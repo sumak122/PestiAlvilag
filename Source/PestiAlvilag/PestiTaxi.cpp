@@ -2,6 +2,8 @@
 
 #include "PestiTaxi.h"
 
+#include "Components/BoxComponent.h"
+
 APestiTaxi::APestiTaxi()
 {
 	BodyColor = FLinearColor(0.01f, 0.01f, 0.01f);

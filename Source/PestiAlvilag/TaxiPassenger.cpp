@@ -53,7 +53,7 @@ void ATaxiPassenger::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const FLinearColor Coat = TaxiPassenger::Coats[FMath::RandRange(0, UE_ARRAY_COUNT(TaxiPassenger::Coats) - 1)];
+	const FLinearColor Coat = TaxiPassenger::Coats[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(TaxiPassenger::Coats)) - 1)];
 	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Coat);
 	if (BaseMaterial)
 	{
