@@ -7,8 +7,8 @@
 #include "PestiAlvilagGameModeBase.generated.h"
 
 /**
- * Starts the player on foot on Blaha Lujza tér with their car parked
- * nearby, starts the traffic, and keeps the player's wanted level (on foot
+ * Puts up the Népszínház on Blaha Lujza tér, starts the player on foot in
+ * front of it with their car parked nearby, starts the traffic, and keeps the player's wanted level (on foot
  * or driving): ramming traffic makes the police come after you; staying out
  * of their sight long enough loses them, and staying slow next to one gets
  * you arrested. P toggles the police for testing.

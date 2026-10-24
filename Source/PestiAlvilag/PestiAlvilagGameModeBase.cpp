@@ -8,17 +8,22 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Nepszinhaz.h"
 #include "PestiCar.h"
 #include "PestiPerson.h"
 #include "TrafficManager.h"
 
 namespace PestiStart
 {
-	// The open square on the Corvin side of Blaha Lujza tér, looking
-	// north-east towards the crossing (cm, X east, Y south).
-	const FVector2D PersonAt(-3600.f, 1800.f);
-	const FVector2D CarAt(-2800.f, 2400.f);
-	constexpr float Yaw = -45.f;
+	// The Népszínház stood on the Corvin side of Blaha Lujza tér, its front
+	// towards the west (cm, X east, Y south).
+	const FVector2D TheatreAt(-3600.f, 200.f);
+	constexpr float TheatreYaw = 180.f;
+
+	// The player starts on the square in front of it, looking at its front.
+	const FVector2D PersonAt(-9800.f, 1500.f);
+	const FVector2D CarAt(-8600.f, 2600.f);
+	constexpr float Yaw = -23.f;
 
 	// Below this speed next to a police car counts as being caught (cm/s).
 	constexpr float CaughtSpeed = 300.f;
@@ -40,6 +45,13 @@ void APestiAlvilagGameModeBase::StartPlay()
 {
 	Super::StartPlay();
 
+	// Put up the Népszínház unless the level already has one.
+	if (!TActorIterator<ANepszinhaz>(GetWorld()))
+	{
+		const FVector Location(PestiStart::TheatreAt, GroundZ(PestiStart::TheatreAt));
+		GetWorld()->SpawnActor<ANepszinhaz>(ANepszinhaz::StaticClass(), Location, FRotator(0.f, PestiStart::TheatreYaw, 0.f));
+	}
+
 	// Start traffic unless the level already has its own manager.
 	if (!TActorIterator<ATrafficManager>(GetWorld()))
 	{
@@ -49,7 +61,7 @@ void APestiAlvilagGameModeBase::StartPlay()
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
 {
-	// Start on foot on Blaha Lujza tér, whatever PlayerStart the level has.
+	// Start on foot in front of the Népszínház, whatever PlayerStart the level has.
 	const FRotator Facing(0.f, PestiStart::Yaw, 0.f);
 	const FVector PersonLocation(PestiStart::PersonAt, GroundZ(PestiStart::PersonAt) + 100.0);
 	APawn* Pawn = SpawnDefaultPawnAtTransform(NewPlayer, FTransform(Facing, PersonLocation));
