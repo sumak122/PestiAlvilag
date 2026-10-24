@@ -11,6 +11,8 @@
 #include "Nepszinhaz.h"
 #include "PestiCar.h"
 #include "PestiPerson.h"
+#include "PestiTaxi.h"
+#include "TaxiCompany.h"
 #include "TrafficManager.h"
 
 namespace PestiStart
@@ -24,6 +26,11 @@ namespace PestiStart
 	const FVector2D PersonAt(-9800.f, 1500.f);
 	const FVector2D CarAt(-8600.f, 2600.f);
 	constexpr float Yaw = -23.f;
+
+	// The taxi company's kiosk west of the square, two of its taxis waiting
+	// on the open ground beside it.
+	const FVector2D TaxiCompanyAt(-12000.f, 3100.f);
+	const FVector2D TaxiAt[] = { FVector2D(-10400.f, 2500.f), FVector2D(-11100.f, 2500.f) };
 
 	// Below this speed next to a police car counts as being caught (cm/s).
 	constexpr float CaughtSpeed = 300.f;
@@ -50,6 +57,21 @@ void APestiAlvilagGameModeBase::StartPlay()
 	{
 		const FVector Location(PestiStart::TheatreAt, GroundZ(PestiStart::TheatreAt));
 		GetWorld()->SpawnActor<ANepszinhaz>(ANepszinhaz::StaticClass(), Location, FRotator(0.f, PestiStart::TheatreYaw, 0.f));
+	}
+
+	// Put up the taxi company and its taxis unless the level already has one.
+	if (!TActorIterator<ATaxiCompany>(GetWorld()))
+	{
+		const FVector Location(PestiStart::TaxiCompanyAt, GroundZ(PestiStart::TaxiCompanyAt));
+		GetWorld()->SpawnActor<ATaxiCompany>(ATaxiCompany::StaticClass(), Location, FRotator::ZeroRotator);
+
+		FActorSpawnParameters TaxiParams;
+		TaxiParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		for (const FVector2D& At : PestiStart::TaxiAt)
+		{
+			const FVector TaxiLocation(At, GroundZ(At) + 150.0);
+			GetWorld()->SpawnActor<APestiTaxi>(APestiTaxi::StaticClass(), TaxiLocation, FRotator::ZeroRotator, TaxiParams);
+		}
 	}
 
 	// Start traffic unless the level already has its own manager.
@@ -101,6 +123,11 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 	}
 
 	UpdateWanted(DeltaSeconds);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(5, 0.f, FColor(255, 220, 120), FString::Printf(TEXT("P\u00e9nz (money): %s"), *FormatMoney(Money)));
+	}
 
 	if (GEngine && WantedLevel > 0)
 	{
@@ -175,4 +202,16 @@ void APestiAlvilagGameModeBase::ClearWanted(const TCHAR* Message)
 		GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red, TEXT(""));
 		GEngine->AddOnScreenDebugMessage(3, 4.f, FColor::Yellow, Message);
 	}
+}
+
+void APestiAlvilagGameModeBase::AddMoney(int32 Filler)
+{
+	Money = FMath::Max(0, Money + Filler);
+}
+
+FString APestiAlvilagGameModeBase::FormatMoney(int32 Filler)
+{
+	const int32 Sign = Filler < 0 ? -1 : 1;
+	const int32 Abs = FMath::Abs(Filler);
+	return FString::Printf(TEXT("%s%d,%02d peng\u0151"), Sign < 0 ? TEXT("-") : TEXT(""), Abs / 100, Abs % 100);
 }

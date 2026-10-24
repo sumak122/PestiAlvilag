@@ -11,7 +11,8 @@
  * front of it with their car parked nearby, starts the traffic, and keeps the player's wanted level (on foot
  * or driving): ramming traffic makes the police come after you; staying out
  * of their sight long enough loses them, and staying slow next to one gets
- * you arrested. P toggles the police for testing.
+ * you arrested. P toggles the police for testing. Also puts up the taxi
+ * company with two of its taxis, and keeps the player's money.
  */
 UCLASS()
 class PESTIALVILAG_API APestiAlvilagGameModeBase : public AGameModeBase
@@ -43,6 +44,12 @@ public:
 	void NotifySeenByPolice();
 	void NotifyPoliceNear();
 
+	/** The player's money in fillér (100 fillér = 1 pengő). */
+	int32 GetMoney() const { return Money; }
+	void AddMoney(int32 Filler);
+	/** Money as the period wrote it, for example "1,20 pengő". */
+	static FString FormatMoney(int32 Filler);
+
 private:
 	void UpdateWanted(float DeltaSeconds);
 	void ClearWanted(const TCHAR* Message);
@@ -50,6 +57,7 @@ private:
 	double GroundZ(const FVector2D& At) const;
 
 	int32 WantedLevel = 0;
+	int32 Money = 0;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
 	double LastPoliceNearTime = -1.0;

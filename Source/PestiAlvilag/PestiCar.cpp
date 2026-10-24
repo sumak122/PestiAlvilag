@@ -33,10 +33,10 @@ namespace PestiCar
 	constexpr float LookResetRate = 120.f;
 	constexpr float LookResetSpeed = 200.f;
 
-	const FLinearColor BodyColor(0.03f, 0.07f, 0.05f);
-
 	// Ramming something faster than this is a crime (cm/s; 500 is 18 km/h).
 	constexpr float CrimeImpactSpeed = 500.f;
+	// Hitting anything faster than this jolts a passenger (cm/s).
+	constexpr float BumpSpeed = 300.f;
 	// The driver can only get out below this speed (cm/s).
 	constexpr float MaxExitSpeed = 300.f;
 	// How far beside the car the driver steps out (cm from the centre).
@@ -79,7 +79,7 @@ void APestiCar::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, PestiCar::BodyColor);
+	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, BodyColor);
 
 	SnapToGround();
 }
@@ -220,6 +220,14 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 	if (!Hit.bBlockingHit)
 	{
 		return;
+	}
+
+	// Scraping along a wall is one bump, not one per frame.
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (FMath::Abs(ForwardSpeed) > PestiCar::BumpSpeed && Now - LastBumpTime > 1.0)
+	{
+		++BumpCount;
+		LastBumpTime = Now;
 	}
 
 	// Ramming traffic brings the police; ramming the police more so.

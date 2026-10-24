@@ -70,6 +70,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	const FTrafficLane& GetLane(int32 LaneIndex) const { return Lanes[LaneIndex]; }
+	int32 NumLanes() const { return Lanes.Num(); }
+
+	/** Today's name of the street a lane belongs to, or null if it has none. */
+	const FString* FindStreetName(int32 LaneIndex) const { return StreetNames.Find(Lanes[LaneIndex].Way); }
 
 	/** A random lane leaving the end of this one; U-turns only at dead ends. */
 	int32 PickNextLane(int32 LaneIndex) const;
@@ -131,6 +135,8 @@ private:
 	};
 
 	TArray<FTrafficLane> Lanes;
+	/** Street names by OSM way id. */
+	TMap<FString, FString> StreetNames;
 	TArray<TArray<int32>> LanesFromNode;
 	TArray<FVector> NodeLocations;
 	TArray<FNodeClaim> NodeClaims;
