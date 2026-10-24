@@ -230,7 +230,7 @@ bool AOsmGraybox::Build()
 		ESection Section;
 		double Z;
 	};
-	const FLayer Layers[] = {
+	const FLayer LayerTable[] = {
 		{ TEXT("road"), Road, RoadZ },
 		{ TEXT("plaza"), Plaza, PlazaZ },
 		{ TEXT("park"), Park, ParkZ },
@@ -250,15 +250,15 @@ bool AOsmGraybox::Build()
 				continue;
 			}
 			const FString LayerName = Area->GetStringField(TEXT("layer"));
-			const FLayer* Layer = nullptr;
-			for (const FLayer& Candidate : Layers)
+			const FLayer* MatchedLayer = nullptr;
+			for (const FLayer& Candidate : LayerTable)
 			{
 				if (LayerName == Candidate.Name)
 				{
-					Layer = &Candidate;
+					MatchedLayer = &Candidate;
 				}
 			}
-			if (!Layer)
+			if (!MatchedLayer)
 			{
 				continue;
 			}
@@ -267,7 +267,7 @@ bool AOsmGraybox::Build()
 				const TSharedPtr<FJsonObject>& Polygon = PolygonValue->AsObject();
 				if (Polygon.IsValid() && ReadPolygon(*Polygon, Rings, Triangles))
 				{
-					AddFlatPolygon(Sections[Layer->Section], Rings, Triangles, Layer->Z, bFlipFaces);
+					AddFlatPolygon(Sections[MatchedLayer->Section], Rings, Triangles, MatchedLayer->Z, bFlipFaces);
 				}
 			}
 		}
