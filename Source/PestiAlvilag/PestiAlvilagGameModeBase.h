@@ -13,5 +13,7 @@ UCLASS()
 class PESTIALVILAG_API APestiAlvilagGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
-	
+
+public:
+	APestiAlvilagGameModeBase();
 };

@@ -3,3 +3,10 @@
 
 #include "PestiAlvilagGameModeBase.h"
 
+#include "PestiCar.h"
+
+APestiAlvilagGameModeBase::APestiAlvilagGameModeBase()
+{
+	DefaultPawnClass = APestiCar::StaticClass();
+}
+
