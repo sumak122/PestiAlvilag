@@ -52,6 +52,14 @@ PARK_TAGS = {
     ("landuse", "recreation_ground"),
 }
 
+# Building parts mapped onto the street are trimmed back to this far inside
+# the carriageway edge (OSM footprints and guessed road widths don't always agree).
+CARRIAGEWAY_TRIM = 0.3
+# Canopies (building=roof/carport): a thin roof on posts.
+CANOPY_HEIGHT = 4.0
+CANOPY_THICKNESS = 1.0
+CANOPY_TYPES = ("roof", "carport")
+
 # Pest tenements of the period have tall storeys.
 STOREY_HEIGHT = 3.8
 DEFAULT_LEVELS = 4
@@ -184,6 +192,8 @@ def polygon_record(poly):
 
 
 def building_height_m(tags):
+    if tags.get("building") in CANOPY_TYPES and "height" not in tags and "building:levels" not in tags:
+        return CANOPY_HEIGHT
     h = tags.get("height", "").replace("m", "").strip()
     try:
         if h:
@@ -206,9 +216,12 @@ def building_base_m(tags):
     except ValueError:
         pass
     try:
-        return max(0.0, float(tags.get("building:min_level", 0))) * STOREY_HEIGHT
+        base = max(0.0, float(tags.get("building:min_level", 0))) * STOREY_HEIGHT
     except ValueError:
-        return 0.0
+        base = 0.0
+    if base == 0.0 and tags.get("building") in CANOPY_TYPES:
+        base = max(0.0, building_height_m(tags) - CANOPY_THICKNESS)
+    return base
 
 
 def road_width_m(tags):
@@ -386,6 +399,7 @@ def convert(osm_path, origin):
     clip = box(x0, y0, x1, y1)
 
     buildings, roads, plazas, parks, trams, rails, centerlines = [], [], [], [], [], [], []
+    carriageways = []
 
     def add_area(target, geom, tags):
         for poly in polygons_of(geom.intersection(clip) if geom is not None else None):
@@ -414,6 +428,8 @@ def convert(osm_path, origin):
             width = road_width_m(tags)
             target = plazas if highway == "pedestrian" else roads
             add_area(target, line.buffer(width / 2.0, cap_style="flat", join_style="round"), tags)
+            if highway in TRAFFIC_SPEEDS:
+                carriageways.append(line.buffer(width / 2.0 - CARRIAGEWAY_TRIM, cap_style="flat"))
             if highway != "pedestrian":
                 clipped = line.intersection(clip)
                 for part in getattr(clipped, "geoms", [clipped]):
@@ -451,6 +467,19 @@ def convert(osm_path, origin):
         merged = unary_union([p for p, _ in items]) if items else None
         records = [polygon_record(p) for p in polygons_of(merged)]
         return {"layer": name, "polygons": [r for r in records if r]}
+
+    # Cut away building corners that stick out into a street cars drive on.
+    # Bridges and canopies over the street stay whole.
+    carriageway = unary_union(carriageways) if carriageways else None
+    trimmed = []
+    for poly, tags in buildings:
+        if carriageway is not None and building_base_m(tags) < DRIVE_UNDER_HEIGHT and poly.intersects(carriageway):
+            for part in polygons_of(poly.difference(carriageway)):
+                if part.area > 2.0:
+                    trimmed.append((part, tags))
+        else:
+            trimmed.append((poly, tags))
+    buildings = trimmed
 
     out_buildings = []
     for poly, tags in buildings:
