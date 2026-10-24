@@ -14,8 +14,8 @@ class UProceduralMeshComponent;
  * Tools/OsmGraybox/osm_to_graybox.py writes: a ground plane, roads, squares,
  * parks, tram and rail tracks, and extruded buildings.
  *
- * Drop one into a level. It builds itself the first time; press "Rebuild"
- * in the Details panel after the JSON changes.
+ * Drop one into a level. It builds itself the first time, and again when
+ * the JSON file is newer than the last build (save the level afterwards).
  */
 UCLASS()
 class PESTIALVILAG_API AOsmGraybox : public AActor
@@ -27,7 +27,7 @@ public:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	/** Reloads the JSON file and rebuilds every block. */
+	/** Reloads the JSON file and rebuilds every block. Happens by itself when the file changes. */
 	UFUNCTION(CallInEditor, Category = "Graybox")
 	void Rebuild();
 
@@ -75,4 +75,9 @@ protected:
 
 private:
 	bool Build();
+	FString DataPath() const;
+
+	/** When the data file was last built from; a newer file triggers a rebuild. */
+	UPROPERTY()
+	FDateTime BuiltFromFileTime;
 };

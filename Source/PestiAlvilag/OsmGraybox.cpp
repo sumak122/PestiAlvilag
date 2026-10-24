@@ -4,6 +4,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
@@ -169,11 +170,23 @@ void AOsmGraybox::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// Building takes a moment, so only do it when there is nothing yet.
-	if (Mesh && Mesh->GetNumSections() == 0)
+	// Building takes a moment, so only do it when there is nothing yet or the
+	// map file has changed since the last build (e.g. after pulling an update).
+	if (!Mesh)
+	{
+		return;
+	}
+	const FDateTime FileTime = IFileManager::Get().GetTimeStamp(*DataPath());
+	const bool bFileChanged = FileTime != FDateTime::MinValue() && FileTime != BuiltFromFileTime;
+	if (Mesh->GetNumSections() == 0 || bFileChanged)
 	{
 		Build();
 	}
+}
+
+FString AOsmGraybox::DataPath() const
+{
+	return FPaths::Combine(FPaths::ProjectDir(), DataFile);
 }
 
 void AOsmGraybox::Rebuild()
@@ -187,7 +200,7 @@ bool AOsmGraybox::Build()
 
 	Mesh->ClearAllMeshSections();
 
-	const FString Path = FPaths::Combine(FPaths::ProjectDir(), DataFile);
+	const FString Path = DataPath();
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *Path))
 	{
@@ -320,6 +333,7 @@ bool AOsmGraybox::Build()
 		}
 	}
 
+	BuiltFromFileTime = IFileManager::Get().GetTimeStamp(*Path);
 	UE_LOG(LogOsmGraybox, Log, TEXT("Built %d buildings from %s"), NumBuildings, *Path);
 	return true;
 }
