@@ -3,8 +3,10 @@
 #include "TrafficManager.h"
 
 #include "Dom/JsonObject.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -35,7 +37,7 @@ namespace Traffic
 
 ATrafficManager::ATrafficManager()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void ATrafficManager::BeginPlay()
@@ -46,6 +48,79 @@ void ATrafficManager::BeginPlay()
 	{
 		SpawnCars();
 	}
+}
+
+void ATrafficManager::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (PC && PC->WasInputKeyJustPressed(EKeys::N))
+	{
+		bShowDebug = !bShowDebug;
+	}
+	if (bShowDebug)
+	{
+		DrawDebugView();
+	}
+}
+
+void ATrafficManager::DrawDebugView() const
+{
+#if ENABLE_DRAW_DEBUG
+	// Like the 2D game's node view: blue lanes, junctions green when free and
+	// red when a car holds them, and each car's route ahead in yellow.
+	UWorld* World = GetWorld();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const FVector Center = Player ? Player->GetActorLocation() : FVector::ZeroVector;
+	const double RangeSquared = FMath::Square(static_cast<double>(DebugRange));
+	const FVector Lift(0.f, 0.f, 40.f);
+
+	for (const FTrafficLane& Lane : Lanes)
+	{
+		if (FVector::DistSquared2D(Lane.Points[0], Center) > RangeSquared)
+		{
+			continue;
+		}
+		for (int32 i = 0; i + 1 < Lane.Points.Num(); ++i)
+		{
+			DrawDebugLine(World, Lane.Points[i] + Lift, Lane.Points[i + 1] + Lift, FColor(60, 120, 255), false, -1.f, 0, 4.f);
+		}
+	}
+
+	for (int32 Node = 0; Node < NodeLocations.Num(); ++Node)
+	{
+		if (!IsJunction(Node) || FVector::DistSquared2D(NodeLocations[Node], Center) > RangeSquared)
+		{
+			continue;
+		}
+		const bool bTaken = NodeClaims[Node].Holder.IsValid();
+		DrawDebugPoint(World, NodeLocations[Node] + Lift * 2.f, 20.f, bTaken ? FColor::Red : FColor::Green, false, -1.f, SDPG_Foreground);
+	}
+
+	for (const ATrafficCar* Car : Cars)
+	{
+		if (!Car || FVector::DistSquared2D(Car->GetActorLocation(), Center) > RangeSquared || !Lanes.IsValidIndex(Car->GetLaneIndex()))
+		{
+			continue;
+		}
+		FVector Previous = Car->GetActorLocation();
+		const FTrafficLane& Current = Lanes[Car->GetLaneIndex()];
+		for (int32 i = Car->GetPointIndex(); i < Current.Points.Num(); ++i)
+		{
+			DrawDebugLine(World, Previous, Current.Points[i] + Lift, FColor::Yellow, false, -1.f, SDPG_Foreground, 8.f);
+			Previous = Current.Points[i] + Lift;
+		}
+		if (Lanes.IsValidIndex(Car->GetNextLaneIndex()))
+		{
+			for (const FVector& Point : Lanes[Car->GetNextLaneIndex()].Points)
+			{
+				DrawDebugLine(World, Previous, Point + Lift, FColor::Yellow, false, -1.f, SDPG_Foreground, 8.f);
+				Previous = Point + Lift;
+			}
+		}
+	}
+#endif
 }
 
 bool ATrafficManager::LoadLanes()
@@ -202,8 +277,7 @@ int32 ATrafficManager::PickNextLane(int32 LaneIndex) const
 
 bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce)
 {
-	// Two lanes out means a street simply carries on; only real junctions need turns.
-	if (!NodeClaims.IsValidIndex(Node) || LanesFromNode[Node].Num() <= 2)
+	if (!IsJunction(Node))
 	{
 		return true;
 	}
@@ -219,6 +293,12 @@ bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bFor
 		return true;
 	}
 	return false;
+}
+
+bool ATrafficManager::IsJunction(int32 Node) const
+{
+	// Two lanes out means a street simply carries on.
+	return LanesFromNode.IsValidIndex(Node) && LanesFromNode[Node].Num() > 2;
 }
 
 void ATrafficManager::ReleaseNode(int32 Node, const ATrafficCar* Car)

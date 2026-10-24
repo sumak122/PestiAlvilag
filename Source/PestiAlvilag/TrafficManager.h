@@ -36,11 +36,17 @@ public:
 	FString DataFile = TEXT("Data/OsmGraybox/blaha_test_area.json");
 
 	UPROPERTY(EditAnywhere, Category = "Traffic")
-	int32 NumCars = 40;
+	int32 NumCars = 120;
 
 	/** No two cars start closer than this (cm). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
-	float MinSpawnSpacing = 1500.f;
+	float MinSpawnSpacing = 1000.f;
+
+	/** The debug view (key N) draws lanes, junctions and car routes within this range of the player (cm). */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	float DebugRange = 20000.f;
+
+	virtual void Tick(float DeltaSeconds) override;
 
 	const FTrafficLane& GetLane(int32 LaneIndex) const { return Lanes[LaneIndex]; }
 
@@ -56,6 +62,8 @@ public:
 	 * anyway, so two cars waiting on each other cannot get stuck for ever.
 	 */
 	bool TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce);
+	/** True where streets meet, false where a street just bends or continues. */
+	bool IsJunction(int32 Node) const;
 	void ReleaseNode(int32 Node, const ATrafficCar* Car);
 	FVector GetNodeLocation(int32 Node) const;
 
@@ -65,6 +73,9 @@ protected:
 private:
 	bool LoadLanes();
 	void SpawnCars();
+	void DrawDebugView() const;
+
+	bool bShowDebug = false;
 
 	struct FNodeClaim
 	{

@@ -26,6 +26,10 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	int32 GetLaneIndex() const { return LaneIndex; }
+	int32 GetPointIndex() const { return PointIndex; }
+	int32 GetNextLaneIndex() const { return NextLaneIndex; }
+
 	/** Called by the manager right after spawning. */
 	void StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex, const FLinearColor& Paint);
 
@@ -54,6 +58,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
 	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
 
+	/** Period turn signals: little arms that swing out of the cabin side. */
+	UPROPERTY(VisibleAnywhere, Category = "Traffic")
+	TObjectPtr<UStaticMeshComponent> TrafficatorLeft;
+
+	UPROPERTY(VisibleAnywhere, Category = "Traffic")
+	TObjectPtr<UStaticMeshComponent> TrafficatorRight;
+
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
@@ -64,8 +75,11 @@ private:
 	/** Speed limit from the junction ahead: full speed if free, else stop at the line. */
 	float JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds);
 	void ReleasePassedJunctions(const FVector& Location, int32 NextNode);
+	void UpdateTrafficators(float DistToJunction);
 
 	int32 LaneIndex = INDEX_NONE;
+	/** Chosen as soon as the car enters a lane, so it can signal the turn. */
+	int32 NextLaneIndex = INDEX_NONE;
 	int32 PointIndex = 0;
 	float CurrentSpeed = 0.f;
 	float JunctionWaitTime = 0.f;
