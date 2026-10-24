@@ -10,6 +10,9 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "PoliceCar.h"
+#include "TrafficCar.h"
+#include "Tram.h"
 
 namespace PestiCar
 {
@@ -22,6 +25,12 @@ namespace PestiCar
 	constexpr float OverheadPitch = -70.f;
 
 	const FLinearColor BodyColor(0.03f, 0.07f, 0.05f);
+
+	// Ramming something faster than this is a crime (cm/s; 500 is 18 km/h).
+	constexpr float CrimeImpactSpeed = 500.f;
+	// Below this speed next to a police car counts as being caught (cm/s).
+	constexpr float CaughtSpeed = 300.f;
+	constexpr int32 MaxWantedLevel = 3;
 }
 
 APestiCar::APestiCar()
@@ -94,6 +103,17 @@ void APestiCar::Tick(float DeltaSeconds)
 	{
 		ToggleCamera();
 	}
+	if (PC->WasInputKeyJustPressed(EKeys::P))
+	{
+		if (WantedLevel > 0)
+		{
+			ClearWanted(TEXT("Police called off (P)"));
+		}
+		else
+		{
+			ReportCrime(1);
+		}
+	}
 
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);
 
@@ -109,10 +129,81 @@ void APestiCar::Tick(float DeltaSeconds)
 	MoveWithSlide(GetActorForwardVector() * ForwardSpeed * DeltaSeconds);
 	SnapToGround();
 
+	UpdateWanted(DeltaSeconds);
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			FString::Printf(TEXT("%d km/h   (C: camera, N: traffic view)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
+			FString::Printf(TEXT("%d km/h   (C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
+		if (WantedLevel > 0)
+		{
+			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red,
+				FString::Printf(TEXT("WANTED %s   lose them: %d s%s"), *FString::ChrN(WantedLevel, TEXT('*')),
+					FMath::CeilToInt(FMath::Max(0.f, EscapeTime - TimeUnseen)),
+					ArrestProgress > 0.f ? *FString::Printf(TEXT("   ARREST %d%%"), FMath::RoundToInt(100.f * ArrestProgress / ArrestTime)) : TEXT("")));
+		}
+	}
+}
+
+void APestiCar::ReportCrime(int32 CrimeLevel)
+{
+	if (WantedLevel == 0 && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(3, 4.f, FColor::Red, TEXT("The police are after you!"));
+	}
+	WantedLevel = FMath::Clamp(FMath::Max(WantedLevel, CrimeLevel), 0, PestiCar::MaxWantedLevel);
+	TimeUnseen = 0.f;
+}
+
+void APestiCar::NotifySeenByPolice()
+{
+	TimeUnseen = 0.f;
+}
+
+void APestiCar::NotifyPoliceNear()
+{
+	LastPoliceNearTime = GetWorld()->GetTimeSeconds();
+}
+
+void APestiCar::UpdateWanted(float DeltaSeconds)
+{
+	if (WantedLevel == 0)
+	{
+		return;
+	}
+
+	TimeUnseen += DeltaSeconds;
+	if (TimeUnseen > EscapeTime)
+	{
+		ClearWanted(TEXT("You lost the police!"));
+		return;
+	}
+
+	const bool bPoliceNear = GetWorld()->GetTimeSeconds() - LastPoliceNearTime < 0.2;
+	if (bPoliceNear && FMath::Abs(ForwardSpeed) < PestiCar::CaughtSpeed)
+	{
+		ArrestProgress += DeltaSeconds;
+		if (ArrestProgress > ArrestTime)
+		{
+			ForwardSpeed = 0.f;
+			ClearWanted(TEXT("BUSTED! The police caught you."));
+		}
+	}
+	else
+	{
+		ArrestProgress = FMath::Max(0.f, ArrestProgress - DeltaSeconds);
+	}
+}
+
+void APestiCar::ClearWanted(const TCHAR* Message)
+{
+	WantedLevel = 0;
+	TimeUnseen = 0.f;
+	ArrestProgress = 0.f;
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red, TEXT(""));
+		GEngine->AddOnScreenDebugMessage(3, 4.f, FColor::Yellow, Message);
 	}
 }
 
@@ -155,6 +246,13 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 	if (!Hit.bBlockingHit)
 	{
 		return;
+	}
+
+	// Ramming traffic brings the police; ramming the police more so.
+	const AActor* Rammed = Hit.GetActor();
+	if (Rammed && FMath::Abs(ForwardSpeed) > PestiCar::CrimeImpactSpeed && (Rammed->IsA<ATrafficCar>() || Rammed->IsA<ATram>()))
+	{
+		ReportCrime(Rammed->IsA<APoliceCar>() ? 2 : 1);
 	}
 
 	// A head-on hit nearly stops the car; a glancing one lets it scrape along.

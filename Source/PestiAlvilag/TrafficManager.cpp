@@ -14,6 +14,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
+#include "PoliceCar.h"
 #include "Tram.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
@@ -30,6 +31,9 @@ namespace Traffic
 		FLinearColor(0.01f, 0.02f, 0.07f),
 		FLinearColor(0.45f, 0.40f, 0.30f),
 	};
+
+	// Police cars are dark blue.
+	const FLinearColor PolicePaint(0.01f, 0.015f, 0.05f);
 
 	// Half the width of the corridor a car watches for others (cm).
 	constexpr float CorridorHalfWidth = 220.f;
@@ -138,6 +142,17 @@ void ATrafficManager::DrawDebugView() const
 		{
 			continue;
 		}
+		// A chasing police car shows its way to the player in red.
+		if (const APoliceCar* Police = Cast<APoliceCar>(Car); Police && Police->IsChasing())
+		{
+			FVector From = Police->GetActorLocation();
+			for (const FVector& Point : Police->GetChasePath())
+			{
+				DrawDebugLine(World, From, Point + Lift, FColor::Red, false, -1.f, SDPG_Foreground, 8.f);
+				From = Point + Lift;
+			}
+			continue;
+		}
 		FVector Previous = Car->GetActorLocation();
 		const FTrafficLane& Current = Lanes[Car->GetLaneIndex()];
 		for (int32 i = Car->GetPointIndex(); i < Current.Points.Num(); ++i)
@@ -203,6 +218,23 @@ bool ATrafficManager::LoadLanes(const FJsonObject& Root)
 		{
 			NodeLocations[Lane.ToNode] = Lane.Points.Last();
 		}
+	}
+
+	StreetLinks.SetNum(MaxNode + 1);
+	for (int32 i = 0; i < Lanes.Num(); ++i)
+	{
+		const FTrafficLane& Lane = Lanes[i];
+		if (Lane.FromNode < 0 || Lane.ToNode < 0)
+		{
+			continue;
+		}
+		float Length = 0.f;
+		for (int32 p = 1; p < Lane.Points.Num(); ++p)
+		{
+			Length += static_cast<float>(FVector::Dist2D(Lane.Points[p - 1], Lane.Points[p]));
+		}
+		StreetLinks[Lane.FromNode].Add({ Lane.ToNode, i, false, Length });
+		StreetLinks[Lane.ToNode].Add({ Lane.FromNode, i, true, Length });
 	}
 
 	UE_LOG(LogTraffic, Log, TEXT("Loaded %d traffic lanes"), Lanes.Num());
@@ -358,18 +390,133 @@ void ATrafficManager::SpawnCars()
 		Location.Z += Traffic::RideHeight;
 
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
-		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(ATrafficCar::StaticClass(), Location, Facing, SpawnParams);
+		const bool bPolice = Cars.Num() < NumPolice;
+		UClass* CarClass = bPolice ? APoliceCar::StaticClass() : ATrafficCar::StaticClass();
+		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 		if (!Car)
 		{
 			continue;
 		}
-		const FLinearColor& Paint = Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)];
+		const FLinearColor& Paint = bPolice
+			? Traffic::PolicePaint
+			: Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)];
 		Car->StartOnLane(this, LaneIdx, PointIdx + 1, Paint);
 		Cars.Add(Car);
 		Taken.Add(Location);
 	}
 
 	UE_LOG(LogTraffic, Log, TEXT("Spawned %d traffic cars"), Cars.Num());
+}
+
+int32 ATrafficManager::NearestNode(const FVector& Location) const
+{
+	int32 Best = INDEX_NONE;
+	double BestDistance = TNumericLimits<double>::Max();
+	for (int32 Node = 0; Node < StreetLinks.Num(); ++Node)
+	{
+		if (StreetLinks[Node].Num() == 0)
+		{
+			continue;
+		}
+		const double Distance = FVector::DistSquared2D(NodeLocations[Node], Location);
+		if (Distance < BestDistance)
+		{
+			BestDistance = Distance;
+			Best = Node;
+		}
+	}
+	return Best;
+}
+
+bool ATrafficManager::FindPath(const FVector& From, const FVector& To, TArray<FVector>& OutPoints) const
+{
+	OutPoints.Reset();
+	const int32 Start = NearestNode(From);
+	const int32 Goal = NearestNode(To);
+	if (Start == INDEX_NONE || Goal == INDEX_NONE)
+	{
+		return false;
+	}
+
+	// A* over street corners, measuring along the streets.
+	const int32 NumNodes = StreetLinks.Num();
+	TArray<float> Cost;
+	Cost.Init(TNumericLimits<float>::Max(), NumNodes);
+	TArray<int32> CameBy;
+	CameBy.Init(INDEX_NONE, NumNodes);
+	TArray<int32> CameFrom;
+	CameFrom.Init(INDEX_NONE, NumNodes);
+	using FOpen = TPair<float, int32>;
+	auto Cheaper = [](const FOpen& A, const FOpen& B) { return A.Key < B.Key; };
+	TArray<FOpen> Open;
+	Cost[Start] = 0.f;
+	Open.HeapPush(FOpen(0.f, Start), Cheaper);
+	while (Open.Num() > 0)
+	{
+		FOpen Top;
+		Open.HeapPop(Top, Cheaper);
+		const int32 Node = Top.Value;
+		if (Node == Goal)
+		{
+			break;
+		}
+		for (int32 l = 0; l < StreetLinks[Node].Num(); ++l)
+		{
+			const FStreetLink& Link = StreetLinks[Node][l];
+			const float NewCost = Cost[Node] + Link.Length;
+			if (NewCost < Cost[Link.Node])
+			{
+				Cost[Link.Node] = NewCost;
+				CameFrom[Link.Node] = Node;
+				CameBy[Link.Node] = l;
+				const float Guess = static_cast<float>(FVector::Dist2D(NodeLocations[Link.Node], NodeLocations[Goal]));
+				Open.HeapPush(FOpen(NewCost + Guess, Link.Node), Cheaper);
+			}
+		}
+	}
+	if (Start != Goal && CameFrom[Goal] == INDEX_NONE)
+	{
+		return false;
+	}
+
+	TArray<const FStreetLink*> Steps;
+	for (int32 Node = Goal; Node != Start; Node = CameFrom[Node])
+	{
+		Steps.Add(&StreetLinks[CameFrom[Node]][CameBy[Node]]);
+	}
+	OutPoints.Add(NodeLocations[Start]);
+	for (int32 s = Steps.Num() - 1; s >= 0; --s)
+	{
+		const FTrafficLane& Lane = Lanes[Steps[s]->Lane];
+		const int32 Num = Lane.Points.Num();
+		for (int32 p = 1; p < Num; ++p)
+		{
+			OutPoints.Add(Lane.Points[Steps[s]->bReverse ? Num - 1 - p : p]);
+		}
+	}
+	return true;
+}
+
+bool ATrafficManager::FindLanePointNear(const FVector& Location, const FVector& Forward, int32& OutLane, int32& OutPoint) const
+{
+	double BestDistance = TNumericLimits<double>::Max();
+	OutLane = INDEX_NONE;
+	for (int32 l = 0; l < Lanes.Num(); ++l)
+	{
+		const TArray<FVector>& Points = Lanes[l].Points;
+		for (int32 p = 1; p < Points.Num(); ++p)
+		{
+			const FVector Heading = (Points[p] - Points[p - 1]).GetSafeNormal2D();
+			const double Distance = FVector::DistSquared2D(Points[p], Location);
+			if (Distance < BestDistance && FVector::DotProduct(Heading, Forward) > 0.3)
+			{
+				BestDistance = Distance;
+				OutLane = l;
+				OutPoint = p;
+			}
+		}
+	}
+	return OutLane != INDEX_NONE;
 }
 
 int32 ATrafficManager::PickNextLane(int32 LaneIndex) const

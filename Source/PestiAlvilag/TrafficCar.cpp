@@ -91,6 +91,27 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	}
 }
 
+void ATrafficCar::ResumeOnLane(int32 InLaneIndex, int32 InPointIndex)
+{
+	LaneIndex = InLaneIndex;
+	PointIndex = InPointIndex;
+	NextLaneIndex = Manager->PickNextLane(LaneIndex);
+	BlockedTime = 0.f;
+	JunctionWaitTime = 0.f;
+}
+
+void ATrafficCar::ReleaseAllJunctions()
+{
+	for (const int32 Node : HeldNodes)
+	{
+		Manager->ReleaseNode(Node, this);
+	}
+	HeldNodes.Reset();
+	JunctionWaitTime = 0.f;
+	TrafficatorLeft->SetVisibility(false);
+	TrafficatorRight->SetVisibility(false);
+}
+
 void ATrafficCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

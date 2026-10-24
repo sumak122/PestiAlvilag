@@ -19,7 +19,12 @@ class UStaticMeshComponent;
  * chase camera plus a GTA 1 style overhead camera.
  *
  * Keys: W/S or triggers to drive and brake, A/D or left stick to steer,
- * Space or gamepad A for the handbrake, C or gamepad Y to switch camera.
+ * Space or gamepad A for the handbrake, C or gamepad Y to switch camera,
+ * P to make the police come after you (for testing).
+ *
+ * It also keeps the player's wanted level: ramming traffic makes the police
+ * come after you; staying out of their sight long enough loses them, and
+ * staying slow next to one gets you arrested.
  */
 UCLASS()
 class PESTIALVILAG_API APestiCar : public APawn
@@ -67,6 +72,21 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car")
 	float ForwardSpeed = 0.f;
 
+	/** Seconds out of police sight that lose them. */
+	UPROPERTY(EditAnywhere, Category = "Police")
+	float EscapeTime = 20.f;
+
+	/** Seconds slow beside a police car before being arrested. */
+	UPROPERTY(EditAnywhere, Category = "Police")
+	float ArrestTime = 3.f;
+
+	/** 0 = not wanted; higher means more trouble. */
+	int32 GetWantedLevel() const { return WantedLevel; }
+	void ReportCrime(int32 CrimeLevel);
+	/** Police call these every frame they see the player or are right beside them. */
+	void NotifySeenByPolice();
+	void NotifyPoliceNear();
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UBoxComponent> CollisionBox;
@@ -90,7 +110,13 @@ private:
 	void MoveWithSlide(const FVector& Delta);
 	void SnapToGround();
 	void ToggleCamera();
+	void UpdateWanted(float DeltaSeconds);
+	void ClearWanted(const TCHAR* Message);
 
 	bool bOverheadCamera = false;
+	int32 WantedLevel = 0;
+	float TimeUnseen = 0.f;
+	float ArrestProgress = 0.f;
+	double LastPoliceNearTime = -1.0;
 	TArray<CarBody::EPaint> BodyPaints;
 };

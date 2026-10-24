@@ -69,9 +69,21 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
-private:
 	UPROPERTY(Transient)
 	TObjectPtr<ATrafficManager> Manager;
+
+	/** Picks up lane driving again from this lane point (e.g. after a police chase). */
+	void ResumeOnLane(int32 InLaneIndex, int32 InPointIndex);
+	void ReleaseAllJunctions();
+
+	int32 LaneIndex = INDEX_NONE;
+	/** Chosen as soon as the car enters a lane, so it can signal the turn. */
+	int32 NextLaneIndex = INDEX_NONE;
+	int32 PointIndex = 0;
+	float CurrentSpeed = 0.f;
+	float BlockedTime = 0.f;
+
+private:
 
 	/** Speed limit from the junction ahead: full speed if free, else stop at the line. */
 	float JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds);
@@ -80,13 +92,7 @@ private:
 	/** Fraction of lane speed for a bend of this many degrees. */
 	static float CornerFraction(float TurnDegrees);
 
-	int32 LaneIndex = INDEX_NONE;
-	/** Chosen as soon as the car enters a lane, so it can signal the turn. */
-	int32 NextLaneIndex = INDEX_NONE;
-	int32 PointIndex = 0;
-	float CurrentSpeed = 0.f;
 	float JunctionWaitTime = 0.f;
-	float BlockedTime = 0.f;
 	TArray<int32> HeldNodes;
 	TArray<CarBody::EPaint> BodyPaints;
 };
