@@ -35,7 +35,8 @@ namespace Nepszinhaz
 
 	constexpr double Front = 2800.0;           // front wall
 	constexpr double PorticoFront = 2900.0;    // the central part stands forward of it
-	constexpr double Back = -3000.0;
+	constexpr double Back = -2200.0;           // back wall; the rounded end stands out of its middle
+	constexpr double ApseRadius = 1300.0;
 	constexpr double HalfWidth = 2200.0;
 	constexpr double PorticoHalfWidth = 1300.0;
 
@@ -185,23 +186,36 @@ namespace Nepszinhaz
 			}
 		}
 
-		// A balustrade on a roof or balcony from P0 to P1 (along X or Y):
-		// plinth, a baluster every 35 cm, a post every few metres, and a rail.
-		void Balustrade(EPart Part, const FVector& P0, const FVector& P1, double Height)
+		// A box turned to run along Along (level), centred on the line from
+		// P0 to P1, HalfDepth to either side of it, from Z0 to Z1 above it.
+		void LineBox(EPart Part, const FVector& P0, const FVector& P1, double HalfDepth, double Z0, double Z1)
+		{
+			const FVector Along = FVector(P1.X - P0.X, P1.Y - P0.Y, 0.0).GetSafeNormal();
+			const FVector Across(-Along.Y, Along.X, 0.0);
+			const FVector Lo(0.0, 0.0, Z0), Hi(0.0, 0.0, Z1);
+			const FVector A = FVector(P0.X, P0.Y, 0.0) - Across * HalfDepth, B = FVector(P1.X, P1.Y, 0.0) - Across * HalfDepth;
+			const FVector C = FVector(P1.X, P1.Y, 0.0) + Across * HalfDepth, D = FVector(P0.X, P0.Y, 0.0) + Across * HalfDepth;
+			Poly(Part, { A + Hi, B + Hi, C + Hi, D + Hi }, FVector::UpVector);
+			Poly(Part, { A + Lo, B + Lo, B + Hi, A + Hi }, -Across);
+			Poly(Part, { D + Lo, C + Lo, C + Hi, D + Hi }, Across);
+			Poly(Part, { A + Lo, D + Lo, D + Hi, A + Hi }, -Along);
+			Poly(Part, { B + Lo, C + Lo, C + Hi, B + Hi }, Along);
+		}
+
+		// A balustrade on a roof or balcony from P0 to P1: plinth, a
+		// baluster every 35 cm, a post every few metres, and a rail.
+		void Balustrade(EPart Part, const FVector& P0, const FVector& P1, double Height, bool bPosts = true)
 		{
 			const FVector Along = (P1 - P0).GetSafeNormal();
-			const FVector Across(-Along.Y, Along.X, 0.0);
 			const double Length = FVector::Dist(P0, P1);
 			auto Slab = [&](double S0, double S1, double Z0, double Z1, double HalfDepth)
 			{
-				const FVector A = P0 + Along * S0 - Across * HalfDepth + FVector(0.0, 0.0, Z0);
-				const FVector B = P0 + Along * S1 + Across * HalfDepth + FVector(0.0, 0.0, Z1);
-				Box(Part, FVector(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y), A.Z), FVector(FMath::Max(A.X, B.X), FMath::Max(A.Y, B.Y), B.Z));
+				LineBox(Part, P0 + Along * S0, P0 + Along * S1, HalfDepth, P0.Z + Z0, P0.Z + Z1);
 			};
 			Slab(0.0, Length, 0.0, 18.0, 22.0);
 			Slab(0.0, Length, Height - 14.0, Height, 20.0);
-			const int32 Posts = FMath::Max(1, FMath::RoundToInt(Length / 320.0));
-			for (int32 i = 0; i <= Posts; ++i)
+			const int32 Posts = bPosts ? FMath::Max(1, FMath::RoundToInt(Length / 320.0)) : 0;
+			for (int32 i = 0; i <= Posts && bPosts; ++i)
 			{
 				const double S = FMath::Clamp(Length * i / Posts, 18.0, Length - 18.0);
 				Slab(S - 18.0, S + 18.0, 18.0, Height - 14.0, 18.0);
@@ -465,10 +479,10 @@ void ANepszinhaz::Build()
 	B.Figure(FVector(PorticoFront - 20.0, -PorticoHalfWidth - 20.0, CorniceTop), 1.1, false);
 	B.Figure(FVector(PorticoFront - 20.0, PorticoHalfWidth + 20.0, CorniceTop), 1.1, false);
 
-	// --- The sides (+Y and -Y): twelve bays between pilasters, a side
+	// --- The sides (+Y and -Y): ten bays between pilasters, a side
 	// entrance under a columned porch near the front.
-	constexpr int32 SideBays = 12;
-	constexpr int32 PorchBay = 10;
+	constexpr int32 SideBays = 10;
+	constexpr int32 PorchBay = 8;
 	const double SideLength = Front - Back;
 	const double SideBay = SideLength / SideBays;
 	for (const double Side : { 1.0, -1.0 })
@@ -557,32 +571,51 @@ void ANepszinhaz::Build()
 		}
 	}
 
-	// --- The back, towards the Körút: dressed like the sides, with a door
-	// in the middle.
+	// --- The back, towards the Körút: a bay at each corner, and between
+	// them the rounded end, two floors under a balustraded terrace.
 	{
-		constexpr int32 BackBays = 9;
 		const FFace Wall{ FVector(Back, HalfWidth, 0.0), FVector(0.0, -1.0, 0.0), FVector(-1.0, 0.0, 0.0) };
-		const double BackBay = Width / BackBays;
+		const double Corner = HalfWidth - ApseRadius;
 		Wall.Bands(B, 0.0, Width);
 		Wall.Rustication(B, 0.0, Width);
-		for (int32 k = 0; k <= BackBays; ++k)
+		for (const double S0 : { 0.0, Width - Corner })
 		{
-			Wall.Pilaster(B, FMath::Clamp(BackBay * k, 45.0, Width - 45.0), 40.0);
+			const double Mid = S0 + Corner / 2.0;
+			Wall.Pilaster(B, S0 + 45.0, 40.0);
+			Wall.Pilaster(B, S0 + Corner - 45.0, 40.0);
+			Wall.Arch(B, Trim, Glass, Mid - 80.0, Mid + 80.0, 140.0, 440.0, 14.0, 10.0, false);
+			Wall.UpperBay(B, Mid, 1);
+			B.Balustrade(Trim, FVector(Back + 30.0, HalfWidth - S0 - 20.0, CorniceTop), FVector(Back + 30.0, HalfWidth - S0 - Corner, CorniceTop), BalustradeHeight);
 		}
-		for (int32 k = 0; k < BackBays; ++k)
+
+		constexpr int32 ApseSides = 10;
+		const FVector2D Center(Back, 0.0);
+		FVector2D Points[ApseSides + 1];
+		for (int32 i = 0; i <= ApseSides; ++i)
 		{
-			const double Mid = BackBay * (k + 0.5);
-			if (k == BackBays / 2)
-			{
-				Wall.Arch(B, Trim, Door, Mid - 140.0, Mid + 140.0, 0.0, 340.0, 20.0, 12.0, true);
-			}
-			else
-			{
-				Wall.Arch(B, Trim, Glass, Mid - 80.0, Mid + 80.0, 140.0, 440.0, 14.0, 10.0, false);
-			}
-			Wall.UpperBay(B, Mid, k % 2 == 0 ? 1 : 2);
+			const double A = PI / 2.0 + PI * i / ApseSides;
+			Points[i] = Center + FVector2D(FMath::Cos(A), FMath::Sin(A)) * ApseRadius;
 		}
-		B.Balustrade(Trim, FVector(Back + 30.0, -HalfWidth + 20.0, CorniceTop), FVector(Back + 30.0, HalfWidth - 20.0, CorniceTop), BalustradeHeight);
+		for (int32 i = 0; i < ApseSides; ++i)
+		{
+			const FVector2D Chord = Points[i + 1] - Points[i];
+			const double Length = FMath::Sqrt(Chord.X * Chord.X + Chord.Y * Chord.Y);
+			const FVector Along(Chord.X / Length, Chord.Y / Length, 0.0);
+			const FVector Out(Along.Y, -Along.X, 0.0);
+			const FFace Segment{ FVector(Points[i], 0.0), Along, Out };
+			const FVector P0(Points[i], 0.0), P1(Points[i + 1], 0.0);
+			B.Poly(Rustic, { P0 + FVector(0.0, 0.0, Base), P1 + FVector(0.0, 0.0, Base), P1 + FVector(0.0, 0.0, RusticTop), P0 + FVector(0.0, 0.0, RusticTop) }, Out);
+			B.Poly(Plaster, { P0 + FVector(0.0, 0.0, RusticTop), P1 + FVector(0.0, 0.0, RusticTop), P1 + FVector(0.0, 0.0, CorniceTop), P0 + FVector(0.0, 0.0, CorniceTop) }, Out);
+			B.Poly(Plaster, { FVector(Center, CorniceTop), P0 + FVector(0.0, 0.0, CorniceTop), P1 + FVector(0.0, 0.0, CorniceTop) }, FVector::UpVector);
+			Segment.Bands(B, 0.0, Length);
+			Segment.Rustication(B, 0.0, Length);
+			Segment.Pilaster(B, 35.0, 30.0);
+			Segment.Arch(B, Trim, Glass, Length / 2.0 - 75.0, Length / 2.0 + 75.0, 140.0, 440.0, 14.0, 10.0, false);
+			Segment.UpperBay(B, Length / 2.0, i % 2 == 0 ? 2 : 1);
+			const FVector2D In0 = Center + (Points[i] - Center) * ((ApseRadius - 30.0) / ApseRadius);
+			const FVector2D In1 = Center + (Points[i + 1] - Center) * ((ApseRadius - 30.0) / ApseRadius);
+			B.Balustrade(Trim, FVector(In0, CorniceTop), FVector(In1, CorniceTop), BalustradeHeight, false);
+		}
 	}
 
 	// --- Hand the parts to the mesh, one coloured section each.

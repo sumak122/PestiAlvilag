@@ -14,8 +14,9 @@ class UProceduralMeshComponent;
  * first hero building: Fellner and Helmer's theatre of 1875, pulled down in
  * 1965. Built from code after period photos: a rusticated ground floor with
  * arched doors, giant columns under a sculpted pediment, corner pavilions
- * with statues on the balustrade, side porches, and the domed roof over
- * the auditorium. The sides and the back are dressed like the front.
+ * with statues on the balustrade, side porches, the domed roof over the
+ * auditorium, and the rounded back towards the Körút. The sides and the
+ * back are dressed like the front.
  *
  * The actor's front faces its +X; the game mode places it on the square
  * with the front towards the west, as it stood.
