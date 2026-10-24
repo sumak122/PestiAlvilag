@@ -26,6 +26,11 @@ namespace TrafficCar
 	constexpr float JunctionExit = 900.f;
 	// Seconds stuck against another car or a wall before driving through it.
 	constexpr float MaxBlockedTime = 3.f;
+	// Signal a turn from this far before the junction (cm)...
+	constexpr float SignalDistance = 2500.f;
+	// ...if the road bends more than this (degrees).
+	constexpr float SignalAngle = 25.f;
+	const FLinearColor TrafficatorColor(1.f, 0.35f, 0.f);
 }
 
 ATrafficCar::ATrafficCar()
@@ -68,12 +73,29 @@ ATrafficCar::ATrafficCar()
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BodyParts.Add(Part);
 	}
+
+	// Trafficator arms stick out sideways from the front of the cabin; the
+	// car's left is -Y. Hidden until the car signals.
+	auto MakeTrafficator = [&](const TCHAR* PartName, float Side)
+	{
+		UStaticMeshComponent* Arm = CreateDefaultSubobject<UStaticMeshComponent>(PartName);
+		Arm->SetupAttachment(CollisionBox);
+		Arm->SetStaticMesh(CubeMesh.Object);
+		Arm->SetRelativeLocation(FVector(55.f, Side * 90.f, 30.f));
+		Arm->SetRelativeScale3D(FVector(0.05f, 0.3f, 0.06f));
+		Arm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Arm->SetVisibility(false);
+		return Arm;
+	};
+	TrafficatorLeft = MakeTrafficator(TEXT("TrafficatorLeft"), -1.f);
+	TrafficatorRight = MakeTrafficator(TEXT("TrafficatorRight"), 1.f);
 }
 
 void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex, const FLinearColor& Paint)
 {
 	Manager = InManager;
 	LaneIndex = InLaneIndex;
+	NextLaneIndex = Manager->PickNextLane(LaneIndex);
 	PointIndex = InPointIndex;
 	CurrentSpeed = 0.f;
 
@@ -92,6 +114,13 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 		Paintwork->SetVectorParameterValue(TEXT("Color"), i < 2 ? Paint : FLinearColor(0.01f, 0.01f, 0.01f));
 		Part->SetMaterial(0, Paintwork);
+	}
+
+	for (UStaticMeshComponent* Arm : { TrafficatorLeft.Get(), TrafficatorRight.Get() })
+	{
+		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		Paintwork->SetVectorParameterValue(TEXT("Color"), TrafficCar::TrafficatorColor);
+		Arm->SetMaterial(0, Paintwork);
 	}
 }
 
@@ -113,7 +142,8 @@ void ATrafficCar::Tick(float DeltaSeconds)
 	{
 		if (++PointIndex >= Lane->Points.Num())
 		{
-			LaneIndex = Manager->PickNextLane(LaneIndex);
+			LaneIndex = NextLaneIndex;
+			NextLaneIndex = Manager->PickNextLane(LaneIndex);
 			Lane = &Manager->GetLane(LaneIndex);
 			PointIndex = 0;
 		}
@@ -137,6 +167,7 @@ void ATrafficCar::Tick(float DeltaSeconds)
 	const float DistToJunction = static_cast<float>(FVector::Dist2D(Location, Lane->Points.Last()));
 	WantedSpeed *= JunctionSpeedLimit(DistToJunction, Lane->ToNode, DeltaSeconds);
 	ReleasePassedJunctions(Location, Lane->ToNode);
+	UpdateTrafficators(DistToJunction);
 
 	const float Rate = WantedSpeed < CurrentSpeed ? BrakeDeceleration : Acceleration;
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, WantedSpeed, DeltaSeconds, Rate);
@@ -193,4 +224,25 @@ void ATrafficCar::ReleasePassedJunctions(const FVector& Location, int32 NextNode
 			HeldNodes.RemoveAt(i);
 		}
 	}
+}
+
+void ATrafficCar::UpdateTrafficators(float DistToJunction)
+{
+	bool bLeft = false;
+	bool bRight = false;
+	const FTrafficLane& Lane = Manager->GetLane(LaneIndex);
+	if (DistToJunction < TrafficCar::SignalDistance && Manager->IsJunction(Lane.ToNode) && NextLaneIndex != INDEX_NONE)
+	{
+		// Compare the heading at the end of this lane with the start of the next.
+		const FTrafficLane& Next = Manager->GetLane(NextLaneIndex);
+		const int32 Last = Lane.Points.Num() - 1;
+		const float InYaw = static_cast<float>((Lane.Points[Last] - Lane.Points[Last - 1]).Rotation().Yaw);
+		const float OutYaw = static_cast<float>((Next.Points[1] - Next.Points[0]).Rotation().Yaw);
+		const float Turn = FRotator::NormalizeAxis(OutYaw - InYaw);
+		// Unreal's yaw grows clockwise seen from above, so positive is a right turn.
+		bLeft = Turn < -TrafficCar::SignalAngle;
+		bRight = Turn > TrafficCar::SignalAngle;
+	}
+	TrafficatorLeft->SetVisibility(bLeft);
+	TrafficatorRight->SetVisibility(bRight);
 }

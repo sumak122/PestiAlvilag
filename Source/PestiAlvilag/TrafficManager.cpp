@@ -202,8 +202,7 @@ int32 ATrafficManager::PickNextLane(int32 LaneIndex) const
 
 bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce)
 {
-	// Two lanes out means a street simply carries on; only real junctions need turns.
-	if (!NodeClaims.IsValidIndex(Node) || LanesFromNode[Node].Num() <= 2)
+	if (!IsJunction(Node))
 	{
 		return true;
 	}
@@ -219,6 +218,12 @@ bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bFor
 		return true;
 	}
 	return false;
+}
+
+bool ATrafficManager::IsJunction(int32 Node) const
+{
+	// Two lanes out means a street simply carries on.
+	return LanesFromNode.IsValidIndex(Node) && LanesFromNode[Node].Num() > 2;
 }
 
 void ATrafficManager::ReleaseNode(int32 Node, const ATrafficCar* Car)

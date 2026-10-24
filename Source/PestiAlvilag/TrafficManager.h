@@ -56,6 +56,8 @@ public:
 	 * anyway, so two cars waiting on each other cannot get stuck for ever.
 	 */
 	bool TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce);
+	/** True where streets meet, false where a street just bends or continues. */
+	bool IsJunction(int32 Node) const;
 	void ReleaseNode(int32 Node, const ATrafficCar* Car);
 	FVector GetNodeLocation(int32 Node) const;
 
