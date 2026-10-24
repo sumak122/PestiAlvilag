@@ -21,9 +21,9 @@ import xml.etree.ElementTree as ET
 
 import mapbox_earcut
 import numpy as np
-from shapely.geometry import LineString, MultiPolygon, Polygon, box
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 from shapely.geometry.polygon import orient
-from shapely.ops import polygonize, unary_union
+from shapely.ops import nearest_points, polygonize, unary_union
 
 # Blaha Lujza tér, the heart of the prototype area.
 DEFAULT_ORIGIN = (47.49655, 19.07040)
@@ -197,6 +197,20 @@ def building_height_m(tags):
     return max(1.0, levels) * STOREY_HEIGHT
 
 
+def building_base_m(tags):
+    """Height of the underside, for bridges and overhangs above the street."""
+    h = tags.get("min_height", "").replace("m", "").strip()
+    try:
+        if h:
+            return max(0.0, float(h))
+    except ValueError:
+        pass
+    try:
+        return max(0.0, float(tags.get("building:min_level", 0))) * STOREY_HEIGHT
+    except ValueError:
+        return 0.0
+
+
 def road_width_m(tags):
     for key in ("width", "est_width"):
         try:
@@ -247,7 +261,35 @@ def traffic_direction(tags, width):
     return "both"
 
 
-def build_lanes(ways, nodes, proj, clip):
+# Cars are 1.7 m wide; keep lane centres this far from walls so they don't scrape.
+WALL_CLEARANCE = 1.3
+# Buildings whose underside is higher than this are bridges cars drive under.
+DRIVE_UNDER_HEIGHT = 2.5
+
+
+def keep_clear_of_walls(lane, walls):
+    """Nudge lane points away from building walls that crowd the street."""
+    if walls is None or lane.distance(walls) >= WALL_CLEARANCE:
+        return lane
+    pts = list(lane.segmentize(3.0).coords)
+    for i, (x, y) in enumerate(pts):
+        for _ in range(3):
+            here = Point(x, y)
+            gap = here.distance(walls)
+            if gap >= WALL_CLEARANCE:
+                break
+            wall = nearest_points(here, walls)[1]
+            dx, dy = x - wall.x, y - wall.y
+            norm = math.hypot(dx, dy)
+            if norm < 1e-6:
+                break  # inside a wall; leave it rather than guess a side
+            push = WALL_CLEARANCE - gap
+            x, y = x + dx / norm * push, y + dy / norm * push
+        pts[i] = (x, y)
+    return LineString(pts)
+
+
+def build_lanes(ways, nodes, proj, clip, walls=None):
     """Directed driving lanes for AI traffic, keeping LEFT as Budapest did in 1932.
 
     Ways are split at junctions (nodes shared by two or more drivable ways).
@@ -325,6 +367,7 @@ def build_lanes(ways, nodes, proj, clip):
             lane = path.offset_curve(offset, join_style="mitre", mitre_limit=2.0) if offset else path
             if lane.is_empty or lane.geom_type != "LineString":
                 lane = path
+            lane = keep_clear_of_walls(lane, walls)
             lanes.append({
                 "from": node_id(a),
                 "to": node_id(b),
@@ -417,7 +460,12 @@ def convert(osm_path, origin):
         rec["id"] = tags["id"]
         rec["name"] = tags.get("name", "")
         rec["height"] = round(building_height_m(tags) * 100)
+        base = round(building_base_m(tags) * 100)
+        if 0 < base < rec["height"]:
+            rec["base"] = base
         out_buildings.append(rec)
+
+    walls = unary_union([p for p, tags in buildings if building_base_m(tags) < DRIVE_UNDER_HEIGHT]) if buildings else None
 
     gx0, gy0 = to_ue(x0, y1)  # north-west corner becomes min X, min Y
     gx1, gy1 = to_ue(x1, y0)
@@ -436,7 +484,7 @@ def convert(osm_path, origin):
         ],
         "buildings": out_buildings,
         "centerlines": centerlines,
-        "lanes": build_lanes(ways, nodes, proj, clip),
+        "lanes": build_lanes(ways, nodes, proj, clip, walls),
     }
 
 

@@ -221,9 +221,10 @@ void ATrafficManager::SpawnCars()
 			continue;
 		}
 
-		// Find the road surface under the spawn point.
+		// Find the road surface under the spawn point. Start low, so a bridge
+		// over the street isn't mistaken for the road.
 		FHitResult Hit;
-		const FVector TraceStart = Location + FVector(0.f, 0.f, 1000.f);
+		const FVector TraceStart = Location + FVector(0.f, 0.f, 200.f);
 		const FVector TraceEnd = Location - FVector(0.f, 0.f, 1000.f);
 		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility))
 		{
