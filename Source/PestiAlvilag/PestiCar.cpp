@@ -23,6 +23,13 @@ namespace PestiCar
 	constexpr float ChasePitch = -12.f;
 	constexpr float OverheadArmLength = 2600.f;
 	constexpr float OverheadPitch = -70.f;
+	// How far free look may tilt the chase camera up and down (degrees).
+	constexpr float MinLookPitch = -50.f;
+	constexpr float MaxLookPitch = 20.f;
+	// Free look swings back behind the car at this many degrees per second,
+	// once the car is moving faster than this (cm/s).
+	constexpr float LookResetRate = 120.f;
+	constexpr float LookResetSpeed = 200.f;
 
 	const FLinearColor BodyColor(0.03f, 0.07f, 0.05f);
 
@@ -115,6 +122,7 @@ void APestiCar::Tick(float DeltaSeconds)
 		}
 	}
 
+	UpdateFreeLook(PC, DeltaSeconds);
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);
 
 	// Turning needs some speed, and gets gentler near top speed.
@@ -279,7 +287,43 @@ void APestiCar::SnapToGround()
 void APestiCar::ToggleCamera()
 {
 	bOverheadCamera = !bOverheadCamera;
+	LookYaw = 0.f;
+	LookPitch = 0.f;
 	CameraArm->TargetArmLength = bOverheadCamera ? PestiCar::OverheadArmLength : PestiCar::ChaseArmLength;
 	CameraArm->SetRelativeRotation(FRotator(bOverheadCamera ? PestiCar::OverheadPitch : PestiCar::ChasePitch, 0.f, 0.f));
 	CameraArm->bDoCollisionTest = !bOverheadCamera;
+}
+
+void APestiCar::UpdateFreeLook(const APlayerController* PC, float DeltaSeconds)
+{
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	PC->GetInputMouseDelta(MouseX, MouseY);
+	const float TurnX = MouseX * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightX) * StickLookRate * DeltaSeconds;
+	const float TurnY = MouseY * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightY) * StickLookRate * DeltaSeconds;
+
+	if (!FMath::IsNearlyZero(TurnX) || !FMath::IsNearlyZero(TurnY))
+	{
+		TimeSinceLook = 0.f;
+		LookYaw = FRotator::NormalizeAxis(LookYaw + TurnX);
+		// The overhead camera only turns around; it keeps looking down.
+		if (!bOverheadCamera)
+		{
+			LookPitch = FMath::Clamp(LookPitch + TurnY,
+				PestiCar::MinLookPitch - PestiCar::ChasePitch, PestiCar::MaxLookPitch - PestiCar::ChasePitch);
+		}
+	}
+	else
+	{
+		TimeSinceLook += DeltaSeconds;
+		// Like GTA: when driving and not looking around, the camera settles back behind the car.
+		if (TimeSinceLook > LookResetDelay && FMath::Abs(ForwardSpeed) > PestiCar::LookResetSpeed && !bOverheadCamera)
+		{
+			LookYaw = FMath::FixedTurn(LookYaw, 0.f, PestiCar::LookResetRate * DeltaSeconds);
+			LookPitch = FMath::FInterpConstantTo(LookPitch, 0.f, DeltaSeconds, PestiCar::LookResetRate);
+		}
+	}
+
+	const float BasePitch = bOverheadCamera ? PestiCar::OverheadPitch : PestiCar::ChasePitch;
+	CameraArm->SetRelativeRotation(FRotator(BasePitch + LookPitch, LookYaw, 0.f));
 }

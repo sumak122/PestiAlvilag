@@ -36,7 +36,13 @@ Notes:
   everything else is two-way with a lane each side. A one-way lane that would
   trap cars at a dead end gets a lane back too. Lanes are nudged to stay
   1.3 m clear of walls where buildings crowd the street.
-- `trams` are tram routes from OSM `route=tram` relations, cut to the map,
-  with their stops (cm along the route). Today's tracks are mapped for
-  right-hand running, so each route is run backwards to keep left as in 1932.
+- `trams` are the 1932 tram lines, not today's: `trams_1932.py` lists them as
+  streets in running order, taken from the BSzKRt network schematic of 1932
+  (print M.92/932, Budapest City Archives, kozlekedes.bparchiv.hu). The
+  track follows those streets, sits in the middle of streets mapped as two
+  one-way halves, and each direction keeps left. Lines on the same street
+  share tracks and stops. The 1932 map has no stops, so stops are placed
+  just before crossings, main roads first, about 300 m apart. The `tram`
+  area layer draws these tracks; today's OSM tram tracks are ignored.
+  Karpfenstein utca (1932) is today's Dobozi utca.
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.
