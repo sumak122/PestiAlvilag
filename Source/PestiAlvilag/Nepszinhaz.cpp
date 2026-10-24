@@ -132,6 +132,21 @@ namespace Nepszinhaz
 			Frustum(Part, Center, R, R, Z0, Z1, Sides);
 		}
 
+		// A ring of a square dome: the rectangle HX0 by HY0 (half sizes) at
+		// Z0 narrowing to HX1 by HY1 at Z1.
+		void SquareRing(EPart Part, const FVector2D& Center, double HX0, double HY0, double HX1, double HY1, double Z0, double Z1)
+		{
+			const FVector C0(Center, Z0), C1(Center, Z1);
+			const FVector Lo[4] = { C0 + FVector(-HX0, -HY0, 0.0), C0 + FVector(HX0, -HY0, 0.0), C0 + FVector(HX0, HY0, 0.0), C0 + FVector(-HX0, HY0, 0.0) };
+			const FVector Hi[4] = { C1 + FVector(-HX1, -HY1, 0.0), C1 + FVector(HX1, -HY1, 0.0), C1 + FVector(HX1, HY1, 0.0), C1 + FVector(-HX1, HY1, 0.0) };
+			const FVector Outs[4] = { FVector(0.0, -1.0, 0.5), FVector(1.0, 0.0, 0.5), FVector(0.0, 1.0, 0.5), FVector(-1.0, 0.0, 0.5) };
+			for (int32 i = 0; i < 4; ++i)
+			{
+				const int32 j = (i + 1) % 4;
+				Poly(Part, { Lo[i], Lo[j], Hi[j], Hi[i] }, Outs[i]);
+			}
+		}
+
 		// A gable: a triangular prism running along X (bAlongX) or Y, its
 		// ridge Rise above Z0.
 		void Gable(EPart Part, const FVector& Min, const FVector& Max, double Rise, bool bAlongX)
@@ -529,45 +544,57 @@ void ANepszinhaz::Build()
 		B.Figure(FVector(Front - 60.0, Side * (HalfWidth - 60.0), CorniceTop), 1.0, Side > 0.0);
 	}
 
-	// --- The roof: a hipped roof over the auditorium and its dome, a drum
-	// with windows under a low ribbed cap and a lantern ring.
+	// --- The roof: a hipped roof over the front building and, over the
+	// auditorium, a raised square block with windows under a square dome
+	// whose sides curve in to a flat top with a railing.
 	B.Hip(Roof, FVector2D(Back + 60.0, -HalfWidth + 120.0), FVector2D(Front - 250.0, HalfWidth - 120.0), CorniceTop, 520.0);
 	{
 		const FVector2D DomeCenter((Back + Front) / 2.0 - 300.0, 0.0);
-		constexpr int32 DrumSides = 24;
-		constexpr double DrumRadius = 1250.0;
-		constexpr double DrumBottom = CorniceTop + 300.0;
+		constexpr double DrumHalfX = 1100.0;
+		constexpr double DrumHalfY = 1250.0;
+		constexpr double DrumBottom = CorniceTop + 200.0;
 		constexpr double DrumTop = CorniceTop + 800.0;
-		B.Cylinder(Plaster, DomeCenter, DrumRadius, DrumBottom, DrumTop, DrumSides);
-		const double FaceWidth = 2.0 * DrumRadius * FMath::Sin(PI / DrumSides);
-		const double Apothem = DrumRadius * FMath::Cos(PI / DrumSides);
-		for (int32 i = 0; i < DrumSides; ++i)
+		B.Box(Plaster, FVector(DomeCenter.X - DrumHalfX, DomeCenter.Y - DrumHalfY, DrumBottom), FVector(DomeCenter.X + DrumHalfX, DomeCenter.Y + DrumHalfY, DrumTop));
+		const FFace DrumFaces[4] = {
+			{ FVector(DomeCenter.X + DrumHalfX, DomeCenter.Y - DrumHalfY, 0.0), FVector(0.0, 1.0, 0.0), FVector(1.0, 0.0, 0.0) },
+			{ FVector(DomeCenter.X - DrumHalfX, DomeCenter.Y + DrumHalfY, 0.0), FVector(0.0, -1.0, 0.0), FVector(-1.0, 0.0, 0.0) },
+			{ FVector(DomeCenter.X + DrumHalfX, DomeCenter.Y + DrumHalfY, 0.0), FVector(-1.0, 0.0, 0.0), FVector(0.0, 1.0, 0.0) },
+			{ FVector(DomeCenter.X - DrumHalfX, DomeCenter.Y - DrumHalfY, 0.0), FVector(1.0, 0.0, 0.0), FVector(0.0, -1.0, 0.0) } };
+		for (int32 f = 0; f < 4; ++f)
 		{
-			const double A = 2.0 * PI * (i + 0.5) / DrumSides;
-			const FVector Out(FMath::Cos(A), FMath::Sin(A), 0.0);
-			const FVector Along(-Out.Y, Out.X, 0.0);
-			const FFace Face{ FVector(DomeCenter, 0.0) + Out * Apothem - Along * (FaceWidth / 2.0), Along, Out };
-			Face.Block(B, Trim, 0.0, 22.0, DrumBottom, DrumTop, 12.0);
-			if (i % 2 == 0)
+			const FFace& Face = DrumFaces[f];
+			const double Length = 2.0 * (f < 2 ? DrumHalfY : DrumHalfX);
+			constexpr int32 DrumBays = 5;
+			Face.Block(B, Trim, 0.0, Length, DrumTop - 90.0, DrumTop, 40.0);
+			Face.Block(B, Trim, 0.0, Length, DrumBottom, DrumBottom + 40.0, 16.0);
+			for (int32 k = 0; k <= DrumBays; ++k)
 			{
-				Face.Arch(B, Trim, Glass, FaceWidth / 2.0 - 70.0, FaceWidth / 2.0 + 70.0, DrumBottom + 90.0, DrumBottom + 300.0, 12.0, 8.0, false);
+				const double S = FMath::Clamp(Length * k / DrumBays, 35.0, Length - 35.0);
+				Face.Block(B, Plaster, S - 35.0, S + 35.0, DrumBottom + 40.0, DrumTop - 90.0, 12.0);
+			}
+			for (int32 k = 0; k < DrumBays; ++k)
+			{
+				const double Mid = Length * (k + 0.5) / DrumBays;
+				Face.Arch(B, Trim, Glass, Mid - 70.0, Mid + 70.0, DrumBottom + 120.0, DrumBottom + 340.0, 12.0, 8.0, false);
 			}
 		}
-		B.Frustum(Trim, DomeCenter, DrumRadius + 60.0, DrumRadius + 60.0, DrumTop, DrumTop + 70.0, DrumSides);
-		const double Rings[][3] = { { 1.0, 0.93, 160.0 }, { 0.93, 0.76, 150.0 }, { 0.76, 0.52, 110.0 }, { 0.52, 0.25, 70.0 } };
-		double Z = DrumTop + 70.0;
+		// The dome: rings of the square, each narrower, steeper at the
+		// bottom and flatter towards the top.
+		const double Rings[][3] = { { 1.03, 1.0, 120.0 }, { 1.0, 0.92, 140.0 }, { 0.92, 0.80, 120.0 }, { 0.80, 0.66, 90.0 }, { 0.66, 0.55, 50.0 } };
+		double Z = DrumTop;
 		for (const auto& Ring : Rings)
 		{
-			B.Frustum(Roof, DomeCenter, DrumRadius * Ring[0], DrumRadius * Ring[1], Z, Z + Ring[2], DrumSides, false);
+			B.SquareRing(Roof, DomeCenter, DrumHalfX * Ring[0], DrumHalfY * Ring[0], DrumHalfX * Ring[1], DrumHalfY * Ring[1], Z, Z + Ring[2]);
 			Z += Ring[2];
 		}
-		B.Cylinder(Trim, DomeCenter, DrumRadius * 0.27, Z, Z + 60.0, DrumSides);
-		B.Cylinder(Roof, DomeCenter, DrumRadius * 0.12, Z + 60.0, Z + 200.0, 12);
-		for (int32 i = 0; i < 8; ++i)
+		const double TopX = DrumHalfX * 0.55, TopY = DrumHalfY * 0.55;
+		B.Box(Roof, FVector(DomeCenter.X - TopX, DomeCenter.Y - TopY, Z - 1.0), FVector(DomeCenter.X + TopX, DomeCenter.Y + TopY, Z + 10.0));
+		const FVector Corners[4] = {
+			FVector(DomeCenter.X - TopX + 20.0, DomeCenter.Y - TopY + 20.0, Z + 10.0), FVector(DomeCenter.X + TopX - 20.0, DomeCenter.Y - TopY + 20.0, Z + 10.0),
+			FVector(DomeCenter.X + TopX - 20.0, DomeCenter.Y + TopY - 20.0, Z + 10.0), FVector(DomeCenter.X - TopX + 20.0, DomeCenter.Y + TopY - 20.0, Z + 10.0) };
+		for (int32 i = 0; i < 4; ++i)
 		{
-			const double A = 2.0 * PI * i / 8.0;
-			const FVector2D At = DomeCenter + FVector2D(FMath::Cos(A), FMath::Sin(A)) * (DrumRadius * 0.25);
-			B.Cylinder(Trim, At, 8.0, Z + 60.0, Z + 160.0, 6);
+			B.Balustrade(Trim, Corners[i], Corners[(i + 1) % 4], 90.0, false);
 		}
 	}
 
