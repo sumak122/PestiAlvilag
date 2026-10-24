@@ -26,6 +26,10 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	int32 GetLaneIndex() const { return LaneIndex; }
+	int32 GetPointIndex() const { return PointIndex; }
+	int32 GetNextLaneIndex() const { return NextLaneIndex; }
+
 	/** Called by the manager right after spawning. */
 	void StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex, const FLinearColor& Paint);
 

@@ -157,7 +157,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			FString::Printf(TEXT("%d km/h   (C: camera)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
+			FString::Printf(TEXT("%d km/h   (C: camera, N: traffic view)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
 	}
 }
 
