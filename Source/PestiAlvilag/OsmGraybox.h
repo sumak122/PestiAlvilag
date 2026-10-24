@@ -107,8 +107,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Graybox")
 	TObjectPtr<UProceduralMeshComponent> Mesh;
 
-	/** Facade detail in a grid of tiles, so far-away tiles can be skipped when drawing. No collision, not saved. */
-	UPROPERTY(VisibleAnywhere, Category = "Graybox")
+	/** Facade detail in a grid of tiles, so far-away tiles can be skipped when drawing. Made at game start only; no collision. */
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> FacadeTiles;
 
 	UPROPERTY()

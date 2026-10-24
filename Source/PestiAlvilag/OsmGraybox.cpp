@@ -4,6 +4,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/World.h"
 #include "HAL/FileManager.h"
 #include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
@@ -344,14 +345,6 @@ AOsmGraybox::AOsmGraybox()
 	Mesh->SetCollisionProfileName(TEXT("BlockAll"));
 	RootComponent = Mesh;
 
-	for (int32 i = 0; i < OsmGraybox::FacadeTilesX * OsmGraybox::FacadeTilesY; ++i)
-	{
-		UProceduralMeshComponent* Tile = CreateDefaultSubobject<UProceduralMeshComponent>(*FString::Printf(TEXT("FacadeTile%02d"), i), true);
-		Tile->SetupAttachment(Mesh);
-		Tile->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		FacadeTiles.Add(Tile);
-	}
-
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	BaseMaterial = BasicShapeMaterial.Object;
 }
@@ -372,18 +365,14 @@ void AOsmGraybox::OnConstruction(const FTransform& Transform)
 	{
 		Build();
 	}
-	else if (!HasFacades())
-	{
-		BuildFacades();
-	}
 }
 
 void AOsmGraybox::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Facades are not saved with the level (they would make it huge), so
-	// make them when the game starts.
+	// Facades exist only while the game runs: kept in the editor's level they
+	// were copied whenever Play was pressed, which ran out of memory.
 	if (!HasFacades())
 	{
 		BuildFacades();
@@ -590,6 +579,21 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 {
 	using namespace OsmGraybox;
 
+	if (!GetWorld() || !GetWorld()->IsGameWorld())
+	{
+		return;
+	}
+	if (FacadeTiles.Num() == 0)
+	{
+		for (int32 i = 0; i < FacadeTilesX * FacadeTilesY; ++i)
+		{
+			UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this, *FString::Printf(TEXT("FacadeTile%02d"), i), RF_Transient | RF_DuplicateTransient);
+			Tile->SetupAttachment(Mesh);
+			Tile->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Tile->RegisterComponent();
+			FacadeTiles.Add(Tile);
+		}
+	}
 	for (UProceduralMeshComponent* Tile : FacadeTiles)
 	{
 		if (Tile)

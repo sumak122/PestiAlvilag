@@ -32,6 +32,7 @@ Notes:
   widened by a 6 m pavement. The actor dresses those walls as Pest tenement
   facades (windows, ledges, cornice, shops, gates); courtyard walls stay
   plain. `levels` is passed on from OSM `building:levels` when mapped.
+  Facades are made when the game starts and are not shown in the editor.
 - This is today's map. Buildings that did not exist in 1932 (for example
   around Corvin köz and Keleti's newer blocks) are still in it; fixing the
   1932 street plan comes later, from the MAPIRE 1930s maps.
