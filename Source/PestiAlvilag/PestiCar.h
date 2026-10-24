@@ -72,6 +72,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car")
 	float ForwardSpeed = 0.f;
 
+	/** Degrees the camera turns per unit of mouse movement. */
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MouseLookScale = 2.5f;
+
+	/** Degrees per second the camera turns with the gamepad's right stick. */
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float StickLookRate = 150.f;
+
+	/** Seconds without looking around before the camera swings back behind the car while driving. */
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float LookResetDelay = 2.f;
+
 	/** Seconds out of police sight that lose them. */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float EscapeTime = 20.f;
@@ -110,10 +122,15 @@ private:
 	void MoveWithSlide(const FVector& Delta);
 	void SnapToGround();
 	void ToggleCamera();
+	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void UpdateWanted(float DeltaSeconds);
 	void ClearWanted(const TCHAR* Message);
 
 	bool bOverheadCamera = false;
+	// Free look: the camera's turn away from straight behind the car (degrees).
+	float LookYaw = 0.f;
+	float LookPitch = 0.f;
+	float TimeSinceLook = 0.f;
 	int32 WantedLevel = 0;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
