@@ -16,7 +16,7 @@ class UStaticMeshComponent;
  * The player on foot, built from engine shapes so it needs no art: a man in
  * a long coat and hat, with a GTA style camera behind him.
  *
- * Keys: W/A/S/D or left stick to walk, Shift or left stick click to run,
+ * Keys: W/A/S/D or left stick to jog, Shift or left stick click to sprint,
  * Space or gamepad A to jump, mouse or right stick to look around,
  * F or gamepad B to get into the car next to you.
  */
@@ -30,11 +30,13 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** The everyday pace: a light jog (cm/s). */
 	UPROPERTY(EditAnywhere, Category = "Person")
-	float WalkSpeed = 170.f;
+	float JogSpeed = 330.f;
 
+	/** Holding Shift (cm/s). */
 	UPROPERTY(EditAnywhere, Category = "Person")
-	float RunSpeed = 550.f;
+	float RunSpeed = 750.f;
 
 	/** Walking speed with something heavy in hand; no running then (cm/s). */
 	UPROPERTY(EditAnywhere, Category = "Person")

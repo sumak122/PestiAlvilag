@@ -32,6 +32,9 @@ namespace Prologue
 	constexpr float DriverBeside = 180.f;
 	const FLinearColor DriverCoat(0.04f, 0.04f, 0.05f);
 
+	// The flower bed in the middle of Tisza Kálmán tér.
+	const FVector2D ParkMiddle(59600.f, 700.f);
+
 	// A brown leather case, carried in the right hand.
 	const FVector SuitcaseScale(0.7f, 0.22f, 0.48f);
 	const FVector SuitcaseInHand(0.f, 48.f, -52.f);
@@ -127,6 +130,14 @@ void AMissionPrologue::SetUpMission()
 	Carry.Radius = 400.f;
 	Steps.Add(Carry);
 
+	// The way home leads through the park on Tisza Kálmán tér.
+	FMissionStep Park;
+	Park.GoalHu = TEXT("Menj \u00e1t a Tisza K\u00e1lm\u00e1n t\u00e9ren");
+	Park.GoalEn = TEXT("Walk through Tisza K\u00e1lm\u00e1n t\u00e9r");
+	Park.Target = FVector(Prologue::ParkMiddle, GroundZ(Prologue::ParkMiddle) + 90.0);
+	Park.Radius = 1200.f;
+	Steps.Add(Park);
+
 	FMissionStep Home;
 	Home.GoalHu = TEXT("Keresd meg B\u00f6zsi n\u00e9ni h\u00e1z\u00e1t a N\u00e9psz\u00ednh\u00e1z utc\u00e1ban");
 	Home.GoalEn = TEXT("Find Aunt B\u00f6zsi's house on N\u00e9psz\u00ednh\u00e1z utca");
@@ -185,7 +196,7 @@ void AMissionPrologue::OnStepDone(int32 Step)
 		Say(TEXT("\u00dariember"), TEXT("Tess\u00e9k, \u00f6tven fill\u00e9r. Isten \u00e1ldja, fiam!"),
 			TEXT("Here, fifty fill\u00e9r. God bless you, son!"), 8.f);
 	}
-	else if (Step == 2)
+	else if (Step == 3)
 	{
 		Say(TEXT("B\u00f6zsi n\u00e9ni"), TEXT("H\u00e1t megj\u00f6tt\u00e9l, fiam! Gyere csak, megmutatom a szob\u00e1dat."),
 			TEXT("So you made it, son! Come in, I'll show you your room."), 8.f);

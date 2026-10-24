@@ -12,9 +12,9 @@ class APestiTaxi;
 /**
  * Act 1, mission 1, "Megérkezés" (Arrival). The player steps out of Keleti
  * station in the autumn of 1932, carries a gentleman's suitcase to his taxi
- * on Baross tér for a 50 fillér tip, then finds Bözsi néni's tenement on
- * Népszínház utca, which becomes home. Teaches walking, following the goal
- * light and saving at home.
+ * on Baross tér for a 50 fillér tip, then walks through the park on Tisza
+ * Kálmán tér to Bözsi néni's tenement on Népszínház utca, which becomes
+ * home. Teaches walking, following the goal light and saving at home.
  */
 UCLASS()
 class PESTIALVILAG_API AMissionPrologue : public AMission

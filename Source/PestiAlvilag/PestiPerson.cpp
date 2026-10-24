@@ -47,7 +47,7 @@ APestiPerson::APestiPerson()
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->bOrientRotationToMovement = true;
 	Movement->RotationRate = FRotator(0.f, 600.f, 0.f);
-	Movement->MaxWalkSpeed = WalkSpeed;
+	Movement->MaxWalkSpeed = JogSpeed;
 	Movement->JumpZVelocity = 380.f;
 	Movement->AirControl = 0.2f;
 
@@ -117,7 +117,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			TEXT("On foot   (F: get in car, Shift: run, Space: jump, N: traffic view, P: police test, F9: new game)"));
+			TEXT("On foot   (F: get in car, Shift: sprint, Space: jump, N: traffic view, P: police test, F9: new game)"));
 	}
 }
 
@@ -154,7 +154,7 @@ void APestiPerson::Walk(const APlayerController* PC)
 	AddMovementInput(FRotationMatrix(Heading).GetUnitAxis(EAxis::Y), Right);
 
 	const bool bRun = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::Gamepad_LeftThumbstick);
-	GetCharacterMovement()->MaxWalkSpeed = bCarrying ? CarrySpeed : bRun ? RunSpeed : WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = bCarrying ? CarrySpeed : bRun ? RunSpeed : JogSpeed;
 }
 
 void APestiPerson::SwingLimbs(float DeltaSeconds)

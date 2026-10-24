@@ -15,6 +15,7 @@
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
 #include "PestiTaxi.h"
+#include "StreetFurniture.h"
 #include "TaxiCompany.h"
 #include "TrafficManager.h"
 
@@ -87,6 +88,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	{
 		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
 		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
+	}
+
+	// Lamps, benches, advertising columns and the park on Tisza Kálmán tér.
+	if (!TActorIterator<AStreetFurniture>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AStreetFurniture>();
 	}
 
 	// Start traffic unless the level already has its own manager.

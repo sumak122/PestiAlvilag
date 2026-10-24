@@ -52,3 +52,20 @@ Notes:
   area layer draws these tracks; today's OSM tram tracks are ignored.
   Karpfenstein utca (1932) is today's Dobozi utca.
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.
+
+## Street furniture and Tisza Kálmán tér
+
+`street_furniture.py` reads the graybox JSON and writes
+`Data/OsmGraybox/street_furniture.json`. The `AStreetFurniture` actor (the game
+mode spawns it) reads that file and places everything on the ground:
+
+- the period street lamps along the pavements (after Fortepan 100450);
+- round advertising columns near street corners;
+- benches in the parks;
+- the 1932 layout of Tisza Kálmán tér: paths, flower beds, trees, benches,
+  lamps and a railing.
+
+Run it again whenever the graybox JSON changes:
+
+    python street_furniture.py ../../Data/OsmGraybox/blaha_test_area.json \
+        ../../Data/OsmGraybox/street_furniture.json
