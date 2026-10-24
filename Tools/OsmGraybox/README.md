@@ -7,13 +7,13 @@ Turns an OpenStreetMap export into the JSON that the `AOsmGraybox` actor
   Népszínház utca, Teleki tér and Keleti, bounding box
   19.066,47.490 to 19.090,47.503. Downloaded 2026-10-24 from
   `https://www.openstreetmap.org/api/0.6/map?bbox=19.066,47.490,19.090,47.503`.
-- `Content/Data/OsmGraybox/blaha_test_area.json` is the output the actor reads.
+- `Data/OsmGraybox/blaha_test_area.json` is the output the actor reads.
 
 To regenerate:
 
 ```
 pip install -r requirements.txt
-python osm_to_graybox.py source/blaha_test_area.osm ../../Content/Data/OsmGraybox/blaha_test_area.json
+python osm_to_graybox.py source/blaha_test_area.osm ../../Data/OsmGraybox/blaha_test_area.json
 ```
 
 Then press **Rebuild** on the OsmGraybox actor in the editor.

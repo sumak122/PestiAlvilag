@@ -8,6 +8,7 @@
 
 class ATrafficManager;
 class UBoxComponent;
+class UMaterialInterface;
 class UStaticMeshComponent;
 
 /**
@@ -42,6 +43,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float StopGap = 650.f;
 
+	/** Seconds to wait at a busy junction before going anyway. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	float MaxJunctionWait = 4.f;
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
 	TObjectPtr<UBoxComponent> CollisionBox;
@@ -49,11 +54,21 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
 	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
 
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BaseMaterial;
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<ATrafficManager> Manager;
 
+	/** Speed limit from the junction ahead: full speed if free, else stop at the line. */
+	float JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds);
+	void ReleasePassedJunctions(const FVector& Location, int32 NextNode);
+
 	int32 LaneIndex = INDEX_NONE;
 	int32 PointIndex = 0;
 	float CurrentSpeed = 0.f;
+	float JunctionWaitTime = 0.f;
+	float BlockedTime = 0.f;
+	TArray<int32> HeldNodes;
 };

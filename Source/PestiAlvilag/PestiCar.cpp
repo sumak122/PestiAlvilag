@@ -33,6 +33,8 @@ APestiCar::APestiCar()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	BaseMaterial = BasicShapeMaterial.Object;
 
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->SetBoxExtent(PestiCar::BoxExtent);
@@ -90,7 +92,7 @@ void APestiCar::BeginPlay()
 
 	auto Paint = [this](UStaticMeshComponent* Part, const FLinearColor& Color)
 	{
-		if (UMaterialInterface* BaseMaterial = Part->GetMaterial(0))
+		if (BaseMaterial)
 		{
 			UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			Paintwork->SetVectorParameterValue(TEXT("Color"), Color);

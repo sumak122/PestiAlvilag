@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -17,6 +18,14 @@ namespace TrafficCar
 	constexpr float ReachRadius = 300.f;
 	// Slowest fraction of lane speed in a sharp corner.
 	constexpr float CornerSpeedFraction = 0.35f;
+	// Cars ask for a junction this far before it (cm)...
+	constexpr float JunctionApproach = 1500.f;
+	// ...stop this far before it if it is busy...
+	constexpr float JunctionStopLine = 700.f;
+	// ...and free it once this far past (cm).
+	constexpr float JunctionExit = 900.f;
+	// Seconds stuck against another car or a wall before driving through it.
+	constexpr float MaxBlockedTime = 3.f;
 }
 
 ATrafficCar::ATrafficCar()
@@ -25,6 +34,8 @@ ATrafficCar::ATrafficCar()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	BaseMaterial = BasicShapeMaterial.Object;
 
 	// Same size and layout as the player's car (see APestiCar).
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
@@ -66,11 +77,14 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	PointIndex = InPointIndex;
 	CurrentSpeed = 0.f;
 
+	if (!BaseMaterial)
+	{
+		return;
+	}
 	for (int32 i = 0; i < BodyParts.Num(); ++i)
 	{
 		UStaticMeshComponent* Part = BodyParts[i];
-		UMaterialInterface* BaseMaterial = Part ? Part->GetMaterial(0) : nullptr;
-		if (!BaseMaterial)
+		if (!Part)
 		{
 			continue;
 		}
@@ -119,9 +133,64 @@ void ATrafficCar::Tick(float DeltaSeconds)
 	const float Clear = Manager->ClearDistanceAhead(this, TrafficCar::LookAhead);
 	WantedSpeed *= FMath::Clamp((Clear - StopGap) / (TrafficCar::LookAhead - StopGap), 0.f, 1.f);
 
+	// Take turns at junctions.
+	const float DistToJunction = static_cast<float>(FVector::Dist2D(Location, Lane->Points.Last()));
+	WantedSpeed *= JunctionSpeedLimit(DistToJunction, Lane->ToNode, DeltaSeconds);
+	ReleasePassedJunctions(Location, Lane->ToNode);
+
 	const float Rate = WantedSpeed < CurrentSpeed ? BrakeDeceleration : Acceleration;
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, WantedSpeed, DeltaSeconds, Rate);
 
-	Location += GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed * DeltaSeconds;
-	SetActorLocation(Location);
+	// Move with collision so cars bump into the player and each other instead
+	// of passing through. If stuck on another AI car or a wall for a while,
+	// drive through it so traffic cannot jam for good; never through the player.
+	const FVector NewLocation = Location + GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed * DeltaSeconds;
+	FHitResult Hit;
+	SetActorLocation(NewLocation, true, &Hit);
+	if (!Hit.bBlockingHit)
+	{
+		BlockedTime = 0.f;
+		return;
+	}
+	CurrentSpeed = 0.f;
+	BlockedTime += DeltaSeconds;
+	const AActor* Blocker = Hit.GetActor();
+	const bool bBlockedByPlayer = Blocker && Blocker == UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!bBlockedByPlayer && BlockedTime > TrafficCar::MaxBlockedTime)
+	{
+		SetActorLocation(NewLocation, false);
+	}
+}
+
+float ATrafficCar::JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds)
+{
+	if (HeldNodes.Contains(Node) || DistToJunction > TrafficCar::JunctionApproach)
+	{
+		return 1.f;
+	}
+
+	const bool bForce = JunctionWaitTime > MaxJunctionWait;
+	if (Manager->TryClaimNode(Node, this, bForce))
+	{
+		HeldNodes.Add(Node);
+		JunctionWaitTime = 0.f;
+		return 1.f;
+	}
+
+	JunctionWaitTime += DeltaSeconds;
+	return FMath::Clamp((DistToJunction - TrafficCar::JunctionStopLine)
+		/ (TrafficCar::JunctionApproach - TrafficCar::JunctionStopLine), 0.f, 1.f);
+}
+
+void ATrafficCar::ReleasePassedJunctions(const FVector& Location, int32 NextNode)
+{
+	for (int32 i = HeldNodes.Num() - 1; i >= 0; --i)
+	{
+		const int32 Node = HeldNodes[i];
+		if (Node != NextNode && FVector::Dist2D(Location, Manager->GetNodeLocation(Node)) > TrafficCar::JunctionExit)
+		{
+			Manager->ReleaseNode(Node, this);
+			HeldNodes.RemoveAt(i);
+		}
+	}
 }
