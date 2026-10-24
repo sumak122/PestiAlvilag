@@ -13,6 +13,14 @@ class UMaterialInterface;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 
+enum class ETaxiShift : uint8
+{
+	Off,
+	Waiting,      // on shift, the next fare comes soon
+	ToPickup,     // a fare waits at the kerb
+	ToDropoff,    // the fare rides in the taxi
+};
+
 /**
  * The Budapesti Autótaxi kiosk, where the player can work as a taxi driver.
  *
@@ -102,14 +110,6 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	enum class EShift : uint8
-	{
-		Off,
-		Waiting,      // on shift, the next fare comes soon
-		ToPickup,     // a fare waits at the kerb
-		ToDropoff,    // the fare rides in the taxi
-	};
-
 	void ToggleShift();
 	void UpdateFare(APestiTaxi* Taxi, float DeltaSeconds);
 	bool StartFare(const FVector& From);
@@ -123,7 +123,7 @@ private:
 	void Say(const FString& Line) const;
 	ATrafficManager* GetTraffic() const;
 
-	EShift Shift = EShift::Off;
+	ETaxiShift Shift = ETaxiShift::Off;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ATaxiPassenger> Passenger;

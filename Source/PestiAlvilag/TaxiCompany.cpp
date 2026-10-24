@@ -185,7 +185,7 @@ void ATaxiCompany::BeginPlay()
 	{
 		return;
 	}
-	for (int32 i = 0; i < KioskParts.Num() && i < UE_ARRAY_COUNT(TaxiCompany::KioskSpecs); ++i)
+	for (int32 i = 0; i < KioskParts.Num() && i < static_cast<int32>(UE_ARRAY_COUNT(TaxiCompany::KioskSpecs)); ++i)
 	{
 		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 		Paintwork->SetVectorParameterValue(TEXT("Color"), TaxiCompany::KioskSpecs[i].Color);
@@ -228,7 +228,7 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 		ToggleShift();
 	}
 
-	if (Shift == EShift::Off)
+	if (Shift == ETaxiShift::Off)
 	{
 		if (bAtKiosk && GEngine)
 		{
@@ -246,7 +246,7 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 	else
 	{
 		// Leaving the taxi with a fare aboard loses them.
-		if (Shift == EShift::ToDropoff)
+		if (Shift == ETaxiShift::ToDropoff)
 		{
 			Say(TEXT("\u201eHova megy? Na j\u00f3, majd gyalog.\u201d  (Where are you going? Fine, I'll walk.)"));
 			EndFare();
@@ -262,9 +262,9 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 
 void ATaxiCompany::ToggleShift()
 {
-	if (Shift == EShift::Off)
+	if (Shift == ETaxiShift::Off)
 	{
-		Shift = EShift::Waiting;
+		Shift = ETaxiShift::Waiting;
 		Fares = 0;
 		NextFareTime = GetWorld()->GetTimeSeconds() + TaxiCompany::FirstFareDelay;
 		Say(TEXT("\u201eIndulhat, a kocsik ott \u00e1llnak.\u201d  (Off you go, the cars are over there.)"));
@@ -272,7 +272,7 @@ void ATaxiCompany::ToggleShift()
 	else
 	{
 		EndFare();
-		Shift = EShift::Off;
+		Shift = ETaxiShift::Off;
 		Say(FString::Printf(TEXT("Shift over: %d fares."), Fares));
 	}
 }
@@ -286,7 +286,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 
 	switch (Shift)
 	{
-	case EShift::Waiting:
+	case ETaxiShift::Waiting:
 		Status = TEXT("Taxi shift: waiting for a fare...");
 		if (Now >= NextFareTime && !StartFare(At))
 		{
@@ -294,7 +294,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		}
 		break;
 
-	case EShift::ToPickup:
+	case ETaxiShift::ToPickup:
 	{
 		const double Distance = FVector::Dist2D(At, PickupSpot);
 		if (Distance < PickupRange && bStopped)
@@ -314,7 +314,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		break;
 	}
 
-	case EShift::ToDropoff:
+	case ETaxiShift::ToDropoff:
 	{
 		APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
 		if (Game && Game->GetWantedLevel() > 0 && !bPassengerScared)
@@ -352,7 +352,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		break;
 	}
 
-	if (Shift == EShift::ToPickup || Shift == EShift::ToDropoff)
+	if (Shift == ETaxiShift::ToPickup || Shift == ETaxiShift::ToDropoff)
 	{
 		DrawRoute();
 	}
@@ -379,7 +379,7 @@ bool ATaxiCompany::StartFare(const FVector& From)
 	{
 		return false;
 	}
-	Shift = EShift::ToPickup;
+	Shift = ETaxiShift::ToPickup;
 	FareTime = GetWorld()->GetTimeSeconds();
 	NextRouteTime = 0.0;
 	Say(FString::Printf(TEXT("Someone is waving for a taxi on %s."), *PickupStreet));
@@ -414,7 +414,7 @@ void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 	{
 		Passenger->SetInWorld(false);
 	}
-	Shift = EShift::ToDropoff;
+	Shift = ETaxiShift::ToDropoff;
 	FareTime = GetWorld()->GetTimeSeconds();
 	BumpsAtPickup = Taxi->GetBumpCount();
 	BumpsSaid = 0;
@@ -475,9 +475,9 @@ void ATaxiCompany::EndFare()
 	}
 	Beacon->SetVisibility(false);
 	Route.Reset();
-	if (Shift != EShift::Off)
+	if (Shift != ETaxiShift::Off)
 	{
-		Shift = EShift::Waiting;
+		Shift = ETaxiShift::Waiting;
 		NextFareTime = GetWorld()->GetTimeSeconds() + TaxiCompany::NextFareDelay;
 	}
 }
