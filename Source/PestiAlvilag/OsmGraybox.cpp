@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/FileManager.h"
+#include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
@@ -16,7 +17,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogOsmGraybox, Log, All);
 
 namespace OsmGraybox
 {
-	// Mesh sections, one color each.
+	// Main mesh sections, one color each; then one wall section per plaster color.
 	enum ESection : int32
 	{
 		Ground,
@@ -25,10 +26,23 @@ namespace OsmGraybox
 		Park,
 		Tram,
 		Rail,
-		Walls,
 		Roofs,
-		Count
+		FirstWalls
 	};
+
+	// Facade tile sections.
+	enum EFacadeSection : int32
+	{
+		Stone,
+		Glass,
+		Wood,
+		Sign,
+		FacadeSectionCount
+	};
+
+	// Facade tiles: the map is cut into this many columns and rows.
+	constexpr int32 FacadeTilesX = 8;
+	constexpr int32 FacadeTilesY = 6;
 
 	// Small lifts keep the flat layers from flickering where they overlap.
 	constexpr double GroundZ = 2.0;
@@ -150,6 +164,174 @@ namespace OsmGraybox
 			}
 		}
 	}
+
+	// Sizes of a Pest tenement facade (cm).
+	namespace Facade
+	{
+		constexpr double StoreyHeight = 380.0;
+		constexpr double GroundFloorHeight = 450.0;
+		constexpr double CorniceZone = 60.0;
+		constexpr double BayWidth = 320.0;
+		constexpr double EdgeMargin = 60.0;
+		constexpr double MinWindowedLength = 250.0;
+		constexpr double WindowWidth = 130.0;
+		constexpr double FrameBorder = 14.0;
+		constexpr double FrameDepth = 8.0;
+		constexpr double GlassDepth = 1.0;
+		constexpr double ShopWidth = 240.0;
+		constexpr double GateWidth = 280.0;
+		constexpr double GateHeight = 400.0;
+	}
+
+	// Draws on one straight wall: S runs along it from P0, Z up from the
+	// ground, D out from the wall face.
+	struct FWallFrame
+	{
+		FVector2D P0;
+		FVector2D Along;
+		FVector Out;
+		bool bFlip;
+
+		FVector At(double S, double Z, double D) const
+		{
+			const FVector2D Flat = P0 + Along * S;
+			return FVector(Flat.X, Flat.Y, Z) + Out * D;
+		}
+
+		// A rectangle on a plane, facing Normal, with corners in order.
+		void Quad(FSection& Section, const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& Normal) const
+		{
+			const int32 IA = Section.AddVertex(A, Normal);
+			const int32 IB = Section.AddVertex(B, Normal);
+			const int32 IC = Section.AddVertex(C, Normal);
+			const int32 ID = Section.AddVertex(D, Normal);
+			Section.AddTriangle(IA, IB, IC, Normal, bFlip);
+			Section.AddTriangle(IA, IC, ID, Normal, bFlip);
+		}
+
+		// A flat panel parallel to the wall at depth D.
+		void Panel(FSection& Section, double S0, double S1, double Z0, double Z1, double D) const
+		{
+			Quad(Section, At(S0, Z0, D), At(S1, Z0, D), At(S1, Z1, D), At(S0, Z1, D), Out);
+		}
+
+		// A block standing out of the wall (no back face).
+		void Block(FSection& Section, double S0, double S1, double Z0, double Z1, double D) const
+		{
+			const FVector Side(Along.X, Along.Y, 0.0);
+			Panel(Section, S0, S1, Z0, Z1, D);
+			Quad(Section, At(S0, Z1, 0.0), At(S1, Z1, 0.0), At(S1, Z1, D), At(S0, Z1, D), FVector::UpVector);
+			Quad(Section, At(S0, Z0, 0.0), At(S1, Z0, 0.0), At(S1, Z0, D), At(S0, Z0, D), FVector::DownVector);
+			Quad(Section, At(S0, Z0, 0.0), At(S0, Z1, 0.0), At(S0, Z1, D), At(S0, Z0, D), -Side);
+			Quad(Section, At(S1, Z0, 0.0), At(S1, Z1, 0.0), At(S1, Z1, D), At(S1, Z0, D), Side);
+		}
+
+		// An opening: a raised frame of width Border around an inner panel
+		// that sits back near the wall, with the frame's inner sides showing.
+		void Opening(FSection& FrameSection, FSection& InnerSection, double S0, double S1, double Z0, double Z1, double Border, double Depth) const
+		{
+			const double IS0 = S0 + Border, IS1 = S1 - Border, IZ0 = Z0 + Border, IZ1 = Z1 - Border;
+			const FVector Side(Along.X, Along.Y, 0.0);
+			// Frame front.
+			Panel(FrameSection, S0, S1, IZ1, Z1, Depth);
+			Panel(FrameSection, S0, S1, Z0, IZ0, Depth);
+			Panel(FrameSection, S0, IS0, IZ0, IZ1, Depth);
+			Panel(FrameSection, IS1, S1, IZ0, IZ1, Depth);
+			// Frame inner sides, from the panel out to the frame front.
+			Quad(FrameSection, At(IS0, IZ1, Facade::GlassDepth), At(IS1, IZ1, Facade::GlassDepth), At(IS1, IZ1, Depth), At(IS0, IZ1, Depth), FVector::DownVector);
+			Quad(FrameSection, At(IS0, IZ0, Facade::GlassDepth), At(IS1, IZ0, Facade::GlassDepth), At(IS1, IZ0, Depth), At(IS0, IZ0, Depth), FVector::UpVector);
+			Quad(FrameSection, At(IS0, IZ0, Facade::GlassDepth), At(IS0, IZ1, Facade::GlassDepth), At(IS0, IZ1, Depth), At(IS0, IZ0, Depth), Side);
+			Quad(FrameSection, At(IS1, IZ0, Facade::GlassDepth), At(IS1, IZ1, Facade::GlassDepth), At(IS1, IZ1, Depth), At(IS1, IZ0, Depth), -Side);
+			// The glass, door or shop window itself.
+			Panel(InnerSection, IS0, IS1, IZ0, IZ1, Facade::GlassDepth);
+		}
+	};
+
+	// A Pest tenement front on one wall: shops or windows and a gate on the
+	// ground floor, framed windows with sills on the floors above, ledges
+	// between floors and a cornice on top. Seed varies the details.
+	void AddFacade(TArray<FSection>& Sections, const FVector2D& P0, const FVector2D& P1, double Height, int32 Levels, uint32 Seed, bool bFlip)
+	{
+		using namespace Facade;
+
+		const double Length = FVector2D::Distance(P0, P1);
+		const FVector2D Along = (P1 - P0) / Length;
+		// Rings keep the solid on the left of each edge, so out is to the right.
+		const FWallFrame Wall{ P0, Along, FVector(Along.Y, -Along.X, 0.0), bFlip };
+		FSection& StoneS = Sections[Stone];
+		FSection& GlassS = Sections[Glass];
+		FSection& WoodS = Sections[Wood];
+		FSection& SignS = Sections[Sign];
+
+		const int32 Storeys = Levels > 0 ? Levels : FMath::Clamp(FMath::RoundToInt(Height / StoreyHeight), 1, 8);
+		const double GroundTop = FMath::Min(GroundFloorHeight, Height - CorniceZone);
+		const double UpperHeight = Storeys > 1 ? (Height - CorniceZone - GroundTop) / (Storeys - 1) : 0.0;
+
+		// Plinth, the ledge over the ground floor, and the cornice.
+		Wall.Block(StoneS, 0.0, Length, 0.0, 50.0, 6.0);
+		if (GroundTop > 100.0)
+		{
+			Wall.Block(StoneS, 0.0, Length, GroundTop - 25.0, GroundTop, 18.0);
+		}
+		Wall.Block(StoneS, 0.0, Length, Height - CorniceZone, Height - 25.0, 22.0);
+		Wall.Block(StoneS, 0.0, Length, Height - 25.0, Height, 42.0);
+
+		if (Length < MinWindowedLength || GroundTop < 300.0)
+		{
+			return;
+		}
+
+		const int32 Bays = FMath::Max(1, FMath::FloorToInt((Length - 2.0 * EdgeMargin) / BayWidth));
+		const double Bay = (Length - 2.0 * EdgeMargin) / Bays;
+		const bool bShops = Seed % 10 < 7;
+		const int32 GateBay = Bays >= 3 && (Seed / 10) % 2 == 0 ? Bays / 2 : INDEX_NONE;
+
+		for (int32 k = 0; k < Bays; ++k)
+		{
+			const double Mid = EdgeMargin + Bay * (k + 0.5);
+
+			// Ground floor: a gate, a shop, or a window.
+			if (k == GateBay)
+			{
+				const double Half = FMath::Min(GateWidth, Bay - 20.0) / 2.0;
+				Wall.Opening(StoneS, WoodS, Mid - Half, Mid + Half, 0.0, FMath::Min(GateHeight, GroundTop - 30.0), 30.0, 10.0);
+			}
+			else if (bShops)
+			{
+				const double Half = FMath::Min(ShopWidth, Bay - 40.0) / 2.0;
+				Wall.Opening(WoodS, GlassS, Mid - Half, Mid + Half, 50.0, GroundTop - 120.0, 18.0, 8.0);
+				Wall.Block(SignS, Mid - Half - 10.0, Mid + Half + 10.0, GroundTop - 105.0, GroundTop - 45.0, 8.0);
+			}
+			else
+			{
+				Wall.Opening(StoneS, GlassS, Mid - WindowWidth / 2.0, Mid + WindowWidth / 2.0, 130.0, GroundTop - 80.0, FrameBorder, FrameDepth);
+			}
+
+			// Floors above: framed windows with a sill; a hood over the
+			// first floor's windows, which were the grandest.
+			for (int32 Floor = 1; Floor < Storeys; ++Floor)
+			{
+				const double Base = GroundTop + (Floor - 1) * UpperHeight;
+				const double Z0 = Base + UpperHeight * 0.22;
+				const double Z1 = Z0 + FMath::Min(230.0, UpperHeight * 0.6);
+				const double S0 = Mid - WindowWidth / 2.0;
+				const double S1 = Mid + WindowWidth / 2.0;
+				Wall.Opening(StoneS, GlassS, S0, S1, Z0, Z1, FrameBorder, FrameDepth);
+				Wall.Block(StoneS, S0 - 15.0, S1 + 15.0, Z0 - 12.0, Z0, 16.0);
+				if (Floor == 1)
+				{
+					Wall.Block(StoneS, S0 - 20.0, S1 + 20.0, Z1 + 8.0, Z1 + 30.0, 14.0);
+				}
+			}
+		}
+
+		// Thin ledges between the upper floors.
+		for (int32 Floor = 2; Floor < Storeys; ++Floor)
+		{
+			const double Base = GroundTop + (Floor - 1) * UpperHeight;
+			Wall.Block(StoneS, 0.0, Length, Base - 8.0, Base + 4.0, 8.0);
+		}
+	}
 }
 
 AOsmGraybox::AOsmGraybox()
@@ -161,6 +343,14 @@ AOsmGraybox::AOsmGraybox()
 	Mesh->bUseComplexAsSimpleCollision = true;
 	Mesh->SetCollisionProfileName(TEXT("BlockAll"));
 	RootComponent = Mesh;
+
+	for (int32 i = 0; i < OsmGraybox::FacadeTilesX * OsmGraybox::FacadeTilesY; ++i)
+	{
+		UProceduralMeshComponent* Tile = CreateDefaultSubobject<UProceduralMeshComponent>(*FString::Printf(TEXT("FacadeTile%02d"), i), true);
+		Tile->SetupAttachment(Mesh);
+		Tile->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FacadeTiles.Add(Tile);
+	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	BaseMaterial = BasicShapeMaterial.Object;
@@ -182,6 +372,64 @@ void AOsmGraybox::OnConstruction(const FTransform& Transform)
 	{
 		Build();
 	}
+	else if (!HasFacades())
+	{
+		BuildFacades();
+	}
+}
+
+void AOsmGraybox::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Facades are not saved with the level (they would make it huge), so
+	// make them when the game starts.
+	if (!HasFacades())
+	{
+		BuildFacades();
+	}
+}
+
+bool AOsmGraybox::HasFacades() const
+{
+	if (!bBuildFacades)
+	{
+		return true;
+	}
+	for (const UProceduralMeshComponent* Tile : FacadeTiles)
+	{
+		if (Tile && Tile->GetNumSections() > 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+TSharedPtr<FJsonObject> AOsmGraybox::LoadData() const
+{
+	const FString Path = DataPath();
+	FString Text;
+	if (!FFileHelper::LoadFileToString(Text, *Path))
+	{
+		UE_LOG(LogOsmGraybox, Error, TEXT("Could not read %s"), *Path);
+		return nullptr;
+	}
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		UE_LOG(LogOsmGraybox, Error, TEXT("%s is not valid JSON"), *Path);
+		return nullptr;
+	}
+	return Root;
+}
+
+void AOsmGraybox::BuildFacades()
+{
+	if (const TSharedPtr<FJsonObject> Root = LoadData())
+	{
+		BuildFacades(*Root);
+	}
 }
 
 FString AOsmGraybox::DataPath() const
@@ -201,22 +449,16 @@ bool AOsmGraybox::Build()
 	Mesh->ClearAllMeshSections();
 
 	const FString Path = DataPath();
-	FString Text;
-	if (!FFileHelper::LoadFileToString(Text, *Path))
+	const TSharedPtr<FJsonObject> Root = LoadData();
+	if (!Root)
 	{
-		UE_LOG(LogOsmGraybox, Error, TEXT("Could not read %s"), *Path);
 		return false;
 	}
 
-	TSharedPtr<FJsonObject> Root;
-	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
-	{
-		UE_LOG(LogOsmGraybox, Error, TEXT("%s is not valid JSON"), *Path);
-		return false;
-	}
-
+	const int32 NumWallColors = FMath::Max(1, WallColors.Num());
 	TArray<FSection> Sections;
-	Sections.SetNum(ESection::Count);
+	Sections.SetNum(FirstWalls + NumWallColors);
+
 	TArray<TArray<FVector2D>> Rings;
 	TArray<int32> Triangles;
 
@@ -302,20 +544,24 @@ bool AOsmGraybox::Build()
 			// Bridges between buildings start above the street, so traffic passes under them.
 			double Base = 0.0;
 			Building->TryGetNumberField(TEXT("base"), Base);
-			AddWalls(Sections[Walls], Rings, Base, Height, bFlipFaces);
+			const uint32 Seed = FCrc::StrCrc32(*Building->GetStringField(TEXT("id")));
+			FSection& WallSection = Sections[FirstWalls + Seed % NumWallColors];
+			AddWalls(WallSection, Rings, Base, Height, bFlipFaces);
 			AddFlatPolygon(Sections[Roofs], Rings, Triangles, Height, bFlipFaces);
 			if (Base > 0.0)
 			{
-				AddFlatPolygon(Sections[Walls], Rings, Triangles, Base, bFlipFaces, FVector::DownVector);
+				AddFlatPolygon(WallSection, Rings, Triangles, Base, bFlipFaces, FVector::DownVector);
 			}
 			++NumBuildings;
 		}
 	}
 
-	const FLinearColor Colors[ESection::Count] = {
-		GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor, WallColor, RoofColor
-	};
-	for (int32 i = 0; i < ESection::Count; ++i)
+	TArray<FLinearColor> Colors = { GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor, RoofColor };
+	for (int32 i = 0; i < NumWallColors; ++i)
+	{
+		Colors.Add(WallColors.IsValidIndex(i) ? WallColors[i] : FLinearColor(0.62f, 0.55f, 0.45f));
+	}
+	for (int32 i = 0; i < Sections.Num(); ++i)
 	{
 		const FSection& Section = Sections[i];
 		if (Section.Triangles.Num() == 0)
@@ -335,5 +581,115 @@ bool AOsmGraybox::Build()
 
 	BuiltFromFileTime = IFileManager::Get().GetTimeStamp(*Path);
 	UE_LOG(LogOsmGraybox, Log, TEXT("Built %d buildings from %s"), NumBuildings, *Path);
+
+	BuildFacades(*Root);
 	return true;
+}
+
+void AOsmGraybox::BuildFacades(const FJsonObject& Root)
+{
+	using namespace OsmGraybox;
+
+	for (UProceduralMeshComponent* Tile : FacadeTiles)
+	{
+		if (Tile)
+		{
+			Tile->ClearAllMeshSections();
+		}
+	}
+	const TSharedPtr<FJsonObject>* Bounds = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Buildings = nullptr;
+	if (!bBuildFacades || !Root.TryGetObjectField(TEXT("bounds"), Bounds) || !Root.TryGetArrayField(TEXT("buildings"), Buildings))
+	{
+		return;
+	}
+	const double MinX = (*Bounds)->GetNumberField(TEXT("minX"));
+	const double MinY = (*Bounds)->GetNumberField(TEXT("minY"));
+	const double MaxX = (*Bounds)->GetNumberField(TEXT("maxX"));
+	const double MaxY = (*Bounds)->GetNumberField(TEXT("maxY"));
+
+	TArray<TArray<FSection>> TileSections;
+	TileSections.SetNum(FacadeTiles.Num());
+	for (TArray<FSection>& Tile : TileSections)
+	{
+		Tile.SetNum(FacadeSectionCount);
+	}
+
+	TArray<TArray<FVector2D>> Rings;
+	TArray<int32> Triangles;
+	for (const TSharedPtr<FJsonValue>& BuildingValue : *Buildings)
+	{
+		const TSharedPtr<FJsonObject>& Building = BuildingValue->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Front = nullptr;
+		if (!Building.IsValid() || !Building->TryGetArrayField(TEXT("front"), Front) || !ReadPolygon(*Building, Rings, Triangles))
+		{
+			continue;
+		}
+		const double Height = Building->GetNumberField(TEXT("height"));
+		const uint32 Seed = FCrc::StrCrc32(*Building->GetStringField(TEXT("id")));
+
+		// "front" lists the street-facing wall edges, counted through all rings.
+		double Levels = 0.0;
+		Building->TryGetNumberField(TEXT("levels"), Levels);
+		for (const TSharedPtr<FJsonValue>& EdgeValue : *Front)
+		{
+			int32 Edge = static_cast<int32>(EdgeValue->AsNumber());
+			for (const TArray<FVector2D>& Ring : Rings)
+			{
+				if (Edge >= Ring.Num())
+				{
+					Edge -= Ring.Num();
+					continue;
+				}
+				const FVector2D& P0 = Ring[Edge];
+				const FVector2D& P1 = Ring[(Edge + 1) % Ring.Num()];
+				const FVector2D Mid = (P0 + P1) * 0.5;
+				const int32 TileX = FMath::Clamp(FMath::FloorToInt((Mid.X - MinX) / (MaxX - MinX) * FacadeTilesX), 0, FacadeTilesX - 1);
+				const int32 TileY = FMath::Clamp(FMath::FloorToInt((Mid.Y - MinY) / (MaxY - MinY) * FacadeTilesY), 0, FacadeTilesY - 1);
+				const int32 TileIndex = TileY * FacadeTilesX + TileX;
+				if (TileSections.IsValidIndex(TileIndex) && !P0.Equals(P1, 1.0))
+				{
+					AddFacade(TileSections[TileIndex], P0, P1, Height, static_cast<int32>(Levels), Seed ^ (static_cast<uint32>(Edge) * 2654435761u), bFlipFaces);
+				}
+				break;
+			}
+		}
+	}
+
+	// Facade tiles share one material per part.
+	const FLinearColor FacadeColors[FacadeSectionCount] = { StoneColor, GlassColor, WoodColor, SignColor };
+	UMaterialInstanceDynamic* FacadeMaterials[FacadeSectionCount] = {};
+	if (BaseMaterial)
+	{
+		for (int32 j = 0; j < FacadeSectionCount; ++j)
+		{
+			FacadeMaterials[j] = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			FacadeMaterials[j]->SetVectorParameterValue(TEXT("Color"), FacadeColors[j]);
+		}
+	}
+	int32 FacadeTriangles = 0;
+	for (int32 t = 0; t < FacadeTiles.Num(); ++t)
+	{
+		UProceduralMeshComponent* Tile = FacadeTiles[t];
+		if (!Tile)
+		{
+			continue;
+		}
+		Tile->LDMaxDrawDistance = FacadeDrawDistance;
+		Tile->SetCachedMaxDrawDistance(FacadeDrawDistance);
+		for (int32 j = 0; j < FacadeSectionCount; ++j)
+		{
+			const FSection& Section = TileSections[t][j];
+			if (Section.Triangles.Num() == 0)
+			{
+				continue;
+			}
+			Tile->CreateMeshSection_LinearColor(j, Section.Vertices, Section.Triangles, Section.Normals,
+				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+			Tile->SetMaterial(j, FacadeMaterials[j]);
+			FacadeTriangles += Section.Triangles.Num() / 3;
+		}
+	}
+
+	UE_LOG(LogOsmGraybox, Log, TEXT("Built facades: %d triangles"), FacadeTriangles);
 }

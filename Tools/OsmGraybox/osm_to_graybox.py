@@ -24,6 +24,7 @@ import numpy as np
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polygonize, unary_union
+from shapely.prepared import prep
 
 from trams_1932 import build_1932_tram_routes
 
@@ -61,6 +62,13 @@ CARRIAGEWAY_TRIM = 0.3
 CANOPY_HEIGHT = 4.0
 CANOPY_THICKNESS = 1.0
 CANOPY_TYPES = ("roof", "carport")
+
+# A wall gets a dressed street facade when the street (road or square,
+# widened by a pavement) starts within FRONT_PROBE metres of it.
+FRONT_SIDEWALK = 6.0
+FRONT_PROBE = 3.0
+FRONT_MIN_EDGE = 4.0
+FRONT_MIN_HEIGHT = 6.0
 
 # Pest tenements of the period have tall storeys.
 STOREY_HEIGHT = 3.8
@@ -224,6 +232,35 @@ def building_base_m(tags):
     if base == 0.0 and tags.get("building") in CANOPY_TYPES:
         base = max(0.0, building_height_m(tags) - CANOPY_THICKNESS)
     return base
+
+
+def building_levels(tags):
+    """Storeys above ground from OSM, or None."""
+    try:
+        levels = int(float(tags.get("building:levels", "")))
+    except ValueError:
+        return None
+    return levels if levels > 0 else None
+
+
+def street_edges(rec, poly, street_area):
+    """Indices of the wall edges (counted through all rings in order, edge i
+    running from point i to point i+1) whose outside faces a street."""
+    front, index = [], 0
+    for flat in rec["rings"]:
+        pts = [(flat[i] / 100.0, -flat[i + 1] / 100.0) for i in range(0, len(flat), 2)]
+        for i, (x0, y0) in enumerate(pts):
+            x1, y1 = pts[(i + 1) % len(pts)]
+            length = math.hypot(x1 - x0, y1 - y0)
+            if length >= FRONT_MIN_EDGE:
+                mx, my = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+                nx, ny = (y1 - y0) / length, -(x1 - x0) / length
+                if poly.contains(Point(mx + nx, my + ny)):
+                    nx, ny = -nx, -ny
+                if street_area.contains(Point(mx + nx * FRONT_PROBE, my + ny * FRONT_PROBE)):
+                    front.append(index)
+            index += 1
+    return front
 
 
 def road_width_m(tags):
@@ -482,6 +519,9 @@ def convert(osm_path, origin):
             trimmed.append((poly, tags))
     buildings = trimmed
 
+    # Walls that face a street or square get a dressed facade in Unreal.
+    street_area = prep(unary_union([p for p, _ in roads + plazas]).buffer(FRONT_SIDEWALK)) if roads else None
+
     out_buildings = []
     for poly, tags in buildings:
         rec = polygon_record(poly)
@@ -493,6 +533,13 @@ def convert(osm_path, origin):
         base = round(building_base_m(tags) * 100)
         if 0 < base < rec["height"]:
             rec["base"] = base
+        levels = building_levels(tags)
+        if levels:
+            rec["levels"] = levels
+        if street_area is not None and base == 0 and rec["height"] >= FRONT_MIN_HEIGHT * 100:
+            front = street_edges(rec, poly, street_area)
+            if front:
+                rec["front"] = front
         out_buildings.append(rec)
 
     walls = unary_union([p for p, tags in buildings if building_base_m(tags) < DRIVE_UNDER_HEIGHT]) if buildings else None

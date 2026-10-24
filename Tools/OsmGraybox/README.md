@@ -27,6 +27,11 @@ Notes:
   Canopies (`building=roof`, `carport`) are a thin roof 3-4 m up. Building
   corners that stick out into a street cars drive on are cut back to the
   carriageway edge.
+- Buildings get `front`: the wall edges (counted through all rings, edge i
+  from point i to i+1) whose outside is within 3 m of a road or square
+  widened by a 6 m pavement. The actor dresses those walls as Pest tenement
+  facades (windows, ledges, cornice, shops, gates); courtyard walls stay
+  plain. `levels` is passed on from OSM `building:levels` when mapped.
 - This is today's map. Buildings that did not exist in 1932 (for example
   around Corvin köz and Keleti's newer blocks) are still in it; fixing the
   1932 street plan comes later, from the MAPIRE 1930s maps.
