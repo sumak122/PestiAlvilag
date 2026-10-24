@@ -158,6 +158,7 @@ AOsmGraybox::AOsmGraybox()
 	Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Mesh"));
 	Mesh->bUseAsyncCooking = true;
 	Mesh->bUseComplexAsSimpleCollision = true;
+	Mesh->SetCollisionProfileName(TEXT("BlockAll"));
 	RootComponent = Mesh;
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
