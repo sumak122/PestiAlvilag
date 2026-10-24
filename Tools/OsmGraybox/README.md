@@ -36,4 +36,7 @@ Notes:
   everything else is two-way with a lane each side. A one-way lane that would
   trap cars at a dead end gets a lane back too. Lanes are nudged to stay
   1.3 m clear of walls where buildings crowd the street.
+- `trams` are tram routes from OSM `route=tram` relations, cut to the map,
+  with their stops (cm along the route). Today's tracks are mapped for
+  right-hand running, so each route is run backwards to keep left as in 1932.
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.

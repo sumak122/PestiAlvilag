@@ -55,6 +55,27 @@ namespace CarBody
 		{ TEXT("WheelRearRight"), EShape::Cylinder, EPaint::Tyre, FVector(-130.f, 78.f, -55.f), WheelAxle, WheelScale },
 	};
 
+	// A two-axle Budapest tram of the period, 10 m long: yellow body, a band
+	// of windows, grey roof with a raised clerestory and a bow collector.
+	// Ground is 165 cm below the centre. Both ends look alike, as the cars
+	// were driven from either end.
+	const FVector TramWheelScale = FVector(0.8f, 0.8f, 0.15f);
+	const FPartSpec TramSpecs[] = {
+		{ TEXT("Underframe"), EShape::Cube, EPaint::Tyre, FVector(0.f, 0.f, -110.f), Upright, FVector(9.4f, 1.9f, 0.3f) },
+		{ TEXT("LowerBody"), EShape::Cube, EPaint::Body, FVector(0.f, 0.f, -40.f), Upright, FVector(10.f, 2.2f, 1.1f) },
+		{ TEXT("Windows"), EShape::Cube, EPaint::Glass, FVector(0.f, 0.f, 55.f), Upright, FVector(9.8f, 2.22f, 0.8f) },
+		{ TEXT("Roof"), EShape::Cube, EPaint::Chrome, FVector(0.f, 0.f, 105.f), Upright, FVector(10.f, 2.2f, 0.2f) },
+		{ TEXT("Clerestory"), EShape::Cube, EPaint::Chrome, FVector(0.f, 0.f, 125.f), Upright, FVector(7.f, 1.2f, 0.2f) },
+		{ TEXT("CollectorArm"), EShape::Cube, EPaint::Tyre, FVector(0.f, 0.f, 160.f), Upright, FVector(0.05f, 0.05f, 0.5f) },
+		{ TEXT("CollectorBow"), EShape::Cube, EPaint::Chrome, FVector(0.f, 0.f, 185.f), Upright, FVector(0.1f, 1.4f, 0.05f) },
+		{ TEXT("HeadlampFront"), EShape::Sphere, EPaint::Headlamp, FVector(502.f, 0.f, -30.f), Upright, FVector(0.25f) },
+		{ TEXT("HeadlampRear"), EShape::Sphere, EPaint::Headlamp, FVector(-502.f, 0.f, -30.f), Upright, FVector(0.25f) },
+		{ TEXT("WheelFrontLeft"), EShape::Cylinder, EPaint::Tyre, FVector(250.f, -80.f, -125.f), WheelAxle, TramWheelScale },
+		{ TEXT("WheelFrontRight"), EShape::Cylinder, EPaint::Tyre, FVector(250.f, 80.f, -125.f), WheelAxle, TramWheelScale },
+		{ TEXT("WheelRearLeft"), EShape::Cylinder, EPaint::Tyre, FVector(-250.f, -80.f, -125.f), WheelAxle, TramWheelScale },
+		{ TEXT("WheelRearRight"), EShape::Cylinder, EPaint::Tyre, FVector(-250.f, 80.f, -125.f), WheelAxle, TramWheelScale },
+	};
+
 	FLinearColor PaintColor(EPaint Slot, const FLinearColor& BodyColor)
 	{
 		switch (Slot)
@@ -68,13 +89,14 @@ namespace CarBody
 		}
 	}
 
-	void Build(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
+	void BuildParts(TConstArrayView<FPartSpec> Specs, AActor* Owner, USceneComponent* Parent,
+		TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
 	{
 		static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 		static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 		static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 
-		for (const FPartSpec& Spec : PartSpecs)
+		for (const FPartSpec& Spec : Specs)
 		{
 			UStaticMesh* Shape = Spec.Shape == EShape::Cube ? CubeMesh.Object
 				: Spec.Shape == EShape::Cylinder ? CylinderMesh.Object
@@ -89,6 +111,16 @@ namespace CarBody
 			OutParts.Add(Part);
 			OutPaints.Add(Spec.Paint);
 		}
+	}
+
+	void Build(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
+	{
+		BuildParts(PartSpecs, Owner, Parent, OutParts, OutPaints);
+	}
+
+	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
+	{
+		BuildParts(TramSpecs, Owner, Parent, OutParts, OutPaints);
 	}
 
 	UMaterialInterface* LoadPaintMaterial()

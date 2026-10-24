@@ -391,6 +391,90 @@ def build_lanes(ways, nodes, proj, clip, walls=None):
     return lanes
 
 
+# Tram routes shorter than this inside the map are left out (m).
+MIN_TRAM_ROUTE = 200.0
+# A stop counts for a route when it is this close to the track (m).
+TRAM_STOP_SNAP = 15.0
+
+
+def chain_route_ways(rel, ways):
+    """Node-id chains for a route relation's ways, in route order. Gaps (ways
+    missing from the download) start a new chain."""
+    chains = []
+    for mtype, ref, role in rel["members"]:
+        if mtype != "way" or ref not in ways or role not in ("", "forward", "backward"):
+            continue
+        refs = ways[ref]["refs"]
+        if len(refs) < 2:
+            continue
+        chain = chains[-1] if chains else None
+        if chain and chain[-1] == refs[0]:
+            chain.extend(refs[1:])
+        elif chain and chain[-1] == refs[-1]:
+            chain.extend(reversed(refs[:-1]))
+        elif chain and len(chain) and chain[0] in (refs[0], refs[-1]) and chain is chains[-1]:
+            chain.reverse()
+            chain.extend(refs[1:] if chain[-1] == refs[0] else list(reversed(refs[:-1])))
+        else:
+            chains.append(list(refs))
+    return chains
+
+
+def build_tram_routes(ways, nodes, relations, proj, clip):
+    """Tram routes in driving order with their stops, from OSM route=tram
+    relations. Each route is cut to the map; a tram runs it start to end,
+    keeping left like the rest of 1932 traffic."""
+    inner = clip.buffer(-5.0)
+    routes, seen = [], set()
+    for rel in relations:
+        tags = rel["tags"]
+        if tags.get("route") != "tram" or "ideiglenes" in tags.get("name", ""):
+            continue
+        stop_pts = [(nodes[ref], ref) for mtype, ref, role in rel["members"]
+                    if mtype == "node" and role.startswith("stop") and ref in nodes]
+        for chain in chain_route_ways(rel, ways):
+            pts = [proj.to_metres(*nodes[r]) for r in chain if r in nodes]
+            if len(pts) < 2:
+                continue
+            full = LineString(pts)
+            for part in polygons_or_lines(full.intersection(inner)):
+                if part.length < MIN_TRAM_ROUTE:
+                    continue
+                a, b = Point(part.coords[0]), Point(part.coords[-1])
+                if full.project(a) > full.project(b):
+                    part = LineString(part.coords[::-1])
+                key = tuple(round(c / 5.0) for c in (*part.coords[0], *part.coords[-1]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                stops = []
+                for latlon, ref in stop_pts:
+                    pt = Point(proj.to_metres(*latlon))
+                    if part.distance(pt) < TRAM_STOP_SNAP:
+                        at = part.project(pt)
+                        if 5.0 < at < part.length - 5.0 and all(abs(at - s["at"] / 100.0) > 20.0 for s in stops):
+                            stops.append({"at": round(at * 100)})
+                # Budapest kept left until 1941, but today's tracks are mapped
+                # for right-hand running, so each route runs its track backwards.
+                part = LineString(part.coords[::-1])
+                stops = sorted(({"at": round(part.length * 100) - s["at"]} for s in stops), key=lambda s: s["at"])
+                routes.append({
+                    "ref": tags.get("ref", ""),
+                    "name": tags.get("name", ""),
+                    "points": [c for x, y in part.coords for c in to_ue(x, y)],
+                    "stops": stops,
+                })
+    return routes
+
+
+def polygons_or_lines(geom):
+    if geom is None or geom.is_empty:
+        return []
+    if isinstance(geom, LineString):
+        return [geom]
+    return [g for g in getattr(geom, "geoms", []) if isinstance(g, LineString)]
+
+
 def convert(osm_path, origin):
     nodes, ways, relations, (minlat, minlon, maxlat, maxlon) = parse_osm(osm_path)
     proj = LocalProjection(*origin)
@@ -514,6 +598,7 @@ def convert(osm_path, origin):
         "buildings": out_buildings,
         "centerlines": centerlines,
         "lanes": build_lanes(ways, nodes, proj, clip, walls),
+        "trams": build_tram_routes(ways, nodes, relations, proj, clip),
     }
 
 
@@ -530,6 +615,7 @@ def main():
         f"{len(data['buildings'])} buildings, "
         + ", ".join(f"{a['layer']}: {len(a['polygons'])}" for a in data["areas"])
         + f", {len(data['centerlines'])} centerlines, {len(data['lanes'])} traffic lanes"
+        + f", {len(data['trams'])} tram routes"
     )
 
 
