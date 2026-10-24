@@ -107,9 +107,9 @@ namespace OsmGraybox
 		return OutRings.Num() > 0 && OutTriangles.Num() % 3 == 0;
 	}
 
-	void AddFlatPolygon(FSection& Section, const TArray<TArray<FVector2D>>& Rings, const TArray<int32>& Triangles, double Z, bool bFlip)
+	void AddFlatPolygon(FSection& Section, const TArray<TArray<FVector2D>>& Rings, const TArray<int32>& Triangles, double Z, bool bFlip,
+		const FVector& Up = FVector::UpVector)
 	{
-		const FVector Up = FVector::UpVector;
 		const int32 First = Section.Vertices.Num();
 		for (const TArray<FVector2D>& Ring : Rings)
 		{
@@ -126,7 +126,7 @@ namespace OsmGraybox
 
 	// The script orients rings so the solid is on the left of every edge,
 	// which puts the outside on the right.
-	void AddWalls(FSection& Section, const TArray<TArray<FVector2D>>& Rings, double Height, bool bFlip)
+	void AddWalls(FSection& Section, const TArray<TArray<FVector2D>>& Rings, double Base, double Height, bool bFlip)
 	{
 		for (const TArray<FVector2D>& Ring : Rings)
 		{
@@ -140,8 +140,8 @@ namespace OsmGraybox
 					continue;
 				}
 				const FVector Outward = FVector(Edge.Y, -Edge.X, 0.0).GetSafeNormal();
-				const int32 A = Section.AddVertex(FVector(P0.X, P0.Y, 0.0), Outward);
-				const int32 B = Section.AddVertex(FVector(P1.X, P1.Y, 0.0), Outward);
+				const int32 A = Section.AddVertex(FVector(P0.X, P0.Y, Base), Outward);
+				const int32 B = Section.AddVertex(FVector(P1.X, P1.Y, Base), Outward);
 				const int32 C = Section.AddVertex(FVector(P1.X, P1.Y, Height), Outward);
 				const int32 D = Section.AddVertex(FVector(P0.X, P0.Y, Height), Outward);
 				Section.AddTriangle(A, B, C, Outward, bFlip);
@@ -286,8 +286,15 @@ bool AOsmGraybox::Build()
 				continue;
 			}
 			const double Height = Building->GetNumberField(TEXT("height"));
-			AddWalls(Sections[Walls], Rings, Height, bFlipFaces);
+			// Bridges between buildings start above the street, so traffic passes under them.
+			double Base = 0.0;
+			Building->TryGetNumberField(TEXT("base"), Base);
+			AddWalls(Sections[Walls], Rings, Base, Height, bFlipFaces);
 			AddFlatPolygon(Sections[Roofs], Rings, Triangles, Height, bFlipFaces);
+			if (Base > 0.0)
+			{
+				AddFlatPolygon(Sections[Walls], Rings, Triangles, Base, bFlipFaces, FVector::DownVector);
+			}
 			++NumBuildings;
 		}
 	}
