@@ -39,6 +39,8 @@ namespace Traffic
 
 	// Half the width of the corridor a car watches for others (cm).
 	constexpr float CorridorHalfWidth = 220.f;
+	// Free track a tram needs around it to be placed at the start (cm).
+	constexpr float TramSpawnRoom = 2000.f;
 	// Height of the car's centre above the road surface (hover + half height).
 	constexpr float RideHeight = 90.f;
 }
@@ -330,6 +332,11 @@ void ATrafficManager::SpawnTrams()
 			const float Distance = Offset + n * Spacing;
 			const FVector Location = Route.LocationAt(Distance);
 			if (Player && FVector::Dist2D(Location, Player->GetActorLocation()) < 3000.f)
+			{
+				continue;
+			}
+			// Lines share tracks: don't start a tram on top of another line's.
+			if (!IsAreaClear(Location, Traffic::TramSpawnRoom, nullptr))
 			{
 				continue;
 			}
@@ -642,9 +649,16 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 			}
 		}
 	}
+	// Two trams that meet where lines join must not both wait for the other:
+	// a tram only waits for trams whose middle is ahead of its own.
+	const bool bAskerIsTram = Car->IsA<ATram>();
 	for (const ATram* Other : Trams)
 	{
 		if (!Other || Other == Car || Other->IsHidden() || IsOncoming(Other))
+		{
+			continue;
+		}
+		if (bAskerIsTram && FVector::DotProduct(Other->GetActorLocation() - Origin, Forward) <= 0.f)
 		{
 			continue;
 		}
