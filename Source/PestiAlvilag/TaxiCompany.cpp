@@ -15,6 +15,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
+#include "PestiText.h"
 #include "PestiTaxi.h"
 #include "TaxiPassenger.h"
 #include "TrafficManager.h"
@@ -106,23 +107,6 @@ namespace TaxiCompany
 			}
 		}
 		return FString();
-	}
-
-	// Which way to drive, as a compass word (X is east, Y is south).
-	const TCHAR* Compass(const FVector& From, const FVector& To)
-	{
-		static const TCHAR* const Words[] = {
-			TEXT("north"), TEXT("north-east"), TEXT("east"), TEXT("south-east"),
-			TEXT("south"), TEXT("south-west"), TEXT("west"), TEXT("north-west") };
-		const FVector Delta = To - From;
-		const double Bearing = FMath::RadiansToDegrees(FMath::Atan2(Delta.X, -Delta.Y));
-		const int32 Sector = static_cast<int32>(FMath::RoundToDouble(FRotator::ClampAxis(Bearing) / 45.0)) % 8;
-		return Words[Sector];
-	}
-
-	FString Metres(double Centimetres)
-	{
-		return FString::Printf(TEXT("%d m"), FMath::RoundToInt(Centimetres / 100.0 / 10.0) * 10);
 	}
 }
 
@@ -310,7 +294,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		}
 		UpdateRoute(At, PickupSpot);
 		Status = FString::Printf(TEXT("Fare waiting on %s: %s %s  (stop beside them)"),
-			*PickupStreet, *TaxiCompany::Metres(Distance), TaxiCompany::Compass(At, PickupSpot));
+			*PickupStreet, *PestiText::Metres(Distance), PestiText::Compass(At, PickupSpot));
 		break;
 	}
 
@@ -342,8 +326,8 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		}
 		UpdateRoute(At, DropoffRoad);
 		const double TimeLeft = RideLength / ExpectedSpeed - (Now - FareTime);
-		Status = FString::Printf(TEXT("To %s: %s %s   %s"), *DropoffStreet, *TaxiCompany::Metres(Distance),
-			TaxiCompany::Compass(At, DropoffRoad),
+		Status = FString::Printf(TEXT("To %s: %s %s   %s"), *DropoffStreet, *PestiText::Metres(Distance),
+			PestiText::Compass(At, DropoffRoad),
 			TimeLeft > 0.0 ? *FString::Printf(TEXT("tip if there in %d s"), FMath::CeilToInt(TimeLeft)) : TEXT("too slow for a tip"));
 		break;
 	}

@@ -7,10 +7,13 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "HomeDoor.h"
 #include "Kismet/GameplayStatics.h"
+#include "MissionPrologue.h"
 #include "Nepszinhaz.h"
 #include "PestiCar.h"
 #include "PestiPerson.h"
+#include "PestiSaveGame.h"
 #include "PestiTaxi.h"
 #include "TaxiCompany.h"
 #include "TrafficManager.h"
@@ -22,10 +25,15 @@ namespace PestiStart
 	const FVector2D TheatreAt(-3600.f, 200.f);
 	constexpr float TheatreYaw = 180.f;
 
-	// The player starts on the square in front of it, looking at its front.
-	const FVector2D PersonAt(-9800.f, 1500.f);
+	// The player's car is parked on the square in front of it.
 	const FVector2D CarAt(-8600.f, 2600.f);
 	constexpr float Yaw = -23.f;
+
+	// Bözsi néni's street door on the north side of Népszínház utca, between
+	// Kun utca and Teleki tér, facing the street.
+	const FVector2D HomeDoorAt(58392.f, 21268.f);
+	constexpr float HomeDoorYaw = 108.6f;
+	const FName Prologue(TEXT("Prologue"));
 
 	// The taxi company's kiosk west of the square, two of its taxis waiting
 	// on the open ground beside it.
@@ -74,21 +82,45 @@ void APestiAlvilagGameModeBase::StartPlay()
 		}
 	}
 
+	// Bözsi néni's door, the player's home.
+	if (!TActorIterator<AHomeDoor>(GetWorld()))
+	{
+		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
+		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
+	}
+
 	// Start traffic unless the level already has its own manager.
 	if (!TActorIterator<ATrafficManager>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ATrafficManager>();
 	}
+
+	// A new game begins with the prologue (traffic first: it finds its route on the lanes).
+	LoadSaveOnce();
+	if (!IsMissionDone(PestiStart::Prologue))
+	{
+		GetWorld()->SpawnActor<AMissionPrologue>();
+	}
 }
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
 {
-	// Start on foot in front of the Népszínház, whatever PlayerStart the level has.
-	const FRotator Facing(0.f, PestiStart::Yaw, 0.f);
-	const FVector PersonLocation(PestiStart::PersonAt, GroundZ(PestiStart::PersonAt) + 100.0);
-	APawn* Pawn = SpawnDefaultPawnAtTransform(NewPlayer, FTransform(Facing, PersonLocation));
+	// A new game starts at Keleti station for the prologue, a saved one at
+	// the home door, whatever PlayerStart the level has.
+	LoadSaveOnce();
+	FVector2D StartAt = AMissionPrologue::StartAt();
+	double StartYaw = AMissionPrologue::StartYaw();
+	if (IsMissionDone(PestiStart::Prologue))
+	{
+		const FVector2D Out = FVector2D(FRotator(0.f, PestiStart::HomeDoorYaw, 0.f).Vector()) * 150.0;
+		StartAt = PestiStart::HomeDoorAt + Out;
+		StartYaw = PestiStart::HomeDoorYaw;
+	}
+	const FVector PersonLocation(StartAt, GroundZ(StartAt) + 100.0);
+	APawn* Pawn = SpawnDefaultPawnAtTransform(NewPlayer, FTransform(FRotator(0.0, StartYaw, 0.0), PersonLocation));
 
-	// The player's car, parked a few steps away (it settles onto the ground itself).
+	// The player's car, parked in front of the Népszínház (it settles onto the ground itself).
+	const FRotator Facing(0.f, PestiStart::Yaw, 0.f);
 	FActorSpawnParameters CarParams;
 	CarParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	const FVector CarLocation(PestiStart::CarAt, GroundZ(PestiStart::CarAt) + 150.0);
@@ -120,6 +152,12 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 		{
 			ReportCrime(1);
 		}
+	}
+
+	if (PC && PC->WasInputKeyJustPressed(EKeys::F9))
+	{
+		StartNewGame();
+		return;
 	}
 
 	UpdateWanted(DeltaSeconds);
@@ -214,4 +252,46 @@ FString APestiAlvilagGameModeBase::FormatMoney(int32 Filler)
 	const int32 Sign = Filler < 0 ? -1 : 1;
 	const int32 Abs = FMath::Abs(Filler);
 	return FString::Printf(TEXT("%s%d,%02d peng\u0151"), Sign < 0 ? TEXT("-") : TEXT(""), Abs / 100, Abs % 100);
+}
+
+void APestiAlvilagGameModeBase::LoadSaveOnce()
+{
+	if (bSaveRead)
+	{
+		return;
+	}
+	bSaveRead = true;
+	if (const UPestiSaveGame* Save = Cast<UPestiSaveGame>(UGameplayStatics::LoadGameFromSlot(UPestiSaveGame::SlotName(), 0)))
+	{
+		Money = Save->Money;
+		CompletedMissions = Save->CompletedMissions;
+	}
+}
+
+void APestiAlvilagGameModeBase::MarkMissionDone(FName MissionId)
+{
+	CompletedMissions.AddUnique(MissionId);
+}
+
+bool APestiAlvilagGameModeBase::CanSaveAtHome() const
+{
+	return IsMissionDone(PestiStart::Prologue);
+}
+
+bool APestiAlvilagGameModeBase::SaveToDisk() const
+{
+	UPestiSaveGame* Save = Cast<UPestiSaveGame>(UGameplayStatics::CreateSaveGameObject(UPestiSaveGame::StaticClass()));
+	if (!Save)
+	{
+		return false;
+	}
+	Save->Money = Money;
+	Save->CompletedMissions = CompletedMissions;
+	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
+}
+
+void APestiAlvilagGameModeBase::StartNewGame()
+{
+	UGameplayStatics::DeleteGameInSlot(UPestiSaveGame::SlotName(), 0);
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }

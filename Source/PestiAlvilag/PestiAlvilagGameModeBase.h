@@ -13,6 +13,11 @@
  * of their sight long enough loses them, and staying slow next to one gets
  * you arrested. P toggles the police for testing. Also puts up the taxi
  * company with two of its taxis, and keeps the player's money.
+ *
+ * Saving: the game is saved by sleeping at home (Bözsi néni's door on
+ * Népszínház utca). A new game starts with the prologue at Keleti station;
+ * a saved game starts at the home door. F9 throws the save away and starts
+ * a new game.
  */
 UCLASS()
 class PESTIALVILAG_API APestiAlvilagGameModeBase : public AGameModeBase
@@ -50,14 +55,27 @@ public:
 	/** Money as the period wrote it, for example "1,20 pengő". */
 	static FString FormatMoney(int32 Filler);
 
+	void MarkMissionDone(FName MissionId);
+	bool IsMissionDone(FName MissionId) const { return CompletedMissions.Contains(MissionId); }
+
+	/** Home can be slept at once the prologue has led the player there. */
+	bool CanSaveAtHome() const;
+	/** Writes money and missions done to the save slot. */
+	bool SaveToDisk() const;
+
 private:
 	void UpdateWanted(float DeltaSeconds);
 	void ClearWanted(const TCHAR* Message);
 	/** Ground height under a map point, or 0 when nothing is there. */
 	double GroundZ(const FVector2D& At) const;
+	/** Reads the save slot the first time it is needed. */
+	void LoadSaveOnce();
+	void StartNewGame();
 
 	int32 WantedLevel = 0;
 	int32 Money = 0;
+	TArray<FName> CompletedMissions;
+	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
 	double LastPoliceNearTime = -1.0;
