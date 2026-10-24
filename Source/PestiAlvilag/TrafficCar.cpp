@@ -2,6 +2,7 @@
 
 #include "TrafficCar.h"
 
+#include "CarBody.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -38,41 +39,15 @@ ATrafficCar::ATrafficCar()
 	PrimaryActorTick.bCanEverTick = true;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
-	BaseMaterial = BasicShapeMaterial.Object;
+	BaseMaterial = CarBody::LoadPaintMaterial();
 
-	// Same size and layout as the player's car (see APestiCar).
+	// Same size and look as the player's car (see APestiCar).
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->SetBoxExtent(FVector(210.f, 85.f, 70.f));
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
-	struct FPart
-	{
-		const TCHAR* Name;
-		bool bWheel;
-		FVector Location;
-		FVector Scale;
-	};
-	const FPart Parts[] = {
-		{ TEXT("Chassis"), false, FVector(0.f, 0.f, -35.f), FVector(4.2f, 1.7f, 0.6f) },
-		{ TEXT("Cabin"), false, FVector(-30.f, 0.f, 25.f), FVector(2.0f, 1.5f, 0.6f) },
-		{ TEXT("Wheel0"), true, FVector(130.f, 78.f, -55.f), FVector(0.7f, 0.7f, 0.25f) },
-		{ TEXT("Wheel1"), true, FVector(130.f, -78.f, -55.f), FVector(0.7f, 0.7f, 0.25f) },
-		{ TEXT("Wheel2"), true, FVector(-130.f, 78.f, -55.f), FVector(0.7f, 0.7f, 0.25f) },
-		{ TEXT("Wheel3"), true, FVector(-130.f, -78.f, -55.f), FVector(0.7f, 0.7f, 0.25f) },
-	};
-	for (const FPart& Spec : Parts)
-	{
-		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Spec.Name);
-		Part->SetupAttachment(CollisionBox);
-		Part->SetStaticMesh(Spec.bWheel ? CylinderMesh.Object : CubeMesh.Object);
-		Part->SetRelativeLocationAndRotation(Spec.Location, Spec.bWheel ? FRotator(0.f, 0.f, 90.f) : FRotator::ZeroRotator);
-		Part->SetRelativeScale3D(Spec.Scale);
-		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		BodyParts.Add(Part);
-	}
+	CarBody::Build(this, CollisionBox, BodyParts, BodyPaints);
 
 	// Trafficator arms stick out sideways from the front of the cabin; the
 	// car's left is -Y. Hidden until the car signals.
@@ -81,7 +56,7 @@ ATrafficCar::ATrafficCar()
 		UStaticMeshComponent* Arm = CreateDefaultSubobject<UStaticMeshComponent>(PartName);
 		Arm->SetupAttachment(CollisionBox);
 		Arm->SetStaticMesh(CubeMesh.Object);
-		Arm->SetRelativeLocation(FVector(55.f, Side * 90.f, 30.f));
+		Arm->SetRelativeLocation(FVector(15.f, Side * 90.f, 45.f));
 		Arm->SetRelativeScale3D(FVector(0.05f, 0.3f, 0.06f));
 		Arm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Arm->SetVisibility(false);
@@ -99,23 +74,11 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	PointIndex = InPointIndex;
 	CurrentSpeed = 0.f;
 
+	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Paint);
 	if (!BaseMaterial)
 	{
 		return;
 	}
-	for (int32 i = 0; i < BodyParts.Num(); ++i)
-	{
-		UStaticMeshComponent* Part = BodyParts[i];
-		if (!Part)
-		{
-			continue;
-		}
-		// The first two parts are the body; the rest are tyres.
-		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-		Paintwork->SetVectorParameterValue(TEXT("Color"), i < 2 ? Paint : FLinearColor(0.01f, 0.01f, 0.01f));
-		Part->SetMaterial(0, Paintwork);
-	}
-
 	for (UStaticMeshComponent* Arm : { TrafficatorLeft.Get(), TrafficatorRight.Get() })
 	{
 		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);

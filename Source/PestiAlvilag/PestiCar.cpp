@@ -2,16 +2,14 @@
 
 #include "PestiCar.h"
 
+#include "CarBody.h"
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
-#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace PestiCar
 {
@@ -24,51 +22,22 @@ namespace PestiCar
 	constexpr float OverheadPitch = -70.f;
 
 	const FLinearColor BodyColor(0.03f, 0.07f, 0.05f);
-	const FLinearColor TyreColor(0.01f, 0.01f, 0.01f);
 }
 
 APestiCar::APestiCar()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
-	BaseMaterial = BasicShapeMaterial.Object;
+	BaseMaterial = CarBody::LoadPaintMaterial();
 
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->SetBoxExtent(PestiCar::BoxExtent);
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
-	// The box bottom floats HoverHeight above the road; the body sits a
-	// little lower so the car looks grounded. Engine shapes are 100 cm.
-	auto MakePart = [this](const TCHAR* PartName, UStaticMesh* Shape, const FVector& Location, const FRotator& Rotation, const FVector& Scale)
-	{
-		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(PartName);
-		Part->SetupAttachment(CollisionBox);
-		Part->SetStaticMesh(Shape);
-		Part->SetRelativeLocationAndRotation(Location, Rotation);
-		Part->SetRelativeScale3D(Scale);
-		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		return Part;
-	};
-
-	Chassis = MakePart(TEXT("Chassis"), CubeMesh.Object, FVector(0.f, 0.f, -35.f), FRotator::ZeroRotator, FVector(4.2f, 1.7f, 0.6f));
-	Cabin = MakePart(TEXT("Cabin"), CubeMesh.Object, FVector(-30.f, 0.f, 25.f), FRotator::ZeroRotator, FVector(2.0f, 1.5f, 0.6f));
-
-	const FVector WheelPositions[] = {
-		FVector(130.f, 78.f, -55.f),
-		FVector(130.f, -78.f, -55.f),
-		FVector(-130.f, 78.f, -55.f),
-		FVector(-130.f, -78.f, -55.f),
-	};
-	int32 WheelIndex = 0;
-	for (const FVector& WheelPosition : WheelPositions)
-	{
-		const FString PartName = FString::Printf(TEXT("Wheel%d"), WheelIndex++);
-		Wheels.Add(MakePart(*PartName, CylinderMesh.Object, WheelPosition, FRotator(0.f, 0.f, 90.f), FVector(0.7f, 0.7f, 0.25f)));
-	}
+	// The box bottom floats HoverHeight above the road; the body reaches a
+	// little lower so the car looks grounded.
+	CarBody::Build(this, CollisionBox, BodyParts, BodyPaints);
 
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
 	CameraArm->SetupAttachment(CollisionBox);
@@ -90,21 +59,7 @@ void APestiCar::BeginPlay()
 {
 	Super::BeginPlay();
 
-	auto Paint = [this](UStaticMeshComponent* Part, const FLinearColor& Color)
-	{
-		if (BaseMaterial)
-		{
-			UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-			Paintwork->SetVectorParameterValue(TEXT("Color"), Color);
-			Part->SetMaterial(0, Paintwork);
-		}
-	};
-	Paint(Chassis, PestiCar::BodyColor);
-	Paint(Cabin, PestiCar::BodyColor);
-	for (UStaticMeshComponent* Wheel : Wheels)
-	{
-		Paint(Wheel, PestiCar::TyreColor);
-	}
+	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, PestiCar::BodyColor);
 
 	SnapToGround();
 }

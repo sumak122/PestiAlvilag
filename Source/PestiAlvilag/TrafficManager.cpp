@@ -327,6 +327,13 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead) co
 		{
 			return;
 		}
+		// Oncoming AI cars in the other lane are no reason to stop. The player
+		// always counts, whichever way they face.
+		const bool bIsPlayer = Other->IsA<APawn>();
+		if (!bIsPlayer && FVector::DotProduct(Other->GetActorForwardVector().GetSafeNormal2D(), Forward) < 0.f)
+		{
+			return;
+		}
 		const FVector Offset = Other->GetActorLocation() - Origin;
 		const float Ahead = static_cast<float>(FVector::DotProduct(Offset, Forward));
 		const float Side = static_cast<float>(FMath::Abs(FVector::DotProduct(Offset, Right)));
