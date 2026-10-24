@@ -12,6 +12,7 @@ class ATrafficManager;
 class UMaterialInterface;
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class URouteGuideComponent;
 
 enum class ETaxiShift : uint8
 {
@@ -104,6 +105,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Taxi")
 	TObjectPtr<UStaticMeshComponent> Beacon;
 
+	/** Arrows over the crossings on the way to the fare or the destination. */
+	UPROPERTY(VisibleAnywhere, Category = "Taxi")
+	TObjectPtr<URouteGuideComponent> Guide;
+
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
@@ -118,8 +123,6 @@ private:
 	void EndFare();
 	/** A kerb spot on a named 1932 street between MinDistance and MaxDistance from From. */
 	bool PickStreetSpot(const FVector& From, float MinDistance, float MaxDistance, FVector& OutKerb, FVector& OutRoad, FString& OutStreet) const;
-	void UpdateRoute(const FVector& From, const FVector& To);
-	void DrawRoute() const;
 	void Say(const FString& Line) const;
 	ATrafficManager* GetTraffic() const;
 
@@ -139,7 +142,5 @@ private:
 	int32 BumpsAtPickup = 0;
 	int32 BumpsSaid = 0;
 	bool bPassengerScared = false;
-	TArray<FVector> Route;
-	double NextRouteTime = 0.0;
 	int32 Fares = 0;
 };
