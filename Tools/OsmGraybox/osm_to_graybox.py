@@ -209,6 +209,83 @@ def road_width_m(tags):
         return ROAD_WIDTHS[tags["highway"]]
 
 
+# Roads that AI traffic drives on, and its cruising speed there in km/h.
+TRAFFIC_SPEEDS = {
+    "primary": 40,
+    "primary_link": 30,
+    "secondary": 35,
+    "secondary_link": 30,
+    "tertiary": 30,
+    "tertiary_link": 25,
+    "unclassified": 25,
+    "residential": 25,
+    "living_street": 15,
+}
+
+
+def build_lanes(ways, nodes, proj, clip):
+    """Directed driving lanes for AI traffic, keeping LEFT as Budapest did in 1932.
+
+    Ways are split at junctions (nodes shared by two or more drivable ways).
+    Each piece becomes one lane each way, offset to the left of travel.
+    Today's one-way tags are ignored: they describe right-hand traffic, and
+    most of these streets were two-way in 1932. Lanes leaving the map are dropped, so cars
+    turn round at the map edge.
+    """
+    drivable = {}
+    for wid, way in ways.items():
+        tags = way["tags"]
+        if tags.get("highway") in TRAFFIC_SPEEDS and not is_underground(tags) and tags.get("area") != "yes":
+            refs = [r for r in way["refs"] if r in nodes]
+            if len(refs) >= 2:
+                drivable[wid] = (refs, tags)
+
+    use_count = {}
+    for refs, _ in drivable.values():
+        for r in set(refs):
+            use_count[r] = use_count.get(r, 0) + 1
+
+    inner = clip.buffer(-5.0)
+    node_index = {}
+    lanes = []
+
+    def node_id(ref):
+        return node_index.setdefault(ref, len(node_index))
+
+    for wid, (refs, tags) in drivable.items():
+        width = road_width_m(tags)
+        speed = round(TRAFFIC_SPEEDS[tags["highway"]] / 0.036)
+
+        start = 0
+        for i in range(1, len(refs)):
+            if i < len(refs) - 1 and use_count.get(refs[i], 0) < 2:
+                continue
+            piece = refs[start:i + 1]
+            start = i
+            pts = [proj.to_metres(*nodes[r]) for r in piece]
+            line = LineString(pts)
+            if line.length < 1.0 or not inner.contains(line):
+                continue
+            offset = min(width / 4.0, 2.5)
+            directions = [
+                (line, piece[0], piece[-1], offset),
+                (LineString(pts[::-1]), piece[-1], piece[0], offset),
+            ]
+            for path, a, b, offset in directions:
+                # Positive offset_curve distance is to the left of travel.
+                lane = path.offset_curve(offset, join_style="mitre", mitre_limit=2.0)
+                if lane.is_empty or lane.geom_type != "LineString":
+                    lane = path
+                lanes.append({
+                    "from": node_id(a),
+                    "to": node_id(b),
+                    "way": "w" + wid,
+                    "speed": speed,
+                    "points": [c for x, y in lane.coords for c in to_ue(x, y)],
+                })
+    return lanes
+
+
 def convert(osm_path, origin):
     nodes, ways, relations, (minlat, minlon, maxlat, maxlon) = parse_osm(osm_path)
     proj = LocalProjection(*origin)
@@ -310,6 +387,7 @@ def convert(osm_path, origin):
         ],
         "buildings": out_buildings,
         "centerlines": centerlines,
+        "lanes": build_lanes(ways, nodes, proj, clip),
     }
 
 
@@ -325,7 +403,7 @@ def main():
     print(
         f"{len(data['buildings'])} buildings, "
         + ", ".join(f"{a['layer']}: {len(a['polygons'])}" for a in data["areas"])
-        + f", {len(data['centerlines'])} centerlines"
+        + f", {len(data['centerlines'])} centerlines, {len(data['lanes'])} traffic lanes"
     )
 
 

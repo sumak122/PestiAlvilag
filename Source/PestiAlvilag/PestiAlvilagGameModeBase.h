@@ -16,4 +16,6 @@ class PESTIALVILAG_API APestiAlvilagGameModeBase : public AGameModeBase
 
 public:
 	APestiAlvilagGameModeBase();
+
+	virtual void StartPlay() override;
 };
