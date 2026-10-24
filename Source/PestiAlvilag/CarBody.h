@@ -26,6 +26,8 @@ namespace CarBody
 		Glass,
 		Headlamp,
 		TailLamp,
+		Skin,
+		Trousers,
 	};
 
 	/** Call from an actor constructor. Adds the parts under Parent. */
@@ -33,6 +35,13 @@ namespace CarBody
 
 	/** Call from an actor constructor. A 10 x 2.2 x 3.5 m tram, ground 165 cm below the parent's centre. */
 	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
+
+	/**
+	 * Call from an actor constructor. A man in a long coat and hat, 1.85 m
+	 * tall, ground 90 cm below the parent's centre, facing +X. Limb parts
+	 * come first, in the order left leg, right leg, left arm, right arm.
+	 */
+	void BuildPerson(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
 
 	/** Call from an actor constructor: the material every part is painted from. */
 	UMaterialInterface* LoadPaintMaterial();
