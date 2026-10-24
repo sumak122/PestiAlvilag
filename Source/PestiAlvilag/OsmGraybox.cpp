@@ -187,7 +187,7 @@ bool AOsmGraybox::Build()
 
 	Mesh->ClearAllMeshSections();
 
-	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), DataFile);
+	const FString Path = FPaths::Combine(FPaths::ProjectDir(), DataFile);
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *Path))
 	{

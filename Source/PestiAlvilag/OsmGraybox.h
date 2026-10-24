@@ -31,7 +31,7 @@ public:
 	UFUNCTION(CallInEditor, Category = "Graybox")
 	void Rebuild();
 
-	/** JSON file, relative to the project's Content folder. */
+	/** JSON file, relative to the project folder (kept out of Content so the editor does not try to import it). */
 	UPROPERTY(EditAnywhere, Category = "Graybox")
 	FString DataFile = TEXT("Data/OsmGraybox/blaha_test_area.json");
 

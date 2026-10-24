@@ -8,6 +8,7 @@
 
 class UBoxComponent;
 class UCameraComponent;
+class UMaterialInterface;
 class USpringArmComponent;
 class UStaticMeshComponent;
 
@@ -83,6 +84,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UCameraComponent> ChaseCamera;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BaseMaterial;
 
 	virtual void BeginPlay() override;
 

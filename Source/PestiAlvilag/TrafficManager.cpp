@@ -50,7 +50,7 @@ void ATrafficManager::BeginPlay()
 
 bool ATrafficManager::LoadLanes()
 {
-	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), DataFile);
+	const FString Path = FPaths::Combine(FPaths::ProjectDir(), DataFile);
 	FString Text;
 	TSharedPtr<FJsonObject> Root;
 	if (!FFileHelper::LoadFileToString(Text, *Path)
@@ -90,11 +90,19 @@ bool ATrafficManager::LoadLanes()
 	}
 
 	LanesFromNode.SetNum(MaxNode + 1);
+	NodeLocations.SetNum(MaxNode + 1);
+	NodeClaims.SetNum(MaxNode + 1);
 	for (int32 i = 0; i < Lanes.Num(); ++i)
 	{
-		if (Lanes[i].FromNode >= 0)
+		const FTrafficLane& Lane = Lanes[i];
+		if (Lane.FromNode >= 0)
 		{
-			LanesFromNode[Lanes[i].FromNode].Add(i);
+			LanesFromNode[Lane.FromNode].Add(i);
+			NodeLocations[Lane.FromNode] = Lane.Points[0];
+		}
+		if (Lane.ToNode >= 0)
+		{
+			NodeLocations[Lane.ToNode] = Lane.Points.Last();
 		}
 	}
 
@@ -190,6 +198,40 @@ int32 ATrafficManager::PickNextLane(int32 LaneIndex) const
 		return Choices[FMath::RandRange(0, Choices.Num() - 1)];
 	}
 	return UTurn != INDEX_NONE ? UTurn : LaneIndex;
+}
+
+bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce)
+{
+	// Two lanes out means a street simply carries on; only real junctions need turns.
+	if (!NodeClaims.IsValidIndex(Node) || LanesFromNode[Node].Num() <= 2)
+	{
+		return true;
+	}
+
+	// A claim older than this is stale (its car got stuck or was destroyed).
+	constexpr double ClaimTimeout = 8.0;
+	const double Now = GetWorld()->GetTimeSeconds();
+	FNodeClaim& Claim = NodeClaims[Node];
+	if (bForce || !Claim.Holder.IsValid() || Claim.Holder.Get() == Car || Now - Claim.Time > ClaimTimeout)
+	{
+		Claim.Holder = Car;
+		Claim.Time = Now;
+		return true;
+	}
+	return false;
+}
+
+void ATrafficManager::ReleaseNode(int32 Node, const ATrafficCar* Car)
+{
+	if (NodeClaims.IsValidIndex(Node) && NodeClaims[Node].Holder.Get() == Car)
+	{
+		NodeClaims[Node].Holder.Reset();
+	}
+}
+
+FVector ATrafficManager::GetNodeLocation(int32 Node) const
+{
+	return NodeLocations.IsValidIndex(Node) ? NodeLocations[Node] : FVector::ZeroVector;
 }
 
 float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead) const

@@ -11,7 +11,7 @@ X points east, Y points south (Unreal is left-handed, so north is -Y), Z is up.
 Usage:
     pip install -r requirements.txt
     python osm_to_graybox.py source/blaha_test_area.osm \
-        ../../Content/Data/OsmGraybox/blaha_test_area.json
+        ../../Data/OsmGraybox/blaha_test_area.json
 """
 
 import argparse

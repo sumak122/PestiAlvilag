@@ -31,7 +31,7 @@ class PESTIALVILAG_API ATrafficManager : public AActor
 public:
 	ATrafficManager();
 
-	/** JSON file, relative to the project's Content folder. */
+	/** JSON file, relative to the project folder (kept out of Content so the editor does not try to import it). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	FString DataFile = TEXT("Data/OsmGraybox/blaha_test_area.json");
 
@@ -50,6 +50,15 @@ public:
 	/** Distance to the nearest car (AI or player) in front, in the same lane corridor. */
 	float ClearDistanceAhead(const AActor* Car, float LookAhead) const;
 
+	/**
+	 * Asks to drive through a junction. Only one car may be in a junction at a
+	 * time; plain bends in a street are always free. bForce takes the junction
+	 * anyway, so two cars waiting on each other cannot get stuck for ever.
+	 */
+	bool TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce);
+	void ReleaseNode(int32 Node, const ATrafficCar* Car);
+	FVector GetNodeLocation(int32 Node) const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -57,8 +66,16 @@ private:
 	bool LoadLanes();
 	void SpawnCars();
 
+	struct FNodeClaim
+	{
+		TWeakObjectPtr<const AActor> Holder;
+		double Time = 0.0;
+	};
+
 	TArray<FTrafficLane> Lanes;
 	TArray<TArray<int32>> LanesFromNode;
+	TArray<FVector> NodeLocations;
+	TArray<FNodeClaim> NodeClaims;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ATrafficCar>> Cars;
