@@ -8,6 +8,7 @@
 #include "Mission.generated.h"
 
 class UMaterialInterface;
+class URouteGuideComponent;
 class UStaticMeshComponent;
 
 /** One step of a mission: get somewhere, perhaps on foot, perhaps pressing E there. */
@@ -26,7 +27,7 @@ struct FMissionStep
 
 /**
  * A story mission: a list of steps, each with a goal line on screen, a tall
- * light over the target and a yellow line along the streets to it. A
+ * light over the target and see-through arrows over the turns on the way. A
  * mission sets itself up in SetUpMission (people, things, the steps), reacts
  * as steps begin and end, and pays its reward when the last step is done.
  *
@@ -54,6 +55,10 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Mission")
 	TObjectPtr<UStaticMeshComponent> Beacon;
+
+	/** Arrows over the turns on the way to the target. */
+	UPROPERTY(VisibleAnywhere, Category = "Mission")
+	TObjectPtr<URouteGuideComponent> Guide;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
@@ -98,12 +103,9 @@ protected:
 private:
 	void StartStep(int32 Step);
 	void Pass();
-	void UpdateRoute(const FVector& From, const FVector& To);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> MissionActors;
 
 	int32 CurrentStep = INDEX_NONE;
-	TArray<FVector> Route;
-	double NextRouteTime = 0.0;
 };

@@ -5,17 +5,15 @@
 #include "CarBody.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PestiText.h"
-#include "TrafficManager.h"
+#include "RouteGuideComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace Mission
@@ -28,8 +26,7 @@ namespace Mission
 	const FColor AnnounceColor(255, 200, 60);
 
 	constexpr float BeaconHeight = 1500.f;
-	constexpr double RouteRefresh = 0.5;
-	// Closer than this the light alone is enough; no line along the streets.
+	// Closer than this the light alone is enough; no arrows.
 	constexpr double RouteMinDistance = 4000.0;
 }
 
@@ -54,6 +51,9 @@ AMission::AMission()
 	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Beacon->SetCastShadow(false);
 	Beacon->SetVisibility(false);
+
+	Guide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("Guide"));
+	Guide->SetupAttachment(Root);
 }
 
 void AMission::BeginPlay()
@@ -129,8 +129,7 @@ void AMission::Announce(const FString& LineHu, const FString& LineEn, float Seco
 void AMission::StartStep(int32 Step)
 {
 	CurrentStep = Step;
-	Route.Reset();
-	NextRouteTime = 0.0;
+	Guide->Stop();
 	const FMissionStep& Next = Steps[Step];
 	Beacon->SetWorldLocation(FVector(Next.Target.X, Next.Target.Y, Next.Target.Z + Mission::BeaconHeight));
 	Beacon->SetVisibility(true);
@@ -176,16 +175,14 @@ void AMission::Tick(float DeltaSeconds)
 		GEngine->AddOnScreenDebugMessage(Mission::GoalLine, 0.f, Mission::GoalColor, Goal);
 	}
 
+	// Arrows over the turns on the way, while the target is still far off.
 	if (Distance > Mission::RouteMinDistance)
 	{
-		UpdateRoute(At, Step.Target);
-#if ENABLE_DRAW_DEBUG
-		const FVector Lift(0.0, 0.0, 60.0);
-		for (int32 i = 0; i + 1 < Route.Num(); ++i)
-		{
-			DrawDebugLine(GetWorld(), Route[i] + Lift, Route[i + 1] + Lift, FColor(255, 210, 90), false, -1.f, 0, 20.f);
-		}
-#endif
+		Guide->Guide(At, Step.Target);
+	}
+	else
+	{
+		Guide->Stop();
 	}
 
 	const APlayerController* PC = Cast<APlayerController>(Player->GetController());
@@ -204,27 +201,11 @@ void AMission::Tick(float DeltaSeconds)
 	}
 }
 
-void AMission::UpdateRoute(const FVector& From, const FVector& To)
-{
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < NextRouteTime)
-	{
-		return;
-	}
-	NextRouteTime = Now + Mission::RouteRefresh;
-	Route.Reset();
-	TActorIterator<ATrafficManager> It(GetWorld());
-	if (It && It->FindPath(From, To, Route))
-	{
-		Route.Insert(From, 0);
-		Route.Add(To);
-	}
-}
-
 void AMission::Pass()
 {
 	CurrentStep = INDEX_NONE;
 	Beacon->SetVisibility(false);
+	Guide->Stop();
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(Mission::GoalLine, 0.f, Mission::GoalColor, TEXT(""));

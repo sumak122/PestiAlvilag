@@ -5,7 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -16,6 +15,7 @@
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PestiText.h"
+#include "RouteGuideComponent.h"
 #include "PestiTaxi.h"
 #include "TaxiPassenger.h"
 #include "TrafficManager.h"
@@ -32,7 +32,6 @@ namespace TaxiCompany
 	constexpr float PersonHalfHeight = 92.f;
 	constexpr double FirstFareDelay = 2.0;
 	constexpr double NextFareDelay = 5.0;
-	constexpr double RouteRefresh = 0.5;
 	// A quick ride earns this share of the meter as a tip, less a share per bump.
 	constexpr float BestTip = 0.25f;
 	constexpr float TipLostPerBump = 0.08f;
@@ -159,6 +158,9 @@ ATaxiCompany::ATaxiCompany()
 	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Beacon->SetCastShadow(false);
 	Beacon->SetVisibility(false);
+
+	Guide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("Guide"));
+	Guide->SetupAttachment(Root);
 }
 
 void ATaxiCompany::BeginPlay()
@@ -229,6 +231,7 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 	}
 	else
 	{
+		Guide->Stop();
 		// Leaving the taxi with a fare aboard loses them.
 		if (Shift == ETaxiShift::ToDropoff)
 		{
@@ -292,7 +295,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 			EndFare();
 			break;
 		}
-		UpdateRoute(At, PickupSpot);
+		Guide->Guide(At, PickupSpot);
 		Status = FString::Printf(TEXT("Fare waiting on %s: %s %s  (stop beside them)"),
 			*PickupStreet, *PestiText::Metres(Distance), PestiText::Compass(At, PickupSpot));
 		break;
@@ -324,7 +327,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 			DropOff(Taxi, true);
 			break;
 		}
-		UpdateRoute(At, DropoffRoad);
+		Guide->Guide(At, DropoffRoad);
 		const double TimeLeft = RideLength / ExpectedSpeed - (Now - FareTime);
 		Status = FString::Printf(TEXT("To %s: %s %s   %s"), *DropoffStreet, *PestiText::Metres(Distance),
 			PestiText::Compass(At, DropoffRoad),
@@ -336,10 +339,6 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		break;
 	}
 
-	if (Shift == ETaxiShift::ToPickup || Shift == ETaxiShift::ToDropoff)
-	{
-		DrawRoute();
-	}
 	if (GEngine && !Status.IsEmpty())
 	{
 		GEngine->AddOnScreenDebugMessage(TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), Status);
@@ -365,7 +364,6 @@ bool ATaxiCompany::StartFare(const FVector& From)
 	}
 	Shift = ETaxiShift::ToPickup;
 	FareTime = GetWorld()->GetTimeSeconds();
-	NextRouteTime = 0.0;
 	Say(FString::Printf(TEXT("Someone is waving for a taxi on %s."), *PickupStreet));
 	return true;
 }
@@ -403,7 +401,6 @@ void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 	BumpsAtPickup = Taxi->GetBumpCount();
 	BumpsSaid = 0;
 	bPassengerScared = false;
-	NextRouteTime = 0.0;
 	Beacon->SetWorldLocation(DropoffSpot + FVector(0.0, 0.0, 1500.0));
 	Beacon->SetVisibility(true);
 	Say(FString::Printf(TEXT("\u201e%s, legyen sz\u00edves!\u201d  (%s, please!)"), *DropoffStreet, *DropoffStreet));
@@ -458,7 +455,7 @@ void ATaxiCompany::EndFare()
 		Passenger = nullptr;
 	}
 	Beacon->SetVisibility(false);
-	Route.Reset();
+	Guide->Stop();
 	if (Shift != ETaxiShift::Off)
 	{
 		Shift = ETaxiShift::Waiting;
@@ -516,35 +513,4 @@ bool ATaxiCompany::PickStreetSpot(const FVector& From, float MinDistance, float 
 		}
 	}
 	return false;
-}
-
-void ATaxiCompany::UpdateRoute(const FVector& From, const FVector& To)
-{
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < NextRouteTime)
-	{
-		return;
-	}
-	NextRouteTime = Now + TaxiCompany::RouteRefresh;
-	Route.Reset();
-	if (const ATrafficManager* Traffic = GetTraffic())
-	{
-		if (Traffic->FindPath(From, To, Route))
-		{
-			Route.Insert(From, 0);
-			Route.Add(To);
-		}
-	}
-}
-
-void ATaxiCompany::DrawRoute() const
-{
-#if ENABLE_DRAW_DEBUG
-	// A yellow line along the streets to follow, like a satnav the 1930s did not have.
-	const FVector Lift(0.0, 0.0, 60.0);
-	for (int32 i = 0; i + 1 < Route.Num(); ++i)
-	{
-		DrawDebugLine(GetWorld(), Route[i] + Lift, Route[i + 1] + Lift, FColor(255, 190, 40), false, -1.f, 0, 25.f);
-	}
-#endif
 }
