@@ -2,6 +2,7 @@
 
 #include "TrafficManager.h"
 
+#include "Algo/BinarySearch.h"
 #include "Dom/JsonObject.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -13,6 +14,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
+#include "Tram.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
 
@@ -44,10 +46,22 @@ void ATrafficManager::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (LoadLanes())
+	const FString Path = FPaths::Combine(FPaths::ProjectDir(), DataFile);
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (!FFileHelper::LoadFileToString(Text, *Path)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		UE_LOG(LogTraffic, Error, TEXT("Could not read %s"), *Path);
+		return;
+	}
+
+	if (LoadLanes(*Root))
 	{
 		SpawnCars();
 	}
+	LoadTramRoutes(*Root);
+	SpawnTrams();
 }
 
 void ATrafficManager::Tick(float DeltaSeconds)
@@ -98,6 +112,26 @@ void ATrafficManager::DrawDebugView() const
 		DrawDebugPoint(World, NodeLocations[Node] + Lift * 2.f, 20.f, bTaken ? FColor::Red : FColor::Green, false, -1.f, SDPG_Foreground);
 	}
 
+	// Tram routes in magenta, their stops as cyan points.
+	for (const FTramRoute& Route : TramRoutes)
+	{
+		for (int32 i = 0; i + 1 < Route.Points.Num(); ++i)
+		{
+			if (FVector::DistSquared2D(Route.Points[i], Center) < RangeSquared)
+			{
+				DrawDebugLine(World, Route.Points[i] + Lift, Route.Points[i + 1] + Lift, FColor::Magenta, false, -1.f, 0, 6.f);
+			}
+		}
+		for (const float Stop : Route.Stops)
+		{
+			const FVector StopLocation = Route.LocationAt(Stop);
+			if (FVector::DistSquared2D(StopLocation, Center) < RangeSquared)
+			{
+				DrawDebugPoint(World, StopLocation + Lift * 2.f, 16.f, FColor::Cyan, false, -1.f, SDPG_Foreground);
+			}
+		}
+	}
+
 	for (const ATrafficCar* Car : Cars)
 	{
 		if (!Car || FVector::DistSquared2D(Car->GetActorLocation(), Center) > RangeSquared || !Lanes.IsValidIndex(Car->GetLaneIndex()))
@@ -123,22 +157,12 @@ void ATrafficManager::DrawDebugView() const
 #endif
 }
 
-bool ATrafficManager::LoadLanes()
+bool ATrafficManager::LoadLanes(const FJsonObject& Root)
 {
-	const FString Path = FPaths::Combine(FPaths::ProjectDir(), DataFile);
-	FString Text;
-	TSharedPtr<FJsonObject> Root;
-	if (!FFileHelper::LoadFileToString(Text, *Path)
-		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
-	{
-		UE_LOG(LogTraffic, Error, TEXT("Could not read lanes from %s"), *Path);
-		return false;
-	}
-
 	const TArray<TSharedPtr<FJsonValue>>* LaneValues = nullptr;
-	if (!Root->TryGetArrayField(TEXT("lanes"), LaneValues))
+	if (!Root.TryGetArrayField(TEXT("lanes"), LaneValues))
 	{
-		UE_LOG(LogTraffic, Error, TEXT("%s has no lanes; rerun osm_to_graybox.py"), *Path);
+		UE_LOG(LogTraffic, Error, TEXT("%s has no lanes; rerun osm_to_graybox.py"), *DataFile);
 		return false;
 	}
 
@@ -183,6 +207,107 @@ bool ATrafficManager::LoadLanes()
 
 	UE_LOG(LogTraffic, Log, TEXT("Loaded %d traffic lanes"), Lanes.Num());
 	return Lanes.Num() > 0;
+}
+
+FVector FTramRoute::LocationAt(float Distance) const
+{
+	if (Points.Num() == 0)
+	{
+		return FVector::ZeroVector;
+	}
+	if (Distance <= 0.f)
+	{
+		return Points[0];
+	}
+	if (Distance >= Length)
+	{
+		return Points.Last();
+	}
+	const int32 Upper = Algo::UpperBound(PointDistances, Distance);
+	const int32 i = FMath::Clamp(Upper - 1, 0, Points.Num() - 2);
+	const float SegmentLength = PointDistances[i + 1] - PointDistances[i];
+	const float Alpha = SegmentLength > 0.f ? (Distance - PointDistances[i]) / SegmentLength : 0.f;
+	return FMath::Lerp(Points[i], Points[i + 1], Alpha);
+}
+
+void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
+{
+	const TArray<TSharedPtr<FJsonValue>>* RouteValues = nullptr;
+	if (!Root.TryGetArrayField(TEXT("trams"), RouteValues))
+	{
+		UE_LOG(LogTraffic, Warning, TEXT("%s has no tram routes; rerun osm_to_graybox.py"), *DataFile);
+		return;
+	}
+
+	for (const TSharedPtr<FJsonValue>& RouteValue : *RouteValues)
+	{
+		const TSharedPtr<FJsonObject>& RouteObject = RouteValue->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Coords = nullptr;
+		if (!RouteObject.IsValid() || !RouteObject->TryGetArrayField(TEXT("points"), Coords) || Coords->Num() < 4)
+		{
+			continue;
+		}
+
+		FTramRoute& Route = TramRoutes.AddDefaulted_GetRef();
+		Route.Ref = RouteObject->GetStringField(TEXT("ref"));
+		for (int32 i = 0; i + 1 < Coords->Num(); i += 2)
+		{
+			const FVector Point((*Coords)[i]->AsNumber(), (*Coords)[i + 1]->AsNumber(), 0.0);
+			if (Route.Points.Num() > 0)
+			{
+				Route.Length += static_cast<float>(FVector::Dist2D(Route.Points.Last(), Point));
+			}
+			Route.Points.Add(Point);
+			Route.PointDistances.Add(Route.Length);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* StopValues = nullptr;
+		if (RouteObject->TryGetArrayField(TEXT("stops"), StopValues))
+		{
+			for (const TSharedPtr<FJsonValue>& StopValue : *StopValues)
+			{
+				const TSharedPtr<FJsonObject>& Stop = StopValue->AsObject();
+				if (Stop.IsValid())
+				{
+					Route.Stops.Add(static_cast<float>(Stop->GetNumberField(TEXT("at"))));
+				}
+			}
+			Route.Stops.Sort();
+		}
+	}
+	UE_LOG(LogTraffic, Log, TEXT("Loaded %d tram routes"), TramRoutes.Num());
+}
+
+void ATrafficManager::SpawnTrams()
+{
+	UWorld* World = GetWorld();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	for (int32 RouteIdx = 0; RouteIdx < TramRoutes.Num(); ++RouteIdx)
+	{
+		const FTramRoute& Route = TramRoutes[RouteIdx];
+		const int32 Count = FMath::Max(1, FMath::RoundToInt(Route.Length / TramSpacing));
+		const float Spacing = Route.Length / Count;
+		const float Offset = FMath::FRandRange(0.f, Spacing);
+		for (int32 n = 0; n < Count; ++n)
+		{
+			const float Distance = Offset + n * Spacing;
+			const FVector Location = Route.LocationAt(Distance);
+			if (Player && FVector::Dist2D(Location, Player->GetActorLocation()) < 3000.f)
+			{
+				continue;
+			}
+			ATram* NewTram = World->SpawnActor<ATram>(ATram::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
+			if (NewTram)
+			{
+				NewTram->StartOnRoute(this, RouteIdx, Distance);
+				Trams.Add(NewTram);
+			}
+		}
+	}
+	UE_LOG(LogTraffic, Log, TEXT("Spawned %d trams"), Trams.Num());
 }
 
 void ATrafficManager::SpawnCars()
@@ -334,27 +459,16 @@ bool ATrafficManager::HasRoomOnLane(int32 LaneIndex, float Room, const AActor* A
 	return !Player || FVector::Dist2D(Player->GetActorLocation(), Start) >= Room;
 }
 
-float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead) const
+float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars) const
 {
 	const FVector Origin = Car->GetActorLocation();
 	const FVector Forward = Car->GetActorForwardVector().GetSafeNormal2D();
 	const FVector Right = FVector(-Forward.Y, Forward.X, 0.f);
 
 	float Clear = LookAhead;
-	auto Consider = [&](const AActor* Other)
+	auto ConsiderPoint = [&](const FVector& Point)
 	{
-		if (!Other || Other == Car)
-		{
-			return;
-		}
-		// Oncoming AI cars in the other lane are no reason to stop. The player
-		// always counts, whichever way they face.
-		const bool bIsPlayer = Other->IsA<APawn>();
-		if (!bIsPlayer && FVector::DotProduct(Other->GetActorForwardVector().GetSafeNormal2D(), Forward) < 0.f)
-		{
-			return;
-		}
-		const FVector Offset = Other->GetActorLocation() - Origin;
+		const FVector Offset = Point - Origin;
 		const float Ahead = static_cast<float>(FVector::DotProduct(Offset, Forward));
 		const float Side = static_cast<float>(FMath::Abs(FVector::DotProduct(Offset, Right)));
 		if (Ahead > 0.f && Ahead < Clear && Side < Traffic::CorridorHalfWidth)
@@ -362,11 +476,62 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead) co
 			Clear = Ahead;
 		}
 	};
+	// Oncoming cars and trams in the other lane are no reason to stop. The
+	// player always counts, whichever way they face.
+	auto IsOncoming = [&](const AActor* Other)
+	{
+		return FVector::DotProduct(Other->GetActorForwardVector().GetSafeNormal2D(), Forward) < 0.f;
+	};
 
+	if (!bIgnoreAICars)
+	{
+		for (const ATrafficCar* Other : Cars)
+		{
+			if (Other && Other != Car && !IsOncoming(Other))
+			{
+				ConsiderPoint(Other->GetActorLocation());
+			}
+		}
+	}
+	for (const ATram* Other : Trams)
+	{
+		if (!Other || Other == Car || Other->IsHidden() || IsOncoming(Other))
+		{
+			continue;
+		}
+		// A tram is long: check its ends as well as its middle, so a tram
+		// crossing in front is seen.
+		const FVector Along = Other->GetActorForwardVector().GetSafeNormal2D() * 450.f;
+		ConsiderPoint(Other->GetActorLocation());
+		ConsiderPoint(Other->GetActorLocation() + Along);
+		ConsiderPoint(Other->GetActorLocation() - Along);
+	}
+	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0); Player && Player != Car)
+	{
+		ConsiderPoint(Player->GetActorLocation());
+	}
+	return Clear;
+}
+
+bool ATrafficManager::IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const
+{
+	auto IsNear = [&](const AActor* Other)
+	{
+		return Other && Other != Asker && !Other->IsHidden() && FVector::Dist2D(Other->GetActorLocation(), Location) < Radius;
+	};
 	for (const ATrafficCar* Other : Cars)
 	{
-		Consider(Other);
+		if (IsNear(Other))
+		{
+			return false;
+		}
 	}
-	Consider(UGameplayStatics::GetPlayerPawn(this, 0));
-	return Clear;
+	for (const ATram* Other : Trams)
+	{
+		if (IsNear(Other))
+		{
+			return false;
+		}
+	}
+	return !IsNear(UGameplayStatics::GetPlayerPawn(this, 0));
 }

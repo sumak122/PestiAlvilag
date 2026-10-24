@@ -31,6 +31,9 @@ namespace CarBody
 	/** Call from an actor constructor. Adds the parts under Parent. */
 	void Build(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
 
+	/** Call from an actor constructor. A 10 x 2.2 x 3.5 m tram, ground 165 cm below the parent's centre. */
+	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
+
 	/** Call from an actor constructor: the material every part is painted from. */
 	UMaterialInterface* LoadPaintMaterial();
 

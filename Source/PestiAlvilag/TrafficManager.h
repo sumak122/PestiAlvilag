@@ -7,6 +7,8 @@
 #include "TrafficManager.generated.h"
 
 class ATrafficCar;
+class ATram;
+class FJsonObject;
 
 /** One direction of one street piece, already offset to the left side. */
 struct FTrafficLane
@@ -16,6 +18,21 @@ struct FTrafficLane
 	int32 ToNode = INDEX_NONE;
 	float Speed = 700.f;
 	FString Way;
+};
+
+/** One tram route through the map, in driving order. Distances are in cm along the track. */
+struct FTramRoute
+{
+	TArray<FVector> Points;
+	/** Distance along the track at each point. */
+	TArray<float> PointDistances;
+	TArray<float> Stops;
+	FString Ref;
+	float Length = 0.f;
+	float Speed = 700.f;
+
+	/** Point on the track this far along it, clamped to the ends. */
+	FVector LocationAt(float Distance) const;
 };
 
 /**
@@ -53,8 +70,20 @@ public:
 	/** A random lane leaving the end of this one; U-turns only at dead ends. */
 	int32 PickNextLane(int32 LaneIndex) const;
 
-	/** Distance to the nearest car (AI or player) in front, in the same lane corridor. */
-	float ClearDistanceAhead(const AActor* Car, float LookAhead) const;
+	/**
+	 * Distance to the nearest car, tram or player in front, in the same lane
+	 * corridor. bIgnoreAICars counts only trams and the player.
+	 */
+	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false) const;
+
+	/** True unless a car, tram or the player is within Radius of Location. */
+	bool IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const;
+
+	const FTramRoute& GetTramRoute(int32 RouteIndex) const { return TramRoutes[RouteIndex]; }
+
+	/** Roughly one tram per this much route length (cm); at least one per route. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	float TramSpacing = 80000.f;
 
 	/** True unless a car (AI or player) sits within Room of the start of this lane. */
 	bool HasRoomOnLane(int32 LaneIndex, float Room, const AActor* Asker) const;
@@ -74,8 +103,10 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	bool LoadLanes();
+	bool LoadLanes(const FJsonObject& Root);
+	void LoadTramRoutes(const FJsonObject& Root);
 	void SpawnCars();
+	void SpawnTrams();
 	void DrawDebugView() const;
 
 	bool bShowDebug = false;
@@ -91,6 +122,11 @@ private:
 	TArray<FVector> NodeLocations;
 	TArray<FNodeClaim> NodeClaims;
 
+	TArray<FTramRoute> TramRoutes;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ATrafficCar>> Cars;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ATram>> Trams;
 };
