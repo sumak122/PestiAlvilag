@@ -77,6 +77,8 @@ private:
 	float JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds);
 	void ReleasePassedJunctions(const FVector& Location, int32 NextNode);
 	void UpdateTrafficators(float DistToJunction);
+	/** Fraction of lane speed for a bend of this many degrees. */
+	static float CornerFraction(float TurnDegrees);
 
 	int32 LaneIndex = INDEX_NONE;
 	/** Chosen as soon as the car enters a lane, so it can signal the turn. */

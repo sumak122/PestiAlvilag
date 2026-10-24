@@ -25,8 +25,12 @@ namespace TrafficCar
 	constexpr float JunctionStopLine = 700.f;
 	// ...and free it once this far past (cm).
 	constexpr float JunctionExit = 900.f;
+	// Free space needed past a junction before driving into it (cm).
+	constexpr float ExitRoom = 900.f;
 	// Seconds stuck against another car or a wall before driving through it.
 	constexpr float MaxBlockedTime = 3.f;
+	// Speed while driving through whatever it is stuck on (cm/s).
+	constexpr float UnstickSpeed = 300.f;
 	// Signal a turn from this far before the junction (cm)...
 	constexpr float SignalDistance = 2500.f;
 	// ...if the road bends more than this (degrees).
@@ -121,8 +125,24 @@ void ATrafficCar::Tick(float DeltaSeconds)
 	const float NewYaw = FMath::FixedTurn(CurrentYaw, WantedYaw, TurnRate * DeltaSeconds);
 	SetActorRotation(FRotator(0.f, NewYaw, 0.f));
 
-	// Slow for corners and for anything in front.
-	float WantedSpeed = Lane->Speed * FMath::Lerp(1.f, TrafficCar::CornerSpeedFraction, FMath::Clamp(TurnNeeded / 90.f, 0.f, 1.f));
+	// Slow for the corner we are in, and brake early enough for the one at
+	// the target point, so the car doesn't swing into a wall at a junction.
+	const float CornerSpeed = Lane->Speed * CornerFraction(TurnNeeded);
+	const FVector* AfterTarget = PointIndex + 1 < Lane->Points.Num()
+		? &Lane->Points[PointIndex + 1]
+		: (NextLaneIndex != INDEX_NONE ? &Manager->GetLane(NextLaneIndex).Points[0] : nullptr);
+	float WantedSpeed = CornerSpeed;
+	if (AfterTarget && FVector::Dist2D(*AfterTarget, Target) > 1.f)
+	{
+		const FVector NextHeading = (*AfterTarget - Target).GetSafeNormal2D();
+		const float NextTurn = static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(
+			FMath::Clamp(FVector::DotProduct(ToTarget, NextHeading), -1.0, 1.0))));
+		const float NextCornerSpeed = Lane->Speed * CornerFraction(NextTurn);
+		const float DistToTarget = static_cast<float>(FVector::Dist2D(Location, Target));
+		const float BrakeRoom = FMath::Max(0.f, DistToTarget - TrafficCar::ReachRadius);
+		WantedSpeed = FMath::Min(WantedSpeed,
+			FMath::Sqrt(FMath::Square(NextCornerSpeed) + BrakeDeceleration * BrakeRoom));
+	}
 	const float Clear = Manager->ClearDistanceAhead(this, TrafficCar::LookAhead);
 	WantedSpeed *= FMath::Clamp((Clear - StopGap) / (TrafficCar::LookAhead - StopGap), 0.f, 1.f);
 
@@ -146,14 +166,23 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		BlockedTime = 0.f;
 		return;
 	}
-	CurrentSpeed = 0.f;
 	BlockedTime += DeltaSeconds;
 	const AActor* Blocker = Hit.GetActor();
 	const bool bBlockedByPlayer = Blocker && Blocker == UGameplayStatics::GetPlayerPawn(this, 0);
 	if (!bBlockedByPlayer && BlockedTime > TrafficCar::MaxBlockedTime)
 	{
-		SetActorLocation(NewLocation, false);
+		// Keep a crawl going, or the car would creep a hair a frame and stay
+		// wedged in the wall for good.
+		CurrentSpeed = FMath::Max(CurrentSpeed, TrafficCar::UnstickSpeed);
+		SetActorLocation(Location + GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed * DeltaSeconds, false);
+		return;
 	}
+	CurrentSpeed = 0.f;
+}
+
+float ATrafficCar::CornerFraction(float TurnDegrees)
+{
+	return FMath::Lerp(1.f, TrafficCar::CornerSpeedFraction, FMath::Clamp(TurnDegrees / 90.f, 0.f, 1.f));
 }
 
 float ATrafficCar::JunctionSpeedLimit(float DistToJunction, int32 Node, float DeltaSeconds)
@@ -163,8 +192,14 @@ float ATrafficCar::JunctionSpeedLimit(float DistToJunction, int32 Node, float De
 		return 1.f;
 	}
 
+	// Don't enter a junction (or the tram tracks across it) unless there is
+	// room on the far side; after a long wait go anyway, so traffic can't
+	// lock up for good.
+	const bool bRoomToExit = !Manager->IsJunction(Node)
+		|| Manager->HasRoomOnLane(NextLaneIndex, TrafficCar::ExitRoom, this)
+		|| JunctionWaitTime > MaxJunctionWait * 3.f;
 	const bool bForce = JunctionWaitTime > MaxJunctionWait;
-	if (Manager->TryClaimNode(Node, this, bForce))
+	if (bRoomToExit && Manager->TryClaimNode(Node, this, bForce))
 	{
 		HeldNodes.Add(Node);
 		JunctionWaitTime = 0.f;

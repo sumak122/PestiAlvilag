@@ -315,6 +315,25 @@ FVector ATrafficManager::GetNodeLocation(int32 Node) const
 	return NodeLocations.IsValidIndex(Node) ? NodeLocations[Node] : FVector::ZeroVector;
 }
 
+bool ATrafficManager::HasRoomOnLane(int32 LaneIndex, float Room, const AActor* Asker) const
+{
+	if (!Lanes.IsValidIndex(LaneIndex))
+	{
+		return true;
+	}
+	const FVector Start = Lanes[LaneIndex].Points[0];
+	for (const ATrafficCar* Other : Cars)
+	{
+		if (Other && Other != Asker && Other->GetLaneIndex() == LaneIndex
+			&& FVector::Dist2D(Other->GetActorLocation(), Start) < Room)
+		{
+			return false;
+		}
+	}
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	return !Player || FVector::Dist2D(Player->GetActorLocation(), Start) >= Room;
+}
+
 float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead) const
 {
 	const FVector Origin = Car->GetActorLocation();

@@ -56,6 +56,9 @@ public:
 	/** Distance to the nearest car (AI or player) in front, in the same lane corridor. */
 	float ClearDistanceAhead(const AActor* Car, float LookAhead) const;
 
+	/** True unless a car (AI or player) sits within Room of the start of this lane. */
+	bool HasRoomOnLane(int32 LaneIndex, float Room, const AActor* Asker) const;
+
 	/**
 	 * Asks to drive through a junction. Only one car may be in a junction at a
 	 * time; plain bends in a street are always free. bForce takes the junction
