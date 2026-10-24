@@ -64,6 +64,20 @@ void ATrafficManager::BeginPlay()
 		return;
 	}
 
+	const TArray<TSharedPtr<FJsonValue>>* Streets = nullptr;
+	if (Root->TryGetArrayField(TEXT("centerlines"), Streets))
+	{
+		for (const TSharedPtr<FJsonValue>& StreetValue : *Streets)
+		{
+			const TSharedPtr<FJsonObject>& Street = StreetValue->AsObject();
+			FString Name;
+			if (Street.IsValid() && Street->TryGetStringField(TEXT("name"), Name) && !Name.IsEmpty())
+			{
+				StreetNames.Add(Street->GetStringField(TEXT("id")), Name);
+			}
+		}
+	}
+
 	if (LoadLanes(*Root))
 	{
 		SpawnCars();

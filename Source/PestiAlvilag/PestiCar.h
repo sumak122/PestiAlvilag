@@ -63,6 +63,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Car")
 	float FullTurnSpeed = 500.f;
 
+	UPROPERTY(EditAnywhere, Category = "Car")
+	FLinearColor BodyColor = FLinearColor(0.03f, 0.07f, 0.05f);
+
 	/** Keeps the collision box off the flat road layers. */
 	UPROPERTY(EditAnywhere, Category = "Car")
 	float HoverHeight = 20.f;
@@ -87,6 +90,9 @@ public:
 	/** Puts a person behind the wheel; they get out again with F. */
 	void TakeDriver(APawn* InDriver);
 
+	/** How many times the car has hit something hard enough to jolt a passenger. */
+	int32 GetBumpCount() const { return BumpCount; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UBoxComponent> CollisionBox;
@@ -102,6 +108,8 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
+
+	TArray<CarBody::EPaint> BodyPaints;
 
 	virtual void BeginPlay() override;
 
@@ -122,5 +130,6 @@ private:
 	UPROPERTY()
 	TObjectPtr<APawn> Driver;
 	double DriverInTime = 0.0;
-	TArray<CarBody::EPaint> BodyPaints;
+	int32 BumpCount = 0;
+	double LastBumpTime = -1.0;
 };
