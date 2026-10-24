@@ -24,6 +24,9 @@ Notes:
 - Building heights use `height`, then `building:levels` × 3.8 m, then 4 storeys.
   Bridges between buildings get a `base` from `min_height` or
   `building:min_level`, so streets stay open underneath.
+  Canopies (`building=roof`, `carport`) are a thin roof 3-4 m up. Building
+  corners that stick out into a street cars drive on are cut back to the
+  carriageway edge.
 - This is today's map. Buildings that did not exist in 1932 (for example
   around Corvin köz and Keleti's newer blocks) are still in it; fixing the
   1932 street plan comes later, from the MAPIRE 1930s maps.
