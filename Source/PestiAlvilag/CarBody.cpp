@@ -76,6 +76,21 @@ namespace CarBody
 		{ TEXT("WheelRearRight"), EShape::Cylinder, EPaint::Tyre, FVector(-250.f, 80.f, -125.f), WheelAxle, TramWheelScale },
 	};
 
+	// A Pest man of 1932: long coat, dark trousers, hat. The nose shows which
+	// way he faces. Ground is 90 cm below the centre.
+	const FPartSpec PersonSpecs[] = {
+		{ TEXT("LegLeft"), EShape::Cube, EPaint::Trousers, FVector(0.f, -11.f, -48.f), Upright, FVector(0.16f, 0.15f, 0.84f) },
+		{ TEXT("LegRight"), EShape::Cube, EPaint::Trousers, FVector(0.f, 11.f, -48.f), Upright, FVector(0.16f, 0.15f, 0.84f) },
+		{ TEXT("ArmLeft"), EShape::Cube, EPaint::Body, FVector(0.f, -29.f, 22.f), Upright, FVector(0.12f, 0.11f, 0.62f) },
+		{ TEXT("ArmRight"), EShape::Cube, EPaint::Body, FVector(0.f, 29.f, 22.f), Upright, FVector(0.12f, 0.11f, 0.62f) },
+		{ TEXT("Coat"), EShape::Cube, EPaint::Body, FVector(0.f, 0.f, 12.f), Upright, FVector(0.3f, 0.46f, 0.84f) },
+		{ TEXT("Collar"), EShape::Cube, EPaint::Body, FVector(0.f, 0.f, 54.f), Upright, FVector(0.22f, 0.3f, 0.06f) },
+		{ TEXT("Head"), EShape::Sphere, EPaint::Skin, FVector(0.f, 0.f, 70.f), Upright, FVector(0.22f, 0.2f, 0.25f) },
+		{ TEXT("Nose"), EShape::Cube, EPaint::Skin, FVector(11.f, 0.f, 69.f), Upright, FVector(0.05f, 0.04f, 0.06f) },
+		{ TEXT("HatBrim"), EShape::Cylinder, EPaint::Tyre, FVector(0.f, 0.f, 81.f), Upright, FVector(0.36f, 0.36f, 0.03f) },
+		{ TEXT("HatCrown"), EShape::Cylinder, EPaint::Tyre, FVector(0.f, 0.f, 88.f), Upright, FVector(0.22f, 0.22f, 0.13f) },
+	};
+
 	FLinearColor PaintColor(EPaint Slot, const FLinearColor& BodyColor)
 	{
 		switch (Slot)
@@ -85,6 +100,8 @@ namespace CarBody
 		case EPaint::Glass: return FLinearColor(0.02f, 0.03f, 0.05f);
 		case EPaint::Headlamp: return FLinearColor(1.f, 0.9f, 0.6f);
 		case EPaint::TailLamp: return FLinearColor(0.7f, 0.02f, 0.02f);
+		case EPaint::Skin: return FLinearColor(0.75f, 0.5f, 0.38f);
+		case EPaint::Trousers: return FLinearColor(0.03f, 0.03f, 0.04f);
 		default: return BodyColor;
 		}
 	}
@@ -121,6 +138,11 @@ namespace CarBody
 	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
 	{
 		BuildParts(TramSpecs, Owner, Parent, OutParts, OutPaints);
+	}
+
+	void BuildPerson(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
+	{
+		BuildParts(PersonSpecs, Owner, Parent, OutParts, OutPaints);
 	}
 
 	UMaterialInterface* LoadPaintMaterial()

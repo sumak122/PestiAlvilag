@@ -20,11 +20,9 @@ class UStaticMeshComponent;
  *
  * Keys: W/S or triggers to drive and brake, A/D or left stick to steer,
  * Space or gamepad A for the handbrake, C or gamepad Y to switch camera,
- * P to make the police come after you (for testing).
+ * mouse or right stick to look around, F or gamepad B to get out.
  *
- * It also keeps the player's wanted level: ramming traffic makes the police
- * come after you; staying out of their sight long enough loses them, and
- * staying slow next to one gets you arrested.
+ * Ramming traffic makes the police come after you (see the game mode).
  */
 UCLASS()
 class PESTIALVILAG_API APestiCar : public APawn
@@ -84,20 +82,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	float LookResetDelay = 2.f;
 
-	/** Seconds out of police sight that lose them. */
-	UPROPERTY(EditAnywhere, Category = "Police")
-	float EscapeTime = 20.f;
+	virtual FVector GetVelocity() const override;
 
-	/** Seconds slow beside a police car before being arrested. */
-	UPROPERTY(EditAnywhere, Category = "Police")
-	float ArrestTime = 3.f;
-
-	/** 0 = not wanted; higher means more trouble. */
-	int32 GetWantedLevel() const { return WantedLevel; }
-	void ReportCrime(int32 CrimeLevel);
-	/** Police call these every frame they see the player or are right beside them. */
-	void NotifySeenByPolice();
-	void NotifyPoliceNear();
+	/** Puts a person behind the wheel; they get out again with F. */
+	void TakeDriver(APawn* InDriver);
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
@@ -123,17 +111,16 @@ private:
 	void SnapToGround();
 	void ToggleCamera();
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
-	void UpdateWanted(float DeltaSeconds);
-	void ClearWanted(const TCHAR* Message);
+	void LetDriverOut(APlayerController* PC);
 
 	bool bOverheadCamera = false;
 	// Free look: the camera's turn away from straight behind the car (degrees).
 	float LookYaw = 0.f;
 	float LookPitch = 0.f;
 	float TimeSinceLook = 0.f;
-	int32 WantedLevel = 0;
-	float TimeUnseen = 0.f;
-	float ArrestProgress = 0.f;
-	double LastPoliceNearTime = -1.0;
+	// The person who got in, waiting hidden until they get out.
+	UPROPERTY()
+	TObjectPtr<APawn> Driver;
+	double DriverInTime = 0.0;
 	TArray<CarBody::EPaint> BodyPaints;
 };

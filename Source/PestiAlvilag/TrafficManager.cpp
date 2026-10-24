@@ -6,11 +6,13 @@
 #include "Dom/JsonObject.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "PestiCar.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
@@ -657,6 +659,14 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 	{
 		ConsiderPoint(Player->GetActorLocation());
 	}
+	// The player's car, parked while they are on foot.
+	for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
+	{
+		if (*It != Car)
+		{
+			ConsiderPoint(It->GetActorLocation());
+		}
+	}
 	return Clear;
 }
 
@@ -676,6 +686,13 @@ bool ATrafficManager::IsAreaClear(const FVector& Location, float Radius, const A
 	for (const ATram* Other : Trams)
 	{
 		if (IsNear(Other))
+		{
+			return false;
+		}
+	}
+	for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
+	{
+		if (IsNear(*It))
 		{
 			return false;
 		}

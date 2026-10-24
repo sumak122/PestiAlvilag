@@ -8,7 +8,7 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
-#include "PestiCar.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -78,14 +78,15 @@ void APoliceCar::BeginPlay()
 
 void APoliceCar::Tick(float DeltaSeconds)
 {
-	APestiCar* Player = Cast<APestiCar>(UGameplayStatics::GetPlayerPawn(this, 0));
-	if (!Player || !Manager)
+	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Player || !Game || !Manager)
 	{
 		Super::Tick(DeltaSeconds);
 		return;
 	}
 
-	const bool bWanted = Player->GetWantedLevel() > 0;
+	const bool bWanted = Game->GetWantedLevel() > 0;
 	if (!bChasing && bWanted && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < ResponseRange)
 	{
 		StartChase();
@@ -102,7 +103,7 @@ void APoliceCar::Tick(float DeltaSeconds)
 	}
 	// Skip the lane driving in ATrafficCar::Tick while chasing.
 	AActor::Tick(DeltaSeconds);
-	ChaseTick(Player, DeltaSeconds);
+	ChaseTick(Player, Game, DeltaSeconds);
 }
 
 void APoliceCar::StartChase()
@@ -131,7 +132,7 @@ void APoliceCar::StopChase()
 	}
 }
 
-void APoliceCar::ChaseTick(APestiCar* Player, float DeltaSeconds)
+void APoliceCar::ChaseTick(APawn* Player, APestiAlvilagGameModeBase* Game, float DeltaSeconds)
 {
 	const FVector Here = GetActorLocation();
 	const FVector PlayerAt = Player->GetActorLocation();
@@ -145,11 +146,11 @@ void APoliceCar::ChaseTick(APestiCar* Player, float DeltaSeconds)
 	}
 	if (bSeesPlayer)
 	{
-		Player->NotifySeenByPolice();
+		Game->NotifySeenByPolice();
 	}
 	if (DistToPlayer < PoliceCar::ArrestRange)
 	{
-		Player->NotifyPoliceNear();
+		Game->NotifyPoliceNear();
 	}
 
 	// Flash the roof sign.
@@ -204,7 +205,7 @@ void APoliceCar::ChaseTick(APestiCar* Player, float DeltaSeconds)
 	if (bDirect)
 	{
 		// Close in, then keep pace to box the player in.
-		const float PlayerSpeed = FMath::Abs(Player->ForwardSpeed);
+		const float PlayerSpeed = static_cast<float>(Player->GetVelocity().Size2D());
 		WantedSpeed = FMath::Min(WantedSpeed, PlayerSpeed + FMath::Max(0.f, DistToPlayer - 500.f) * 1.5f);
 	}
 	const float Rate = WantedSpeed < CurrentSpeed ? BrakeDeceleration : Acceleration * 2.f;
@@ -213,7 +214,7 @@ void APoliceCar::ChaseTick(APestiCar* Player, float DeltaSeconds)
 	MoveChasing(GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed * DeltaSeconds, Player, DeltaSeconds);
 }
 
-bool APoliceCar::CanSee(const APestiCar* Player) const
+bool APoliceCar::CanSee(const APawn* Player) const
 {
 	const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, 100.f);
 	const FVector PlayerAt = Player->GetActorLocation() + FVector(0.f, 0.f, 50.f);
@@ -229,7 +230,7 @@ bool APoliceCar::CanSee(const APestiCar* Player) const
 	return !GetWorld()->LineTraceSingleByObjectType(Hit, Eye, PlayerAt, Objects, Params);
 }
 
-void APoliceCar::MoveChasing(const FVector& Delta, const APestiCar* Player, float DeltaSeconds)
+void APoliceCar::MoveChasing(const FVector& Delta, const APawn* Player, float DeltaSeconds)
 {
 	FHitResult Hit;
 	AddActorWorldOffset(Delta, true, &Hit);

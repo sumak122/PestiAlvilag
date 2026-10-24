@@ -6,7 +6,7 @@
 #include "TrafficCar.h"
 #include "PoliceCar.generated.h"
 
-class APestiCar;
+class APestiAlvilagGameModeBase;
 class UMaterialInstanceDynamic;
 class UTextRenderComponent;
 
@@ -62,9 +62,9 @@ protected:
 private:
 	void StartChase();
 	void StopChase();
-	void ChaseTick(APestiCar* Player, float DeltaSeconds);
-	bool CanSee(const APestiCar* Player) const;
-	void MoveChasing(const FVector& Delta, const APestiCar* Player, float DeltaSeconds);
+	void ChaseTick(APawn* Player, APestiAlvilagGameModeBase* Game, float DeltaSeconds);
+	bool CanSee(const APawn* Player) const;
+	void MoveChasing(const FVector& Delta, const APawn* Player, float DeltaSeconds);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> SignPaint;
