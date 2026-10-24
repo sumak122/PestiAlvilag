@@ -32,8 +32,10 @@ namespace Prologue
 	constexpr float DriverBeside = 180.f;
 	const FLinearColor DriverCoat(0.04f, 0.04f, 0.05f);
 
-	// The flower bed in the middle of Tisza Kálmán tér.
+	// The flower bed in the middle of Tisza Kálmán tér; anywhere on the
+	// round gravel place around it counts as there.
 	const FVector2D ParkMiddle(59600.f, 700.f);
+	constexpr float ParkRadius = 2400.f;
 
 	// A brown leather case, carried in the right hand.
 	const FVector SuitcaseScale(0.7f, 0.22f, 0.48f);
@@ -135,7 +137,7 @@ void AMissionPrologue::SetUpMission()
 	Park.GoalHu = TEXT("Menj \u00e1t a Tisza K\u00e1lm\u00e1n t\u00e9ren");
 	Park.GoalEn = TEXT("Walk through Tisza K\u00e1lm\u00e1n t\u00e9r");
 	Park.Target = FVector(Prologue::ParkMiddle, GroundZ(Prologue::ParkMiddle) + 90.0);
-	Park.Radius = 1200.f;
+	Park.Radius = Prologue::ParkRadius;
 	Steps.Add(Park);
 
 	FMissionStep Home;

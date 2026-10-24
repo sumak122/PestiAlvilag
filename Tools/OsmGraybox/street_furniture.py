@@ -303,6 +303,12 @@ def layout_tisza(space, park):
     def in_park(x, y, margin):
         return park.buffer(-margin).contains(Point(x, y))
 
+    # Path furniture keeps off the round places; their own benches go round the edge.
+    round_places = unary_union([Point(x, y).buffer(r) for (x, y), r, _ in TISZA_ROUNDS])
+
+    def off_rounds(x, y, margin):
+        return not round_places.buffer(margin).contains(Point(x, y))
+
     trees = []
     tree_spread = Spread(700)
     benches = []
@@ -327,13 +333,15 @@ def layout_tisza(space, park):
             side = 1 if n % 2 == 0 else -1
             nx, ny = ay * side, -ax * side
             bx, by = x + nx * (p[4] / 2 + 90), y + ny * (p[4] / 2 + 90)
-            if in_park(bx, by, 200) and bench_spread.ok(bx, by) and not space.near_building(Point(bx, by), 200):
+            if in_park(bx, by, 200) and off_rounds(bx, by, 100) and bench_spread.ok(bx, by) \
+                    and not space.near_building(Point(bx, by), 200):
                 benches.append([round(bx), round(by), yaw_of(-nx, -ny)])
                 bench_spread.add(bx, by)
         for n, ((x, y), (ax, ay), s) in enumerate(walk(coords, PATH_LAMP_SPACING, PATH_LAMP_SPACING / 2, 500)):
             nx, ny = -ay, ax
             lx, ly = x + nx * (p[4] / 2 + 50), y + ny * (p[4] / 2 + 50)
-            if in_park(lx, ly, 150) and lamp_spread.ok(lx, ly) and not space.near_building(Point(lx, ly), 200):
+            if in_park(lx, ly, 150) and off_rounds(lx, ly, 100) and lamp_spread.ok(lx, ly) \
+                    and not space.near_building(Point(lx, ly), 200):
                 lamps.append([round(lx), round(ly), yaw_of(-nx, -ny)])
                 lamp_spread.add(lx, ly)
 
