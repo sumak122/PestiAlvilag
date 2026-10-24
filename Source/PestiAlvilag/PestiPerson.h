@@ -36,6 +36,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Person")
 	float RunSpeed = 550.f;
 
+	/** Walking speed with something heavy in hand; no running then (cm/s). */
+	UPROPERTY(EditAnywhere, Category = "Person")
+	float CarrySpeed = 130.f;
+
 	/** How close a car must be to get in (cm, centre to centre). */
 	UPROPERTY(EditAnywhere, Category = "Person")
 	float EnterCarRange = 400.f;
@@ -50,6 +54,13 @@ public:
 
 	/** Called by a car the player leaves: appear at At if there is room. */
 	bool TryStepOutAt(const FVector& At, double Yaw);
+
+	/**
+	 * Something heavy in the right hand (a mission attaches the thing itself):
+	 * a slow walk, no running, jumping or getting into cars.
+	 */
+	void SetCarrying(bool bInCarrying);
+	bool IsCarrying() const { return bCarrying; }
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Person")
@@ -76,5 +87,6 @@ private:
 	TArray<CarBody::EPaint> BodyPaints;
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
+	bool bCarrying = false;
 	double OutOfCarTime = -1.0;
 };

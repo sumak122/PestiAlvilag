@@ -95,6 +95,15 @@ void APestiPerson::Tick(float DeltaSeconds)
 	Look(PC, DeltaSeconds);
 	Walk(PC);
 
+	if (bCarrying)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White, TEXT("On foot, carrying something heavy"));
+		}
+		return;
+	}
+
 	if (PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom))
 	{
 		Jump();
@@ -108,7 +117,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			TEXT("On foot   (F: get in car, Shift: run, Space: jump, N: traffic view, P: police test)"));
+			TEXT("On foot   (F: get in car, Shift: run, Space: jump, N: traffic view, P: police test, F9: new game)"));
 	}
 }
 
@@ -145,7 +154,7 @@ void APestiPerson::Walk(const APlayerController* PC)
 	AddMovementInput(FRotationMatrix(Heading).GetUnitAxis(EAxis::Y), Right);
 
 	const bool bRun = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::Gamepad_LeftThumbstick);
-	GetCharacterMovement()->MaxWalkSpeed = bRun ? RunSpeed : WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = bCarrying ? CarrySpeed : bRun ? RunSpeed : WalkSpeed;
 }
 
 void APestiPerson::SwingLimbs(float DeltaSeconds)
@@ -156,7 +165,8 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 	StridePhase += DeltaSeconds * Speed / PestiPerson::StrideLength * PI;
 	const float Swing = FMath::Sin(StridePhase) * PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
 	constexpr int32 NumLimbs = 4;
-	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, Swing };  // left leg, right leg, left arm, right arm
+	// The arm with a load in it hangs still.
+	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, bCarrying ? 0.f : Swing };  // left leg, right leg, left arm, right arm
 	for (int32 i = 0; i < NumLimbs && i < BodyParts.Num(); ++i)
 	{
 		if (BodyParts[i])
@@ -225,4 +235,9 @@ void APestiPerson::SetInWorld(bool bInWorld)
 		GetCharacterMovement()->StopMovementImmediately();
 		GetCharacterMovement()->DisableMovement();
 	}
+}
+
+void APestiPerson::SetCarrying(bool bInCarrying)
+{
+	bCarrying = bInCarrying;
 }
