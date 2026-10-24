@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CarBody.h"
 #include "GameFramework/Pawn.h"
 #include "PestiCar.generated.h"
 
@@ -71,13 +72,7 @@ protected:
 	TObjectPtr<UBoxComponent> CollisionBox;
 
 	UPROPERTY(VisibleAnywhere, Category = "Car")
-	TObjectPtr<UStaticMeshComponent> Chassis;
-
-	UPROPERTY(VisibleAnywhere, Category = "Car")
-	TObjectPtr<UStaticMeshComponent> Cabin;
-
-	UPROPERTY(VisibleAnywhere, Category = "Car")
-	TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
+	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
 
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<USpringArmComponent> CameraArm;
@@ -97,4 +92,5 @@ private:
 	void ToggleCamera();
 
 	bool bOverheadCamera = false;
+	TArray<CarBody::EPaint> BodyPaints;
 };

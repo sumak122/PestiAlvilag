@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CarBody.h"
 #include "GameFramework/Actor.h"
 #include "TrafficCar.generated.h"
 
@@ -85,4 +86,5 @@ private:
 	float JunctionWaitTime = 0.f;
 	float BlockedTime = 0.f;
 	TArray<int32> HeldNodes;
+	TArray<CarBody::EPaint> BodyPaints;
 };

@@ -25,7 +25,9 @@ Notes:
 - This is today's map. Buildings that did not exist in 1932 (for example
   around Corvin köz and Keleti's newer blocks) are still in it; fixing the
   1932 street plan comes later, from the MAPIRE 1930s maps.
-- `lanes` are the AI traffic routes: every drivable street piece gets one
-  lane each way, offset to the LEFT (Budapest drove on the left until 1941).
-  Today's one-way tags are ignored because they describe right-hand traffic.
+- `lanes` are the AI traffic routes, keeping LEFT (Budapest drove on the
+  left until 1941). Main roads mapped as one-way pairs stay one-way with the
+  direction flipped; side streets narrower than 6 m keep their one-way rule;
+  everything else is two-way with a lane each side. A one-way lane that would
+  trap cars at a dead end gets a lane back too.
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.

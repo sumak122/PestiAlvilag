@@ -223,14 +223,38 @@ TRAFFIC_SPEEDS = {
 }
 
 
+# Main roads mapped today as split one-way pairs (often with the tram between
+# them). They stay one-way, with the direction flipped for left-hand traffic.
+MAIN_ROADS = {"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link"}
+# Side streets narrower than this keep their one-way rule; wider ones carry
+# traffic both ways, as most did in 1932.
+MIN_TWO_WAY_WIDTH = 6.0
+
+
+def traffic_direction(tags, width):
+    """"both", "forward" or "backward" along the way's node order."""
+    oneway = tags.get("oneway", "no")
+    if tags.get("junction") == "roundabout" and oneway == "no":
+        oneway = "yes"
+    if oneway in ("yes", "true", "1"):
+        if tags["highway"] in MAIN_ROADS:
+            return "backward"
+        return "forward" if width < MIN_TWO_WAY_WIDTH else "both"
+    if oneway == "-1":
+        if tags["highway"] in MAIN_ROADS:
+            return "forward"
+        return "backward" if width < MIN_TWO_WAY_WIDTH else "both"
+    return "both"
+
+
 def build_lanes(ways, nodes, proj, clip):
     """Directed driving lanes for AI traffic, keeping LEFT as Budapest did in 1932.
 
     Ways are split at junctions (nodes shared by two or more drivable ways).
-    Each piece becomes one lane each way, offset to the left of travel.
-    Today's one-way tags are ignored: they describe right-hand traffic, and
-    most of these streets were two-way in 1932. Lanes leaving the map are dropped, so cars
-    turn round at the map edge.
+    Two-way pieces get one lane each way, offset to the left of travel; one-way
+    pieces get a single lane down the middle (see traffic_direction). A one-way
+    lane that would trap cars at a dead end gets a lane back as well. Lanes
+    leaving the map are dropped, so cars turn round at the map edge.
     """
     drivable = {}
     for wid, way in ways.items():
@@ -247,15 +271,16 @@ def build_lanes(ways, nodes, proj, clip):
 
     inner = clip.buffer(-5.0)
     node_index = {}
-    lanes = []
 
     def node_id(ref):
         return node_index.setdefault(ref, len(node_index))
 
+    # Street pieces between junctions: (way id, node refs, points, direction, width, speed).
+    pieces = []
     for wid, (refs, tags) in drivable.items():
         width = road_width_m(tags)
         speed = round(TRAFFIC_SPEEDS[tags["highway"]] / 0.036)
-
+        direction = traffic_direction(tags, width)
         start = 0
         for i in range(1, len(refs)):
             if i < len(refs) - 1 and use_count.get(refs[i], 0) < 2:
@@ -264,25 +289,49 @@ def build_lanes(ways, nodes, proj, clip):
             start = i
             pts = [proj.to_metres(*nodes[r]) for r in piece]
             line = LineString(pts)
-            if line.length < 1.0 or not inner.contains(line):
-                continue
+            if line.length >= 1.0 and inner.contains(line):
+                pieces.append(["w" + wid, piece, pts, direction, width, speed])
+
+    # Open up one-way pieces that lead into a dead end until every lane has a way out.
+    while True:
+        outgoing = {}
+        for _, piece, _, direction, _, _ in pieces:
+            if direction in ("both", "forward"):
+                outgoing[piece[0]] = outgoing.get(piece[0], 0) + 1
+            if direction in ("both", "backward"):
+                outgoing[piece[-1]] = outgoing.get(piece[-1], 0) + 1
+        changed = False
+        for p in pieces:
+            _, piece, _, direction, _, _ = p
+            end = piece[-1] if direction == "forward" else piece[0]
+            if direction != "both" and not outgoing.get(end):
+                p[3] = "both"
+                changed = True
+        if not changed:
+            break
+
+    lanes = []
+    for wid, piece, pts, direction, width, speed in pieces:
+        forward = (LineString(pts), piece[0], piece[-1])
+        backward = (LineString(pts[::-1]), piece[-1], piece[0])
+        if direction == "both":
             offset = min(width / 4.0, 2.5)
-            directions = [
-                (line, piece[0], piece[-1], offset),
-                (LineString(pts[::-1]), piece[-1], piece[0], offset),
-            ]
-            for path, a, b, offset in directions:
-                # Positive offset_curve distance is to the left of travel.
-                lane = path.offset_curve(offset, join_style="mitre", mitre_limit=2.0)
-                if lane.is_empty or lane.geom_type != "LineString":
-                    lane = path
-                lanes.append({
-                    "from": node_id(a),
-                    "to": node_id(b),
-                    "way": "w" + wid,
-                    "speed": speed,
-                    "points": [c for x, y in lane.coords for c in to_ue(x, y)],
-                })
+            paths = [forward, backward]
+        else:
+            offset = 0.0
+            paths = [forward if direction == "forward" else backward]
+        for path, a, b in paths:
+            # Positive offset_curve distance is to the left of travel.
+            lane = path.offset_curve(offset, join_style="mitre", mitre_limit=2.0) if offset else path
+            if lane.is_empty or lane.geom_type != "LineString":
+                lane = path
+            lanes.append({
+                "from": node_id(a),
+                "to": node_id(b),
+                "way": wid,
+                "speed": speed,
+                "points": [c for x, y in lane.coords for c in to_ue(x, y)],
+            })
     return lanes
 
 
