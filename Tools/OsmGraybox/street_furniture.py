@@ -91,6 +91,15 @@ TAXI_STANDS = [
     ("N\u00e9psz\u00ednh\u00e1z", (-6700, 200)),
     ("Keleti p\u00e1lyaudvar", (91200, -43178)),
 ]
+# A stand laid out by hand instead, where the kerbs nearby are all too close
+# to the traffic: Keleti's cab rank on Baross tér in front of the station,
+# the taxis in a row along the front facing south, the sign at its head.
+FIXED_TAXI_STANDS = {
+    "Keleti p\u00e1lyaudvar": {
+        "taxis": [[91000, -44700, 90.0], [91000, -44160, 90.0], [91000, -43620, 90.0]],
+        "sign": [91250, -44950, 180.0],
+    },
+}
 # Where taxis take the player: a name and a point near the place; the drop
 # is on the nearest pavement walking line.
 TAXI_DESTINATIONS = [
@@ -106,7 +115,7 @@ TAXI_SPACING = 540
 TAXI_STEP = 270
 TAXI_FROM_KERB = 120
 TAXI_SEARCH = 5000
-TAXI_CLEAR_OF_LANES = 200
+TAXI_CLEAR_OF_LANES = 340
 TAXI_CLEAR_OF_TRAMS = 160
 TAXI_SIGN_OUT = 160
 
@@ -439,6 +448,9 @@ def place_taxi_stands(data, space):
     """Taxi ranks by the kerb near the landmarks (see TAXI_STANDS)."""
     stands = []
     for name, anchor in TAXI_STANDS:
+        if name in FIXED_TAXI_STANDS:
+            stands.append({"name": name, **FIXED_TAXI_STANDS[name]})
+            continue
         near = Point(anchor)
         spots = {}
         for k, street in enumerate(data["centerlines"]):
