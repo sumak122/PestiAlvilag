@@ -125,16 +125,20 @@ MODERN_WAYS = {
 # Positions on Baross tér are measured from the middle of Keleti's main front
 # (AKeletiStation::FrontAt), in Unreal cm: X east, Y south.
 KELETI_FRONT = (92766, -43178)
-# The roundabout where Rákóczi út, Fiumei út and the two sides of the square
-# meet: its ring runs through the OSM node at the end of Rákóczi út, its
-# middle a little north of east from there (degrees), clear of the houses.
-ROUNDABOUT_NODE = "659498280"
-ROUNDABOUT_HEADING = 12.0
-ROUNDABOUT_RADIUS = 20.5
-ROUNDABOUT_LAWN = 15.0
-ROUNDABOUT_POINTS = 24
-# Today's node at the start of the square's south side, joined to the ring.
-ROUNDABOUT_EXIT = "262558625"
+# The big oval roundabout where Rákóczi út, Rottenbiller utca, Fiumei út and
+# the two sides of the square meet: the middle of its ring road, round from
+# the north side, clockwise as seen from above (the way traffic went round).
+# Every street that reaches it is cut at the ring and joined to it.
+ROUNDABOUT_RING = [(-23000, 7050), (-21000, 6950), (-19500, 7150), (-18000, 7600), (-17000, 8400), (-16600, 9500),
+                   (-16550, 10700), (-16900, 11800), (-17800, 12450), (-19000, 12550), (-21000, 12150),
+                   (-23000, 11850), (-24500, 11400), (-25200, 10500), (-25300, 9200), (-24900, 8000), (-24100, 7300)]
+ROUNDABOUT_WIDTH = 9.0
+ROUNDABOUT_STEP = 6.0
+# Inside the ring: the round lawn in its east end, the three-cornered lawn
+# and the small one at the west end; the rest is paved.
+ROUNDABOUT_LAWN = ((-18650, 10550), 1300, 1500)
+ROUNDABOUT_LAWNS = [[(-23450, 7550), (-20000, 7500), (-19500, 7900), (-23450, 9850)],
+                    [(-24600, 8150), (-23950, 8150), (-23900, 9850), (-24550, 9850)]]
 # The gravel island with the Baross statue, its outline round from the west
 # tip; its east end stops at the road that still crosses from side to side.
 STATUE_ISLAND = [(-16160, 6560), (-15340, 5640), (-13940, 4700), (-12300, 3700), (-11600, 3500),
@@ -145,19 +149,26 @@ ISLAND_LAWNS = [[(-16380, 5780), (-15040, 5750), (-14900, 7940), (-16250, 7960)]
                 [(-13660, 7300), (-12610, 7290), (-12560, 8200), (-13600, 8210)]]
 # The long lawn with round ends in front of the south half of the station front.
 LONG_LAWN = ((-2320, 2990), (-2320, 5120), 750)
-# The tram terminus: three tracks side by side, the trams waiting on them;
-# at each end they come together and run into the line on the square's south
-# side, the loop round the island's east end.
-TERMINUS_TRACKS = [
-    [(-5950, 8400), (-5950, 1400), (-6400, 400), (-7300, -100)],
-    [(-5200, 8400), (-5200, 1400), (-5700, 300), (-7300, -100)],
-    [(-4100, 8400), (-4100, 1400), (-4700, 100), (-6000, -350), (-7300, -100)],
-    [(-7300, -100), (-9000, 1000), (-10000, 2400), (-10100, 3600), (-9950, 5000), (-8800, 6000), (-7150, 7600),
-     (-6900, 8600), (-6600, 9700)],
-    [(-5950, 8400), (-5700, 9700)],
-    [(-5200, 8400), (-5200, 8700), (-5700, 9700)],
-    [(-4100, 8400), (-4300, 9000), (-5700, 9700)],
+# The 1932 tram line across the square, as Daniel drew it on the 1944 photo:
+# in from Rákóczi út to a fork inside the roundabout, west of its round lawn;
+# one branch down Fiumei út, the other past the statue island, along the
+# station front and up the square's north side to Thököly út. Each end is
+# joined to the nearest node of that street; trams take it through the
+# street graph like any other street (see trams_1932.py). Each leg's points
+# run from the fork outwards.
+TRAM_NAME = "Baross tér villamos"
+TRAM_FORK = (-20700, 9550)
+TRAM_LEGS = [
+    ("Rákóczi út", (-27500, 11500), [(-21800, 10100), (-23500, 10600), (-25500, 11100)]),
+    # Down Fiumei út it runs on the western half, so it ends up between the two.
+    ("Fiumei út", (-13374, 21342), [(-20450, 10400), (-20400, 11500), (-19950, 12500), (-19203, 13600),
+                                    (-18149, 15000), (-16643, 17000), (-15000, 19180)]),
+    ("Thököly út", (-5500, -3500), [(-19700, 8850), (-18400, 8550), (-16800, 8600), (-15000, 9300), (-13000, 9800),
+                                    (-11000, 10100), (-9000, 10200), (-7600, 10000), (-6800, 9300), (-6600, 8300),
+                                    (-6600, 0), (-6400, -1500), (-6000, -2700)]),
 ]
+# The side track along the front where trams wait (no line uses it).
+TRAM_SIDING = [(-6600, -600), (-5600, 400), (-4800, 1400), (-4800, 7600), (-5600, 8500), (-6600, 8900)]
 
 
 def from_keleti(local):
@@ -165,39 +176,112 @@ def from_keleti(local):
     return ((KELETI_FRONT[0] + local[0]) / 100.0, -(KELETI_FRONT[1] + local[1]) / 100.0)
 
 
+def nearest_node(nodes, ways, proj, street, at, away_from):
+    """The node of the named street closest to `at` that lies outside `away_from`."""
+    best = None
+    for way in ways.values():
+        if way["tags"].get("name") != street or way["tags"].get("highway") not in ROAD_WIDTHS:
+            continue
+        for r in way["refs"]:
+            if r in nodes:
+                p = proj.to_metres(*nodes[r])
+                d = math.dist(p, at)
+                if not away_from.contains(Point(p)) and (best is None or d < best[0]):
+                    best = (d, r)
+    return best[1]
+
+
 def baross_ter_1932(nodes, ways, proj):
-    """Put back the early-1930s Baross tér: drops the modern ways, adds the
-    roundabout's ring, and returns the island, lawns and terminus tracks
-    (map metres) for the area layers."""
+    """Put back the early-1930s Baross tér: drops the modern ways, builds the
+    oval roundabout and joins the streets to it, adds the tram line across
+    the square, and returns the island, lawns and siding (map metres) for
+    the area layers."""
     for wid in MODERN_WAYS:
         ways.pop(wid, None)
 
-    # The ring, clockwise as traffic kept left (the node order is
-    # anticlockwise; one-way main roads run against it, see traffic_direction).
-    hub = proj.to_metres(*nodes[ROUNDABOUT_NODE])
-    heading = math.radians(ROUNDABOUT_HEADING)
-    middle = (hub[0] + math.cos(heading) * ROUNDABOUT_RADIUS, hub[1] + math.sin(heading) * ROUNDABOUT_RADIUS)
-    refs = [ROUNDABOUT_NODE]
-    for i in range(1, ROUNDABOUT_POINTS):
-        a = heading + math.pi + 2.0 * math.pi * i / ROUNDABOUT_POINTS
+    # The ring: node order anticlockwise, as one-way main roads run against
+    # their node order (see traffic_direction).
+    ring_line = orient(Polygon([from_keleti(p) for p in ROUNDABOUT_RING]), 1.0).exterior
+    ring_line = LineString(ring_line.coords).segmentize(ROUNDABOUT_STEP)
+    ring_pts = list(ring_line.coords)[:-1]
+    ring_refs = []
+    for i, p in enumerate(ring_pts):
         ref = f"baross-ring-{i}"
-        nodes[ref] = proj.to_latlon(middle[0] + math.cos(a) * ROUNDABOUT_RADIUS, middle[1] + math.sin(a) * ROUNDABOUT_RADIUS)
-        refs.append(ref)
-    refs.append(ROUNDABOUT_NODE)
-    road = {"highway": "primary", "name": "Baross tér", "lanes": "2"}
-    ways["baross-ring"] = {"refs": refs, "tags": dict(road, junction="roundabout")}
-    exit_at = proj.to_metres(*nodes[ROUNDABOUT_EXIT])
-    nearest = min(refs[1:-1], key=lambda r: math.dist(proj.to_metres(*nodes[r]), exit_at))
-    ways["baross-ring-exit"] = {"refs": [nearest, ROUNDABOUT_EXIT], "tags": road}
+        nodes[ref] = proj.to_latlon(*p)
+        ring_refs.append(ref)
+    road = {"highway": "primary", "name": "Baross tér", "width": str(ROUNDABOUT_WIDTH)}
+    ways["baross-ring"] = {"refs": ring_refs + ring_refs[:1], "tags": dict(road, junction="roundabout")}
+    ring = Polygon(ring_pts)
+    hub = ring.buffer(ROUNDABOUT_WIDTH / 2.0 + 2.0)
 
+    def ring_node(outside, inside):
+        """The ring node where the street from `inside` to `outside` meets the ring."""
+        a, b = proj.to_metres(*nodes[outside]), proj.to_metres(*nodes[inside])
+        cross = LineString([a, b]).intersection(ring.exterior)
+        p = nearest_points(cross, Point(a))[0].coords[0] if not cross.is_empty else a
+        return ring_refs[min(range(len(ring_pts)), key=lambda i: math.dist(ring_pts[i], p))]
+
+    # Streets that reach the ring are cut at it; the parts outside are joined
+    # to the nearest ring node (cars only; paths just stop).
+    for wid in list(ways):
+        way = ways[wid]
+        tags = way["tags"]
+        if tags.get("highway") not in ROAD_WIDTHS or wid == "baross-ring":
+            continue
+        refs = [r for r in way["refs"] if r in nodes]
+        inside = [hub.contains(Point(proj.to_metres(*nodes[r]))) for r in refs]
+        if not any(inside):
+            continue
+        del ways[wid]
+        joins = tags["highway"] in TRAFFIC_SPEEDS
+        run, k = [], 0
+        for i, r in enumerate(refs + [None]):
+            if r is not None and not inside[i]:
+                if not run and i > 0 and joins:
+                    run.append(ring_node(r, refs[i - 1]))
+                run.append(r)
+                continue
+            if run:
+                if r is not None and joins:
+                    run.append(ring_node(run[-1], r))
+                if len(run) >= 2:
+                    ways[wid if k == 0 else f"{wid}-{k}"] = {"refs": run, "tags": tags}
+                    k += 1
+                run = []
+
+    # The tram line: its own street, so the 1932 lines can be routed along it.
+    fork = "baross-tram-fork"
+    nodes[fork] = proj.to_latlon(*from_keleti(TRAM_FORK))
+    tram_lines = []
+    for street, end_at, via in TRAM_LEGS:
+        refs = [fork]
+        for i, p in enumerate(via):
+            ref = f"baross-tram-{street}-{i}"
+            nodes[ref] = proj.to_latlon(*from_keleti(p))
+            refs.append(ref)
+        refs.append(nearest_node(nodes, ways, proj, street, from_keleti(end_at), hub))
+        ways[f"baross-tram-{street}"] = {"refs": refs, "tags": {"tram_1932": "yes", "name": TRAM_NAME}}
+        tram_lines.append(LineString([proj.to_metres(*nodes[r]) for r in refs]))
+
+    def ellipse(middle, rx, ry):
+        x, y = from_keleti(middle)
+        return Polygon([(x + math.cos(a) * rx / 100.0, y + math.sin(a) * ry / 100.0)
+                        for a in np.linspace(0.0, 2.0 * math.pi, 48, endpoint=False)])
+
+    def rounded(points, r=2.0):
+        return Polygon([from_keleti(p) for p in points]).buffer(-r).buffer(r)
+
+    inner = ring.buffer(-ROUNDABOUT_WIDTH / 2.0)
+    ring_lawns = [ellipse(*ROUNDABOUT_LAWN)] + [rounded(p).intersection(inner) for p in ROUNDABOUT_LAWNS]
     (x0, y0), (x1, y1), half = LONG_LAWN
     start, end = from_keleti((x0, y0)), from_keleti((x1, y1))
     island = Polygon([from_keleti(p) for p in STATUE_ISLAND])
     lawns = [Polygon([from_keleti(p) for p in lawn]).intersection(island.buffer(-1.0)) for lawn in ISLAND_LAWNS]
     return {
-        "plazas": [island],
-        "parks": [Point(middle).buffer(ROUNDABOUT_LAWN, 48), LineString([start, end]).buffer(half / 100.0, 24)] + lawns,
-        "trams": [LineString([from_keleti(p) for p in track]) for track in TERMINUS_TRACKS],
+        "plazas": [island, inner.difference(unary_union(ring_lawns))],
+        "parks": ring_lawns + [LineString([start, end]).buffer(half / 100.0, 24)] + lawns,
+        "trams": [LineString([from_keleti(p) for p in TRAM_SIDING])],
+        "tram_lines": tram_lines,
     }
 
 

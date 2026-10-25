@@ -157,10 +157,10 @@ BAROSS_TREE_RADIUS = 150
 BAROSS_BED = (-2235, 7472, 760, 740)
 # The two-armed lamps round the long lawn and the bed (their shadows show in the photo).
 BAROSS_LAMPS = [(-3650, 3909), (-3644, 5911), (-999, 4285), (-3623, 8155), (-287, 8276)]
-# Trams waiting on the terminus tracks, facing south.
-BAROSS_TRAMS = [(-5950, 2700), (-5950, 5800), (-5200, 3600), (-5200, 6700), (-4100, 2900)]
-# The roundabout's lawn: no benches inside a ring of traffic.
-BAROSS_ROUNDABOUT = (-19334, 10195)
+# Trams waiting on the side track along the front, facing south.
+BAROSS_TRAMS = [(-4800, 2600), (-4800, 5700)]
+# The roundabout's lawns: no benches inside a ring of traffic.
+BAROSS_ROUNDABOUT = [(-18650, 10550), (-22200, 8300), (-24250, 9000)]
 
 # Tisza Kálmán tér: the park polygon in the graybox has its middle near here.
 TISZA_PARK_NEAR = (61300, 1100)
@@ -900,9 +900,9 @@ def place_lamp_bins(lamps, space, tisza):
 
 def place_park_benches(space, tisza_park, bins):
     benches = []
-    roundabout = Point(*keleti(BAROSS_ROUNDABOUT))
+    roundabout = [Point(*keleti(p)) for p in BAROSS_ROUNDABOUT]
     for park in space.parks:
-        if park is tisza_park or park.area < 30e4 or park.contains(roundabout):
+        if park is tisza_park or park.area < 30e4 or any(park.contains(p) for p in roundabout):
             continue
         inner = park.buffer(-BENCH_INSET)
         if inner.is_empty:

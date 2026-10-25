@@ -17,18 +17,21 @@ from shapely.geometry import LineString, Point
 
 # Streets with trams in 1932 inside the prototype area, each line from one map
 # edge to another. "from"/"to" say which end of the first/last street to use.
-# Karpfenstein utca of 1932 is today's Dobozi utca.
+# Karpfenstein utca of 1932 is today's Dobozi utca. "Baross tér villamos" is
+# the track across Baross tér laid by osm_to_graybox.baross_ter_1932, after
+# the 1944 aerial photo: no trams ran along the Kerepesi út side then.
 LINES_1932 = [
     {"name": "Nagykörút", "streets": ["Erzsébet körút", "József körút"], "from": "north", "to": "south"},
-    {"name": "Rákóczi út - Kerepesi út", "streets": ["Rákóczi út", "Baross tér", "Kerepesi út"], "from": "west", "to": "east"},
+    {"name": "Rákóczi út - Thököly út", "streets": ["Rákóczi út", "Baross tér villamos", "Thököly út"],
+     "from": "west", "to": "north"},
     {"name": "Népszínház utca - Salgótarjáni utca",
      "streets": ["Rákóczi út", "Népszínház utca", "Salgótarjáni utca"], "from": "west", "to": "east"},
     {"name": "Bezerédj utca",
      "streets": ["Rákóczi út", "Népszínház utca", "Csokonai utca", "Bezerédj utca", "II. János Pál pápa tér",
-                 "Baross tér", "Kerepesi út"],
-     "from": "west", "to": "east"},
+                 "Fiumei út", "Baross tér villamos", "Thököly út"],
+     "from": "west", "to": "north"},
     {"name": "Karpfenstein utca", "streets": ["Rákóczi út", "Népszínház utca", "Dobozi utca"], "from": "west", "to": "south"},
-    {"name": "Fiumei út", "streets": ["Kerepesi út", "Baross tér", "Fiumei út"], "from": "east", "to": "south"},
+    {"name": "Fiumei út", "streets": ["Thököly út", "Baross tér villamos", "Fiumei út"], "from": "north", "to": "south"},
 ]
 
 # Each track sits this far left of the street's middle (m): double track, 1435 mm gauge.
@@ -59,6 +62,8 @@ EXTRA_STOPS = [
     # Mid-block on Népszínház utca (Bözsi néni's, not named on the sign):
     # named after the nearest cross street, like the others.
     ("Nagy Fuvaros utca", (583.92, -212.68)),
+    # On the track along Keleti's main front.
+    ("Keleti pályaudvar", (861.66, 391.78)),
 ]
 EXTRA_STOP_REACH = 100.0
 # Stops are named after the street crossed, by its 1932 name.
@@ -90,7 +95,7 @@ class StreetGraph:
         self.street_lines = {}
         for way in ways.values():
             tags = way["tags"]
-            if tags.get("highway") not in TRAM_HIGHWAYS:
+            if tags.get("highway") not in TRAM_HIGHWAYS and not tags.get("tram_1932"):
                 continue
             name = tags.get("name", "")
             refs = [r for r in way["refs"] if r in nodes]
