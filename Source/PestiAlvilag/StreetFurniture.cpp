@@ -102,13 +102,13 @@ namespace Furniture
 	};
 	constexpr double TaxiSignTextZ = 230.0;
 
-	// A tram stop sign ("megallo"): a post with a white enamel plate
+	// A tram stop sign ("megallo"): a post with a white enamel plate on top
 	// edged in red, the word and the stop's name written on it separately.
 	const FLinearColor Enamel(0.85f, 0.85f, 0.80f);
 	const FLinearColor StopRed(0.45f, 0.03f, 0.02f);
 	const TArray<FFurniturePart> TramStopSign = {
-		{ Cylinder, Iron, FVector(0, 0, 140), FVector(0.07, 0.07, 2.8), true },
-		{ Sphere, Iron, FVector(0, 0, 282), FVector(0.1, 0.1, 0.1), false },
+		{ Cylinder, Iron, FVector(0, 0, 110), FVector(0.07, 0.07, 2.2), true },
+		{ Cube, Iron, FVector(0, 0, 221), FVector(0.06, 0.3, 0.03), false },
 		{ Cube, StopRed, FVector(0, 0, 245), FVector(0.03, 0.9, 0.5), false },
 		{ Cube, Enamel, FVector(0, 0, 245), FVector(0.036, 0.84, 0.44), false },
 	};
