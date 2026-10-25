@@ -82,6 +82,8 @@ private:
 	void BuildTramStops(const FJsonObject& Root);
 	/** Street food sellers with their carts (food_vendors). */
 	void BuildFoodVendors(const FJsonObject& Root);
+	/** The Teleki tér market (an AFleaMarket). */
+	void BuildMarket(const FJsonObject& Root);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;

@@ -623,6 +623,171 @@ def place_food_vendors(space, sidewalks):
     return out
 
 
+# The Teleki tér market (1932), after the Fortepan aerial photos: on the
+# east of the square a grid of big open market sheds lined up with its north
+# side, on the west an open flea market of tables and blankets with a crowd
+# along the south side. (The photos also show a lot of little wooden booths
+# across Népszínház utca, where the map has a later building.) Two stalls
+# belong to people the story needs.
+MARKET_NEAR = (105715, 29355)
+MARKET_GROUND_IN = 60       # the market ground stops this far inside the square
+MARKET_SHEDS_FROM = (103450, 26230)  # the north-west corner of the shed grid
+MARKET_SHED = 1100          # a shed's square footprint (cm)
+MARKET_SHED_GAP = 250
+MARKET_SHEDS_IN = 250       # sheds keep this far inside the square
+MARKET_FLEA_IN = 400
+MARKET_FLEA_ROW_PITCH = 900 # flea market rows (cm), stall to stall along a row
+MARKET_FLEA_PITCH = 330
+MARKET_FLEA_KEEP = 0.75     # share of the flea market spots with a stall
+MARKET_STALL_DEPTH = 200
+MARKET_GOODS = [            # what a stall sells, and how often
+    ("clothes", 5), ("shoes", 2), ("pots", 3), ("junk", 3), ("books", 1),
+    ("furniture", 2), ("produce", 3), ("crockery", 2),
+]
+MARKET_SHED_GOODS = [("produce", 5), ("pots", 2), ("crockery", 2), ("clothes", 2), ("shoes", 1)]
+MARKET_KEEPERS = [          # who the story needs, what they sell, near which point
+    ("Pista b\u00e1csi", "junk", (101500, 30500)),
+    ("B\u00f6zsi n\u00e9ni", "clothes", (104300, 32300)),
+]
+MARKET_SHOPPERS = 20        # strolling the aisles, looking at stalls
+MARKET_CROWD = 30           # the throng along the south side of the flea market
+MARKET_CROWD_AT = (100800, 31600)
+
+
+def pick_goods(table, *key):
+    r = chance(*key)
+    total = sum(w for _, w in table)
+    acc = 0
+    for kind, w in table:
+        acc += w / total
+        if r < acc:
+            return kind
+    return table[-1][0]
+
+
+def place_market(space):
+    """The ground (triangles), the sheds, the stalls and the people's spots."""
+    import mapbox_earcut
+    import numpy as np
+    square = min(space.parks, key=lambda p: p.distance(Point(MARKET_NEAR)))
+    ground = square.buffer(-MARKET_GROUND_IN)
+    if ground.geom_type != "Polygon":
+        ground = max(ground.geoms, key=lambda g: g.area)
+    ring = list(ground.exterior.coords)[:-1]
+    tris = mapbox_earcut.triangulate_float64(np.array(ring, dtype=np.float64).reshape(-1, 2), np.array([len(ring)], dtype=np.uint32))
+
+    # The square's frame: u along its long north side (west to east), v
+    # across it, into the square.
+    coords = list(square.exterior.coords)
+    edges = [(coords[i], coords[i + 1]) for i in range(len(coords) - 1)]
+    (ax, ay), (bx, by) = max(edges, key=lambda e: math.dist(*e))
+    if bx < ax:
+        (ax, ay), (bx, by) = (bx, by), (ax, ay)
+    ux, uy = unit(bx - ax, by - ay)
+    vx, vy = -uy, ux
+    if square.contains(Point(ax + (bx - ax) / 2 - vx * 300, ay + (by - ay) / 2 - vy * 300)):
+        vx, vy = -vx, -vy
+    us = [(x - ax) * ux + (y - ay) * uy for x, y in coords]
+    vs = [(x - ax) * vx + (y - ay) * vy for x, y in coords]
+    u_sheds = (MARKET_SHEDS_FROM[0] - ax) * ux + (MARKET_SHEDS_FROM[1] - ay) * uy
+
+    def world(u, v):
+        return ax + ux * u + vx * v, ay + uy * u + vy * v
+
+    yaw_u = yaw_of(ux, uy)
+    stalls = []
+
+    def add_stall(x, y, fx, fy, goods, build, key):
+        stalls.append({"at": [round(x), round(y), yaw_of(fx, fy)], "goods": goods, "build": build,
+                       "seller": chance("market seller", *key) < 0.4})
+
+    # The shed grid: each shed a roof on posts over two tables back to back.
+    sheds = []
+    shed_room = square.buffer(-MARKET_SHEDS_IN)
+    pitch = MARKET_SHED + MARKET_SHED_GAP
+    half = MARKET_SHED / 2
+    u = u_sheds + half
+    while u < max(us):
+        v = half + MARKET_SHEDS_IN
+        while v < max(vs):
+            corners = [world(u + du, v + dv) for du in (-half, half) for dv in (-half, half)]
+            if all(shed_room.contains(Point(c)) and not space.near_building(Point(c), 100) for c in corners):
+                x, y = world(u, v)
+                sheds.append([round(x), round(y), yaw_u, MARKET_SHED, MARKET_SHED])
+                for side in (1, -1):
+                    tx, ty = world(u, v + side * 120)
+                    add_stall(tx, ty, vx * side, vy * side, pick_goods(MARKET_SHED_GOODS, "shed", len(sheds), side), "shed",
+                              (len(sheds), side))
+            v += pitch
+        u += pitch
+
+    # The open flea market west of the sheds: loose rows of tables and
+    # blankets facing the aisles, not quite in line.
+    flea_room = square.buffer(-MARKET_FLEA_IN)
+    v = MARKET_FLEA_IN + MARKET_STALL_DEPTH
+    row = 0
+    while v < max(vs):
+        side = 1 if row % 2 == 0 else -1
+        u = min(us)
+        while u < u_sheds - 400:
+            u += MARKET_FLEA_PITCH
+            key = ("flea", row, round(u))
+            if chance(*key) > MARKET_FLEA_KEEP:
+                continue
+            jog_u = (chance("jog u", *key) - 0.5) * 120
+            jog_v = (chance("jog v", *key) - 0.5) * 100
+            x, y = world(u + jog_u, v + jog_v)
+            front = world(u + jog_u, v + jog_v + side * 250)
+            if not (flea_room.contains(Point(x, y)) and flea_room.contains(Point(front))) or space.near_building(Point(x, y), 300):
+                continue
+            goods = pick_goods(MARKET_GOODS, *key)
+            build = "blanket" if chance("blanket", *key) < 0.45 and goods != "furniture" else "table"
+            add_stall(x, y, vx * side, vy * side, goods, build, key)
+        v += MARKET_FLEA_ROW_PITCH * (0.5 if row % 2 == 0 else 1.5)
+        row += 1
+
+    # The story's stall keepers: always there, at a flea market stall near their spot.
+    taken = set()
+    for name, goods, (wx, wy) in MARKET_KEEPERS:
+        best = min((i for i in range(len(stalls)) if i not in taken and stalls[i]["build"] in ("table", "blanket")),
+                   key=lambda i: math.hypot(stalls[i]["at"][0] - wx, stalls[i]["at"][1] - wy))
+        taken.add(best)
+        stalls[best].update({"keeper": name, "goods": goods, "build": "table", "seller": True})
+
+    # Shoppers stand in front of stalls, looking at the goods; a crowd
+    # mills along the south side of the flea market.
+    shoppers = []
+    order = sorted(range(len(stalls)), key=lambda i: chance("market shopper", i))
+    for i in order[:MARKET_SHOPPERS]:
+        x, y, yaw = stalls[i]["at"]
+        a = math.radians(yaw)
+        off = (chance("market off", i) - 0.5) * 160
+        reach = MARKET_STALL_DEPTH * 0.5 + 110
+        sx = x + math.cos(a) * reach - math.sin(a) * off
+        sy = y + math.sin(a) * reach + math.cos(a) * off
+        shoppers.append([round(sx), round(sy), round((yaw + 360.0) % 360.0 - 180.0, 1)])
+    crowd_room = square.buffer(-300)
+    for k in range(MARKET_CROWD * 4):
+        if len(shoppers) >= MARKET_SHOPPERS + MARKET_CROWD:
+            break
+        r = 1200 * math.sqrt(chance("crowd r", k))
+        a = 2 * math.pi * chance("crowd a", k)
+        x, y = MARKET_CROWD_AT[0] + r * math.cos(a) * 1.8, MARKET_CROWD_AT[1] + r * math.sin(a) * 0.6
+        if not crowd_room.contains(Point(x, y)) or any(math.hypot(x - s["at"][0], y - s["at"][1]) < 180 for s in stalls) \
+                or any(math.hypot(x - p[0], y - p[1]) < 90 for p in shoppers):
+            continue
+        shoppers.append([round(x), round(y), round(360 * chance("crowd yaw", k) - 180, 1)])
+
+    print(f"Market: {len(sheds)} sheds, {len(stalls)} stalls, {len(shoppers)} shoppers")
+    return {
+        "ground": [c for x, y in ring for c in (round(x), round(y))],
+        "tris": [int(t) for t in tris],
+        "sheds": sheds,
+        "stalls": stalls,
+        "shoppers": shoppers,
+    }
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -908,6 +1073,7 @@ def main():
     taxi_destinations = place_taxi_destinations(sidewalks)
     tram_stops = place_tram_stops(data, space, sidewalks)
     food_vendors = place_food_vendors(space, sidewalks)
+    market = place_market(space)
 
     out = {
         "version": 1,
@@ -921,11 +1087,12 @@ def main():
         "taxi_destinations": taxi_destinations,
         "tram_stops": tram_stops,
         "food_vendors": food_vendors,
+        "market": market,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
