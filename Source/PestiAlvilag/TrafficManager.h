@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "TrafficManager.generated.h"
 
+class APestiCar;
 class ATrafficCar;
 class ATram;
 class FJsonObject;
@@ -111,6 +112,14 @@ public:
 	 * anyway, so two cars waiting on each other cannot get stuck for ever.
 	 */
 	bool TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce);
+	/**
+	 * The player takes this car: it leaves the traffic and a car of the same
+	 * colour the player can drive takes its place, its driver jumps out and
+	 * runs off, and a new car joins the traffic later somewhere out of sight.
+	 * Police cars cannot be taken. Returns the car to get into, or null.
+	 */
+	APestiCar* StealCar(ATrafficCar* Car);
+
 	/** True where streets meet, false where a street just bends or continues. */
 	bool IsJunction(int32 Node) const;
 	void ReleaseNode(int32 Node, const ATrafficCar* Car);
@@ -124,7 +133,10 @@ private:
 	void LoadTramRoutes(const FJsonObject& Root);
 	void SpawnCars();
 	void SpawnTrams();
+	/** Puts new cars in the traffic, out of the player's sight, for the ones taken. */
+	void ReplaceCars();
 	void DrawDebugView() const;
+	int32 CarsToReplace = 0;
 
 	bool bShowDebug = false;
 

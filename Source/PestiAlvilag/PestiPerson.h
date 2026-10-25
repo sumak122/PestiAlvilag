@@ -18,7 +18,8 @@ class UStaticMeshComponent;
  *
  * Keys: W/A/S/D or left stick to jog, Shift or left stick click to sprint,
  * Space or gamepad A to jump, mouse or right stick to look around,
- * F or gamepad B to get into the car next to you.
+ * F or gamepad B to get into the car next to you, or to pull the driver out
+ * of a car in the traffic and take it.
  */
 UCLASS()
 class PESTIALVILAG_API APestiPerson : public ACharacter
