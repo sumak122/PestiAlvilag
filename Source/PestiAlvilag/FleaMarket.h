@@ -21,7 +21,9 @@ class UStaticMesh;
  * clothes, shoes, pots, junk, books, furniture, crockery and vegetables.
  * Sellers stand behind some stalls, shoppers look at the goods and a crowd
  * mills along the south side. Two stalls belong to people the story needs
- * (Pista bácsi, Bözsi néni): FindKeeper finds them.
+ * (Pista bácsi, Bözsi néni): FindKeeper finds them. A third keeper is a
+ * little secret: Ibn Iszhák, the carpet seller from Baghdad in a white
+ * hooded robe, who has a word for anyone who walks up and presses E.
  *
  * Laid out by the street furniture script (market); the street furniture
  * actor spawns it at the world origin and calls Setup.
@@ -39,6 +41,8 @@ public:
 
 	/** A stall keeper the story needs, by name (as in the furniture file), or null. */
 	static AStoryPerson* FindKeeper(const UWorld* World, const FString& Name);
+
+	virtual void Tick(float DeltaSeconds) override;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -76,6 +80,8 @@ private:
 	AStoryPerson* SpawnPerson(const FVector& Feet, double Yaw, FRandomStream& Random, const FString& Keeper = FString(), bool bShopper = false);
 
 	double GroundZ = 0.0;
+	/** The carpet seller's next line. */
+	int32 CarpetLine = 0;
 	TArray<FVector> RoofVertices;
 	TArray<int32> RoofTriangles;
 	TArray<FVector> RoofNormals;

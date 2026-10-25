@@ -6,12 +6,15 @@
 #include "Components/PrimitiveComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
 #include "MarketModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
+#include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
@@ -21,6 +24,18 @@ namespace MarketBuild
 	// People are drawn up to this far away, the stalls and sheds further (cm).
 	constexpr float PeopleDrawDistance = 9000.f;
 	constexpr int32 GoodsDrawDistance = 14000;
+
+	// The carpet seller, and how close to him you must be to talk.
+	const TCHAR* const CarpetSeller = TEXT("Ibn Iszh\u00e1k");
+	constexpr double TalkRadius = 260.0;
+	constexpr int32 HintLine = 32;
+	constexpr int32 SpeechLine = 6;
+	const TCHAR* const CarpetLines[] = {
+		TEXT("Ibn Iszh\u00e1k: \u201eSz\u0151nyeget, uram? Egyenesen Bagdadb\u00f3l!\u201d  (A carpet, sir? Straight from Baghdad!)"),
+		TEXT("Ibn Iszh\u00e1k: \u201eA sasom? R\u00e9gi bar\u00e1tom. Most a Keleti f\u00f6l\u00f6tt k\u00f6r\u00f6z.\u201d  (My eagle? An old friend. These days he circles over the Keleti.)"),
+		TEXT("Ibn Iszh\u00e1k: \u201eA tet\u0151kr\u0151l mindent l\u00e1tni. A t\u00f6meg pedig mindent elrejt.\u201d  (From the rooftops you see everything. And the crowd hides everything.)"),
+		TEXT("Ibn Iszh\u00e1k: \u201eSemmi sem igaz, minden megengedett.\u201d  (Nothing is true, everything is permitted.)"),
+	};
 
 	bool ReadNumbers(const FJsonObject& Object, const TCHAR* Field, TArray<double>& Out)
 	{
@@ -53,13 +68,15 @@ namespace MarketBuild
 			: Name == TEXT("books") ? EGoods::Books
 			: Name == TEXT("furniture") ? EGoods::Furniture
 			: Name == TEXT("produce") ? EGoods::Produce
+			: Name == TEXT("carpets") ? EGoods::Carpets
 			: EGoods::Crockery;
 	}
 }
 
 AFleaMarket::AFleaMarket()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Ticks only to let the player talk to the carpet seller.
+	PrimaryActorTick.bCanEverTick = true;
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
 	Ground = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Ground"));
@@ -105,6 +122,34 @@ AStoryPerson* AFleaMarket::FindKeeper(const UWorld* World, const FString& Name)
 		}
 	}
 	return nullptr;
+}
+
+void AFleaMarket::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	const TObjectPtr<AStoryPerson>* Seller = Keepers.Find(FString(MarketBuild::CarpetSeller));
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	APestiPerson* Player = PC ? Cast<APestiPerson>(PC->GetPawn()) : nullptr;
+	if (!Seller || !*Seller || !Player || Player->IsCarrying() || Player->IsRiding() || Player->IsHidden()
+		|| FVector::Dist2D(Player->GetActorLocation(), (*Seller)->GetActorLocation()) > MarketBuild::TalkRadius)
+	{
+		return;
+	}
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(MarketBuild::HintLine, 0.f, FColor(255, 210, 60), TEXT("E: talk to the carpet seller"));
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::E))
+	{
+		(*Seller)->FaceTowards(Player->GetActorLocation());
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(MarketBuild::CarpetLines));
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(MarketBuild::SpeechLine, 6.f, FColor(255, 210, 60), MarketBuild::CarpetLines[CarpetLine % Count]);
+		}
+		CarpetLine = (CarpetLine + 1) % Count;
+	}
 }
 
 void AFleaMarket::Add(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide)
@@ -352,6 +397,27 @@ AStoryPerson* AFleaMarket::SpawnPerson(const FVector& Feet, double Yaw, FRandomS
 		Outfit.bMoustache = true;
 		Outfit.Hair = FLinearColor(0.55f, 0.55f, 0.52f);
 		Outfit.Height = 170.f;
+	}
+	else if (Keeper == MarketBuild::CarpetSeller)
+	{
+		// The carpet seller from Baghdad, who dresses rather like a certain
+		// hooded man from there: a long white robe with its hood up, a red
+		// sash, soft boots.
+		Outfit = PersonKit::FOutfit();
+		Outfit.Hat = PersonKit::EHat::Hood;
+		Outfit.Top = PersonKit::ETop::Overcoat;
+		Outfit.Coat = FLinearColor(0.70f, 0.66f, 0.56f);
+		Outfit.HatColor = Outfit.Coat;
+		Outfit.bSash = true;
+		Outfit.Sash = FLinearColor(0.45f, 0.06f, 0.05f);
+		Outfit.Shirt = FLinearColor(0.55f, 0.50f, 0.42f);
+		Outfit.Trousers = FLinearColor(0.20f, 0.15f, 0.10f);
+		Outfit.Shoes = FLinearColor(0.16f, 0.10f, 0.06f);
+		Outfit.bBoots = true;
+		Outfit.bTie = false;
+		Outfit.Skin = FLinearColor(0.58f, 0.40f, 0.28f);
+		Outfit.Hair = FLinearColor(0.04f, 0.03f, 0.02f);
+		Outfit.Height = 176.f;
 	}
 	else if (Keeper == TEXT("B\u00f6zsi n\u00e9ni"))
 	{
