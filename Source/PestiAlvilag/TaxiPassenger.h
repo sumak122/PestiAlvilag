@@ -3,11 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
 #include "GameFramework/Actor.h"
 #include "TaxiPassenger.generated.h"
 
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class UStaticMeshComponent;
 
 /**
@@ -30,8 +30,9 @@ public:
 	void SetInWorld(bool bInWorld);
 
 protected:
-	UPROPERTY(VisibleAnywhere, Category = "Passenger")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	/** Legs, arms and body (PersonKit::EPiece order), dressed when play begins. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
 
 	UPROPERTY(VisibleAnywhere, Category = "Passenger")
 	TObjectPtr<UStaticMeshComponent> Beacon;
@@ -42,7 +43,6 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	TArray<CarBody::EPaint> BodyPaints;
 	bool bIsWaiting = true;
 	float WavePhase = 0.f;
 };

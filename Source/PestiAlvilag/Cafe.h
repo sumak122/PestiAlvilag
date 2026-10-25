@@ -71,6 +71,8 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	void PoseArms();
+
 	float SipClock = 0.f;
 };
 

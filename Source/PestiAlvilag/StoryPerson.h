@@ -3,18 +3,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
 #include "GameFramework/Actor.h"
+#include "PersonKit.h"
 #include "StoryPerson.generated.h"
 
 class UCapsuleComponent;
 class UMaterialInterface;
-class UStaticMeshComponent;
+class UProceduralMeshComponent;
+class USceneComponent;
 
 /**
- * Someone a mission needs: a man in a coat and hat who can stand, turn to
- * face someone and walk after them. The actor's location is his middle,
- * 90 cm above the ground.
+ * Someone a mission needs: a person from the dress-up kit (a man in a coat
+ * and hat unless given another outfit) who can stand, turn to face someone
+ * and walk after them. The actor's location is his middle, 90 cm above the
+ * ground.
  */
 UCLASS()
 class PESTIALVILAG_API AStoryPerson : public AActor
@@ -38,6 +40,10 @@ public:
 
 	/** Repaint the coat (after spawning). */
 	void SetCoatColor(const FLinearColor& Color);
+
+	/** Dress him (or her) differently; before or after spawning. */
+	void SetOutfit(const PersonKit::FOutfit& InOutfit);
+	const PersonKit::FOutfit& GetOutfit() const { return Outfit; }
 	/** Walk after Target (null to stand still). */
 	void Follow(AActor* Target);
 	/** Turn to look at a point. */
@@ -49,13 +55,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Person")
 	TObjectPtr<UCapsuleComponent> Capsule;
 
-	UPROPERTY(VisibleAnywhere, Category = "Person")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	/** The dressed person: legs, arms and body (PersonKit::EPiece order). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+	/** What he wears; subclasses set it in their constructor. */
+	PersonKit::FOutfit Outfit;
+
 	virtual void BeginPlay() override;
+
+	/** A limb to swing from its hip or shoulder: 0 left leg, 1 right leg, 2 left arm, 3 right arm. */
+	USceneComponent* Limb(int32 Index) const;
 
 private:
 	void SwingLimbs(float Speed, float DeltaSeconds);
@@ -63,6 +76,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> FollowTarget;
 
-	TArray<CarBody::EPaint> BodyPaints;
 	float StridePhase = 0.f;
 };

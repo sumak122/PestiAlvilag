@@ -2,9 +2,11 @@
 
 #include "StoryPerson.h"
 
+#include "CarBody.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
+#include "PersonModel.h"
+#include "ProceduralMeshComponent.h"
 
 namespace StoryPerson
 {
@@ -26,21 +28,39 @@ AStoryPerson::AStoryPerson()
 	Capsule->InitCapsuleSize(StoryPerson::CapsuleRadius, StoryPerson::CapsuleHalfHeight);
 	Capsule->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = Capsule;
-
-	CarBody::BuildPerson(this, Capsule, BodyParts, BodyPaints);
 }
 
 void AStoryPerson::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, CoatColor);
+	Outfit.Coat = CoatColor;
+	PersonModel::Dress(this, Capsule, BaseMaterial, Outfit, Pieces);
 }
 
 void AStoryPerson::SetCoatColor(const FLinearColor& Color)
 {
 	CoatColor = Color;
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, CoatColor);
+	Outfit.Coat = Color;
+	if (HasActorBegunPlay())
+	{
+		PersonModel::Dress(this, Capsule, BaseMaterial, Outfit, Pieces);
+	}
+}
+
+void AStoryPerson::SetOutfit(const PersonKit::FOutfit& InOutfit)
+{
+	Outfit = InOutfit;
+	CoatColor = Outfit.Coat;
+	if (HasActorBegunPlay())
+	{
+		PersonModel::Dress(this, Capsule, BaseMaterial, Outfit, Pieces);
+	}
+}
+
+USceneComponent* AStoryPerson::Limb(int32 Index) const
+{
+	return Pieces.IsValidIndex(Index) ? Pieces[Index].Get() : nullptr;
 }
 
 void AStoryPerson::Follow(AActor* Target)
@@ -104,11 +124,11 @@ void AStoryPerson::SwingLimbs(float Speed, float DeltaSeconds)
 	const float Swing = FMath::Sin(StridePhase) * StoryPerson::MaxSwing * FMath::Clamp(Speed / 300.f, 0.f, 1.f);
 	constexpr int32 NumLimbs = 4;
 	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, Swing };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < NumLimbs && i < BodyParts.Num(); ++i)
+	for (int32 i = 0; i < NumLimbs; ++i)
 	{
-		if (BodyParts[i])
+		if (USceneComponent* Part = Limb(i))
 		{
-			BodyParts[i]->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
 		}
 	}
 }

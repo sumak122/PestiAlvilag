@@ -3,6 +3,7 @@
 #include "Pedestrians.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -11,6 +12,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
+#include "PersonModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -18,25 +20,11 @@ DEFINE_LOG_CATEGORY_STATIC(LogPedestrians, Log, All);
 
 namespace Pedestrians
 {
-	// Autumn coats of 1932: browns, greys, navy, black, loden and a few light ones.
-	const FLinearColor Coats[] = {
-		FLinearColor(0.10f, 0.07f, 0.05f),
-		FLinearColor(0.16f, 0.12f, 0.08f),
-		FLinearColor(0.12f, 0.12f, 0.12f),
-		FLinearColor(0.05f, 0.06f, 0.10f),
-		FLinearColor(0.03f, 0.03f, 0.03f),
-		FLinearColor(0.10f, 0.12f, 0.07f),
-		FLinearColor(0.35f, 0.30f, 0.22f),
-		FLinearColor(0.22f, 0.10f, 0.08f),
-	};
-
 	constexpr float MinSpeed = 105.f;
 	constexpr float MaxSpeed = 160.f;
 	// Each keeps to the right of the walking line by this much.
 	constexpr float MinLane = 40.f;
 	constexpr float MaxLane = 100.f;
-	constexpr float MinSize = 0.93f;
-	constexpr float MaxSize = 1.06f;
 	constexpr float Middle = 90.f;
 
 	constexpr double EndCell = 1000.0;
@@ -83,11 +71,11 @@ void APedestrian::WalkTo(const FVector& Location, double Yaw, float Speed, float
 	Stride += DeltaSeconds * Speed / Pedestrians::StrideLength * PI;
 	const float Swing = FMath::Sin(Stride);
 	const float Pitches[] = { Swing * Pedestrians::LegSwing, -Swing * Pedestrians::LegSwing, -Swing * Pedestrians::ArmSwing, Swing * Pedestrians::ArmSwing };
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)) && i < BodyParts.Num(); ++i)
+	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)); ++i)
 	{
-		if (BodyParts[i])
+		if (USceneComponent* Part = Limb(i))
 		{
-			BodyParts[i]->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
 		}
 	}
 }
@@ -318,9 +306,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		{
 			break;
 		}
-		const int32 Coat = Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::Coats)) - 1);
-		Walker.Person->SetCoatColor(Pedestrians::Coats[Coat]);
-		Walker.Person->SetActorScale3D(FVector(Random.FRandRange(Pedestrians::MinSize, Pedestrians::MaxSize)));
+		Walker.Person->SetOutfit(PersonModel::RandomOutfit(Random));
 		Walkers.Add(Walker);
 	}
 

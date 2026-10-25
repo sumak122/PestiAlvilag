@@ -3,18 +3,17 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
 #include "GameFramework/Character.h"
 #include "PestiPerson.generated.h"
 
 class UCameraComponent;
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class USpringArmComponent;
-class UStaticMeshComponent;
 
 /**
- * The player on foot, built from engine shapes so it needs no art: a man in
- * a long coat and hat, with a GTA style camera behind him.
+ * The player on foot, from the dress-up kit (PersonKit): a man in a long
+ * coat, fedora and red scarf, with a GTA style camera behind him.
  *
  * Keys: W/A/S/D or left stick to jog, Shift or left stick click to sprint,
  * Space or gamepad A to jump, mouse or right stick to look around,
@@ -66,8 +65,9 @@ public:
 	bool IsCarrying() const { return bCarrying; }
 
 protected:
-	UPROPERTY(VisibleAnywhere, Category = "Person")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	/** Legs, arms and body (PersonKit::EPiece order), made when play begins. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
 
 	UPROPERTY(VisibleAnywhere, Category = "Person")
 	TObjectPtr<USpringArmComponent> CameraArm;
@@ -87,7 +87,6 @@ private:
 	void TryEnterCar(APlayerController* PC);
 	void SetInWorld(bool bInWorld);
 
-	TArray<CarBody::EPaint> BodyPaints;
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
 	bool bCarrying = false;
