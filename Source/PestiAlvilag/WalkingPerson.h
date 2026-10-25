@@ -36,6 +36,8 @@ public:
 
 private:
 	void Rest();
+	/** Finds the ground under At (looking down from just above the person's middle). */
+	void UpdateGround(const FVector2D& At, double MiddleZ);
 
 	TArray<FVector2D> Path;
 	int32 Next = 0;

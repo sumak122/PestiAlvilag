@@ -15,6 +15,8 @@ namespace WalkingPerson
 	constexpr float GoneAfter = 60.f;
 	// Turning towards where they walk (degrees a second).
 	constexpr float TurnRate = 360.f;
+	// The ground is looked for from this far above the middle down (cm): below awnings and shelter roofs.
+	constexpr double LookFrom = 50.0;
 }
 
 AWalkingPerson::AWalkingPerson()
@@ -67,6 +69,16 @@ void AWalkingPerson::Tick(float DeltaSeconds)
 	Clock += DeltaSeconds;
 	if (Next >= Path.Num())
 	{
+		// Standing: settle onto the ground once, wherever they were put.
+		if (!bGroundKnown)
+		{
+			const FVector Here = GetActorLocation();
+			UpdateGround(FVector2D(Here), Here.Z);
+			if (bGroundKnown)
+			{
+				SetActorLocation(FVector(Here.X, Here.Y, GroundZ + WalkingPerson::Middle * GetActorScale3D().Z));
+			}
+		}
 		if (Clock > WalkingPerson::GoneAfter && bVanish)
 		{
 			Destroy();
@@ -97,14 +109,7 @@ void AWalkingPerson::Tick(float DeltaSeconds)
 	if (!bGroundKnown || GroundClock <= 0.f)
 	{
 		GroundClock = WalkingPerson::GroundEvery;
-		FCollisionQueryParams Params(SCENE_QUERY_STAT(WalkingPerson), false, this);
-		FHitResult Hit;
-		if (GetWorld()->LineTraceSingleByObjectType(Hit, FVector(At, Here.Z + 100.0), FVector(At, Here.Z - 1000.0),
-			FCollisionObjectQueryParams(ECC_WorldStatic), Params))
-		{
-			GroundZ = Hit.ImpactPoint.Z;
-			bGroundKnown = true;
-		}
+		UpdateGround(At, Here.Z);
 	}
 	const double Ground = bGroundKnown ? GroundZ : Here.Z - WalkingPerson::Middle;
 	WalkTo(FVector(At, Ground + WalkingPerson::Middle * GetActorScale3D().Z), FacingYaw, Speed, DeltaSeconds);
@@ -117,5 +122,17 @@ void AWalkingPerson::Tick(float DeltaSeconds)
 			return;
 		}
 		Rest();
+	}
+}
+
+void AWalkingPerson::UpdateGround(const FVector2D& At, double MiddleZ)
+{
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WalkingPerson), false, this);
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, FVector(At, MiddleZ + WalkingPerson::LookFrom), FVector(At, MiddleZ - 1000.0),
+		FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		GroundZ = Hit.ImpactPoint.Z;
+		bGroundKnown = true;
 	}
 }
