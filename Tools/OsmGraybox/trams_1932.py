@@ -56,7 +56,9 @@ STOP_ROADS = {"primary", "secondary", "tertiary"}
 # stops too close to it are dropped.
 EXTRA_STOPS = [
     ("Teleki tér", (1057.15, -293.55)),
-    ("Népszínház utca (Bözsi néni)", (583.92, -212.68)),
+    # Mid-block on Népszínház utca (Bözsi néni's, not named on the sign):
+    # named after the nearest cross street, like the others.
+    ("Nagy Fuvaros utca", (583.92, -212.68)),
 ]
 EXTRA_STOP_REACH = 100.0
 # Stops are named after the street crossed, by its 1932 name.
