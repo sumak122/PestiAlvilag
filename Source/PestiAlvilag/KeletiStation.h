@@ -53,7 +53,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Station")
 	TObjectPtr<UProceduralMeshComponent> Overhead;
 
-	/** Glass in the arch, the roof strips and the far end: lets the sun into the hall. */
+	/** The glass of the roof strips, seen from above only: lets the sun into the hall. */
 	UPROPERTY(VisibleAnywhere, Category = "Station")
 	TObjectPtr<UProceduralMeshComponent> Glazing;
 

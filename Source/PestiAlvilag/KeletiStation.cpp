@@ -11,7 +11,10 @@ namespace Keleti
 {
 	// One mesh section (and colour) per material. The parts up to RoofOut
 	// are solid; the roof and its trusses are out of reach and need no
-	// collision; the glass lets the sun through and is seen from both sides.
+	// collision. The roof glass is drawn facing the sky only: from inside
+	// the hall it is not there at all, so the sky shows through and the
+	// sun and the sky light fall on the platforms as through clear glass.
+	// The arch and the far end have their iron bars and no panes at all.
 	enum EPart : int32
 	{
 		Stone,
@@ -83,8 +86,8 @@ namespace Keleti
 	constexpr double TrussApex = 3200.0;
 	constexpr int32 HallBays = 18;
 	constexpr double EndScreenBottom = 900.0;  // the glass screen over the tracks at the far end
-	constexpr double GlassFrom = 0.3;          // the glazed strip of each roof slope, from eaves (0) to ridge (1)
-	constexpr double GlassTo = 0.85;
+	constexpr double GlassFrom = 0.12;         // the glazed strip of each roof slope, from eaves (0) to ridge (1)
+	constexpr double GlassTo = 0.94;
 
 	// Tracks and platforms.
 	constexpr double FloorTop = 3.0;
@@ -662,10 +665,10 @@ namespace Keleti
 			B.Box(Stone, FVector(0.0, Y0, BandTop), FVector(ArchWallDepth, Y1, ArchSpring));
 		}
 
-		// A row of tall windows below the arch, then the arch itself filled
-		// with glass behind iron bars that fan out from the middle.
+		// A row of tall windows below the arch, then the arch itself, its
+		// iron glazing bars fanning out from the middle. The glass is left
+		// clear: you see into the hall, and the sun shines in.
 		constexpr double GlassX = 150.0;
-		B.TwoSided(Pane, { FVector(GlassX, -ArchRadius, BandTop), FVector(GlassX, ArchRadius, BandTop), FVector(GlassX, ArchRadius, ArchSpring), FVector(GlassX, -ArchRadius, ArchSpring) }, FVector::ForwardVector);
 		for (int32 k = 1; k < 10; ++k)
 		{
 			const double Y = -ArchRadius + 2.0 * ArchRadius * k / 10.0;
@@ -680,7 +683,6 @@ namespace Keleti
 		{
 			const double A0 = PI * i / FanSegments;
 			const double A1 = PI * (i + 1) / FanSegments;
-			B.TwoSided(Pane, { Hub, ArchPoint(GlassX, A0, ArchRadius), ArchPoint(GlassX, A1, ArchRadius) }, FVector::ForwardVector);
 			for (const double R : { 450.0, 900.0 })
 			{
 				B.Tube(Iron, ArchPoint(GlassX, A0, R), ArchPoint(GlassX, A1, R), 7.0, 4);
@@ -827,13 +829,13 @@ namespace Keleti
 				const FVector Below(0.0, 0.0, -4.0);
 				B.Poly(RoofIn, { RoofPoint(Side, Band[0], ArchWallDepth) + Below, RoofPoint(Side, Band[0], EndX) + Below, RoofPoint(Side, Band[1], EndX) + Below, RoofPoint(Side, Band[1], ArchWallDepth) + Below }, -Up);
 			}
-			B.TwoSided(Pane, { RoofPoint(Side, GlassFrom, ArchWallDepth), RoofPoint(Side, GlassFrom, EndX), RoofPoint(Side, GlassTo, EndX), RoofPoint(Side, GlassTo, ArchWallDepth) }, Up);
+			B.Poly(Pane, { RoofPoint(Side, GlassFrom, ArchWallDepth), RoofPoint(Side, GlassFrom, EndX), RoofPoint(Side, GlassTo, EndX), RoofPoint(Side, GlassTo, ArchWallDepth) }, Up);
 			const FVector Lift(0.0, 0.0, 6.0);
 			for (double X = ArchWallDepth + 250.0; X < EndX; X += 250.0)
 			{
 				B.Tube(Truss, RoofPoint(Side, GlassFrom, X) + Lift, RoofPoint(Side, GlassTo, X) + Lift, 5.0, 4);
 			}
-			for (const double T : { 0.15, GlassFrom, 0.58, GlassTo })
+			for (const double T : { GlassFrom, 0.4, 0.68, GlassTo })
 			{
 				B.Tube(Truss, RoofPoint(Side, T, WingFrontX) - FVector(0.0, 0.0, 22.0), RoofPoint(Side, T, EndX) - FVector(0.0, 0.0, 22.0), 10.0, 4);
 			}
@@ -843,9 +845,7 @@ namespace Keleti
 			RoofTruss(B, FMath::Min(WingFrontX + Bay * k, EndX - 40.0));
 		}
 
-		// The far end: open over the tracks below a glass screen.
-		B.TwoSided(Pane, { FVector(EndX, -HallHalf, EndScreenBottom), FVector(EndX, HallHalf, EndScreenBottom), FVector(EndX, HallHalf, HallWallTop),
-			FVector(EndX, 0.0, RidgeZ), FVector(EndX, -HallHalf, HallWallTop) }, FVector::ForwardVector);
+		// The far end: open over the tracks below a glazed iron screen (clear glass).
 		B.Box(Iron, FVector(EndX - 30.0, -HallHalf, EndScreenBottom - 70.0), FVector(EndX + 30.0, HallHalf, EndScreenBottom));
 		for (double Y = -HallHalf + 300.0; Y < HallHalf - 100.0; Y += 300.0)
 		{
@@ -1140,6 +1140,9 @@ AKeletiStation::AKeletiStation()
 	Glazing->SetupAttachment(Mesh);
 	Glazing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Glazing->SetCastShadow(false);
+	Glazing->bAffectDynamicIndirectLighting = false;
+	Glazing->bAffectDistanceFieldLighting = false;
+	Glazing->bVisibleInRayTracing = false;
 
 	// Lettering faces the square (the front looks along -X).
 	auto MakeText = [this](const TCHAR* ComponentName, const FVector& At, float Size, const FColor& Ink, const TCHAR* Words)
