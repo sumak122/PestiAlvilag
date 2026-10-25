@@ -734,6 +734,11 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			{
 				Clothes.Hat = PersonKit::EHat::None;
 			}
+			if (Shop->GetStringField(TEXT("trade")) == TEXT("hats"))
+			{
+				// The hatter wears the best of the stock: a smart felt hat with a contrasting band, and no apron.
+				ShopModel::DressHatter(Clothes, Random.FRand());
+			}
 			const FTransform Spawn(FRotator(0.0, Yaw + Random.FRandRange(-30.f, 30.f), 0.0), Foot + FRotator(0.0, Yaw, 0.0).RotateVector(Local));
 			AStoryPerson* Keeper = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,
 				ESpawnActorCollisionHandlingMethod::AlwaysSpawn);

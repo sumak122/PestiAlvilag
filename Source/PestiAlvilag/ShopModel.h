@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ParkModel.h"
+#include "PersonKit.h"
 
 /**
  * The shop fronts of Népszínház utca, as they were in the early 1930s: a
@@ -893,6 +894,21 @@ namespace ShopModel
 		const int32 FirstText = Text.Num();
 		ShopAtWall(P, Text, Width, Trade, Seed, bClosed, bOutside);
 		StandOut(P, FirstPart, Text, FirstText);
+	}
+
+	/** A hat shop keeper in the best of the stock: a fedora or bowler for a man, a cloche for a woman; Pick in [0, 1) chooses. */
+	inline void DressHatter(PersonKit::FOutfit& Outfit, double Pick)
+	{
+		static const FLinearColor HatFelts[] = {
+			FLinearColor(0.30f, 0.27f, 0.24f), FLinearColor(0.22f, 0.13f, 0.07f), FLinearColor(0.05f, 0.05f, 0.06f), FLinearColor(0.38f, 0.30f, 0.20f) };
+		static const FLinearColor HatBands[] = {
+			FLinearColor(0.03f, 0.03f, 0.03f), FLinearColor(0.35f, 0.05f, 0.04f), FLinearColor(0.55f, 0.50f, 0.40f), FLinearColor(0.05f, 0.08f, 0.20f) };
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(HatFelts));
+		const int32 Which = FMath::Min(Count - 1, static_cast<int32>(Pick * Count));
+		Outfit.bApron = false;
+		Outfit.Hat = Outfit.bWoman ? PersonKit::EHat::Cloche : (Pick < 0.6 ? PersonKit::EHat::Fedora : PersonKit::EHat::Bowler);
+		Outfit.HatColor = Outfit.bWoman ? Colors::Cloths[(Which * 2) % static_cast<int32>(UE_ARRAY_COUNT(Colors::Cloths))] : HatFelts[Which];
+		Outfit.HatBand = HatBands[Which];
 	}
 
 	/** Width of the stone surround of a tenement gate (cm, along the wall). */
