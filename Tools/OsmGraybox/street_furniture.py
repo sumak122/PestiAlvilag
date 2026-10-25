@@ -8,8 +8,9 @@ that the AStreetFurniture actor reads:
   wide enough to have them, facing the road;
 - columns: round advertising columns (hirdetőoszlop) near street corners;
 - benches: round the edges of the parks;
-- sidewalks: the lines people walk along, on both pavements of every
-  street and down the paths of Tisza Kálmán tér, as flat [x0, y0, x1, y1,
+- sidewalks: the lines people walk along: round the pavements of every
+  block, turning at its corners, over the road from corner to corner,
+  and down the paths of Tisza Kálmán tér, as flat [x0, y0, x1, y1,
   ...] lists;
 - bins: litter bins on a post, beside some street lamps and next to the
   park benches;
@@ -63,8 +64,15 @@ BENCH_INSET = 350
 # kept clear of the buildings; pieces shorter than this are left out (cm).
 SIDEWALK_OUT = 170
 SIDEWALK_CLEAR = 60
-SIDEWALK_MIN = 800
+SIDEWALK_MIN = 300
 SIDEWALK_SIMPLIFY = 50
+# The pavement lines are cut where they turn more than this (degrees), and
+# from each corner people cross to up to two corners across the road within
+# this distance (cm).
+SIDEWALK_CORNER_TURN = 40
+SIDEWALK_MIN_CROSS = 400
+SIDEWALK_MAX_CROSS = 2600
+CROSSINGS_PER_CORNER = 2
 # In the park people walk round the flower beds this far out from them.
 ROUND_WALK_OUT = 300
 
@@ -282,12 +290,40 @@ def place_columns(data, space, tisza):
     return columns
 
 
+def split_at_corners(points):
+    """Cuts a closed ring of points into runs that end at its sharp corners."""
+    n = len(points)
+    cuts = []
+    for k in range(n):
+        a, b, c = points[k - 1], points[k], points[(k + 1) % n]
+        turn = abs(math.atan2((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]),
+                              (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1])))
+        if turn > math.radians(SIDEWALK_CORNER_TURN):
+            cuts.append(k)
+    if len(cuts) < 2:
+        # A ring without corners: cut it in halves so it has ends to turn at.
+        cuts = [0, n // 2]
+    runs = []
+    for m, k in enumerate(cuts):
+        end = cuts[(m + 1) % len(cuts)]
+        run = [points[k]]
+        i = k
+        while True:
+            i = (i + 1) % n
+            run.append(points[i])
+            if i == end:
+                break
+        runs.append(run)
+    return runs
+
+
 def place_sidewalks(data, space, tisza, park):
     """Walking lines along both pavements of each street, and the park paths."""
     blocked = unary_union([b.buffer(SIDEWALK_CLEAR) for b in space.buildings] + [tisza.buffer(-100)])
     if space.trams is not None:
         blocked = blocked.union(space.trams.buffer(SIDEWALK_CLEAR))
     blocked = prep(blocked)
+    houses = prep(unary_union([b.buffer(SIDEWALK_CLEAR) for b in space.buildings]))
     sidewalks = []
 
     def add(line):
@@ -300,19 +336,39 @@ def place_sidewalks(data, space, tisza, park):
             if piece.length >= SIDEWALK_MIN:
                 sidewalks.append([round(v) for xy in piece.coords for v in xy])
 
+    # The pavements: the outline of all the streets together, pushed out to
+    # the pavement, so each block has one line round it that turns its
+    # corners. The outline is cut at the corners, and at each corner a
+    # crossing goes over the road to the nearest corner across it, so every
+    # line ends where others start and people turn or cross there.
+    widened = []
     for street in data["centerlines"]:
-        width = street.get("width", 0)
         points = ring_points(street["points"])
         if street["highway"] == "service" or len(points) < 2:
             continue
         line = LineString(points)
-        if line.length < 100:
-            continue
-        for side in ("left", "right"):
-            edge = line.parallel_offset(width / 2 + SIDEWALK_OUT, side, join_style=2)
-            for part in getattr(edge, "geoms", [edge]):
-                if part.geom_type == "LineString" and not part.is_empty:
-                    add(part)
+        if line.length >= 100:
+            widened.append(line.buffer(street.get("width", 0) / 2 + SIDEWALK_OUT, cap_style=2, join_style=2))
+    streets = unary_union(widened)
+    corners = []
+    for shape in getattr(streets, "geoms", [streets]):
+        for ring in [shape.exterior, *shape.interiors]:
+            ring = LineString(ring.coords).simplify(SIDEWALK_SIMPLIFY)
+            pieces = split_at_corners(list(ring.coords)[:-1])
+            for piece in pieces:
+                add(LineString(piece))
+                corners.append(piece[0])
+    crossed = set()
+    for i, a in enumerate(corners):
+        across = sorted((math.dist(a, b), j) for j, b in enumerate(corners)
+                        if j != i and SIDEWALK_MIN_CROSS < math.dist(a, b) < SIDEWALK_MAX_CROSS)
+        for length, j in across[:CROSSINGS_PER_CORNER]:
+            key = (min(i, j), max(i, j))
+            crossing = LineString([a, corners[j]])
+            if key in crossed or houses.intersects(crossing):
+                continue
+            crossed.add(key)
+            sidewalks.append([round(v) for xy in crossing.coords for v in xy])
     # The park paths, cut where they reach a round place. From each cut a
     # short way leads in to a walk round the flower bed, and that walk is
     # split where the ways come in, so every line ends where others start.

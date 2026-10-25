@@ -47,9 +47,17 @@ namespace Pedestrians
 	constexpr int32 PickTries = 24;
 	constexpr double FillNear = 500.0;
 	// Later arrivals only appear where the camera is not looking (more than
-	// about 80 degrees off its view), or far off, so nobody pops up in view.
+	// about 80 degrees off its view) or behind a building, so nobody pops up
+	// in view; and the ones left behind only go once they are out of sight.
 	constexpr double OutOfViewDot = 0.17;
-	constexpr double FarShare = 0.85;
+	constexpr float SeenWithin = 1.f;
+	constexpr double GiveUpShare = 2.0;
+	constexpr double EyeHeight = 150.0;
+	// Where he is drawn catches up with his place on the line at up to this
+	// many times his walking pace, and turns at this rate (degrees a second).
+	constexpr double CatchUp = 1.8;
+	constexpr double SnapDistance = 1500.0;
+	constexpr float TurnRate = 360.f;
 
 	constexpr float LegSwing = 25.f;
 	constexpr float ArmSwing = 18.f;
@@ -200,10 +208,9 @@ bool APedestrians::PickSpot(const FVector& Camera, const FVector2D& Looking, boo
 		{
 			continue;
 		}
-		const bool bOutOfSight = Distance > Range * Pedestrians::FarShare
-			|| FVector2D::DotProduct(Away / FMath::Max(Distance, 1.0), Looking) < Pedestrians::OutOfViewDot;
+		const bool bBehind = FVector2D::DotProduct(Away / FMath::Max(Distance, 1.0), Looking) < Pedestrians::OutOfViewDot;
 		// Only where the ground is known, so he is on it from the first frame.
-		if ((bInView || bOutOfSight) && GroundUnder(At, Camera.Z, OutGroundZ))
+		if (GroundUnder(At, Camera.Z, OutGroundZ) && (bInView || bBehind || BehindBuilding(Camera, At, OutGroundZ)))
 		{
 			OutLine = Index;
 			OutAlong = Along;
@@ -248,6 +255,16 @@ void APedestrians::TurnAtEnd(FWalker& Walker)
 	Walker.Line = Join.X;
 	Walker.Dir = Join.Y == 0 ? 1 : -1;
 	Walker.Along = Join.Y == 0 ? 0.0 : Lines[Join.X].Length;
+}
+
+bool APedestrians::BehindBuilding(const FVector& Camera, const FVector2D& At, double GroundZ) const
+{
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PedestrianSight), false, this);
+	const FVector Eye(At, GroundZ + Pedestrians::EyeHeight);
+	return GetWorld()->LineTraceSingleByChannel(Hit, Camera, Eye, ECC_Visibility, Params)
+		&& Cast<AOsmGraybox>(Hit.GetActor()) != nullptr
+		&& FVector::Dist(Hit.ImpactPoint, Eye) > 100.0;
 }
 
 bool APedestrians::GroundUnder(const FVector2D& At, double Near, double& OutZ) const
@@ -314,10 +331,14 @@ void APedestrians::Tick(float DeltaSeconds)
 			continue;
 		}
 
-		// Fallen far behind: start again somewhere out of the way nearer the camera.
-		if (FVector::Dist2D(Walker.Person->GetActorLocation(), Camera) > Range * 1.2)
+		// Fallen far behind: once nobody can see him, start again somewhere
+		// out of the way nearer the camera.
+		const double Away = FVector::Dist2D(Walker.Person->GetActorLocation(), Camera);
+		if (Away > Range * 1.2
+			&& (!Walker.Person->WasRecentlyRendered(Pedestrians::SeenWithin) || Away > Range * Pedestrians::GiveUpShare)
+			&& PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
 		{
-			PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ);
+			Walker.bPlaced = false;
 		}
 
 		Walker.Along += Walker.Dir * Walker.Speed * DeltaSeconds;
@@ -346,8 +367,25 @@ void APedestrians::Tick(float DeltaSeconds)
 			}
 		}
 
+		// Walk over to his place rather than jump there (a new line at a
+		// corner, the other side of the line after turning back), and turn
+		// to face the way he goes.
+		const float Yaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X)));
+		const FVector2D Gap = At - Walker.Shown;
+		const double Step = Walker.Speed * Pedestrians::CatchUp * DeltaSeconds;
+		if (!Walker.bPlaced || Gap.Size() > Pedestrians::SnapDistance)
+		{
+			Walker.Shown = At;
+			Walker.ShownYaw = Yaw;
+			Walker.bPlaced = true;
+		}
+		else
+		{
+			Walker.Shown += Gap.Size() > Step ? Gap.GetSafeNormal() * Step : Gap;
+			Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Yaw, Pedestrians::TurnRate * DeltaSeconds);
+		}
+
 		const double Size = Walker.Person->GetActorScale3D().Z;
-		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X));
-		Walker.Person->WalkTo(FVector(At, Walker.GroundZ + Pedestrians::Middle * Size), Yaw, Walker.Speed, DeltaSeconds);
+		Walker.Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Walker.Speed, DeltaSeconds);
 	}
 }
