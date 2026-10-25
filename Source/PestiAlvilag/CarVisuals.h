@@ -47,6 +47,10 @@ public:
 	/** Nobody at the wheel. */
 	void HideDriver();
 
+	/** Sits this person on the back seat (a taxi's fare), or empties it. */
+	void ShowPassenger(const PersonKit::FOutfit& Outfit);
+	void HidePassenger();
+
 	/** How many different street drivers there are (ShowStreetDriver's Look). */
 	static constexpr int32 NumDriverLooks = 24;
 
@@ -78,7 +82,8 @@ public:
 private:
 	void Fill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder& Shape);
 	void Puff(float Size, bool bDark);
-	void FillDriver(const TArray<PersonKit::FSection>& Sections);
+	void FillPerson(TObjectPtr<UProceduralMeshComponent>& Person, const TArray<PersonKit::FSection>& Sections);
+	static void HidePerson(UProceduralMeshComponent* Person);
 	void UpdateStreetEngine(double Distance, float Speed, float Pickup);
 	void StopStreetEngine();
 
@@ -90,6 +95,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Driver;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Passenger;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEngineSound> StreetEngine;

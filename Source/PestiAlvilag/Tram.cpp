@@ -28,6 +28,8 @@ namespace Tram
 	constexpr float MaxTurnaround = 15.f;
 	// Room the tram needs at the start of its route to come back in (cm).
 	constexpr float StartRoom = 1500.f;
+	// People getting on and off stand this far out from the side (cm).
+	constexpr double StepOut = 60.0;
 	// The colour of each TramModel part. Budapest trams were yellow.
 	const FLinearColor Colors[TramModel::PartCount] = {
 		FLinearColor(0.85f, 0.55f, 0.03f),    // Livery
@@ -121,51 +123,101 @@ void ATram::BuildBody()
 
 void ATram::SeatPassengers()
 {
-	for (USceneComponent* Seat : PassengerSeats)
+	while (TakenSeats.Num() > 0)
 	{
-		if (Seat)
-		{
-			Seat->DestroyComponent();
-		}
+		RemovePassenger(TakenSeats.Num() - 1);
 	}
-	for (UProceduralMeshComponent* Piece : PassengerPieces)
-	{
-		if (Piece)
-		{
-			Piece->DestroyComponent();
-		}
-	}
-	PassengerSeats.Reset();
-	PassengerPieces.Reset();
-	TakenSeats.Reset();
 
 	FRandomStream Random(FMath::Rand());
 	const int32 Count = Random.RandRange(Tram::MinPassengers, Tram::MaxPassengers);
 	while (TakenSeats.Num() < Count)
 	{
 		const int32 Index = Random.RandRange(0, TramModel::NumSeats - 1);
-		if (TakenSeats.Contains(Index))
+		if (TakenSeats.Contains(Index) || Index == ReservedSeat)
 		{
 			continue;
 		}
-		TakenSeats.Add(Index);
-		const TramModel::FSeat Place = TramModel::Seat(Index, PersonModel::SeatedMiddle);
-
-		USceneComponent* Seat = NewObject<USceneComponent>(this);
-		Seat->SetupAttachment(CollisionBox);
-		Seat->SetRelativeLocationAndRotation(Place.At, FRotator(0.0, Place.Yaw, 0.0));
-		Seat->RegisterComponent();
-		AddInstanceComponent(Seat);
-		PassengerSeats.Add(Seat);
-
-		PersonKit::FOutfit Outfit = PersonModel::RandomOutfit(Random);
-		Outfit.bSeated = true;
-		// Hands free on a tram (no umbrella poking through the bench).
-		Outfit.Held = PersonKit::EHeld::None;
-		TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
-		PersonModel::Dress(this, Seat, BaseMaterial, Outfit, Pieces);
-		PassengerPieces.Append(Pieces);
+		AddPassenger(Index, PersonModel::RandomOutfit(Random));
 	}
+}
+
+void ATram::AddPassenger(int32 SeatIndex, const PersonKit::FOutfit& Outfit)
+{
+	const TramModel::FSeat Place = TramModel::Seat(SeatIndex, PersonModel::SeatedMiddle);
+	USceneComponent* Seat = NewObject<USceneComponent>(this);
+	Seat->SetupAttachment(CollisionBox);
+	Seat->SetRelativeLocationAndRotation(Place.At, FRotator(0.0, Place.Yaw, 0.0));
+	Seat->RegisterComponent();
+	AddInstanceComponent(Seat);
+
+	PersonKit::FOutfit Seated = Outfit;
+	Seated.bSeated = true;
+	// Hands free on a tram (no umbrella poking through the bench).
+	Seated.Held = PersonKit::EHeld::None;
+	TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
+	PersonModel::Dress(this, Seat, BaseMaterial, Seated, Pieces);
+	Pieces.SetNum(PersonKit::NumPieces);
+
+	TakenSeats.Add(SeatIndex);
+	PassengerSeats.Add(Seat);
+	PassengerOutfits.Add(Outfit);
+	PassengerPieces.Append(Pieces);
+}
+
+void ATram::RemovePassenger(int32 Which)
+{
+	if (!TakenSeats.IsValidIndex(Which))
+	{
+		return;
+	}
+	const int32 First = Which * PersonKit::NumPieces;
+	for (int32 i = First; i < First + PersonKit::NumPieces && PassengerPieces.IsValidIndex(i); ++i)
+	{
+		if (PassengerPieces[i])
+		{
+			PassengerPieces[i]->DestroyComponent();
+		}
+	}
+	PassengerPieces.RemoveAt(First, FMath::Min(static_cast<int32>(PersonKit::NumPieces), PassengerPieces.Num() - First));
+	if (PassengerSeats.IsValidIndex(Which) && PassengerSeats[Which])
+	{
+		PassengerSeats[Which]->DestroyComponent();
+	}
+	PassengerSeats.RemoveAt(Which);
+	PassengerOutfits.RemoveAt(Which);
+	TakenSeats.RemoveAt(Which);
+}
+
+bool ATram::SeatPassenger(const PersonKit::FOutfit& Outfit)
+{
+	const int32 Index = GetFreeSeat();
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+	AddPassenger(Index, Outfit);
+	return true;
+}
+
+bool ATram::TakeOffPassenger(PersonKit::FOutfit& OutOutfit)
+{
+	if (TakenSeats.Num() == 0)
+	{
+		return false;
+	}
+	const int32 Which = FMath::RandRange(0, TakenSeats.Num() - 1);
+	OutOutfit = PassengerOutfits[Which];
+	RemovePassenger(Which);
+	return true;
+}
+
+FVector ATram::GetDoorNear(const FVector& Point) const
+{
+	const FVector Local = GetActorTransform().InverseTransformPosition(Point);
+	const double Along = Local.X >= 0.0 ? 1.0 : -1.0;
+	const double Side = Local.Y >= 0.0 ? 1.0 : -1.0;
+	const FVector Step(Along * (TramModel::DoorFrom + TramModel::DoorTo) * 0.5, Side * (TramModel::HalfWidth + Tram::StepOut), TramModel::Ground);
+	return GetActorTransform().TransformPosition(Step);
 }
 
 int32 ATram::GetFreeSeat() const
@@ -175,7 +227,7 @@ int32 ATram::GetFreeSeat() const
 	{
 		for (const int32 Side : { 0, TramModel::SeatsPerSide })
 		{
-			if (!TakenSeats.Contains(Along + Side))
+			if (!TakenSeats.Contains(Along + Side) && Along + Side != ReservedSeat)
 			{
 				return Along + Side;
 			}

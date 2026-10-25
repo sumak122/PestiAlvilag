@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Misc/FileHelper.h"
@@ -16,6 +17,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
 #include "Tram.h"
+#include "WalkingPerson.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTramRides, Log, All);
 
@@ -31,6 +33,22 @@ namespace TramRides
 	constexpr double SideStep = 300.0;
 	// The doors stay open at least this long after someone gets on (s).
 	constexpr float BoardingHold = 2.f;
+	// People come and go at stops this close to the camera (cm)...
+	constexpr double CrowdRange = 6000.0;
+	// ...and start waiting once the tram is this far off along its route (cm).
+	constexpr float WaitAhead = 20000.f;
+	// Up to this many wait at a stop, and get off at one.
+	constexpr int32 MaxWaiting = 2;
+	constexpr int32 MaxGettingOff = 2;
+	// Where they stand, along the stop and back from the kerb (cm).
+	constexpr float WaitSpread = 200.f;
+	constexpr float WaitBack = 60.f;
+	// Walking to the steps and away (cm/s), and how far away they go (cm).
+	constexpr float BoardSpeed = 150.f;
+	constexpr float LeaveSpeed = 130.f;
+	constexpr double LeaveDistance = 900.0;
+	// The actor's location is a person's middle, this far above the ground (cm).
+	constexpr double Middle = 90.0;
 	const FColor Yellow(255, 210, 60);
 }
 
@@ -42,6 +60,7 @@ ATramRides::ATramRides()
 void ATramRides::BeginPlay()
 {
 	Super::BeginPlay();
+	Random.Initialize(FMath::Rand());
 	LoadStops();
 }
 
@@ -126,22 +145,32 @@ ATram* ATramRides::TramToBoard(const APawn* Player) const
 	return Best;
 }
 
-bool ATramRides::GetOff(APestiPerson* Player, ATram* Tram)
+const ATramRides::FStopPlace* ATramRides::PlaceFor(const ATram* Tram, int32 Stop) const
 {
-	// The pavement by the stop the tram stands at, facing the way it runs.
 	const FTramRoute& Route = Manager->GetTramRoute(Tram->GetRouteIndex());
-	const FVector StopAt = Route.Stops.IsValidIndex(Tram->GetNextStop()) ? Route.LocationAt(Route.Stops[Tram->GetNextStop()]) : Tram->GetActorLocation();
+	if (!Route.Stops.IsValidIndex(Stop))
+	{
+		return nullptr;
+	}
+	const FVector2D StopAt(Route.LocationAt(Route.Stops[Stop]));
 	const FStopPlace* Place = nullptr;
 	double PlaceDistance = TramRides::SamePlace;
 	for (const FStopPlace& Candidate : Stops)
 	{
-		const double Distance = FVector2D::Distance(Candidate.At, FVector2D(StopAt));
+		const double Distance = FVector2D::Distance(Candidate.At, StopAt);
 		if (Distance < PlaceDistance)
 		{
 			Place = &Candidate;
 			PlaceDistance = Distance;
 		}
 	}
+	return Place;
+}
+
+bool ATramRides::GetOff(APestiPerson* Player, ATram* Tram)
+{
+	// The pavement by the stop the tram stands at, facing the way it runs.
+	const FStopPlace* Place = PlaceFor(Tram, Tram->GetNextStop());
 	const double Yaw = Tram->GetActorRotation().Yaw;
 	const FVector2D At = Place ? Place->Wait : FVector2D(Tram->GetActorLocation() - Tram->GetActorRightVector() * TramRides::SideStep);
 	if (!Player->GetOffAt(FVector(At, Tram->GetActorLocation().Z), Yaw))
@@ -152,10 +181,166 @@ bool ATramRides::GetOff(APestiPerson* Player, ATram* Tram)
 	{
 		PC->SetControlRotation(FRotator(-10.0, Yaw, 0.0));
 	}
+	Tram->ReserveSeat(INDEX_NONE);
 	Riding.Reset();
 	bWantOff = false;
 	CalledStop = INDEX_NONE;
 	return true;
+}
+
+AWalkingPerson* ATramRides::SpawnWalker(const FVector& At, double Yaw, const PersonKit::FOutfit& Outfit)
+{
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AWalkingPerson* Walker = GetWorld()->SpawnActor<AWalkingPerson>(AWalkingPerson::StaticClass(), At, FRotator(0.0, Yaw, 0.0), Params);
+	if (Walker)
+	{
+		PersonKit::FOutfit Clothes = Outfit;
+		Clothes.bSeated = false;
+		Walker->SetOutfit(Clothes);
+	}
+	return Walker;
+}
+
+void ATramRides::SendAway(FStopCrowd& Crowd, const FStopPlace* Place)
+{
+	for (const TWeakObjectPtr<AWalkingPerson>& Each : Crowd.Boarding)
+	{
+		if (AWalkingPerson* Walker = Each.Get())
+		{
+			const FVector2D From(Walker->GetActorLocation());
+			const FVector2D Along = Place ? FVector2D(FMath::Cos(FMath::DegreesToRadians(Place->Yaw)), FMath::Sin(FMath::DegreesToRadians(Place->Yaw))) : FVector2D(1.0, 0.0);
+			Walker->SetPath({ From + Along * (Random.FRand() < 0.5f ? 1.0 : -1.0) * TramRides::LeaveDistance }, TramRides::LeaveSpeed, true);
+		}
+	}
+	Crowd.Boarding.Reset();
+}
+
+void ATramRides::UpdateStopCrowds()
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	const FVector Camera = PC->PlayerCameraManager->GetCameraLocation();
+
+	// Forget trams that are gone.
+	for (auto It = Crowds.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			SendAway(It.Value(), nullptr);
+			It.RemoveCurrent();
+		}
+	}
+
+	for (TActorIterator<ATram> It(GetWorld()); It; ++It)
+	{
+		ATram* Tram = *It;
+		if (!Tram->IsInService() || Tram->GetRouteIndex() == INDEX_NONE)
+		{
+			continue;
+		}
+		const int32 Stop = Tram->GetNextStop();
+		FStopCrowd& Crowd = Crowds.FindOrAdd(TWeakObjectPtr<ATram>(Tram));
+		const FStopPlace* Place = PlaceFor(Tram, Stop);
+		if (Crowd.Stop != Stop)
+		{
+			// The tram has left the last stop: anyone still waiting there walks off.
+			SendAway(Crowd, PlaceFor(Tram, Crowd.Stop));
+			Crowd = FStopCrowd();
+			Crowd.Stop = Stop;
+		}
+		if (!Place)
+		{
+			continue;
+		}
+		const FTramRoute& Route = Manager->GetTramRoute(Tram->GetRouteIndex());
+		const bool bLast = IsLastStop(Tram);
+		const FVector2D Along(FMath::Cos(FMath::DegreesToRadians(Place->Yaw)), FMath::Sin(FMath::DegreesToRadians(Place->Yaw)));
+		const FVector2D ToTrack = (Place->At - Place->Wait).GetSafeNormal();
+		const double Z = Tram->GetActorLocation().Z;
+
+		// A few people wait at the stop for the tram coming.
+		if (!Crowd.bWaitingPlaced && !Tram->IsAtStop() && !bLast
+			&& Route.Stops[Stop] - Tram->GetDistance() < TramRides::WaitAhead
+			&& FVector2D::Distance(FVector2D(Camera), Place->Wait) < TramRides::CrowdRange)
+		{
+			Crowd.bWaitingPlaced = true;
+			const int32 Count = Random.RandRange(0, TramRides::MaxWaiting);
+			for (int32 i = 0; i < Count; ++i)
+			{
+				const FVector2D At = Place->Wait + Along * Random.FRandRange(-TramRides::WaitSpread, TramRides::WaitSpread) - ToTrack * Random.FRandRange(0.f, TramRides::WaitBack);
+				const double Facing = FMath::RadiansToDegrees(FMath::Atan2(ToTrack.Y, ToTrack.X));
+				if (AWalkingPerson* Walker = SpawnWalker(FVector(At, Z), Facing, PersonModel::RandomOutfit(Random)))
+				{
+					Walker->StandFacing(Facing);
+					Crowd.Boarding.Add(Walker);
+				}
+			}
+		}
+
+		if (!Tram->IsAtStop())
+		{
+			continue;
+		}
+		const FVector Door = Tram->GetDoorNear(FVector(Place->Wait, Z));
+
+		// The doors open: some get off and walk away, the waiting ones go to the steps.
+		if (!Crowd.bExchanged)
+		{
+			Crowd.bExchanged = true;
+			if (FVector::Dist2D(Camera, Tram->GetActorLocation()) < TramRides::CrowdRange)
+			{
+				const int32 Off = bLast ? Tram->NumPassengers() : Random.RandRange(0, FMath::Min(TramRides::MaxGettingOff, Tram->NumPassengers()));
+				for (int32 i = 0; i < Off; ++i)
+				{
+					PersonKit::FOutfit Outfit;
+					if (!Tram->TakeOffPassenger(Outfit))
+					{
+						break;
+					}
+					const FVector2D Kerb = Place->Wait + Along * Random.FRandRange(-TramRides::WaitSpread, TramRides::WaitSpread);
+					const FVector2D Away = Kerb + Along * ((Random.FRand() < 0.5f ? 1.0 : -1.0) * TramRides::LeaveDistance);
+					const FVector2D Out = Kerb - FVector2D(Door);
+					if (AWalkingPerson* Walker = SpawnWalker(Door + FVector(0.0, 0.0, TramRides::Middle), FMath::RadiansToDegrees(FMath::Atan2(Out.Y, Out.X)), Outfit))
+					{
+						Walker->SetPath({ Kerb, Away }, TramRides::LeaveSpeed, true);
+					}
+				}
+			}
+			for (const TWeakObjectPtr<AWalkingPerson>& Each : Crowd.Boarding)
+			{
+				if (AWalkingPerson* Walker = Each.Get())
+				{
+					Walker->SetPath({ FVector2D(Door) }, TramRides::BoardSpeed, false);
+				}
+			}
+		}
+
+		// Those who reach the steps get on and sit down; the tram waits for the rest.
+		for (int32 i = Crowd.Boarding.Num() - 1; i >= 0; --i)
+		{
+			AWalkingPerson* Walker = Crowd.Boarding[i].Get();
+			if (!Walker)
+			{
+				Crowd.Boarding.RemoveAt(i);
+				continue;
+			}
+			Walker->SetGoal(FVector2D(Door));
+			if (Walker->HasArrived())
+			{
+				Tram->SeatPassenger(Walker->GetOutfit());
+				Walker->Destroy();
+				Crowd.Boarding.RemoveAt(i);
+			}
+		}
+		if (Crowd.Boarding.Num() > 0)
+		{
+			Tram->HoldAtStop(1.f);
+		}
+	}
 }
 
 void ATramRides::Say(const FString& Text, float Seconds) const
@@ -175,6 +360,7 @@ void ATramRides::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	UpdateStopCrowds();
 	APestiPerson* Player = Cast<APestiPerson>(PC->GetPawn());
 	if (!Player)
 	{
@@ -281,6 +467,7 @@ void ATramRides::Tick(float DeltaSeconds)
 	Game->AddMoney(-Fare);
 	const TramModel::FSeat Place = TramModel::Seat(SeatIndex, PersonModel::SeatedMiddle);
 	Player->RideOn(Tram, Place.At, Place.Yaw);
+	Tram->ReserveSeat(SeatIndex);
 	Riding = Tram;
 	bWantOff = false;
 	CalledStop = Tram->GetNextStop();

@@ -179,55 +179,72 @@ void UCarVisuals::ShowDriver(const PersonKit::FOutfit& Outfit)
 {
 	TArray<PersonKit::FSection> Sections;
 	CarModel::BuildSeatedDriver(Outfit, CarModel::Layout(Style.Body), Sections);
-	FillDriver(Sections);
+	FillPerson(Driver, Sections);
 }
 
 void UCarVisuals::ShowStreetDriver(int32 Look)
 {
-	FillDriver(CarVisuals::StreetDriverShape(Style, FMath::Clamp(Look, 0, NumDriverLooks - 1)));
+	FillPerson(Driver, CarVisuals::StreetDriverShape(Style, FMath::Clamp(Look, 0, NumDriverLooks - 1)));
 }
 
 void UCarVisuals::HideDriver()
 {
-	if (Driver)
+	HidePerson(Driver);
+}
+
+void UCarVisuals::ShowPassenger(const PersonKit::FOutfit& Outfit)
+{
+	TArray<PersonKit::FSection> Sections;
+	CarModel::BuildBackSeatPassenger(Outfit, CarModel::Layout(Style.Body), Sections);
+	FillPerson(Passenger, Sections);
+}
+
+void UCarVisuals::HidePassenger()
+{
+	HidePerson(Passenger);
+}
+
+void UCarVisuals::HidePerson(UProceduralMeshComponent* Person)
+{
+	if (Person)
 	{
-		Driver->ClearAllMeshSections();
-		Driver->SetVisibility(false);
+		Person->ClearAllMeshSections();
+		Person->SetVisibility(false);
 	}
 }
 
-void UCarVisuals::FillDriver(const TArray<PersonKit::FSection>& Sections)
+void UCarVisuals::FillPerson(TObjectPtr<UProceduralMeshComponent>& Person, const TArray<PersonKit::FSection>& Sections)
 {
 	AActor* Owner = GetOwner();
 	if (!Owner || !Body)
 	{
 		return;
 	}
-	if (!Driver)
+	if (!Person)
 	{
-		Driver = NewObject<UProceduralMeshComponent>(Owner);
-		Driver->SetupAttachment(Body);
-		Driver->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Driver->SetCanEverAffectNavigation(false);
-		Driver->SetCastShadow(false);
-		Driver->SetCachedMaxDrawDistance(CarVisuals::DriverRange);
-		Driver->RegisterComponent();
-		Owner->AddInstanceComponent(Driver);
+		Person = NewObject<UProceduralMeshComponent>(Owner);
+		Person->SetupAttachment(Body);
+		Person->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Person->SetCanEverAffectNavigation(false);
+		Person->SetCastShadow(false);
+		Person->SetCachedMaxDrawDistance(CarVisuals::DriverRange);
+		Person->RegisterComponent();
+		Owner->AddInstanceComponent(Person);
 	}
-	Driver->ClearAllMeshSections();
+	Person->ClearAllMeshSections();
 	for (int32 i = 0; i < Sections.Num(); ++i)
 	{
 		const PersonKit::FSection& Section = Sections[i];
-		Driver->CreateMeshSection_LinearColor(i, Section.Vertices, Section.Triangles, Section.Normals,
+		Person->CreateMeshSection_LinearColor(i, Section.Vertices, Section.Triangles, Section.Normals,
 			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
 		if (BaseMaterial)
 		{
 			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			Material->SetVectorParameterValue(TEXT("Color"), Section.Color);
-			Driver->SetMaterial(i, Material);
+			Person->SetMaterial(i, Material);
 		}
 	}
-	Driver->SetVisibility(true);
+	Person->SetVisibility(true);
 }
 
 void UCarVisuals::Fill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder& Shape)

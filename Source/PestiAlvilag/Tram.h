@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "PersonKit.h"
 #include "TramModel.h"
 #include "Tram.generated.h"
 
@@ -50,6 +51,19 @@ public:
 
 	/** A bench seat no passenger sits on (TramModel::Seat index), or INDEX_NONE. */
 	int32 GetFreeSeat() const;
+
+	/** Keeps a seat for the player while they ride (INDEX_NONE frees it). */
+	void ReserveSeat(int32 Index) { ReservedSeat = Index; }
+
+	/** How many people sit on the benches (not counting the player). */
+	int32 NumPassengers() const { return TakenSeats.Num(); }
+	/** Someone gets on and sits down; false if the benches are full. */
+	bool SeatPassenger(const PersonKit::FOutfit& Outfit);
+	/** Someone gets up to get off: they leave the bench, and OutOutfit is what they wear. */
+	bool TakeOffPassenger(PersonKit::FOutfit& OutOutfit);
+
+	/** The platform step nearest Point (on the ground beside the tram), where people get on and off. */
+	FVector GetDoorNear(const FVector& Point) const;
 
 	/** Cruising speed (cm/s); 700 is about 25 km/h. */
 	UPROPERTY(EditAnywhere, Category = "Tram")
@@ -102,6 +116,8 @@ private:
 
 	void BuildBody();
 	void SeatPassengers();
+	void AddPassenger(int32 SeatIndex, const PersonKit::FOutfit& Outfit);
+	void RemovePassenger(int32 Which);
 	void PlaceOnTrack();
 	void SetInService(bool bInService);
 	bool IsStartClear() const;
@@ -116,6 +132,8 @@ private:
 	/** Seconds until the tram comes back in at the start of its route. */
 	float OutOfServiceLeft = 0.f;
 	double GroundZ = 0.0;
-	/** The seats the passengers sit on. */
+	/** The seats the passengers sit on, and what each wears (PassengerPieces has NumPieces each). */
 	TArray<int32> TakenSeats;
+	TArray<PersonKit::FOutfit> PassengerOutfits;
+	int32 ReservedSeat = INDEX_NONE;
 };
