@@ -434,6 +434,7 @@ void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
 
 		FTramRoute& Route = TramRoutes.AddDefaulted_GetRef();
 		Route.Ref = RouteObject->GetStringField(TEXT("ref"));
+		RouteObject->TryGetStringField(TEXT("name"), Route.Name);
 		for (int32 i = 0; i + 1 < Coords->Num(); i += 2)
 		{
 			const FVector Point((*Coords)[i]->AsNumber(), (*Coords)[i + 1]->AsNumber(), 0.0);
@@ -448,15 +449,23 @@ void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
 		const TArray<TSharedPtr<FJsonValue>>* StopValues = nullptr;
 		if (RouteObject->TryGetArrayField(TEXT("stops"), StopValues))
 		{
+			TArray<TPair<float, FString>> Found;
 			for (const TSharedPtr<FJsonValue>& StopValue : *StopValues)
 			{
 				const TSharedPtr<FJsonObject>& Stop = StopValue->AsObject();
 				if (Stop.IsValid())
 				{
-					Route.Stops.Add(static_cast<float>(Stop->GetNumberField(TEXT("at"))));
+					FString StopName;
+					Stop->TryGetStringField(TEXT("name"), StopName);
+					Found.Emplace(static_cast<float>(Stop->GetNumberField(TEXT("at"))), StopName);
 				}
 			}
-			Route.Stops.Sort();
+			Found.Sort([](const TPair<float, FString>& A, const TPair<float, FString>& B) { return A.Key < B.Key; });
+			for (const TPair<float, FString>& Stop : Found)
+			{
+				Route.Stops.Add(Stop.Key);
+				Route.StopNames.Add(Stop.Value);
+			}
 		}
 	}
 	UE_LOG(LogTraffic, Log, TEXT("Loaded %d tram routes"), TramRoutes.Num());
@@ -818,7 +827,8 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 		ConsiderPoint(Other->GetActorLocation() + Along);
 		ConsiderPoint(Other->GetActorLocation() - Along);
 	}
-	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0); Player && Player != Car)
+	// Not the player riding on this tram.
+	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0); Player && Player != Car && Player->GetAttachParentActor() != Car)
 	{
 		ConsiderPoint(Player->GetActorLocation());
 	}

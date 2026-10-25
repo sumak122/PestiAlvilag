@@ -34,6 +34,14 @@ public:
 	int32 GetRouteIndex() const { return RouteIndex; }
 	float GetDistance() const { return Distance; }
 
+	/** Standing at a stop with its doors open (and on the map). */
+	bool IsAtStop() const { return DwellLeft > 0.f && OutOfServiceLeft <= 0.f; }
+	/** The stop it stands at, or else the next one it will stop at (may be past the last). */
+	int32 GetNextStop() const { return NextStop; }
+	bool IsInService() const { return OutOfServiceLeft <= 0.f; }
+	/** Keeps the doors open at least this long more (s). */
+	void HoldAtStop(float Seconds) { if (IsAtStop()) { DwellLeft = FMath::Max(DwellLeft, Seconds); } }
+
 	/** Cruising speed (cm/s); 700 is about 25 km/h. */
 	UPROPERTY(EditAnywhere, Category = "Tram")
 	float MaxSpeed = 700.f;

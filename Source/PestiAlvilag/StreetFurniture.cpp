@@ -100,6 +100,19 @@ namespace Furniture
 		{ Cube, TaxiBlack, FVector(0, 46, 238), FVector(0.035, 0.12, 0.08), false },
 	};
 	constexpr double TaxiSignTextZ = 230.0;
+
+	// A tram stop sign ("megallo"): a post with a white enamel plate
+	// edged in red, the word and the stop's name written on it separately.
+	const FLinearColor Enamel(0.85f, 0.85f, 0.80f);
+	const FLinearColor StopRed(0.45f, 0.03f, 0.02f);
+	const TArray<FFurniturePart> TramStopSign = {
+		{ Cylinder, Iron, FVector(0, 0, 140), FVector(0.07, 0.07, 2.8), true },
+		{ Sphere, Iron, FVector(0, 0, 282), FVector(0.1, 0.1, 0.1), false },
+		{ Cube, StopRed, FVector(0, 0, 245), FVector(0.03, 0.9, 0.5), false },
+		{ Cube, Enamel, FVector(0, 0, 245), FVector(0.036, 0.84, 0.44), false },
+	};
+	constexpr double TramStopWordZ = 256.0;
+	constexpr double TramStopNameZ = 234.0;
 	constexpr double TaxiLift = 150.0;
 
 	// The round advertising column; the poster drum comes in three colours.
@@ -505,6 +518,55 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 		}
 	});
 	BuildTaxiStands(Root);
+	BuildTramStops(Root);
+}
+
+void AStreetFurniture::BuildTramStops(const FJsonObject& Root)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Stops = nullptr;
+	if (!Root.TryGetArrayField(TEXT("tram_stops"), Stops))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& Value : *Stops)
+	{
+		const TSharedPtr<FJsonObject>* Stop = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Sign = nullptr;
+		if (!Value->TryGetObject(Stop) || !(*Stop)->TryGetArrayField(TEXT("sign"), Sign) || Sign->Num() < 3)
+		{
+			continue;
+		}
+		const FVector2D At((*Sign)[0]->AsNumber(), (*Sign)[1]->AsNumber());
+		const double Yaw = (*Sign)[2]->AsNumber();
+		FVector Ground;
+		if (!GroundAt(At, Ground))
+		{
+			continue;
+		}
+		AddObject(Furniture::TramStopSign, Ground, Yaw, 1.0, CullDistance);
+		// The word and the name on both faces of the plate.
+		const FString Name = (*Stop)->GetStringField(TEXT("name"));
+		for (const double Face : { 1.0, -1.0 })
+		{
+			auto Write = [&](const FString& Words, double Z, float Size)
+			{
+				UTextRenderComponent* Text = NewObject<UTextRenderComponent>(this);
+				Text->SetupAttachment(RootComponent);
+				Text->SetWorldLocationAndRotation(Ground + FRotator(0.0, Yaw, 0.0).RotateVector(FVector(4.0 * Face, 0.0, Z)),
+					FRotator(0.0, Face > 0.0 ? Yaw : Yaw + 180.0, 0.0));
+				Text->SetText(FText::FromString(Words));
+				Text->SetHorizontalAlignment(EHTA_Center);
+				Text->SetVerticalAlignment(EVRTA_TextCenter);
+				Text->SetWorldSize(Size);
+				Text->SetTextRenderColor(FColor(110, 10, 8));
+				Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Text->SetCullDistance(CullDistance);
+				Text->RegisterComponent();
+			};
+			Write(TEXT("MEG\u00c1LL\u00d3"), Furniture::TramStopWordZ, 14.f);
+			Write(Name, Furniture::TramStopNameZ, Name.Len() > 16 ? 6.f : 8.f);
+		}
+	}
 }
 
 void AStreetFurniture::BuildTaxiStands(const FJsonObject& Root)

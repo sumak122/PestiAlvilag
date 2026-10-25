@@ -21,6 +21,7 @@
 #include "StreetFurniture.h"
 #include "TaxiCompany.h"
 #include "TaxiRides.h"
+#include "TramRides.h"
 #include "TrafficManager.h"
 
 namespace PestiStart
@@ -112,6 +113,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<ATaxiRides>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ATaxiRides>();
+	}
+
+	// Trams to ride as a passenger.
+	if (!TActorIterator<ATramRides>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ATramRides>();
 	}
 
 	// Start traffic unless the level already has its own manager.

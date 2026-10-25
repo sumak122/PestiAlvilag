@@ -78,6 +78,8 @@ private:
 	void BuildTiszaKalmanTer(const FJsonObject& Park);
 	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */
 	void BuildTaxiStands(const FJsonObject& Root);
+	/** A stop sign by each tram stop (tram_stops). */
+	void BuildTramStops(const FJsonObject& Root);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;

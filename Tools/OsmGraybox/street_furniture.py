@@ -18,6 +18,10 @@ that the AStreetFurniture actor reads:
   Keleti station, each {"name", "taxis": [[x, y, yaw], ...], "sign": [x, y, yaw]};
 - taxi_destinations: where a taxi can take the player, a pavement spot at
   each, {"name", "at": [x, y, yaw]};
+- tram_stops: one per stop place on the tram tracks (lines sharing a track
+  share it), {"name", "at": [x, y, yaw] on the track facing the way the
+  tram runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
+  "wait": [x, y] where passengers wait and get off};
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in;
@@ -491,6 +495,66 @@ def place_taxi_destinations(sidewalks):
     return out
 
 
+TRAM_STOP_SAME = 300
+TRAM_KERB_SEARCH = 3000
+TRAM_SIGN_IN = 100
+TRAM_NO_KERB_OUT = 260
+
+
+def place_tram_stops(data, space, sidewalks):
+    """The stops of the tram routes, with a waiting spot on the pavement on
+    the tram's outer side (away from the other track) and a sign at its
+    kerb edge."""
+    walks = [LineString(ring_points(w)) for w in sidewalks]
+    walk_tree = STRtree(walks)
+    tracks = [LineString(ring_points(r["points"])) for r in data["trams"]]
+    stops = []
+    for route, track in zip(data["trams"], tracks):
+        for stop in route["stops"]:
+            p = track.interpolate(stop["at"])
+            if any(math.hypot(p.x - q["at"][0], p.y - q["at"][1]) < TRAM_STOP_SAME for q in stops):
+                continue
+            a = track.interpolate(max(stop["at"] - 100, 0))
+            b = track.interpolate(min(stop["at"] + 100, track.length))
+            dx, dy = unit(b.x - a.x, b.y - a.y)
+            # Outward: away from the track the other way.
+            nx, ny = -dy, dx
+            other = min((t for t in tracks if t.distance(p) > 100), key=lambda t: t.distance(p), default=None)
+            if other is not None and other.distance(p) < 800:
+                q = other.interpolate(other.project(p))
+                if nx * (q.x - p.x) + ny * (q.y - p.y) > 0:
+                    nx, ny = -nx, -ny
+            ray = LineString([(p.x + nx * 150, p.y + ny * 150), (p.x + nx * TRAM_KERB_SEARCH, p.y + ny * TRAM_KERB_SEARCH)])
+            reach = None
+            for i in walk_tree.query(ray):
+                hit = walks[i].intersection(ray)
+                if hit.is_empty:
+                    continue
+                for g in getattr(hit, "geoms", [hit]):
+                    if g.geom_type != "Point":
+                        continue
+                    # Only a pavement running along the street, not a crossing.
+                    w = walks[i]
+                    at = w.project(g)
+                    u = w.interpolate(min(at + 50, w.length))
+                    v = w.interpolate(max(at - 50, 0))
+                    wx, wy = unit(u.x - v.x, u.y - v.y)
+                    if abs(wx * dx + wy * dy) > 0.85:
+                        d = math.hypot(g.x - p.x, g.y - p.y)
+                        reach = d if reach is None else min(reach, d)
+            if reach is None:
+                sign_out, wait_out = TRAM_NO_KERB_OUT, TRAM_NO_KERB_OUT
+            else:
+                sign_out, wait_out = reach - TRAM_SIGN_IN, reach
+            stops.append({
+                "name": stop.get("name", ""),
+                "at": [round(p.x), round(p.y), yaw_of(dx, dy)],
+                "sign": [round(p.x + nx * sign_out + dx * 150), round(p.y + ny * sign_out + dy * 150), yaw_of(-nx, -ny)],
+                "wait": [round(p.x + nx * wait_out), round(p.y + ny * wait_out)],
+            })
+    return stops
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -774,6 +838,7 @@ def main():
     sidewalks = place_sidewalks(data, space, tisza, park)
     taxi_stands = place_taxi_stands(data, space)
     taxi_destinations = place_taxi_destinations(sidewalks)
+    tram_stops = place_tram_stops(data, space, sidewalks)
 
     out = {
         "version": 1,
@@ -785,11 +850,12 @@ def main():
         "sidewalks": sidewalks,
         "taxi_stands": taxi_stands,
         "taxi_destinations": taxi_destinations,
+        "tram_stops": tram_stops,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
