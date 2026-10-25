@@ -65,6 +65,10 @@ private:
 	/** A flat piece lying on the ground from A to B. */
 	void AddStrip(const FVector2D& A, const FVector2D& B, double Width, double Thickness, double Lift, const FLinearColor& Color);
 	void AddRailing(const FVector2D& A, const FVector2D& B);
+	/** A knee-high wire fence on little wooden posts along a lawn. */
+	void AddLawnFence(const FVector2D& A, const FVector2D& B);
+	/** A low clipped hedge from A to B. */
+	void AddHedge(const FVector2D& A, const FVector2D& B);
 	/** The ground under a map point; false where it is not open map ground. */
 	bool GroundAt(const FVector2D& At, FVector& OutGround) const;
 

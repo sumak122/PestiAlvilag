@@ -63,7 +63,8 @@ mode spawns it) reads that file and places everything on the ground:
 - round advertising columns near street corners;
 - benches in the parks;
 - the 1932 layout of Tisza Kálmán tér: paths, flower beds, trees, benches,
-  lamps and a railing.
+  lamps and a railing, with knee-high wire fences along the lawns and low
+  clipped hedges round the round places (after Fortepan 70268).
 
 Run it again whenever the graybox JSON changes:
 
