@@ -70,12 +70,47 @@ namespace Furniture
 		{ Cube, Lantern, FVector(50, 0, 552), FVector(0.18, 0.18, 0.14), false },
 	};
 
-	const TArray<FFurniturePart> Bench = {
-		{ Cube, Wood, FVector(0, 0, 45), FVector(0.45, 1.8, 0.06), true },
-		{ Cube, Wood, FVector(-22, 0, 76), FVector(0.05, 1.8, 0.36), true },
-		{ Cube, Iron, FVector(0, -80, 23), FVector(0.45, 0.06, 0.46), false },
-		{ Cube, Iron, FVector(0, 80, 23), FVector(0.45, 0.06, 0.46), false },
-	};
+	// The park bench: two cast-iron side frames, each a front leg, a back
+	// leg that carries on up as the leaning back support, a rail under the
+	// seat and an armrest, with wooden slats laid across them, four in the
+	// seat and three screwed to the front of the back supports.
+	constexpr double BenchBackLean = 12.8;
+
+	TArray<FFurniturePart> MakeBench()
+	{
+		TArray<FFurniturePart> Parts;
+		const double Lean = FMath::Tan(FMath::DegreesToRadians(BenchBackLean));
+		const FRotator BackTilt(BenchBackLean, 0.0, 0.0);
+		for (double Y : { -80.0, 80.0 })
+		{
+			Parts.Add({ Cube, Iron, FVector(17, Y, 22), FVector(0.05, 0.05, 0.44), true });
+			Parts.Add({ Cube, Iron, FVector(-17, Y, 22), FVector(0.05, 0.05, 0.44), true });
+			Parts.Add({ Cube, Iron, FVector(18, Y, 1.5), FVector(0.1, 0.08, 0.03), false });
+			Parts.Add({ Cube, Iron, FVector(-18, Y, 1.5), FVector(0.1, 0.08, 0.03), false });
+			Parts.Add({ Cube, Iron, FVector(0, Y, 42), FVector(0.46, 0.05, 0.05), false });
+			FFurniturePart Upright{ Cube, Iron, FVector(-17 - 22 * Lean, Y, 66), FVector(0.05, 0.05, 0.46), false };
+			Upright.Rotation = BackTilt;
+			Parts.Add(Upright);
+			Parts.Add({ Cube, Iron, FVector(20, Y, 55), FVector(0.04, 0.04, 0.22), false });
+			Parts.Add({ Cube, Iron, FVector(1, Y, 67), FVector(0.46, 0.06, 0.04), false });
+			Parts.Add({ Sphere, Iron, FVector(23, Y, 67), FVector(0.07, 0.07, 0.06), false });
+		}
+		Parts.Add({ Cube, Iron, FVector(-17, 0, 12), FVector(0.04, 1.6, 0.04), false });
+		Parts.Add({ Cube, Iron, FVector(0, 0, 42), FVector(0.44, 0.04, 0.04), false });
+		for (double X : { -15.0, -5.0, 5.0, 15.0 })
+		{
+			Parts.Add({ Cube, Wood, FVector(X, 0, 46), FVector(0.09, 1.86, 0.03), X == -5.0 });
+		}
+		for (double Z : { 56.0, 68.0, 80.0 })
+		{
+			FFurniturePart Slat{ Cube, Wood, FVector(-17 - (Z - 44) * Lean + 3.75, 0, Z), FVector(0.025, 1.86, 0.09), Z == 68.0 };
+			Slat.Rotation = BackTilt;
+			Parts.Add(Slat);
+		}
+		return Parts;
+	}
+
+	const TArray<FFurniturePart> Bench = MakeBench();
 
 	// A litter bin: a round sheet-metal basket in dark green, hung on the
 	// side of a short iron post, open at the top.

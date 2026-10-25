@@ -142,11 +142,11 @@ TISZA_ROUNDS = [(TISZA_MIDDLE, 2600, 1300), ((63500, -11150), 1700, 550), ((5675
 # Twin paths run north and south from the middle either side of a long lawn,
 # wide promenades west (to the Népopera) and east (to the statue), diagonals
 # through the small round places to the corners and one to the south-east
-# corner, arcs of a ring round the middle, and a ring just inside the railing.
+# corner, a full ring round the middle, and a ring just inside the railing.
 TWIN_PATH_APART = 1000
 PROMENADE_WIDTH = 600
 RING_RADIUS = 7300
-RING_ARCS = [(-125, -20), (100, 170)]
+RING_ARCS = [(0, 360)]
 # The statue stands east of the middle on a gravel terrace, facing it.
 STATUE_OUT = 6300
 STATUE_TERRACE = 1400
@@ -952,16 +952,21 @@ def layout_tisza(space, park):
     ra = (rx - cx) * vx + (ry - cy) * vy
     rb = (rx - cx) * ux + (ry - cy) * uy
     add_path(at(ra + r, rb), at(TWIN_PATH_APART, rb), SIDE_PATH_WIDTH)
-    # The arcs of the ring round the middle.
+    ring = park.buffer(-700)
+    ring = ring if ring.geom_type == "Polygon" else max(ring.geoms, key=lambda g: g.area)
+    # The ring round the middle.
     for start, end in RING_ARCS:
         steps = max(2, int((end - start) / 8))
         points = [at(RING_RADIUS * math.cos(math.radians(start + (end - start) * i / steps)),
                      RING_RADIUS * math.sin(math.radians(start + (end - start) * i / steps))) for i in range(steps + 1)]
+        # Where the square's edge cuts into the ring (by the Népopera), it
+        # stops at the path just inside the railing.
         for p0, p1 in zip(points[:-1], points[1:]):
-            add_path(p0, p1, SIDE_PATH_WIDTH)
+            piece = LineString([p0, p1]).intersection(ring)
+            for part in getattr(piece, "geoms", [piece]):
+                if part.geom_type == "LineString" and part.length > 1:
+                    add_path(part.coords[0], part.coords[-1], SIDE_PATH_WIDTH)
     # The ring path just inside the railing.
-    ring = park.buffer(-700)
-    ring = ring if ring.geom_type == "Polygon" else max(ring.geoms, key=lambda g: g.area)
     ring = ring.simplify(300)
     ring_coords = list(ring.exterior.coords)
     for a, b in zip(ring_coords[:-1], ring_coords[1:]):
