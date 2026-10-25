@@ -88,6 +88,7 @@ protected:
 	int32 PointIndex = 0;
 	float CurrentSpeed = 0.f;
 	float BlockedTime = 0.f;
+	TArray<CarBody::EPaint> BodyPaints;
 
 private:
 
@@ -100,6 +101,15 @@ private:
 
 	float JunctionWaitTime = 0.f;
 	TArray<int32> HeldNodes;
-	TArray<CarBody::EPaint> BodyPaints;
 	FLinearColor PaintColor = FLinearColor::Black;
+};
+
+/** A taxi out on its rounds: the saloon in black with the taxi markings (see APestiTaxi). */
+UCLASS()
+class PESTIALVILAG_API ATrafficTaxi : public ATrafficCar
+{
+	GENERATED_BODY()
+
+public:
+	ATrafficTaxi();
 };

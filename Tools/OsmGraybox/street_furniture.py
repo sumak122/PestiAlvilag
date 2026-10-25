@@ -14,6 +14,8 @@ that the AStreetFurniture actor reads:
   ...] lists;
 - bins: litter bins on a post, beside some street lamps and next to the
   park benches;
+- taxi_stands: a rank of parked taxis by the kerb near the Népszínház and
+  Keleti station, each {"name", "taxis": [[x, y, yaw], ...], "sign": [x, y, yaw]};
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in;
@@ -75,6 +77,22 @@ SIDEWALK_MAX_CROSS = 2600
 CROSSINGS_PER_CORNER = 2
 # In the park people walk round the flower beds this far out from them.
 ROUND_WALK_OUT = 300
+
+# Taxi stands: a rank of taxis parked along the kerb as near as can be to
+# each landmark's front, clear of the traffic lanes and tram tracks, with a
+# "TAXI" sign on the pavement beside the first.
+TAXI_STANDS = [
+    ("N\u00e9psz\u00ednh\u00e1z", (-6700, 200)),
+    ("Keleti p\u00e1lyaudvar", (91200, -43178)),
+]
+TAXIS_PER_STAND = 3
+TAXI_SPACING = 540
+TAXI_STEP = 270
+TAXI_FROM_KERB = 120
+TAXI_SEARCH = 5000
+TAXI_CLEAR_OF_LANES = 200
+TAXI_CLEAR_OF_TRAMS = 160
+TAXI_SIGN_OUT = 160
 
 # Litter bins: beside this share of the street lamps, and next to park
 # benches, just past the bench's end (a bench is 180 cm long).
@@ -401,6 +419,51 @@ def place_sidewalks(data, space, tisza, park):
     return sidewalks
 
 
+def place_taxi_stands(data, space):
+    """Taxi ranks by the kerb near the landmarks (see TAXI_STANDS)."""
+    stands = []
+    for name, anchor in TAXI_STANDS:
+        near = Point(anchor)
+        spots = {}
+        for k, street in enumerate(data["centerlines"]):
+            width = street.get("width", 0)
+            points = ring_points(street["points"])
+            if street["highway"] == "service" or width < MIN_LAMP_WIDTH or len(points) < 2:
+                continue
+            line = LineString(points)
+            if line.distance(near) > TAXI_SEARCH:
+                continue
+            for (x, y), (dx, dy), along in walk(points, TAXI_STEP, TAXI_STEP, TAXI_STEP):
+                for side in (-1, 1):
+                    out = width / 2 - TAXI_FROM_KERB
+                    px, py = x - dy * out * side, y + dx * out * side
+                    spot = Point(px, py)
+                    if (spot.distance(near) > TAXI_SEARCH or space.near_lane(spot, TAXI_CLEAR_OF_LANES)
+                            or space.near_building(spot, 200)
+                            or (space.trams is not None and space.trams.distance(spot) < TAXI_CLEAR_OF_TRAMS)):
+                        continue
+                    spots[(k, side, round(along / TAXI_STEP))] = (px, py, dx, dy, side, spot.distance(near))
+        best = None
+        per = TAXI_SPACING // TAXI_STEP
+        for (k, side, step), (px, py, dx, dy, sd, dist) in spots.items():
+            rank = [spots.get((k, side, step + per * i)) for i in range(TAXIS_PER_STAND)]
+            if all(rank):
+                score = sum(t[5] for t in rank)
+                if best is None or score < best[0]:
+                    best = (score, rank)
+        if best is None:
+            print(f"No room for a taxi stand near {name}")
+            continue
+        rank = best[1]
+        taxis = [[round(t[0]), round(t[1]), yaw_of(t[2], t[3])] for t in rank]
+        first = rank[0]
+        # The sign stands on the pavement beside the first taxi, facing the road.
+        sx = first[0] - first[3] * TAXI_SIGN_OUT * first[4]
+        sy = first[1] + first[2] * TAXI_SIGN_OUT * first[4]
+        stands.append({"name": name, "taxis": taxis, "sign": [round(sx), round(sy), yaw_of(first[3] * first[4], -first[2] * first[4])]})
+    return stands
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -682,6 +745,7 @@ def main():
     bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
     sidewalks = place_sidewalks(data, space, tisza, park)
+    taxi_stands = place_taxi_stands(data, space)
 
     out = {
         "version": 1,
@@ -691,11 +755,12 @@ def main():
         "benches": benches,
         "bins": bins,
         "sidewalks": sidewalks,
+        "taxi_stands": taxi_stands,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "

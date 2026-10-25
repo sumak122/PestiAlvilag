@@ -3,6 +3,7 @@
 #include "StreetFurniture.h"
 
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -13,6 +14,7 @@
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
 #include "ParkKeeper.h"
+#include "PestiTaxi.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/ConstructorHelpers.h"
@@ -83,6 +85,22 @@ namespace Furniture
 		{ Cylinder, BinInside, FVector(24, 0, 91.5), FVector(0.36, 0.36, 0.02), false },
 		{ Cube, Iron, FVector(12, 0, 80), FVector(0.24, 0.05, 0.05), false },
 	};
+
+	// A taxi stand sign: a post with a yellow plate, chequered black at the
+	// ends like the taxis' band; "TAXI" is written on it separately.
+	const FLinearColor TaxiYellow(0.85f, 0.62f, 0.05f);
+	const FLinearColor TaxiBlack(0.01f, 0.01f, 0.01f);
+	const TArray<FFurniturePart> TaxiSign = {
+		{ Cylinder, Iron, FVector(0, 0, 130), FVector(0.07, 0.07, 2.6), true },
+		{ Sphere, Iron, FVector(0, 0, 262), FVector(0.1, 0.1, 0.1), false },
+		{ Cube, TaxiYellow, FVector(0, 0, 230), FVector(0.03, 0.8, 0.32), false },
+		{ Cube, TaxiBlack, FVector(0, -34, 238), FVector(0.035, 0.12, 0.08), false },
+		{ Cube, TaxiBlack, FVector(0, -46, 222), FVector(0.035, 0.12, 0.08), false },
+		{ Cube, TaxiBlack, FVector(0, 34, 222), FVector(0.035, 0.12, 0.08), false },
+		{ Cube, TaxiBlack, FVector(0, 46, 238), FVector(0.035, 0.12, 0.08), false },
+	};
+	constexpr double TaxiSignTextZ = 230.0;
+	constexpr double TaxiLift = 150.0;
 
 	// The round advertising column; the poster drum comes in three colours.
 	TArray<FFurniturePart> Column(int32 Variant)
@@ -486,6 +504,63 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance);
 		}
 	});
+	BuildTaxiStands(Root);
+}
+
+void AStreetFurniture::BuildTaxiStands(const FJsonObject& Root)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Stands = nullptr;
+	if (!Root.TryGetArrayField(TEXT("taxi_stands"), Stands))
+	{
+		return;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	for (const TSharedPtr<FJsonValue>& Value : *Stands)
+	{
+		const TSharedPtr<FJsonObject>* Stand = nullptr;
+		if (!Value->TryGetObject(Stand))
+		{
+			continue;
+		}
+		FVector Ground;
+		// The taxis wait in a rank by the kerb (they settle onto the road themselves).
+		Furniture::ForEachRow(**Stand, TEXT("taxis"), [&](const TArray<double>& Row)
+		{
+			if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
+			{
+				GetWorld()->SpawnActor<APestiTaxi>(APestiTaxi::StaticClass(), Ground + FVector(0.0, 0.0, Furniture::TaxiLift),
+					FRotator(0.0, Row[2], 0.0), Params);
+			}
+		});
+		const TArray<TSharedPtr<FJsonValue>>* Sign = nullptr;
+		if (!(*Stand)->TryGetArrayField(TEXT("sign"), Sign) || Sign->Num() < 3)
+		{
+			continue;
+		}
+		const FVector2D At((*Sign)[0]->AsNumber(), (*Sign)[1]->AsNumber());
+		const double Yaw = (*Sign)[2]->AsNumber();
+		if (!GroundAt(At, Ground))
+		{
+			continue;
+		}
+		AddObject(Furniture::TaxiSign, Ground, Yaw, 1.0, CullDistance);
+		// "TAXI" on both faces of the plate.
+		for (const double Face : { 1.0, -1.0 })
+		{
+			UTextRenderComponent* Text = NewObject<UTextRenderComponent>(this);
+			Text->SetupAttachment(RootComponent);
+			Text->SetWorldLocationAndRotation(Ground + FRotator(0.0, Yaw, 0.0).RotateVector(FVector(3.5 * Face, 0.0, Furniture::TaxiSignTextZ)),
+				FRotator(0.0, Face > 0.0 ? Yaw : Yaw + 180.0, 0.0));
+			Text->SetText(FText::FromString(TEXT("TAXI")));
+			Text->SetHorizontalAlignment(EHTA_Center);
+			Text->SetVerticalAlignment(EVRTA_TextCenter);
+			Text->SetWorldSize(18.f);
+			Text->SetTextRenderColor(FColor(10, 10, 10));
+			Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Text->RegisterComponent();
+		}
+	}
 }
 
 void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)

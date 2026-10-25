@@ -16,6 +16,7 @@
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
+#include "PestiTaxi.h"
 #include "PersonModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -40,6 +41,7 @@ namespace Traffic
 
 	// Police cars are dark blue.
 	const FLinearColor PolicePaint(0.01f, 0.015f, 0.05f);
+	const FLinearColor TaxiPaint(0.01f, 0.01f, 0.01f);
 
 	// Half the width of the corridor a car watches for others (cm).
 	constexpr float CorridorHalfWidth = 220.f;
@@ -116,7 +118,7 @@ void ATrafficManager::Tick(float DeltaSeconds)
 	{
 		DrawDebugView();
 	}
-	if (CarsToReplace > 0)
+	if (CarsToReplace + TaxisToReplace > 0)
 	{
 		ReplaceCars();
 	}
@@ -132,13 +134,15 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	const FVector Location = Car->GetActorLocation();
 	const FRotator Facing(0.f, Car->GetActorRotation().Yaw, 0.f);
 	const FLinearColor Paint = Car->GetPaint();
+	const bool bTaxi = Cast<ATrafficTaxi>(Car) != nullptr;
 	Car->LeaveTraffic();
 	Cars.Remove(Car);
 	Car->Destroy();
 
 	// The same car, now one the player drives (it settles onto the ground itself).
 	const FTransform Place(Facing, Location + FVector(0.f, 0.f, Traffic::StolenLift));
-	APestiCar* Stolen = World->SpawnActorDeferred<APestiCar>(APestiCar::StaticClass(), Place, nullptr, nullptr,
+	// A taxi stays a taxi, so the player can work in it.
+	APestiCar* Stolen = World->SpawnActorDeferred<APestiCar>(bTaxi ? APestiTaxi::StaticClass() : APestiCar::StaticClass(), Place, nullptr, nullptr,
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Stolen)
 	{
@@ -146,7 +150,7 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	}
 	Stolen->BodyColor = Paint;
 	Stolen->FinishSpawning(Place);
-	++CarsToReplace;
+	++(bTaxi ? TaxisToReplace : CarsToReplace);
 
 	// The driver gets out on the side away from the player and runs off.
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
@@ -217,15 +221,16 @@ void ATrafficManager::ReplaceCars()
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		ATrafficCar* Car = GetWorld()->SpawnActor<ATrafficCar>(ATrafficCar::StaticClass(), Location, Facing, SpawnParams);
+		const bool bTaxi = TaxisToReplace > 0;
+		ATrafficCar* Car = GetWorld()->SpawnActor<ATrafficCar>(bTaxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass(), Location, Facing, SpawnParams);
 		if (!Car)
 		{
 			continue;
 		}
-		Car->StartOnLane(this, LaneIdx, PointIdx + 1,
-			Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)]);
+		Car->StartOnLane(this, LaneIdx, PointIdx + 1, bTaxi ? Traffic::TaxiPaint
+			: Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)]);
 		Cars.Add(Car);
-		--CarsToReplace;
+		--(bTaxi ? TaxisToReplace : CarsToReplace);
 		return;
 	}
 }
@@ -543,14 +548,15 @@ void ATrafficManager::SpawnCars()
 
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
 		const bool bPolice = Cars.Num() < NumPolice;
-		UClass* CarClass = bPolice ? APoliceCar::StaticClass() : ATrafficCar::StaticClass();
+		const bool bTaxi = !bPolice && Cars.Num() < NumPolice + NumTaxis;
+		UClass* CarClass = bPolice ? APoliceCar::StaticClass() : bTaxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
 		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 		if (!Car)
 		{
 			continue;
 		}
-		const FLinearColor& Paint = bPolice
-			? Traffic::PolicePaint
+		const FLinearColor& Paint = bPolice ? Traffic::PolicePaint
+			: bTaxi ? Traffic::TaxiPaint
 			: Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)];
 		Car->StartOnLane(this, LaneIdx, PointIdx + 1, Paint);
 		Cars.Add(Car);

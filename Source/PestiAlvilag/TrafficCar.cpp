@@ -266,3 +266,8 @@ void ATrafficCar::UpdateTrafficators(float DistToJunction)
 	TrafficatorLeft->SetVisibility(bLeft);
 	TrafficatorRight->SetVisibility(bRight);
 }
+
+ATrafficTaxi::ATrafficTaxi()
+{
+	CarBody::BuildTaxi(this, CollisionBox, BodyParts, BodyPaints);
+}
