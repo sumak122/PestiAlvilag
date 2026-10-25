@@ -59,6 +59,19 @@ public:
 	int32 GetTaxiJobs() const { return TaxiJobs; }
 	void AddTaxiJob() { ++TaxiJobs; }
 
+	/** Dishes eaten at least once; true the first time. */
+	bool TryDish(FName DishId)
+	{
+		if (TriedDishes.Contains(DishId))
+		{
+			return false;
+		}
+		TriedDishes.Add(DishId);
+		return true;
+	}
+	bool HasTriedDish(FName DishId) const { return TriedDishes.Contains(DishId); }
+	int32 GetDishesTried() const { return TriedDishes.Num(); }
+
 	void MarkMissionDone(FName MissionId);
 	bool IsMissionDone(FName MissionId) const { return CompletedMissions.Contains(MissionId); }
 
@@ -82,6 +95,7 @@ private:
 	int32 Money = 0;
 	TArray<FName> CompletedMissions;
 	int32 TaxiJobs = 0;
+	TArray<FName> TriedDishes;
 	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;

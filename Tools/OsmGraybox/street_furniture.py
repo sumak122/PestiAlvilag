@@ -18,6 +18,8 @@ that the AStreetFurniture actor reads:
   Keleti station, each {"name", "taxis": [[x, y, yaw], ...], "sign": [x, y, yaw]};
 - taxi_destinations: where a taxi can take the player, a pavement spot at
   each, {"name", "at": [x, y, yaw]};
+- food_vendors: street food sellers near story places, {"kind", "at":
+  [x, y, yaw]} beside the pavement walking line, facing it;
 - tram_stops: one per stop place on the tram tracks (lines sharing a track
   share it), {"name", "at": [x, y, yaw] on the track facing the way the
   tram runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
@@ -577,6 +579,50 @@ def place_tram_stops(data, space, sidewalks):
     return stops
 
 
+# Street food sellers near story places: what they sell, a point near the
+# place, or a spot laid out by hand [x, y, yaw] where no pavement is near.
+FOOD_VENDORS = [
+    ("chestnuts", (-6000, 1500), None),        # by the Népszínház
+    ("sausages", None, [90700, -41500, 180.0]), # Baross tér, in front of Keleti
+    ("pretzels", (105715, 29355), None),        # Teleki tér
+    ("chestnuts", (61300, 1100), None),         # Tisza Kálmán tér
+]
+VENDOR_OFF_WALK = 150
+
+
+def place_food_vendors(space, sidewalks):
+    """Each seller a step off the nearest walking line, on the side away
+    from the traffic, facing the passers-by."""
+    lines = [LineString(ring_points(w)) for w in sidewalks]
+    out = []
+    for kind, anchor, fixed in FOOD_VENDORS:
+        if fixed:
+            out.append({"kind": kind, "at": fixed})
+            continue
+        near = Point(anchor)
+        line = min(lines, key=lambda l: l.distance(near))
+        along = line.project(near)
+        p = line.interpolate(along)
+        a = line.interpolate(max(along - 50, 0))
+        b = line.interpolate(min(along + 50, line.length))
+        dx, dy = unit(b.x - a.x, b.y - a.y)
+        best = None
+        for side in (1, -1):
+            x, y = p.x - dy * VENDOR_OFF_WALK * side, p.y + dx * VENDOR_OFF_WALK * side
+            spot = Point(x, y)
+            if space.near_building(spot, 80):
+                continue
+            room = min((space.lanes[i].distance(spot) for i in space.lane_tree.query(spot.buffer(3000))), default=3000)
+            if best is None or room > best[0]:
+                best = (room, x, y, side)
+        if best is None:
+            print(f"No room for a {kind} seller near {anchor}")
+            continue
+        _, x, y, side = best
+        out.append({"kind": kind, "at": [round(x), round(y), yaw_of(dy * side, -dx * side)]})
+    return out
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -861,6 +907,7 @@ def main():
     taxi_stands = place_taxi_stands(data, space)
     taxi_destinations = place_taxi_destinations(sidewalks)
     tram_stops = place_tram_stops(data, space, sidewalks)
+    food_vendors = place_food_vendors(space, sidewalks)
 
     out = {
         "version": 1,
@@ -873,6 +920,7 @@ def main():
         "taxi_stands": taxi_stands,
         "taxi_destinations": taxi_destinations,
         "tram_stops": tram_stops,
+        "food_vendors": food_vendors,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:

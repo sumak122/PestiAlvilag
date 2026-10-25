@@ -30,4 +30,8 @@ public:
 	/** Taxi fares the player has driven for the company. */
 	UPROPERTY()
 	int32 TaxiJobs = 0;
+
+	/** Dishes the player has eaten at least once, by id (FoodMenus). */
+	UPROPERTY()
+	TArray<FName> TriedDishes;
 };
