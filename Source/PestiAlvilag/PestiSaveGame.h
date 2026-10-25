@@ -26,4 +26,8 @@ public:
 	/** Missions finished, by name. */
 	UPROPERTY()
 	TArray<FName> CompletedMissions;
+
+	/** Taxi fares the player has driven for the company. */
+	UPROPERTY()
+	int32 TaxiJobs = 0;
 };

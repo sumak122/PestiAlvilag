@@ -20,7 +20,8 @@ struct FFurniturePart;
  * advertising columns near street corners, benches in the parks, and the
  * 1932 Tisza Kálmán tér with gravel paths, flower beds, autumn trees,
  * benches, lamps and a low railing, leaf piles and the park keepers who
- * rake them. It also starts the leaves blowing about (AFallingLeaves).
+ * rake them, and the taxi stands near the Népszínház and Keleti with
+ * their parked taxis. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
  * shape and colour, so thousands of them cost little.
@@ -75,6 +76,8 @@ private:
 
 	void BuildStreets(const FJsonObject& Root);
 	void BuildTiszaKalmanTer(const FJsonObject& Park);
+	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */
+	void BuildTaxiStands(const FJsonObject& Root);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;

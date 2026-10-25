@@ -60,6 +60,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	int32 NumPolice = 6;
 
+	/** How many of the cars are taxis. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	int32 NumTaxis = 12;
+
 	/** No two cars start closer than this (cm). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float MinSpawnSpacing = 1000.f;
@@ -137,6 +141,7 @@ private:
 	void ReplaceCars();
 	void DrawDebugView() const;
 	int32 CarsToReplace = 0;
+	int32 TaxisToReplace = 0;
 
 	bool bShowDebug = false;
 

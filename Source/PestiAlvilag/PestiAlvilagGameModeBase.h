@@ -55,6 +55,10 @@ public:
 	/** Money as the period wrote it, for example "1,20 pengő". */
 	static FString FormatMoney(int32 Filler);
 
+	/** Taxi fares driven for the company, over all shifts. */
+	int32 GetTaxiJobs() const { return TaxiJobs; }
+	void AddTaxiJob() { ++TaxiJobs; }
+
 	void MarkMissionDone(FName MissionId);
 	bool IsMissionDone(FName MissionId) const { return CompletedMissions.Contains(MissionId); }
 
@@ -77,6 +81,7 @@ private:
 	int32 WantedLevel = 0;
 	int32 Money = 0;
 	TArray<FName> CompletedMissions;
+	int32 TaxiJobs = 0;
 	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;

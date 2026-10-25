@@ -26,6 +26,9 @@ namespace TaxiCompany
 	// On-screen message slots (the car and person use 1, the police 2 and 3).
 	constexpr int32 StatusLine = 4;
 	constexpr int32 SpeechLine = 6;
+	constexpr int32 RegularLine = 10;
+	// After this many fares the player rides in taxis at half fare (see ATaxiRides).
+	constexpr int32 RegularAfterJobs = 20;
 
 	// Fares stand this far to the left of their lane, on the pavement (cm).
 	constexpr float KerbOffsets[] = { 350.f, 220.f };
@@ -434,6 +437,12 @@ void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
 			Game->AddMoney(Earned);
+			Game->AddTaxiJob();
+			if (Game->GetTaxiJobs() == TaxiCompany::RegularAfterJobs && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(TaxiCompany::RegularLine, 10.f, FColor(255, 210, 60), FString::Printf(
+					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on."), TaxiCompany::RegularAfterJobs));
+			}
 		}
 		const FString Thanks = Tip > 0
 			? FString(TEXT("\u201eK\u00f6sz\u00f6n\u00f6m, a t\u00f6bbi a mag\u00e1\u00e9.\u201d  (Thank you, keep the change.)"))
