@@ -7,6 +7,7 @@
 #include "Styling/SlateBrush.h"
 #include "FoodMenus.generated.h"
 
+class ACafeWaiter;
 class SWidget;
 class UTexture2D;
 
@@ -50,8 +51,8 @@ namespace Food
 
 /**
  * Buying food, in the manner of the Yakuza games: on foot by a place that
- * sells food (the café by Bözsi néni's door, the Keleti station restaurant,
- * a street seller's cart), E opens its menu: the dishes on the left with
+ * sells food (the Keleti station restaurant, a street seller's cart), or by
+ * the waiter on the café terrace at Bözsi néni's door, E opens its menu: the dishes on the left with
  * their prices, the chosen one's picture and a few words about it on the
  * right. W/S or the arrow keys choose, E or Enter orders, Q leaves. The
  * game remembers which dishes you have tried. The game mode spawns one.
@@ -76,12 +77,14 @@ private:
 		FVector Location;
 		float Radius;
 		EFoodMenu Menu;
+		/** The café: you order from its waiter, wherever he is. */
+		ACafeWaiter* Waiter = nullptr;
 	};
 
 	/** The places to order from: the café, the restaurant and every seller. */
 	void GatherOrderPoints(TArray<FOrderPoint>& Out) const;
 	void LoadPictures();
-	void Open(EFoodMenu Which);
+	void Open(EFoodMenu Which, ACafeWaiter* Waiter);
 	void Close();
 	void Order();
 	void Say(const FString& Text, float Seconds = 6.f) const;
@@ -97,4 +100,6 @@ private:
 	TSharedPtr<SWidget> MenuWidget;
 	EFoodMenu OpenMenu = EFoodMenu::Count;
 	int32 Selected = 0;
+	/** The waiter taking the order, who stands by you while the menu is open. */
+	TWeakObjectPtr<ACafeWaiter> Attending;
 };

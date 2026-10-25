@@ -34,11 +34,16 @@ namespace PestiPerson
 
 	constexpr double MinTimeOnFoot = 0.3;
 
-	// Riding a tram: the camera close behind him on his bench, kept under
-	// the roof; C moves it out to see the whole tram (cm, degrees).
-	constexpr float SeatArmLength = 170.f;
-	constexpr float SeatMinPitch = -25.f;
+	// The camera's pivot above his middle, on foot (cm).
+	constexpr float PivotHeight = 60.f;
+	// Riding a tram: the camera just over his head and a little behind,
+	// kept under the roof, looking along the car; C moves it out to see
+	// the whole tram (cm, degrees).
+	constexpr float SeatArmLength = 130.f;
+	constexpr float SeatPivotHeight = 90.f;
+	constexpr float SeatMinPitch = -12.f;
 	constexpr float RideArmLength = 1100.f;
+	constexpr float RidePivotHeight = 150.f;
 }
 
 APestiPerson::APestiPerson()
@@ -63,7 +68,7 @@ APestiPerson::APestiPerson()
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
 	CameraArm->SetupAttachment(GetCapsuleComponent());
 	CameraArm->TargetArmLength = PestiPerson::ArmLength;
-	CameraArm->SocketOffset = FVector(0.f, 0.f, 60.f);
+	CameraArm->SocketOffset = FVector(0.f, 0.f, PestiPerson::PivotHeight);
 	CameraArm->bUsePawnControlRotation = true;
 	CameraArm->bEnableCameraLag = true;
 	CameraArm->CameraLagSpeed = 12.f;
@@ -294,15 +299,24 @@ void APestiPerson::RideOn(AActor* Vehicle, const FVector& SeatAt, double SeatYaw
 	RideSeat = FTransform(FRotator(0.0, SeatYaw, 0.0), SeatAt);
 	AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	SetActorRelativeTransform(RideSeat);
-	// The camera rides with him, without lagging behind into the woodwork.
+	// The camera rides with him, without lagging behind into the woodwork,
+	// and without being pushed in by the tram it sits in.
 	CameraArm->bEnableCameraLag = false;
-	SetRideView(false, Cast<APlayerController>(GetController()));
+	CameraArm->bDoCollisionTest = false;
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		// Look along the car, the way it runs.
+		PC->SetControlRotation(FRotator(-5.f, Vehicle->GetActorRotation().Yaw, 0.f));
+	}
+	SetRideView(false, PC);
 }
 
 void APestiPerson::SetRideView(bool bOutside, APlayerController* PC)
 {
 	bRideOutside = bOutside;
 	CameraArm->TargetArmLength = bOutside ? PestiPerson::RideArmLength : PestiPerson::SeatArmLength;
+	CameraArm->SocketOffset = FVector(0.f, 0.f, bOutside ? PestiPerson::RidePivotHeight : PestiPerson::SeatPivotHeight);
 	if (PC && !bOutside)
 	{
 		const FRotator View = PC->GetControlRotation();
@@ -325,6 +339,8 @@ bool APestiPerson::GetOffAt(const FVector& At, double Yaw)
 			bRideOutside = false;
 			CameraArm->TargetArmLength = PestiPerson::ArmLength;
 			CameraArm->bEnableCameraLag = true;
+			CameraArm->bDoCollisionTest = true;
+			CameraArm->SocketOffset = FVector(0.f, 0.f, PestiPerson::PivotHeight);
 			PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
 			return true;
 		}

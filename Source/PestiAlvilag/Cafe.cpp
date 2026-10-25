@@ -389,7 +389,14 @@ void ACafeWaiter::Tick(float DeltaSeconds)
 	AActor::Tick(DeltaSeconds);
 
 	float Legs = 0.f;
-	if (Wait > 0.f || Tables.IsEmpty())
+	if (const AActor* Taking = Customer.Get())
+	{
+		// Taking an order: stand still and face the customer.
+		const FVector ToCustomer = Taking->GetActorLocation() - GetActorLocation();
+		const float WantYaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToCustomer.Y, ToCustomer.X)));
+		SetActorRotation(FRotator(0.f, FMath::FixedTurn(static_cast<float>(GetActorRotation().Yaw), WantYaw, Cafe::WaiterTurn * DeltaSeconds), 0.f));
+	}
+	else if (Wait > 0.f || Tables.IsEmpty())
 	{
 		Wait -= DeltaSeconds;
 	}

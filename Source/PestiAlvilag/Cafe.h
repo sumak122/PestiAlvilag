@@ -79,7 +79,8 @@ private:
 /**
  * The waiter: white jacket, black trousers, a tray in hand. He comes out of
  * the café door, goes to a table, waits there a moment and goes back in,
- * one table after another.
+ * one table after another. Called over to take an order, he stops and
+ * stands facing the customer until they have chosen.
  */
 UCLASS()
 class PESTIALVILAG_API ACafeWaiter : public AStoryPerson
@@ -94,6 +95,9 @@ public:
 	/** The café door first, then the tables (world points on the ground). */
 	void SetRounds(const FVector& InDoor, const TArray<FVector>& InTables);
 
+	/** Stops his rounds to take Customer's order; null sends him back to them. */
+	void Attend(const AActor* InCustomer) { Customer = InCustomer; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Waiter")
 	TObjectPtr<UStaticMeshComponent> Tray;
@@ -107,4 +111,5 @@ private:
 	bool bGoingToTable = true;
 	float Wait = 0.f;
 	float Phase = 0.f;
+	TWeakObjectPtr<const AActor> Customer;
 };
