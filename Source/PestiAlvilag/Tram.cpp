@@ -4,9 +4,14 @@
 
 #include "CarBody.h"
 #include "Components/BoxComponent.h"
-#include "Components/StaticMeshComponent.h"
+#include "Components/SceneComponent.h"
+#include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "PersonModel.h"
+#include "ProceduralMeshComponent.h"
 #include "TrafficManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace Tram
 {
@@ -23,8 +28,32 @@ namespace Tram
 	constexpr float MaxTurnaround = 15.f;
 	// Room the tram needs at the start of its route to come back in (cm).
 	constexpr float StartRoom = 1500.f;
-	// Budapest trams were yellow.
-	const FLinearColor Livery(0.85f, 0.55f, 0.03f);
+	// The colour of each TramModel part. Budapest trams were yellow.
+	const FLinearColor Colors[TramModel::PartCount] = {
+		FLinearColor(0.85f, 0.55f, 0.03f),    // Livery
+		FLinearColor(0.25f, 0.14f, 0.07f),    // Wood
+		FLinearColor(0.05f, 0.05f, 0.05f),    // Dark
+		FLinearColor(0.22f, 0.22f, 0.22f),    // Roof
+		FLinearColor(1.00f, 0.85f, 0.55f),    // Lamp
+		FLinearColor(0.55f, 0.42f, 0.15f),    // Brass
+		FLinearColor(0.15f, 0.07f, 0.04f),    // Leather
+		// See-through: colour and how much it hides (alpha).
+		FLinearColor(0.60f, 0.66f, 0.66f, 0.18f) };  // Glass
+	// How many passengers sit on each tram (the rest is room for the player).
+	constexpr int32 MinPassengers = 1;
+	constexpr int32 MaxPassengers = 4;
+
+	/** The body is the same for every tram: make it once. */
+	const TramModel::FBuilder& Model()
+	{
+		static const TramModel::FBuilder Built = []()
+		{
+			TramModel::FBuilder B;
+			TramModel::Build(B);
+			return B;
+		}();
+		return Built;
+	}
 }
 
 ATram::ATram()
@@ -38,7 +67,121 @@ ATram::ATram()
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
-	CarBody::BuildTram(this, CollisionBox, BodyParts, BodyPaints);
+	Body = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(CollisionBox);
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body->SetCanEverAffectNavigation(false);
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
+	SeeThroughMaterial = Translucent.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture> White(TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+	WhiteTexture = White.Object;
+}
+
+void ATram::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	BuildBody();
+}
+
+void ATram::BuildBody()
+{
+	const TramModel::FBuilder& B = Tram::Model();
+	Body->ClearAllMeshSections();
+	for (int32 i = 0; i < TramModel::PartCount; ++i)
+	{
+		const TramModel::FPart& Part = B.Parts[i];
+		Body->CreateMeshSection_LinearColor(i, Part.Vertices, Part.Triangles, Part.Normals,
+			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+		if (i == TramModel::Glass)
+		{
+			if (!SeeThroughMaterial)
+			{
+				// No see-through material: leave the panes out, as clear glass.
+				Body->ClearMeshSection(i);
+				continue;
+			}
+			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(SeeThroughMaterial, this);
+			if (WhiteTexture)
+			{
+				Material->SetTextureParameterValue(TEXT("SlateUI"), WhiteTexture);
+			}
+			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
+			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tram::Colors[i]);
+			Body->SetMaterial(i, Material);
+		}
+		else if (BaseMaterial)
+		{
+			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			Material->SetVectorParameterValue(TEXT("Color"), Tram::Colors[i]);
+			Body->SetMaterial(i, Material);
+		}
+	}
+}
+
+void ATram::SeatPassengers()
+{
+	for (USceneComponent* Seat : PassengerSeats)
+	{
+		if (Seat)
+		{
+			Seat->DestroyComponent();
+		}
+	}
+	for (UProceduralMeshComponent* Piece : PassengerPieces)
+	{
+		if (Piece)
+		{
+			Piece->DestroyComponent();
+		}
+	}
+	PassengerSeats.Reset();
+	PassengerPieces.Reset();
+	TakenSeats.Reset();
+
+	FRandomStream Random(FMath::Rand());
+	const int32 Count = Random.RandRange(Tram::MinPassengers, Tram::MaxPassengers);
+	while (TakenSeats.Num() < Count)
+	{
+		const int32 Index = Random.RandRange(0, TramModel::NumSeats - 1);
+		if (TakenSeats.Contains(Index))
+		{
+			continue;
+		}
+		TakenSeats.Add(Index);
+		const TramModel::FSeat Place = TramModel::Seat(Index, PersonModel::SeatedMiddle);
+
+		USceneComponent* Seat = NewObject<USceneComponent>(this);
+		Seat->SetupAttachment(CollisionBox);
+		Seat->SetRelativeLocationAndRotation(Place.At, FRotator(0.0, Place.Yaw, 0.0));
+		Seat->RegisterComponent();
+		AddInstanceComponent(Seat);
+		PassengerSeats.Add(Seat);
+
+		PersonKit::FOutfit Outfit = PersonModel::RandomOutfit(Random);
+		Outfit.bSeated = true;
+		// Hands free on a tram (no umbrella poking through the bench).
+		Outfit.Held = PersonKit::EHeld::None;
+		TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
+		PersonModel::Dress(this, Seat, BaseMaterial, Outfit, Pieces);
+		PassengerPieces.Append(Pieces);
+	}
+}
+
+int32 ATram::GetFreeSeat() const
+{
+	// Nearest the middle of the car first, so the player sits in view.
+	for (const int32 Along : { 2, 3, 1, 4, 0, 5 })
+	{
+		for (const int32 Side : { 0, TramModel::SeatsPerSide })
+		{
+			if (!TakenSeats.Contains(Along + Side))
+			{
+				return Along + Side;
+			}
+		}
+	}
+	return INDEX_NONE;
 }
 
 void ATram::StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance)
@@ -63,7 +206,7 @@ void ATram::StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float I
 		? Hit.ImpactPoint.Z
 		: 0.0;
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Tram::Livery);
+	SeatPassengers();
 	PlaceOnTrack();
 }
 

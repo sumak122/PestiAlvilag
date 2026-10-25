@@ -34,7 +34,10 @@ namespace PestiPerson
 
 	constexpr double MinTimeOnFoot = 0.3;
 
-	// The camera stands this far back while riding a tram (cm).
+	// Riding a tram: the camera close behind him on his bench, kept under
+	// the roof; C moves it out to see the whole tram (cm, degrees).
+	constexpr float SeatArmLength = 170.f;
+	constexpr float SeatMinPitch = -25.f;
 	constexpr float RideArmLength = 1100.f;
 }
 
@@ -96,11 +99,16 @@ void APestiPerson::Tick(float DeltaSeconds)
 		PC->SetControlRotation(FRotator(-10.f, GetActorRotation().Yaw, 0.f));
 		bCameraAimed = true;
 	}
-	Look(PC, DeltaSeconds);
 	if (bRiding)
 	{
+		if (PC->WasInputKeyJustPressed(EKeys::C) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
+		{
+			SetRideView(!bRideOutside, PC);
+		}
+		Look(PC, DeltaSeconds);
 		return;
 	}
+	Look(PC, DeltaSeconds);
 	Walk(PC);
 
 	if (bCarrying)
@@ -141,7 +149,8 @@ void APestiPerson::Look(APlayerController* PC, float DeltaSeconds)
 		return;
 	}
 	const FRotator View = PC->GetControlRotation();
-	const float Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Pitch + TurnY), PestiPerson::MinPitch, PestiPerson::MaxPitch);
+	const float LowestPitch = bRiding && !bRideOutside ? PestiPerson::SeatMinPitch : PestiPerson::MinPitch;
+	const float Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Pitch + TurnY), LowestPitch, PestiPerson::MaxPitch);
 	PC->SetControlRotation(FRotator(Pitch, View.Yaw + TurnX, 0.f));
 }
 
@@ -268,16 +277,33 @@ void APestiPerson::SetInWorld(bool bInWorld)
 	}
 }
 
-void APestiPerson::RideOn(AActor* Vehicle)
+void APestiPerson::RideOn(AActor* Vehicle, const FVector& SeatAt, double SeatYaw)
 {
 	bRiding = true;
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
-	SetActorHiddenInGame(true);
 	SetActorEnableCollision(false);
+	PersonKit::FOutfit Seated = PersonModel::PlayerOutfit();
+	Seated.bSeated = true;
+	PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, Seated, Pieces);
+	RideSeat = FTransform(FRotator(0.0, SeatYaw, 0.0), SeatAt);
 	AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-	SetActorRelativeLocation(FVector::ZeroVector);
-	CameraArm->TargetArmLength = PestiPerson::RideArmLength;
+	SetActorRelativeTransform(RideSeat);
+	// The camera rides with him, without lagging behind into the woodwork.
+	CameraArm->bEnableCameraLag = false;
+	SetRideView(false, Cast<APlayerController>(GetController()));
+}
+
+void APestiPerson::SetRideView(bool bOutside, APlayerController* PC)
+{
+	bRideOutside = bOutside;
+	CameraArm->TargetArmLength = bOutside ? PestiPerson::RideArmLength : PestiPerson::SeatArmLength;
+	if (PC && !bOutside)
+	{
+		const FRotator View = PC->GetControlRotation();
+		const float Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Pitch), PestiPerson::SeatMinPitch, PestiPerson::MaxPitch);
+		PC->SetControlRotation(FRotator(Pitch, View.Yaw, 0.f));
+	}
 }
 
 bool APestiPerson::GetOffAt(const FVector& At, double Yaw)
@@ -291,13 +317,17 @@ bool APestiPerson::GetOffAt(const FVector& At, double Yaw)
 		if (TryStepOutAt(At + Along * Step, Yaw))
 		{
 			bRiding = false;
+			bRideOutside = false;
 			CameraArm->TargetArmLength = PestiPerson::ArmLength;
+			CameraArm->bEnableCameraLag = true;
+			PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
 			return true;
 		}
 	}
 	if (Vehicle)
 	{
 		AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		SetActorRelativeTransform(RideSeat);
 	}
 	return false;
 }

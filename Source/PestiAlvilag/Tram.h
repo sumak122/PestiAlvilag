@@ -3,20 +3,25 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
 #include "GameFramework/Actor.h"
+#include "TramModel.h"
 #include "Tram.generated.h"
 
 class ATrafficManager;
 class UBoxComponent;
 class UMaterialInterface;
-class UStaticMeshComponent;
+class UProceduralMeshComponent;
+class USceneComponent;
+class UTexture;
 
 /**
  * A tram that runs one route along its track, stops at the stops, and
  * brakes for anything on the rails in front of it, but never steers round
  * it. At the end of the route (the map edge) it leaves and comes back in at
  * the start a little later, as if it had gone round the city.
+ *
+ * The body is TramModel's: open platforms at the ends and a saloon with
+ * wooden benches, where a few passengers sit (and the player, riding).
  */
 UCLASS()
 class PESTIALVILAG_API ATram : public AActor
@@ -27,6 +32,7 @@ public:
 	ATram();
 
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 	/** Called by the manager right after spawning. */
 	void StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance);
@@ -41,6 +47,9 @@ public:
 	bool IsInService() const { return OutOfServiceLeft <= 0.f; }
 	/** Keeps the doors open at least this long more (s). */
 	void HoldAtStop(float Seconds) { if (IsAtStop()) { DwellLeft = FMath::Max(DwellLeft, Seconds); } }
+
+	/** A bench seat no passenger sits on (TramModel::Seat index), or INDEX_NONE. */
+	int32 GetFreeSeat() const;
 
 	/** Cruising speed (cm/s); 700 is about 25 km/h. */
 	UPROPERTY(EditAnywhere, Category = "Tram")
@@ -65,16 +74,34 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Tram")
 	TObjectPtr<UBoxComponent> CollisionBox;
 
+	/** One mesh section per TramModel part. */
 	UPROPERTY(VisibleAnywhere, Category = "Tram")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	TObjectPtr<UProceduralMeshComponent> Body;
+
+	/** The seated passengers' legs, arms and bodies. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> PassengerPieces;
+
+	/** Where each passenger sits (their middle), on the tram. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USceneComponent>> PassengerSeats;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
+
+	/** The windows: the engine's see-through widget material. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> SeeThroughMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UTexture> WhiteTexture;
 
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<ATrafficManager> Manager;
 
+	void BuildBody();
+	void SeatPassengers();
 	void PlaceOnTrack();
 	void SetInService(bool bInService);
 	bool IsStartClear() const;
@@ -89,5 +116,6 @@ private:
 	/** Seconds until the tram comes back in at the start of its route. */
 	float OutOfServiceLeft = 0.f;
 	double GroundZ = 0.0;
-	TArray<CarBody::EPaint> BodyPaints;
+	/** The seats the passengers sit on. */
+	TArray<int32> TakenSeats;
 };
