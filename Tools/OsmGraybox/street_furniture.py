@@ -24,6 +24,13 @@ that the AStreetFurniture actor reads:
   share it), {"name", "at": [x, y, yaw] on the track facing the way the
   tram runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
   "wait": [x, y] where passengers wait and get off};
+- shops, gates: the shop fronts and tenement gates on the ground floors of
+  Népszínház utca, each shop {"at": [x, y, yaw] at the middle of its front
+  on the wall foot, facing out, "width", "trade", "fascia" (the big
+  lettering: the owner, the trade or the shop's sign name), "glass" (the
+  smaller lettering on the window), "blade" (words for a hanging sign),
+  "seed", "closed", "outside" (goods on the pavement), "keeper"}, each
+  gate {"at", "width", "number"} (the house number);
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in;
@@ -43,7 +50,7 @@ import math
 import zlib
 
 from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import unary_union
+from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
 from shapely.strtree import STRtree
 
@@ -1384,6 +1391,206 @@ def layout_tisza(space, park):
     }
 
 
+# The shops of Népszínház utca (early 1930s): every street-facing wall of
+# the street gets wooden shop fronts and tenement gates on its ground
+# floor, lined up with the bays of the facade above (the same sums as
+# AddFacade in OsmGraybox.cpp). Sign lettering keeps to letters the
+# in-game font has (no ő or ű).
+SHOP_STREET = "Népszínház utca"
+SHOP_STREET_REACH = 1800    # walls this close to the street's middle line (cm)
+SHOP_MIN_WALL = 300
+SHOP_PARALLEL = 0.9         # |cos| between the wall and the street
+FACADE_EDGE_MARGIN = 60     # as Facade::EdgeMargin
+FACADE_BAY = 320            # as Facade::BayWidth
+SHOP_GAP = 24               # bare wall between neighbouring shop fronts
+GATE_MAX_WIDTH = 320
+GATE_EVERY = 9              # long walls (several houses) get a gate every so many bays
+SHOP_CLOSED = 0.07
+SHOP_KEEPER = 0.2
+SHOP_OUTSIDE_CLEAR = 170    # goods on the pavement keep this far from lamps, bins and signs
+SHOP_TRADES = [             # trade, how often, sign words, words on a hanging sign
+    ("grocer", 5, ["GYARMATÁRU ÉS CSEMEGE", "CSEMEGE", "GYARMATÁRU"], "CSEMEGE"),
+    ("baker", 3, ["PÉKSÉG", "KENYÉR ÉS SÜTEMÉNY"], "PÉK"),
+    ("butcher", 3, ["HENTES ÉS MÉSZÁROS", "HENTESÁRU"], "HENTES"),
+    ("shoes", 4, ["CIPÉSZ", "CIPÉSZMESTER", "CIPÉSZ ÉS CSIZMADIA"], "CIPÉSZ"),
+    ("hats", 2, ["KALAPOS", "KALAP ÉS SAPKA"], "KALAP"),
+    ("drapery", 4, ["DIVATÁRU", "ÚRI SZABÓ", "KÖTÖTT ÁRU", "VÁSZON ÉS SZÖVET"], "DIVAT"),
+    ("watches", 2, ["ÓRÁS ÉS ÉKSZERÉSZ", "ÓRÁS"], "ÓRÁS"),
+    ("tobacco", 3, ["DOHÁNY ÉS SZIVAR", "DOHÁNY"], "DOHÁNY"),
+    ("barber", 3, ["BORBÉLY ÉS FODRÁSZ", "FODRÁSZ"], "FODRÁSZ"),
+    ("tavern", 4, ["ITALMÉRÉS", "BOR ÉS SÖR", "KOCSMA"], "SÖR · BOR"),
+    ("greengrocer", 3, ["ZÖLDSÉG ÉS GYÜMÖLCS", "GYÜMÖLCS"], "GYÜMÖLCS"),
+    ("hardware", 2, ["VAS ÉS EDÉNY", "VASKERESKEDÉS"], "VAS"),
+    ("dairy", 2, ["TEJCSARNOK"], "TEJ"),
+    ("stationery", 2, ["PAPÍR ÉS ÍRÓSZER", "KÖNYV ÉS PAPÍR"], "PAPÍR"),
+    ("cafe", 2, ["KÁVÉMÉRÉS", "KÁVÉ ÉS TEA"], "KÁVÉ"),
+]
+SHOP_OUTSIDE = {"greengrocer": 0.9, "grocer": 0.3, "tavern": 0.6, "hardware": 0.7, "baker": 0.3, "dairy": 0.3}
+# Shop sign names in the old Pest way, "at the golden hat" (one of each at most).
+SHOP_NAMES = {
+    "hats": ["AZ ARANY KALAPHOZ"],
+    "shoes": ["A PIROS CSIZMÁHOZ"],
+    "grocer": ["AZ ARANY KOSÁRHOZ", "A KÉT OROSZLÁNHOZ"],
+    "baker": ["A FEHÉR GALAMBHOZ"],
+    "tavern": ["A HÁROM HUSZÁRHOZ", "AZ ARANY SZARVASHOZ"],
+    "drapery": ["A PÁRISI DIVATHOZ"],
+    "watches": ["AZ ARANY ÓRÁHOZ"],
+    "cafe": ["A KÉK MACSKÁHOZ"],
+}
+SHOP_NAMED = 0.25           # share of shops with a sign name, where one is left
+SHOP_TRADE_FIRST = 0.4      # share with the trade on the fascia and the owner on the glass
+# Two chemists along the street, at about these shares of its length.
+PHARMACIES = [(0.3, "SZENT JÓZSEF"), (0.75, "MEGVÁLTÓ")]
+SHOP_OWNERS = [
+    "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
+    "TÓTH ISTVÁN", "NAGY FERENC", "FISCHER ADOLF", "LÖWY DÁVID", "ROTH SAMU", "SPITZER HERMAN", "HORVÁTH GYULA",
+    "VARGA LAJOS", "MOLNÁR ANTAL", "BALOGH IMRE", "FARKAS BÉLA", "SZÉKELY MIKSA", "HELLER MANÓ", "POLLÁK NÁNDOR",
+    "BRAUN TESTVÉREK", "SINGER ÉS TÁRSA", "FRANK HENRIK", "STEINER JÓZSEF", "KISS MIHÁLY", "BAUER KÁROLY",
+    "WALDMANN ÖDÖN", "ADLER RUDOLF", "GLÜCK ARNOLD", "NEUMANN MÁRK", "SIMON PÁL", "PAPP GÁBOR", "LENGYEL ELEK",
+    "HAJDU ZOLTÁN", "FEKETE ANDRÁS", "ENGEL SALAMON", "KRAUSZ BERNÁT", "ROSENBERG IZIDOR", "BÍRÓ JÁNOS",
+    "ÖZV. KERTÉSZ JÁNOSNÉ", "WINTER LÁSZLÓ", "HIRSCH VILMOS", "MAYER FERENC", "GOLDBERGER JAKAB", "DEUTSCH MÓR",
+    "FRIEDMANN SAMU", "SZABÓ KÁLMÁN", "LAKATOS GÉZA", "KELLNER MIKSA",
+    "BLAU JÓNÁS", "GARAI ÁRPÁD", "RÁCZ ISTVÁN", "SÜSS ÁBRAHÁM", "HAAS LIPÓT", "VÁRADI BÉLA",
+    "KEMÉNY ARMIN", "FÜLÖP JÁNOS", "OPPENHEIM MÓRIC", "ZSIGMOND ANTAL", "STERN ADOLF", "KUN MIKLÓS",
+]
+
+
+def shop_walls(data):
+    """The street-facing walls along the shop street, each [p0, p1] with the
+    building's outside on the right, plus the street line."""
+    pieces = [LineString(ring_points(c["points"])) for c in data["centerlines"] if c.get("name") == SHOP_STREET]
+    street = linemerge(pieces)
+    lines = list(street.geoms) if hasattr(street, "geoms") else [street]
+    walls = []
+    for building in data["buildings"]:
+        front = set(building.get("front", []))
+        index = 0
+        for flat in building["rings"]:
+            ring = ring_points(flat)
+            for i, p0 in enumerate(ring):
+                p1 = ring[(i + 1) % len(ring)]
+                if index in front:
+                    length = math.dist(p0, p1)
+                    mid = Point((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+                    line = min(lines, key=lambda l: l.distance(mid))
+                    if length >= SHOP_MIN_WALL and line.distance(mid) < SHOP_STREET_REACH:
+                        t = line.project(mid)
+                        a, b = line.interpolate(max(t - 50, 0)), line.interpolate(min(t + 50, line.length))
+                        dx, dy = unit(b.x - a.x, b.y - a.y)
+                        ex, ey = unit(p1[0] - p0[0], p1[1] - p0[1])
+                        if abs(dx * ex + dy * ey) > SHOP_PARALLEL:
+                            near = line.interpolate(t)
+                            # Left of the way the street runs from Blaha Lujza tér: odd numbers.
+                            left = dx * (mid.y - near.y) - dy * (mid.x - near.x) < 0
+                            walls.append({"id": building["id"], "p0": p0, "p1": p1, "t": t + sum(l.length for l in lines[:lines.index(line)]), "left": left})
+                index += 1
+    return walls, lines
+
+
+def place_shops(data, furniture_spots):
+    """Shop fronts and gates on the ground floors of the shop street."""
+    walls, lines = shop_walls(data)
+    total = sum(l.length for l in lines)
+    clear = [Point(x, y) for x, y in furniture_spots]
+    clear_tree = STRtree(clear) if clear else None
+    trades = [t for t in SHOP_TRADES for _ in range(t[1])]
+    shops, gates = [], []
+    owners = sorted(SHOP_OWNERS, key=lambda n: chance("owner", n))
+    pharmacies = list(PHARMACIES)
+    numbers = {True: 1, False: 2}
+    last_trade = None
+    used_names = set()
+    for wall in sorted(walls, key=lambda w: (not w["left"], w["t"])):
+        (x0, y0), (x1, y1) = wall["p0"], wall["p1"]
+        length = math.dist(wall["p0"], wall["p1"])
+        ax, ay = unit(x1 - x0, y1 - y0)
+        ox, oy = ay, -ax
+        yaw = yaw_of(ox, oy)
+        bays = max(1, int((length - 2 * FACADE_EDGE_MARGIN) // FACADE_BAY))
+        bay = (length - 2 * FACADE_EDGE_MARGIN) / bays
+        # The house gates: the middle bay as on the facade, more on long walls.
+        gate_bays = set()
+        if bays >= 3:
+            gate_bays.add(bays // 2)
+            k = bays // 2 - GATE_EVERY
+            while k >= 1:
+                gate_bays.add(k)
+                k -= GATE_EVERY
+            k = bays // 2 + GATE_EVERY
+            while k < bays - 1:
+                gate_bays.add(k)
+                k += GATE_EVERY
+        # Number the gates the way the street runs.
+        flip = ax * (lines[0].coords[-1][0] - lines[0].coords[0][0]) + ay * (lines[0].coords[-1][1] - lines[0].coords[0][1]) < 0
+
+        def at(s):
+            return x0 + ax * s, y0 + ay * s
+
+        for k in sorted(gate_bays, reverse=flip):
+            gx, gy = at(FACADE_EDGE_MARGIN + bay * (k + 0.5))
+            gates.append({"at": [round(gx), round(gy), yaw], "width": round(min(bay - 20, GATE_MAX_WIDTH)), "number": str(numbers[wall["left"]])})
+            numbers[wall["left"]] += 2
+        k = 0
+        while k < bays:
+            if k in gate_bays:
+                k += 1
+                continue
+            run = 1
+            while k + run < bays and k + run not in gate_bays:
+                run += 1
+            # Cut the run of bays between gates into shops one to three bays wide.
+            while run > 0:
+                r = chance("shopbays", wall["id"], k)
+                n = min(run, 1 if r < 0.3 else 2 if r < 0.75 else 3)
+                s = FACADE_EDGE_MARGIN + bay * (k + n / 2)
+                sx, sy = at(s)
+                share = wall["t"] / total
+                key = ("shop", wall["id"], k)
+                if pharmacies and abs(share - pharmacies[0][0]) < 0.08 and wall["left"] == (len(pharmacies) == 2):
+                    trade, signs, blade = "pharmacy", ["GYÓGYSZERTÁR"], "PATIKA"
+                    owner = pharmacies.pop(0)[1]
+                else:
+                    choices = [t for t in trades if t[0] != last_trade]
+                    trade, _, signs, blade = choices[int(chance(*key) * len(choices))]
+                    owner = owners[len(shops) % len(owners)]
+                last_trade = trade
+                # What the fascia and the window glass say: the owner's name
+                # over the trade, the trade over the owner's name, or a shop
+                # sign name "at the ..." over the trade.
+                trade_words = signs[int(chance("sign", *key) * len(signs))]
+                style = chance("style", *key)
+                names = SHOP_NAMES.get(trade, [])
+                if trade == "pharmacy":
+                    fascia, glass = owner, trade_words
+                elif names and style < SHOP_NAMED and trade not in used_names:
+                    fascia, glass = names[int(chance("name", *key) * len(names))], trade_words
+                    used_names.add(trade)
+                elif style < SHOP_NAMED + SHOP_TRADE_FIRST:
+                    fascia, glass = trade_words, owner
+                else:
+                    fascia, glass = owner, trade_words
+                closed = chance("closed", *key) < SHOP_CLOSED
+                outside = not closed and chance("outside", *key) < SHOP_OUTSIDE.get(trade, 0.0)
+                if outside and clear_tree is not None:
+                    spot = Point(sx + ox * 80, sy + oy * 80).buffer(n * bay / 2 + SHOP_OUTSIDE_CLEAR)
+                    outside = not any(clear[i].intersects(spot) for i in clear_tree.query(spot))
+                shops.append({
+                    "at": [round(sx), round(sy), yaw],
+                    "width": round(n * bay - SHOP_GAP),
+                    "trade": trade,
+                    "fascia": fascia,
+                    "glass": glass,
+                    "blade": blade,
+                    "seed": zlib.crc32(repr(key).encode()) & 0x7FFFFFFF,
+                    "closed": closed,
+                    "outside": outside,
+                    "keeper": not closed and chance("keeper", *key) < SHOP_KEEPER,
+                })
+                k += n
+                run -= n
+    return shops, gates
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("graybox")
@@ -1407,6 +1614,10 @@ def main():
     tram_stops = place_tram_stops(data, space, sidewalks)
     food_vendors = place_food_vendors(space, sidewalks)
     market = place_market(space)
+    spots = [(l[0], l[1]) for l in lamps + columns + bins + benches]
+    spots += [tuple(t["sign"][:2]) for t in tram_stops] + [tuple(v["at"][:2]) for v in food_vendors]
+    spots += [tuple(t["sign"][:2]) for t in taxi_stands] + [tuple(p[:2]) for t in taxi_stands for p in t["taxis"]]
+    shops, gates = place_shops(data, spots)
 
     out = {
         "version": 1,
@@ -1421,11 +1632,13 @@ def main():
         "tram_stops": tram_stops,
         "food_vendors": food_vendors,
         "market": market,
+        "shops": shops,
+        "gates": gates,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls, {len(shops)} shops and {len(gates)} gates on {SHOP_STREET}; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
