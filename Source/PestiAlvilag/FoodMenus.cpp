@@ -247,8 +247,8 @@ void AFoodMenus::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(FoodMenus::HintLine, 0.f, FColor(255, 210, 60),
-			FString::Printf(Nearest->Waiter ? TEXT("E: call the waiter for the menu  (%s, %s)") : TEXT("E: look at the menu  (%s, %s)"),
-				Menu.Title, Menu.English));
+			FString::Printf(TEXT("E: %s  (%s, %s)"),
+				Nearest->Waiter ? TEXT("call the waiter for the menu") : TEXT("look at the menu"), Menu.Title, Menu.English));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::E))
 	{
