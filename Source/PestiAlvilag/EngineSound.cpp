@@ -6,13 +6,13 @@ namespace EngineSound
 {
 	// Crankshaft speed idling and flat out (turns a minute).
 	constexpr float IdleRpm = 650.f;
-	constexpr float TopRpm = 3000.f;
+	constexpr float TopRpm = 2400.f;
 	// A four-stroke four fires twice each turn.
 	constexpr float FiringsPerTurn = 2.f;
 	// How fast a thump dies away (s), and the pitch of its boom against the firing rate.
 	constexpr float ThumpTime = 0.014f;
-	constexpr float ToneRatio = 2.3f;
-	constexpr float ToneBase = 55.f;
+	constexpr float ToneRatio = 1.6f;
+	constexpr float ToneBase = 45.f;
 	// Each cylinder a little different, so it lopes instead of buzzing.
 	const float CylinderStrength[4] = { 1.f, 0.82f, 0.95f, 0.74f };
 	constexpr float BangTime = 0.06f;
@@ -82,10 +82,10 @@ int32 UEngineSound::OnGenerateAudio(float* OutAudio, int32 NumSamples)
 			+ Bang * NextNoise() * 2.5f;
 
 		// Muffle it: more muffled when idling, brighter under load.
-		const float Cutoff = 250.f + 1100.f * SmoothLoad + 600.f * SmoothRevs;
+		const float Cutoff = 220.f + 600.f * SmoothLoad + 300.f * SmoothRevs;
 		const float Smooth = 1.f - FMath::Exp(-2.f * PI * Cutoff / SampleRateHz);
 		Filtered += (Sample - Filtered) * Smooth;
-		Sample = Filtered * EngineSound::Volume * (0.6f + 0.4f * SmoothLoad);
+		Sample = Filtered * EngineSound::Volume * (0.6f + 0.4f * SmoothLoad) * (1.f - 0.25f * SmoothRevs);
 
 		// Soft limit, so a backfire can't clip harshly.
 		OutAudio[i] = Sample / (1.f + FMath::Abs(Sample));

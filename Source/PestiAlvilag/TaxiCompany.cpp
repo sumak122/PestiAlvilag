@@ -211,6 +211,17 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Regulars get the company's special taxi (checked here, after the save is read).
+	if (!bDeluxeTaxiOut)
+	{
+		APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+		if (Game && Game->GetTaxiJobs() >= TaxiCompany::RegularAfterJobs)
+		{
+			Game->SpawnDeluxeTaxi();
+			bDeluxeTaxiOut = true;
+		}
+	}
+
 	// Starting and ending a shift at the kiosk, on foot.
 	const bool bAtKiosk = Player->IsA<APestiPerson>() && FVector::Dist2D(Player->GetActorLocation(), GetActorLocation()) < SignOnRange;
 	if (bAtKiosk && PC->WasInputKeyJustPressed(EKeys::E))
@@ -442,7 +453,7 @@ void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 			if (Game->GetTaxiJobs() == TaxiCompany::RegularAfterJobs && GEngine)
 			{
 				GEngine->AddOnScreenDebugMessage(TaxiCompany::RegularLine, 10.f, FColor(255, 210, 60), FString::Printf(
-					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on."), TaxiCompany::RegularAfterJobs));
+					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on, and the company's red limousine taxi waits for you by the kiosk."), TaxiCompany::RegularAfterJobs));
 			}
 		}
 		const FString Thanks = Tip > 0

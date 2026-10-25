@@ -77,6 +77,9 @@ public:
 
 	/** Home can be slept at once the prologue has led the player there. */
 	bool CanSaveAtHome() const;
+	/** Parks the company's special taxi beside the kiosk, unless it is already in town. */
+	void SpawnDeluxeTaxi();
+
 	/** Writes money and missions done to the save slot. */
 	bool SaveToDisk() const;
 

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "PersonKit.h"
 
 /**
  * The cars of 1932 Pest, made from boxes, bars, cylinders and side-on
@@ -59,7 +60,6 @@ namespace CarModel
 		bool bTaxi = false;
 		/** The police's blue glass lamp by the windscreen (the Accent colour). */
 		bool bPolice = false;
-		bool bDriver = true;
 	};
 
 	struct FPart
@@ -92,7 +92,18 @@ namespace CarModel
 		double RoofTop = 80.0;
 		/** The tail pipe's end, where the smoke comes out. */
 		FVector Exhaust = FVector(-214.0, 40.0, -62.0);
+		/** The front edge of the driver's seat cushion, and its top. */
+		double SeatX = -40.0;
+		double SeatTop = Waist - 46.0;
 	};
+
+	/** The driver sits on the left. */
+	constexpr double DriverY = -36.0;
+	/** How far the driver's arms reach forward to the wheel, and the thighs tilt up (degrees). */
+	constexpr double DriverArmPitch = 70.0;
+	constexpr double DriverLegPitch = 25.0;
+	/** Taller people are made this tall in the car, so their hats stay under the roof (cm). */
+	constexpr double DriverMaxHeight = 174.0;
 
 	inline FLayout Layout(EBody Body)
 	{
@@ -114,12 +125,14 @@ namespace CarModel
 			L.Tail = -186.0;
 			L.Cowl = 32.0;
 			L.RoofTop = 82.0;
+			L.SeatX = -30.0;
 			L.Exhaust = FVector(-226.0, 40.0, -62.0);
 			break;
 		case EBody::Van:
 			L.Tail = -208.0;
 			L.RoofTop = 88.0;
 			L.Exhaust = FVector(-222.0, 44.0, -62.0);
+			L.SeatX = -36.0;
 			break;
 		case EBody::Tourer:
 			L.RoofTop = 52.0;
@@ -483,24 +496,18 @@ namespace CarModel
 		B.Bar(Guards, FVector(X + 6.0, 0.0, Z - 18.0), FVector(X + 18.0, 0.0, Z - 18.0), 4.0);
 	}
 
-	/** The driver at the wheel on the left, and the wheel in front of him. */
-	inline void BuildDriver(FBuilder& B, double SeatX, double SeatTop, double WheelX)
+	/** The driver's seat and the steering wheel in front of it, where the driver (BuildSeatedDriver) holds it. */
+	inline void BuildDriverSeat(FBuilder& B, const FLayout& L)
 	{
-		const double Y = -36.0;
-		// Seat, a little of which shows.
-		B.Box(Leather, FVector(SeatX - 12.0, -62.0, SeatTop - 8.0), FVector(SeatX + 20.0, 62.0, SeatTop));
-		B.Box(Leather, FVector(SeatX - 14.0, -62.0, SeatTop), FVector(SeatX - 6.0, 62.0, SeatTop + 38.0));
-		// Coat, arms to the wheel, head and hat.
-		B.Box(Rubber, FVector(SeatX - 6.0, Y - 15.0, SeatTop), FVector(SeatX + 12.0, Y + 15.0, SeatTop + 44.0));
-		B.Bar(Rubber, FVector(SeatX + 4.0, Y - 13.0, SeatTop + 38.0), FVector(WheelX - 3.0, Y - 11.0, SeatTop + 26.0), 7.0);
-		B.Bar(Rubber, FVector(SeatX + 4.0, Y + 13.0, SeatTop + 38.0), FVector(WheelX - 3.0, Y + 11.0, SeatTop + 26.0), 7.0);
-		B.Box(Skin, FVector(SeatX - 1.0, Y - 4.0, SeatTop + 43.0), FVector(SeatX + 6.0, Y + 4.0, SeatTop + 48.0));
-		B.Ball(Skin, FVector(SeatX + 3.0, Y, SeatTop + 55.0), 8.5);
-		B.Cylinder(Rubber, FVector(SeatX + 3.0, Y, SeatTop + 62.0), 12.0, 1.4, 2, 12);
-		B.Cylinder(Rubber, FVector(SeatX + 3.0, Y, SeatTop + 66.0), 8.0, 7.0, 2, 10);
-		// Steering wheel on its column.
-		B.Ring(Rubber, FVector(WheelX, Y, SeatTop + 27.0), 17.0, 14.5, 2.5, 0, 14);
-		B.Bar(Rubber, FVector(WheelX, Y, SeatTop + 27.0), FVector(WheelX + 26.0, Y, SeatTop - 4.0), 3.0);
+		const double X = L.SeatX;
+		const double Top = L.SeatTop;
+		B.Box(Leather, FVector(X - 12.0, -62.0, Top - 10.0), FVector(X + 20.0, 62.0, Top));
+		B.Box(Leather, FVector(X - 16.0, -62.0, Top), FVector(X - 8.0, 62.0, Waist + 12.0));
+		// The wheel stands up in front of the chest, on a column slanting down into the dash.
+		const FVector Wheel(X + 54.0, DriverY, Top + 35.0);
+		B.Ring(Rubber, Wheel, 19.0, 16.5, 2.5, 0, 16);
+		B.Bar(Rubber, Wheel - FVector(0.0, 16.5, 0.0), Wheel + FVector(0.0, 16.5, 0.0), 1.6);
+		B.Bar(Rubber, Wheel, Wheel + FVector(30.0, 0.0, -26.0), 3.0);
 	}
 
 	/**
@@ -509,7 +516,7 @@ namespace CarModel
 	 * the windscreen and the back.
 	 */
 	inline void BuildClosedBody(FBuilder& B, const FLayout& L, const TArray<FVector2D>& Lower, double GlassBack, double RoofBack,
-		const TArray<double>& Pillars, double SeatX)
+		const TArray<double>& Pillars)
 	{
 		const double W = BodyHalfWidth;
 		const double GlassTop = L.RoofTop - 10.0;
@@ -541,8 +548,27 @@ namespace CarModel
 			B.BothSides(Chrome, FVector(X + 4.0, W, Waist - 9.0), FVector(X + 11.0, W + 1.4, Waist - 7.0));
 		}
 		B.BothSides(Guards, FVector(Screen - 0.6, W, -38.0), FVector(Screen + 0.6, W + 0.4, Waist - 2.0));
-		// Inside: the driver, and the back seat.
-		BuildDriver(B, SeatX, Waist - 30.0, Screen - 22.0);
+		// Inside: the driver's seat and wheel.
+		BuildDriverSeat(B, L);
+	}
+
+	/** The taxi's chequered band below the waist (from BandBack to the windscreen), the roof lamp and the meter flag by the driver. */
+	inline void BuildTaxiMarks(FBuilder& B, const FLayout& L, double BandBack)
+	{
+		for (const double S : { -1.0, 1.0 })
+		{
+			const double Y = S * (BodyHalfWidth + 0.3);
+			B.Box(Accent, FVector(BandBack, Y - 0.3, 2.0), FVector(L.Cowl - 4.0, Y + 0.3, 14.0));
+			int32 Index = 0;
+			for (double X = BandBack; X + 11.0 <= L.Cowl - 4.0; X += 11.0, ++Index)
+			{
+				const double Z = Index % 2 == 0 ? 8.0 : 2.0;
+				B.Box(Rubber, FVector(X, Y - 0.5, Z), FVector(X + 11.0, Y + 0.5, Z + 6.0));
+			}
+		}
+		B.Box(Accent, FVector(-30.0, -24.0, L.RoofTop - 1.0), FVector(-14.0, 24.0, L.RoofTop + 11.0));
+		B.Bar(Chrome, FVector(L.Cowl + 6.0, -44.0, Waist - 4.0), FVector(L.Cowl + 6.0, -44.0, Waist + 22.0), 2.0);
+		B.Box(TailLamp, FVector(L.Cowl + 5.0, -52.0, Waist + 18.0), FVector(L.Cowl + 7.0, -44.0, Waist + 26.0));
 	}
 
 	inline void BuildSaloon(FBuilder& B, const FLayout& L, const FStyle& Style)
@@ -550,27 +576,13 @@ namespace CarModel
 		BuildFront(B, L, 38.0);
 		const double Back = L.Tail;
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 18.0, Waist), FVector2D(Back + 4.0, Waist - 14.0),
-			FVector2D(Back, Waist - 42.0), FVector2D(Back + 6.0, -44.0) }, Back + 20.0, Back + 46.0, { -45.0, -112.0 }, -40.0);
+			FVector2D(Back, Waist - 42.0), FVector2D(Back + 6.0, -44.0) }, Back + 20.0, Back + 46.0, { -45.0, -112.0 });
 		B.Box(Leather, FVector(-128.0, -62.0, Waist - 4.0), FVector(-120.0, 62.0, Waist + 16.0));
 		BuildRunningGear(B, L, Back);
 		BuildRearSpare(B, Back - 9.0, Waist - 32.0);
 		if (Style.bTaxi)
 		{
-			// Chequered band below the waist, the roof lamp and the meter flag by the driver.
-			for (const double S : { -1.0, 1.0 })
-			{
-				const double Y = S * (BodyHalfWidth + 0.3);
-				B.Box(Accent, FVector(Back + 14.0, Y - 0.3, 2.0), FVector(L.Cowl - 4.0, Y + 0.3, 14.0));
-				int32 Index = 0;
-				for (double X = Back + 14.0; X + 11.0 <= L.Cowl - 4.0; X += 11.0, ++Index)
-				{
-					const double Z = Index % 2 == 0 ? 8.0 : 2.0;
-					B.Box(Rubber, FVector(X, Y - 0.5, Z), FVector(X + 11.0, Y + 0.5, Z + 6.0));
-				}
-			}
-			B.Box(Accent, FVector(-30.0, -24.0, L.RoofTop - 1.0), FVector(-14.0, 24.0, L.RoofTop + 11.0));
-			B.Bar(Chrome, FVector(L.Cowl + 6.0, -44.0, Waist - 4.0), FVector(L.Cowl + 6.0, -44.0, Waist + 22.0), 2.0);
-			B.Box(TailLamp, FVector(L.Cowl + 5.0, -52.0, Waist + 18.0), FVector(L.Cowl + 7.0, -44.0, Waist + 26.0));
+			BuildTaxiMarks(B, L, Back + 14.0);
 		}
 		if (Style.bPolice)
 		{
@@ -589,7 +601,7 @@ namespace CarModel
 		const double Back = L.Tail;
 		// Short glass house for two, then a sloping boot.
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(-92.0, Waist), FVector2D(-140.0, Waist - 8.0),
-			FVector2D(Back + 4.0, Waist - 30.0), FVector2D(Back, Waist - 50.0), FVector2D(Back + 6.0, -44.0) }, -92.0, -72.0, { }, -40.0);
+			FVector2D(Back + 4.0, Waist - 30.0), FVector2D(Back, Waist - 50.0), FVector2D(Back + 6.0, -44.0) }, -92.0, -72.0, { });
 		// Boot lid seam and handle.
 		B.Bar(Guards, FVector(-112.0, -40.0, Waist - 2.0), FVector(-112.0, 40.0, Waist - 2.0), 1.0);
 		B.Bar(Chrome, FVector(Back + 1.0, -8.0, Waist - 36.0), FVector(Back + 1.0, 8.0, Waist - 36.0), 2.0);
@@ -597,12 +609,12 @@ namespace CarModel
 		BuildRearSpare(B, Back - 6.0, Waist - 46.0);
 	}
 
-	inline void BuildLimousine(FBuilder& B, const FLayout& L)
+	inline void BuildLimousine(FBuilder& B, const FLayout& L, const FStyle& Style)
 	{
 		BuildFront(B, L, 40.0);
 		const double Back = L.Tail;
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 14.0, Waist), FVector2D(Back + 2.0, Waist - 12.0),
-			FVector2D(Back, Waist - 44.0), FVector2D(Back + 4.0, -44.0) }, Back + 16.0, Back + 40.0, { -36.0, -98.0 }, -30.0);
+			FVector2D(Back, Waist - 44.0), FVector2D(Back + 4.0, -44.0) }, Back + 16.0, Back + 40.0, { -36.0, -98.0 });
 		B.Box(Leather, FVector(-128.0, -62.0, Waist - 4.0), FVector(-120.0, 62.0, Waist + 18.0));
 		// A trunk on a rack at the back.
 		B.Box(Guards, FVector(Back - 28.0, -60.0, Waist - 46.0), FVector(Back - 2.0, 60.0, Waist - 4.0));
@@ -617,15 +629,19 @@ namespace CarModel
 			B.Cylinder(Paint, At, 24.0, 9.0, 1, 16);
 			B.Cylinder(Chrome, At + FVector(0.0, S * 5.0, 0.0), 9.0, 2.0, 1, 12);
 		}
+		if (Style.bTaxi)
+		{
+			BuildTaxiMarks(B, L, Back + 10.0);
+		}
 	}
 
 	inline void BuildVan(FBuilder& B, const FLayout& L)
 	{
 		BuildFront(B, L, 38.0);
-		const double CabBack = -34.0;
+		const double CabBack = -56.0;
 		// The cab, with the driver.
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(CabBack, Waist), FVector2D(CabBack, -44.0) },
-			CabBack + 2.0, CabBack + 2.0, { }, -30.0);
+			CabBack + 2.0, CabBack + 2.0, { });
 		// The box behind: tall, with a sign panel down each side and doors at the back.
 		B.Box(Paint, FVector(L.Tail, -78.0, -44.0), FVector(CabBack, 78.0, L.RoofTop));
 		B.Box(Paint, FVector(L.Tail - 2.0, -80.0, L.RoofTop), FVector(CabBack + 4.0, 80.0, L.RoofTop + 4.0));
@@ -646,7 +662,7 @@ namespace CarModel
 		BuildFront(B, L, 38.0);
 		const double Back = L.Tail;
 		const double W = BodyHalfWidth;
-		const double Floor = -18.0;
+		const double Floor = -40.0;
 		// An open tub: the body to the floor, thin sides up to the waist, a rear deck.
 		B.SideOutline(Paint, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Floor), FVector2D(Back + 4.0, Floor), FVector2D(Back, Waist - 42.0),
 			FVector2D(Back + 6.0, -44.0) }, -W, W);
@@ -666,9 +682,9 @@ namespace CarModel
 		B.Box(Guards, FVector(Back + 12.0, -W + 3.0, Waist), FVector(Back + 32.0, W - 3.0, Waist + 8.0));
 		B.BarBothSides(Chrome, FVector(Back + 40.0, W - 1.0, Waist - 4.0), FVector(Back + 24.0, W - 1.0, Waist + 10.0), 2.0);
 		// Seats, front and back, with the driver.
-		BuildDriver(B, -40.0, Floor + 16.0, Screen - 24.0);
-		B.Box(Leather, FVector(Back + 30.0, -62.0, Floor), FVector(Back + 64.0, 62.0, Floor + 16.0));
-		B.Box(Leather, FVector(Back + 28.0, -62.0, Floor + 16.0), FVector(Back + 36.0, 62.0, Waist + 14.0));
+		BuildDriverSeat(B, L);
+		B.Box(Leather, FVector(Back + 30.0, -62.0, Floor), FVector(Back + 64.0, 62.0, L.SeatTop));
+		B.Box(Leather, FVector(Back + 28.0, -62.0, L.SeatTop), FVector(Back + 36.0, 62.0, Waist + 14.0));
 		B.BothSides(Chrome, FVector(-44.0, W, Waist - 9.0), FVector(-37.0, W + 1.4, Waist - 7.0));
 		B.BothSides(Guards, FVector(-48.6, W, -38.0), FVector(-47.4, W + 0.4, Waist - 2.0));
 		BuildRunningGear(B, L, Back);
@@ -682,7 +698,7 @@ namespace CarModel
 		{
 		case EBody::Tourer: BuildTourer(B, L); break;
 		case EBody::Coupe: BuildCoupe(B, L); break;
-		case EBody::Limousine: BuildLimousine(B, L); break;
+		case EBody::Limousine: BuildLimousine(B, L, Style); break;
 		case EBody::Van: BuildVan(B, L); break;
 		default: BuildSaloon(B, L, Style); break;
 		}
@@ -815,6 +831,66 @@ namespace CarModel
 		Style.SpokeColor = FLinearColor(0.85f, 0.62f, 0.05f);
 		Style.bTaxi = true;
 		return Style;
+	}
+
+	/** The company's best car, for its regulars: a deep red limousine with a gold chequered band and gold wire wheels. */
+	inline FStyle DeluxeTaxiStyle()
+	{
+		FStyle Style;
+		Style.Body = EBody::Limousine;
+		Style.PaintColor = FLinearColor(0.10f, 0.012f, 0.02f);
+		Style.GuardColor = FLinearColor(0.008f, 0.008f, 0.009f);
+		Style.Wheel = EWheel::Wire;
+		Style.SpokeColor = FLinearColor(0.80f, 0.55f, 0.12f);
+		Style.AccentColor = FLinearColor(0.80f, 0.55f, 0.12f);
+		Style.bTaxi = true;
+		return Style;
+	}
+
+	/**
+	 * A driver sitting at the wheel, as one shape in the car's frame: a
+	 * person from PersonKit, seated, the thighs tilted up a little towards
+	 * the pedals and the hands on the wheel. Pieces of the same colour share
+	 * a section.
+	 */
+	inline void BuildSeatedDriver(const PersonKit::FOutfit& InOutfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
+	{
+		PersonKit::FOutfit Outfit = InOutfit;
+		Outfit.bSeated = true;
+		Outfit.Held = PersonKit::EHeld::None;
+		Outfit.Height = FMath::Min(Outfit.Height, static_cast<float>(DriverMaxHeight));
+		PersonKit::FPerson Person;
+		PersonKit::Build(Outfit, Person);
+		// The hips sit on the cushion, a thigh's thickness above it.
+		const FVector Hip = Person.Pieces[PersonKit::LegRight].Pivot;
+		const FVector Offset(L.SeatX + 2.0 - Hip.X, DriverY, L.SeatTop + 9.0 - Hip.Z);
+		Out.Reset();
+		for (int32 p = 0; p < PersonKit::NumPieces; ++p)
+		{
+			const PersonKit::FPiece& Piece = Person.Pieces[p];
+			const bool bArm = p == PersonKit::ArmLeft || p == PersonKit::ArmRight;
+			const bool bLeg = p == PersonKit::LegLeft || p == PersonKit::LegRight;
+			const FRotator Tilt(bArm ? DriverArmPitch : bLeg ? DriverLegPitch : 0.0, 0.0, 0.0);
+			for (const PersonKit::FSection& From : Piece.Sections)
+			{
+				PersonKit::FSection* Into = Out.FindByPredicate([&From](const PersonKit::FSection& Each) { return Each.Color.Equals(From.Color); });
+				if (!Into)
+				{
+					Into = &Out.AddDefaulted_GetRef();
+					Into->Color = From.Color;
+				}
+				const int32 First = Into->Vertices.Num();
+				for (int32 i = 0; i < From.Vertices.Num(); ++i)
+				{
+					Into->Vertices.Add(Offset + Piece.Pivot + Tilt.RotateVector(From.Vertices[i]));
+					Into->Normals.Add(Tilt.RotateVector(From.Normals[i]));
+				}
+				for (const int32 Corner : From.Triangles)
+				{
+					Into->Triangles.Add(First + Corner);
+				}
+			}
+		}
 	}
 
 	/** A key telling styles with the same shapes apart (the colours don't matter). */
