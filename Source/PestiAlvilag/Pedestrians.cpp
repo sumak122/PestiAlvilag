@@ -46,6 +46,10 @@ namespace Pedestrians
 	constexpr int32 SpawnPerFrame = 4;
 	constexpr int32 PickTries = 24;
 	constexpr double FillNear = 500.0;
+	// Later arrivals only appear where the camera is not looking (more than
+	// about 80 degrees off its view), or far off, so nobody pops up in view.
+	constexpr double OutOfViewDot = 0.17;
+	constexpr double FarShare = 0.85;
 
 	constexpr float LegSwing = 25.f;
 	constexpr float ArmSwing = 18.f;
@@ -135,7 +139,7 @@ bool APedestrians::LoadLines()
 	return Lines.Num() > 0;
 }
 
-bool APedestrians::CameraLocation(FVector& OutLocation) const
+bool APedestrians::CameraView(FVector& OutLocation, FVector2D& OutLooking) const
 {
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || !PC->PlayerCameraManager)
@@ -143,6 +147,7 @@ bool APedestrians::CameraLocation(FVector& OutLocation) const
 		return false;
 	}
 	OutLocation = PC->PlayerCameraManager->GetCameraLocation();
+	OutLooking = FVector2D(PC->PlayerCameraManager->GetCameraRotation().Vector()).GetSafeNormal();
 	return true;
 }
 
@@ -160,7 +165,8 @@ FVector2D APedestrians::PointOn(const FLine& Line, double Along, FVector2D& OutT
 	return A + (B - A) * FMath::Clamp((Along - Line.Along[i]) / Span, 0.0, 1.0);
 }
 
-bool APedestrians::PickSpot(const FVector& Camera, double MinDistance, int32& OutLine, double& OutAlong)
+bool APedestrians::PickSpot(const FVector& Camera, const FVector2D& Looking, bool bInView, double MinDistance,
+	int32& OutLine, double& OutAlong, double& OutGroundZ)
 {
 	if (FVector::Dist2D(Camera, NearLinesFrom) > Pedestrians::RefindLines)
 	{
@@ -187,8 +193,17 @@ bool APedestrians::PickSpot(const FVector& Camera, double MinDistance, int32& Ou
 		const int32 Index = NearLines[Random.RandRange(0, NearLines.Num() - 1)];
 		const double Along = Random.FRandRange(0.f, 1.f) * Lines[Index].Length;
 		FVector2D Tangent;
-		const double Distance = FVector2D::Distance(PointOn(Lines[Index], Along, Tangent), FVector2D(Camera));
-		if (Distance >= MinDistance && Distance < Range)
+		const FVector2D At = PointOn(Lines[Index], Along, Tangent);
+		const FVector2D Away = At - FVector2D(Camera);
+		const double Distance = Away.Size();
+		if (Distance < MinDistance || Distance >= Range)
+		{
+			continue;
+		}
+		const bool bOutOfSight = Distance > Range * Pedestrians::FarShare
+			|| FVector2D::DotProduct(Away / FMath::Max(Distance, 1.0), Looking) < Pedestrians::OutOfViewDot;
+		// Only where the ground is known, so he is on it from the first frame.
+		if ((bInView || bOutOfSight) && GroundUnder(At, Camera.Z, OutGroundZ))
 		{
 			OutLine = Index;
 			OutAlong = Along;
@@ -258,7 +273,8 @@ void APedestrians::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	FVector Camera;
-	if (!bReady || !CameraLocation(Camera))
+	FVector2D Looking;
+	if (!bReady || !CameraView(Camera, Looking))
 	{
 		return;
 	}
@@ -270,10 +286,11 @@ void APedestrians::Tick(float DeltaSeconds)
 	for (int32 n = 0; n < Pedestrians::SpawnPerFrame && Walkers.Num() < Crowd; ++n)
 	{
 		FWalker Walker;
-		if (!PickSpot(Camera, bFilling ? Pedestrians::FillNear : AppearBeyond, Walker.Line, Walker.Along))
+		if (!PickSpot(Camera, Looking, bFilling, bFilling ? Pedestrians::FillNear : AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
 		{
 			break;
 		}
+		Walker.bGroundKnown = true;
 		Walker.Dir = Random.FRand() < 0.5f ? 1 : -1;
 		Walker.Speed = Random.FRandRange(Pedestrians::MinSpeed, Pedestrians::MaxSpeed);
 		Walker.Lane = Random.FRandRange(Pedestrians::MinLane, Pedestrians::MaxLane);
@@ -300,10 +317,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		// Fallen far behind: start again somewhere out of the way nearer the camera.
 		if (FVector::Dist2D(Walker.Person->GetActorLocation(), Camera) > Range * 1.2)
 		{
-			if (PickSpot(Camera, AppearBeyond, Walker.Line, Walker.Along))
-			{
-				Walker.bGroundKnown = false;
-			}
+			PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ);
 		}
 
 		Walker.Along += Walker.Dir * Walker.Speed * DeltaSeconds;
@@ -334,10 +348,6 @@ void APedestrians::Tick(float DeltaSeconds)
 
 		const double Size = Walker.Person->GetActorScale3D().Z;
 		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X));
-		if (Walker.Person->IsHidden() == Walker.bGroundKnown)
-		{
-			Walker.Person->SetActorHiddenInGame(!Walker.bGroundKnown);
-		}
 		Walker.Person->WalkTo(FVector(At, Walker.GroundZ + Pedestrians::Middle * Size), Yaw, Walker.Speed, DeltaSeconds);
 	}
 }
