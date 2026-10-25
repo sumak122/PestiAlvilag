@@ -260,7 +260,8 @@ void ATramRides::UpdateStopCrowds()
 		const bool bLast = IsLastStop(Tram);
 		const FVector2D Along(FMath::Cos(FMath::DegreesToRadians(Place->Yaw)), FMath::Sin(FMath::DegreesToRadians(Place->Yaw)));
 		const FVector2D ToTrack = (Place->At - Place->Wait).GetSafeNormal();
-		const double Z = Tram->GetActorLocation().Z;
+		// A person's middle at the height of the road the tram runs on.
+		const double Z = Tram->GetActorLocation().Z + TramModel::Ground + TramRides::Middle;
 
 		// A few people wait at the stop for the tram coming.
 		if (!Crowd.bWaitingPlaced && !Tram->IsAtStop() && !bLast
