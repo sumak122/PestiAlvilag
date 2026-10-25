@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "Cafe.h"
 #include "HomeDoor.h"
 #include "KeletiStation.h"
 #include "Kismet/GameplayStatics.h"
@@ -84,6 +85,13 @@ void APestiAlvilagGameModeBase::StartPlay()
 	{
 		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
 		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
+	}
+
+	// The coffee house beside it, with its terrace on the pavement.
+	if (!TActorIterator<ACafe>(GetWorld()))
+	{
+		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
+		GetWorld()->SpawnActor<ACafe>(ACafe::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
 	}
 
 	// Lamps, benches, advertising columns and the park on Tisza Kálmán tér.
