@@ -3,12 +3,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
+#include "CarModel.h"
 #include "GameFramework/Actor.h"
 #include "TrafficCar.generated.h"
 
 class ATrafficManager;
 class UBoxComponent;
+class UCarVisuals;
 class UMaterialInterface;
 class UStaticMeshComponent;
 
@@ -36,6 +37,9 @@ public:
 
 	/** The colour it was painted. */
 	const FLinearColor& GetPaint() const { return PaintColor; }
+
+	/** What it looks like: the kind of car, its paint and wheels. */
+	const CarModel::FStyle& GetStyle() const { return Style; }
 
 	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
 	void LeaveTraffic() { ReleaseAllJunctions(); }
@@ -65,8 +69,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
 	TObjectPtr<UBoxComponent> CollisionBox;
 
+	/** The body and wheels (see CarModel), turning wheels and exhaust smoke. */
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	TObjectPtr<UCarVisuals> Visuals;
 
 	/** Period turn signals: little arms that swing out of the cabin side. */
 	UPROPERTY(VisibleAnywhere, Category = "Traffic")
@@ -92,7 +97,8 @@ protected:
 	float CurrentSpeed = 0.f;
 	float BlockedTime = 0.f;
 	float HoldTime = 0.f;
-	TArray<CarBody::EPaint> BodyPaints;
+	/** Picks the car's look for this paint: any kind of car, unless it is a taxi or the police. */
+	virtual CarModel::FStyle PickStyle(const FLinearColor& Paint) const;
 
 private:
 
@@ -106,6 +112,7 @@ private:
 	float JunctionWaitTime = 0.f;
 	TArray<int32> HeldNodes;
 	FLinearColor PaintColor = FLinearColor::Black;
+	CarModel::FStyle Style;
 };
 
 /** A taxi out on its rounds: the saloon in black with the taxi markings (see APestiTaxi). */
@@ -116,4 +123,7 @@ class PESTIALVILAG_API ATrafficTaxi : public ATrafficCar
 
 public:
 	ATrafficTaxi();
+
+protected:
+	virtual CarModel::FStyle PickStyle(const FLinearColor& Paint) const override;
 };

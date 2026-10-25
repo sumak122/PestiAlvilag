@@ -133,7 +133,7 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	UWorld* World = GetWorld();
 	const FVector Location = Car->GetActorLocation();
 	const FRotator Facing(0.f, Car->GetActorRotation().Yaw, 0.f);
-	const FLinearColor Paint = Car->GetPaint();
+	const CarModel::FStyle Look = Car->GetStyle();
 	const bool bTaxi = Cast<ATrafficTaxi>(Car) != nullptr;
 	Car->LeaveTraffic();
 	Cars.Remove(Car);
@@ -148,7 +148,8 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	{
 		return nullptr;
 	}
-	Stolen->BodyColor = Paint;
+	Stolen->BodyColor = Look.PaintColor;
+	Stolen->SetStyle(Look);
 	Stolen->FinishSpawning(Place);
 	++(bTaxi ? TaxisToReplace : CarsToReplace);
 

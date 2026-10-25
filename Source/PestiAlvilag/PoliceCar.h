@@ -48,6 +48,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual CarModel::FStyle PickStyle(const FLinearColor& Paint) const override;
 
 	/** White sign on the roof reading RENDŐRSÉG; it flashes red in a chase. */
 	UPROPERTY(VisibleAnywhere, Category = "Police")

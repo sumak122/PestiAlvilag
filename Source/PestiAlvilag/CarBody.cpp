@@ -31,59 +31,6 @@ namespace CarBody
 	// Engine shapes are 100 cm across. X is forward, Y right, Z up.
 	const FRotator Upright = FRotator(0.f, 0.f, 0.f);
 	const FRotator WheelAxle = FRotator(0.f, 0.f, 90.f);   // cylinder axis along Y
-	const FRotator SpareAxle = FRotator(90.f, 0.f, 0.f);   // cylinder axis along X
-	const FVector WheelScale = FVector(0.7f, 0.7f, 0.25f);
-
-	const FPartSpec PartSpecs[] = {
-		// Body: low chassis, long bonnet in front, tall cabin behind.
-		{ TEXT("Chassis"), EShape::Cube, EPaint::Body, FVector(0.f, 0.f, -40.f), Upright, FVector(4.2f, 1.7f, 0.4f) },
-		{ TEXT("Bonnet"), EShape::Cube, EPaint::Body, FVector(95.f, 0.f, -5.f), Upright, FVector(1.9f, 1.3f, 0.3f) },
-		{ TEXT("Cabin"), EShape::Cube, EPaint::Body, FVector(-75.f, 0.f, 25.f), Upright, FVector(1.9f, 1.55f, 0.9f) },
-		{ TEXT("Windows"), EShape::Cube, EPaint::Glass, FVector(-75.f, 0.f, 42.f), Upright, FVector(1.92f, 1.57f, 0.35f) },
-		// Front: chrome grille and two round headlamps.
-		{ TEXT("Grille"), EShape::Cube, EPaint::Chrome, FVector(192.f, 0.f, -5.f), Upright, FVector(0.08f, 0.9f, 0.5f) },
-		{ TEXT("HeadlampLeft"), EShape::Sphere, EPaint::Headlamp, FVector(190.f, -55.f, 12.f), Upright, FVector(0.28f) },
-		{ TEXT("HeadlampRight"), EShape::Sphere, EPaint::Headlamp, FVector(190.f, 55.f, 12.f), Upright, FVector(0.28f) },
-		// Rear: spare wheel and red tail lamps.
-		{ TEXT("SpareWheel"), EShape::Cylinder, EPaint::Tyre, FVector(-216.f, 0.f, -10.f), SpareAxle, FVector(0.6f, 0.6f, 0.12f) },
-		{ TEXT("TailLampLeft"), EShape::Cube, EPaint::TailLamp, FVector(-212.f, -65.f, -30.f), Upright, FVector(0.05f, 0.18f, 0.12f) },
-		{ TEXT("TailLampRight"), EShape::Cube, EPaint::TailLamp, FVector(-212.f, 65.f, -30.f), Upright, FVector(0.05f, 0.18f, 0.12f) },
-		// Wheels.
-		{ TEXT("WheelFrontLeft"), EShape::Cylinder, EPaint::Tyre, FVector(130.f, -78.f, -55.f), WheelAxle, WheelScale },
-		{ TEXT("WheelFrontRight"), EShape::Cylinder, EPaint::Tyre, FVector(130.f, 78.f, -55.f), WheelAxle, WheelScale },
-		{ TEXT("WheelRearLeft"), EShape::Cylinder, EPaint::Tyre, FVector(-130.f, -78.f, -55.f), WheelAxle, WheelScale },
-		{ TEXT("WheelRearRight"), EShape::Cylinder, EPaint::Tyre, FVector(-130.f, 78.f, -55.f), WheelAxle, WheelScale },
-	};
-
-	// Taxi markings: a chequered band round the cabin at waist height, a
-	// roof lamp, and the meter flag on the left (driver's side when keeping left).
-	const FPartSpec TaxiSpecs[] = {
-		{ TEXT("TaxiBandLeft"), EShape::Cube, EPaint::Accent, FVector(-75.f, -78.5f, 8.f), Upright, FVector(1.9f, 0.02f, 0.16f) },
-		{ TEXT("TaxiBandRight"), EShape::Cube, EPaint::Accent, FVector(-75.f, 78.5f, 8.f), Upright, FVector(1.9f, 0.02f, 0.16f) },
-		{ TEXT("TaxiCheckL0"), EShape::Cube, EPaint::Tyre, FVector(-160.5f, -79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL1"), EShape::Cube, EPaint::Tyre, FVector(-141.5f, -79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL2"), EShape::Cube, EPaint::Tyre, FVector(-122.5f, -79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL3"), EShape::Cube, EPaint::Tyre, FVector(-103.5f, -79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL4"), EShape::Cube, EPaint::Tyre, FVector(-84.5f, -79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL5"), EShape::Cube, EPaint::Tyre, FVector(-65.5f, -79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL6"), EShape::Cube, EPaint::Tyre, FVector(-46.5f, -79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL7"), EShape::Cube, EPaint::Tyre, FVector(-27.5f, -79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL8"), EShape::Cube, EPaint::Tyre, FVector(-8.5f, -79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckL9"), EShape::Cube, EPaint::Tyre, FVector(10.5f, -79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR0"), EShape::Cube, EPaint::Tyre, FVector(-160.5f, 79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR1"), EShape::Cube, EPaint::Tyre, FVector(-141.5f, 79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR2"), EShape::Cube, EPaint::Tyre, FVector(-122.5f, 79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR3"), EShape::Cube, EPaint::Tyre, FVector(-103.5f, 79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR4"), EShape::Cube, EPaint::Tyre, FVector(-84.5f, 79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR5"), EShape::Cube, EPaint::Tyre, FVector(-65.5f, 79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR6"), EShape::Cube, EPaint::Tyre, FVector(-46.5f, 79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR7"), EShape::Cube, EPaint::Tyre, FVector(-27.5f, 79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR8"), EShape::Cube, EPaint::Tyre, FVector(-8.5f, 79.8f, 12.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiCheckR9"), EShape::Cube, EPaint::Tyre, FVector(10.5f, 79.8f, 4.0f), Upright, FVector(0.19f, 0.01f, 0.08f) },
-		{ TEXT("TaxiSign"), EShape::Cube, EPaint::Accent, FVector(-40.f, 0.f, 79.f), Upright, FVector(0.15f, 0.55f, 0.18f) },
-		{ TEXT("TaxiMeterPole"), EShape::Cube, EPaint::Chrome, FVector(100.f, -72.f, 20.f), Upright, FVector(0.03f, 0.03f, 0.4f) },
-		{ TEXT("TaxiMeterFlag"), EShape::Cube, EPaint::TailLamp, FVector(100.f, -72.f, 42.f), Upright, FVector(0.02f, 0.14f, 0.08f) },
-	};
 
 	// A two-axle Budapest tram of the period, 10 m long: yellow body, a band
 	// of windows, grey roof with a raised clerestory and a bow collector.
@@ -159,16 +106,6 @@ namespace CarBody
 			OutParts.Add(Part);
 			OutPaints.Add(Spec.Paint);
 		}
-	}
-
-	void Build(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
-	{
-		BuildParts(PartSpecs, Owner, Parent, OutParts, OutPaints);
-	}
-
-	void BuildTaxi(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)
-	{
-		BuildParts(TaxiSpecs, Owner, Parent, OutParts, OutPaints);
 	}
 
 	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints)

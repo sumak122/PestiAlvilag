@@ -14,6 +14,9 @@ public class PestiAlvilag : ModuleRules
 
 		// The food menus are drawn with Slate.
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+
+		// The car engine sound is made while the game runs (USynthComponent).
+		PrivateDependencyModuleNames.Add("AudioMixer");
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
