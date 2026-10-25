@@ -483,7 +483,17 @@ def place_taxi_stands(data, space):
             print(f"No room for a taxi stand near {name}")
             continue
         rank = best[1]
-        taxis = [[round(t[0]), round(t[1]), yaw_of(t[2], t[3])] for t in rank]
+        # Face the way the traffic runs on this side of the street: along
+        # the nearest lane (lanes run in their direction of travel).
+        first = Point(rank[0][0], rank[0][1])
+        lane = min((space.lanes[i] for i in space.lane_tree.query(first.buffer(2000))), key=lambda l: l.distance(first))
+        along = lane.project(first)
+        a = lane.interpolate(max(along - 50, 0))
+        b = lane.interpolate(min(along + 50, lane.length))
+        lx, ly = unit(b.x - a.x, b.y - a.y)
+        if lx * rank[0][2] + ly * rank[0][3] < 0:
+            rank = rank[::-1]
+        taxis = [[round(t[0]), round(t[1]), yaw_of(lx, ly)] for t in rank]
         first = rank[0]
         # The sign stands on the pavement beside the first taxi, facing the road.
         sx = first[0] - first[3] * TAXI_SIGN_OUT * first[4]
