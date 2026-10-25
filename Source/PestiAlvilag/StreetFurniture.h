@@ -20,7 +20,8 @@ struct FFurniturePart;
  * advertising columns near street corners, benches in the parks, and the
  * 1932 Tisza Kálmán tér with gravel paths, flower beds, autumn trees,
  * benches, lamps and a low railing, leaf piles and the park keepers who
- * rake them, and the taxi stands near the Népszínház and Keleti with
+ * rake them, the statue east of the middle and the big playground in the
+ * south-east quarter (ParkModel.h), and the taxi stands near the Népszínház and Keleti with
  * their parked taxis. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
@@ -76,6 +77,8 @@ private:
 
 	void BuildStreets(const FJsonObject& Root);
 	void BuildTiszaKalmanTer(const FJsonObject& Park);
+	/** The sand, things to play on, children and nannies of the playground in Tisza Kálmán tér. */
+	void BuildPlayground(const FJsonObject& Playground);
 	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */
 	void BuildTaxiStands(const FJsonObject& Root);
 	/** A stop sign by each tram stop (tram_stops). */

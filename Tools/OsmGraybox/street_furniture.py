@@ -131,8 +131,64 @@ BIN_BESIDE_BENCH = 125
 
 # Tisza Kálmán tér: the park polygon in the graybox has its middle near here.
 TISZA_PARK_NEAR = (61300, 1100)
-# The round places in today's park sit where the 1932 flower beds go.
-TISZA_ROUNDS = [((59600, 700), 2300, 800), ((64050, -9900), 1900, 600)]
+# The 1932 layout, traced from the 1944 aerial photo (Fortepan 109126) laid
+# over the map: a round place with a flower bed in the middle, two smaller
+# ones on the diagonal to the north-east and south-west corners, and the
+# park's own frame, its north-south axis (TISZA_AXIS, pointing south) a little
+# off the map's because the square is turned.
+TISZA_MIDDLE = (60000, 500)
+TISZA_AXIS = (0.297, 0.955)
+TISZA_ROUNDS = [(TISZA_MIDDLE, 2600, 1300), ((63500, -11150), 1700, 550), ((56750, 11750), 1700, 550)]
+# Twin paths run north and south from the middle either side of a long lawn,
+# wide promenades west (to the Népopera) and east (to the statue) with a
+# narrower path beside each, straight diagonals through the small round
+# places and one to the south-east corner, a short one to the corner by the
+# Népopera, a path across the north-east round place, paths round the
+# playground, a full ring round the middle, and a ring just inside the
+# railing (the paths as Daniel marked them on the photo, 2026-10-25).
+TWIN_PATH_APART = 1000
+PROMENADE_WIDTH = 600
+RING_RADIUS = 7300
+RING_ARCS = [(0, 360)]
+# Beside each promenade a narrower path, this far off it; the playground's
+# east path this far east of the middle; the short diagonal heads for the
+# park's corner nearest this point (east, south of the middle), and the
+# path across the north-east round place on to the edge this way.
+BESIDE_PROMENADE = 1900
+PLAYGROUND_EAST = 9300
+NOTCH_TOWARDS = (-4400, -3800)
+NE_CROSS_TOWARDS = (0.79, 0.61)
+# The statue stands east of the middle on a gravel terrace, facing it.
+STATUE_OUT = 6300
+STATUE_TERRACE = 1400
+# The big playground fills the south-east quarter: sand, with swings,
+# seesaws, sandpits, a roundabout, a climbing frame, a slide and a drinking
+# fountain, benches round it, children playing and their mothers and
+# nannies on the benches. Sizes are those in ParkModel.h (cm).
+PLAYGROUND_CLEAR = 300
+PLAYGROUND_KIT = [
+    # kind, length along its yaw, width across, how many
+    ("sandpit", 550, 550, 4),
+    ("swings", 300, 520, 4),
+    ("seesaw", 440, 120, 4),
+    ("roundabout", 320, 320, 2),
+    ("climbing_frame", 260, 260, 2),
+    ("slide", 480, 120, 2),
+    ("fountain", 80, 80, 2),
+]
+SWING_SEATS = (-95, 95)
+SWING_SEAT_HEIGHT = 50
+SEESAW_END = 170
+SEESAW_TILT = 8.0
+SEESAW_PIVOT_HEIGHT = 45
+ROUNDABOUT_RADIUS = 150
+ROUNDABOUT_TOP = 44
+PLAYGROUND_BENCH_SPACING = 900
+# Shade trees in a row just inside the edge, between the benches.
+PLAYGROUND_TREE_IN = 260
+PLAYGROUND_RUNNERS = 14
+PLAYGROUND_SHADE_TREES = 7
+NANNY_CHANCE = 0.45
 PATH_WIDTH = 400
 SIDE_PATH_WIDTH = 300
 TREE_SPACING = 1100
@@ -831,30 +887,290 @@ def place_park_benches(space, tisza_park, bins):
     return benches
 
 
+# The people in the playground: [kind, x, y, height above the ground, yaw].
+CHILD_STANDING, CHILD_SEATED, GROWN_UP_SEATED, GROWN_UP_STANDING = range(4)
+
+
+def layout_playground(park, at, along, walkways, ring, end):
+    """The big playground in the south-east quarter, in the park's frame.
+
+    Returns its frame (corners as [a, b] east and south of the middle), the
+    sand, the things to play on as [kind, x, y, yaw] (kind is the index in
+    PLAYGROUND_KIT), the people, and the benches round its edge."""
+    vx, vy = along
+    a0 = TWIN_PATH_APART + SIDE_PATH_WIDTH / 2 + PLAYGROUND_CLEAR
+    b0 = STATUE_TERRACE / 2 + PLAYGROUND_CLEAR
+    inner = ring.buffer(-SIDE_PATH_WIDTH / 2 - PLAYGROUND_CLEAR)
+
+    def box(a_lo, b_lo, a_hi, b_hi):
+        return Polygon([at(a_lo, b_lo), at(a_hi, b_lo), at(a_hi, b_hi), at(a_lo, b_hi)])
+
+    # The biggest frame that fits inside the ring path.
+    best = None
+    # It ends at its east and south paths.
+    a_end, b_end = end[0] - PLAYGROUND_CLEAR, end[1] - PLAYGROUND_CLEAR
+    for a1 in range(int(a0) + 3000, int(a_end) + 1, 200):
+        if not inner.contains(box(a0, b0, a1, b0 + 100)):
+            break
+        for b1 in range(int(b0) + 3000, int(b_end) + 1, 200):
+            if not inner.contains(box(a0, b0, a1, b1)):
+                break
+            if best is None or (a1 - a0) * (b1 - b0) > (best[0] - a0) * (best[1] - b0):
+                best = (a1, b1)
+    a1, b1 = best
+    frame = [[a0, b0], [a1, b0], [a1, b1], [a0, b1]]
+    # A strip in the game is longer than its ends by its width, so the ends
+    # sit half a width in from the frame's.
+    if a1 - a0 >= b1 - b0:
+        half = (b1 - b0) / 2
+        s0, s1 = at(a0 + half, b0 + half), at(a1 - half, b0 + half)
+    else:
+        half = (a1 - a0) / 2
+        s0, s1 = at(a0 + half, b0 + half), at(a0 + half, b1 - half)
+    sand = [round(s0[0]), round(s0[1]), round(s1[0]), round(s1[1]), round(2 * half)]
+
+    # Things to play on, each where it fits, off the path that crosses.
+    yaw_a = yaw_of(vx, vy)
+    yaw_b = round(yaw_a + 90.0, 1)
+    blocked = walkways.buffer(PLAYGROUND_CLEAR)
+    taken = []
+    items = []
+    people = []
+    candidates = [(a, b) for a in range(int(a0) + 400, int(a1) - 300, 100) for b in range(int(b0) + 400, int(b1) - 300, 100)]
+    # Each goes where it is farthest from the ones already there, so they
+    # spread over the whole sand, tried at a few hundred spots.
+    inside = box(a0 + 100, b0 + 100, a1 - 100, b1 - 100)
+    placed = []
+    for kind, (name, length, width, count) in enumerate(PLAYGROUND_KIT):
+        for n in range(count):
+            best = None
+            for a, b in sorted(candidates, key=lambda c: chance("play", name, n, c[0], c[1]))[:400]:
+                turned = chance("turn", name, n, a, b) < 0.5
+                ha, hb = ((width, length) if turned else (length, width))
+                ha, hb = ha / 2 + 150, hb / 2 + 150
+                spot = box(a - ha, b - hb, a + ha, b + hb)
+                if not inside.contains(spot) or spot.intersects(blocked) or any(spot.intersects(t) for t in taken):
+                    continue
+                room = min([math.hypot(a - pa, b - pb) for pa, pb in placed] + [1e9])
+                if best is None or room > best[0]:
+                    best = (room, a, b, turned, spot)
+            if best is None:
+                continue
+            _, a, b, turned, spot = best
+            taken.append(spot)
+            placed.append((a, b))
+            x, y = at(a, b)
+            yaw = yaw_b if turned else yaw_a
+            items.append([kind, round(x), round(y), yaw])
+            people += playground_people(name, (x, y), yaw, (kind, n))
+
+    # Children running about on the open sand.
+    runners = 0
+    for a, b in sorted(candidates, key=lambda c: chance("run", c[0], c[1])):
+        point = Point(at(a, b))
+        if runners >= PLAYGROUND_RUNNERS:
+            break
+        if not point.buffer(80).intersects(blocked) and not any(t.contains(point) for t in taken):
+            x, y = at(a, b)
+            people.append([CHILD_STANDING, round(x), round(y), 0, round(360 * chance("runyaw", a, b), 1)])
+            taken.append(point.buffer(150))
+            runners += 1
+
+    # Benches all round the edge, facing in, with mothers and nannies on
+    # some, and shade trees between them.
+    benches = []
+    trees = []
+    corners = [(a0, b0), (a1, b0), (a1, b1), (a0, b1)]
+    for k in range(4):
+        (pa, pb), (qa, qb) = corners[k], corners[(k + 1) % 4]
+        length = math.hypot(qa - pa, qb - pb)
+        da, db = (qa - pa) / length, (qb - pb) / length
+        # In towards the middle of the frame.
+        na, nb = db, -da
+        if na * ((a0 + a1) / 2 - pa) + nb * ((b0 + b1) / 2 - pb) < 0:
+            na, nb = -na, -nb
+        s = PLAYGROUND_BENCH_SPACING / 2
+        while s < length - PLAYGROUND_BENCH_SPACING / 2:
+            ba, bb = pa + da * s + na * 60, pb + db * s + nb * 60
+            x, y = at(ba, bb)
+            fx, fy = at(ba + na, bb + nb)
+            yaw = yaw_of(fx - x, fy - y)
+            spot = Point(x, y).buffer(120)
+            if not spot.intersects(blocked) and not any(spot.intersects(t) for t in taken):
+                benches.append([round(x), round(y), yaw])
+                if chance("nanny", round(x), round(y)) < NANNY_CHANCE:
+                    people.append([GROWN_UP_SEATED, round(x + (fx - x) * 8), round(y + (fy - y) * 8), 45, yaw])
+            ta, tb = pa + da * (s + PLAYGROUND_BENCH_SPACING / 2) + na * PLAYGROUND_TREE_IN, pb + db * (s + PLAYGROUND_BENCH_SPACING / 2) + nb * PLAYGROUND_TREE_IN
+            tx, ty = at(ta, tb)
+            spot = Point(tx, ty).buffer(150)
+            if s + PLAYGROUND_BENCH_SPACING < length and not spot.intersects(blocked) and not any(spot.intersects(t) for t in taken):
+                trees.append([round(tx), round(ty), round(0.85 + 0.3 * chance("ptree", round(tx), round(ty)), 2)])
+            s += PLAYGROUND_BENCH_SPACING
+
+    # A few big shade trees out on the sand, in the widest gaps.
+    for n in range(PLAYGROUND_SHADE_TREES):
+        best = None
+        for a, b in sorted(candidates, key=lambda c: chance("shade", n, c[0], c[1]))[:400]:
+            spot = Point(at(a, b)).buffer(250)
+            if spot.intersects(blocked) or any(spot.intersects(t) for t in taken):
+                continue
+            room = min([math.hypot(a - pa, b - pb) for pa, pb in placed] + [1e9])
+            if best is None or room > best[0]:
+                best = (room, a, b, spot)
+        if best:
+            _, a, b, spot = best
+            taken.append(spot)
+            placed.append((a, b))
+            x, y = at(a, b)
+            trees.append([round(x), round(y), round(1.05 + 0.2 * chance("shadesize", n), 2)])
+
+    return {"frame": frame, "sand": sand, "items": items, "people": people, "benches": benches, "trees": trees}
+
+
+def playground_people(name, middle, yaw, key):
+    """Who plays on one thing in the playground."""
+    x, y = middle
+    fx, fy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    rx, ry = -fy, fx
+
+    def spot(forward, right):
+        return round(x + fx * forward + rx * right), round(y + fy * forward + ry * right)
+
+    people = []
+    if name == "swings":
+        for i, seat in enumerate(SWING_SEATS):
+            if i == 0 or chance("swing", *key) < 0.5:
+                people.append([CHILD_SEATED, *spot(0, seat), SWING_SEAT_HEIGHT, yaw])
+    elif name == "seesaw":
+        rise = SEESAW_END * math.sin(math.radians(SEESAW_TILT))
+        people.append([CHILD_SEATED, *spot(SEESAW_END, 0), round(SEESAW_PIVOT_HEIGHT + rise), round(yaw + 180, 1)])
+        people.append([CHILD_SEATED, *spot(-SEESAW_END, 0), round(SEESAW_PIVOT_HEIGHT - rise), yaw])
+    elif name == "sandpit":
+        for i in range(2 + int(chance("dig", *key) * 2)):
+            a = 2 * math.pi * chance("digat", i, *key)
+            px, py = spot(math.cos(a) * 140, math.sin(a) * 140)
+            people.append([CHILD_STANDING, px, py, 15, yaw_of(x - px, y - py)])
+        px, py = spot(0, 380)
+        people.append([GROWN_UP_STANDING, px, py, 0, yaw_of(x - px, y - py)])
+    elif name == "roundabout":
+        px, py = spot(ROUNDABOUT_RADIUS * 0.6, 0)
+        people.append([CHILD_STANDING, px, py, ROUNDABOUT_TOP, round(yaw + 90, 1)])
+        px, py = spot(0, -(ROUNDABOUT_RADIUS + 45))
+        people.append([CHILD_STANDING, px, py, 0, round(yaw, 1)])
+    elif name == "climbing_frame":
+        px, py = spot(-190, 40)
+        people.append([CHILD_STANDING, px, py, 0, yaw])
+    elif name == "slide":
+        px, py = spot(-290, 0)
+        people.append([CHILD_STANDING, px, py, 0, yaw])
+    return people
+
+
 def layout_tisza(space, park):
-    """Paths, beds, trees, benches, lamps and railing for Tisza Kálmán tér."""
-    hull = park.simplify(400)
-    corners = [c for c in list(hull.exterior.coords)[:-1]]
-    (cx, cy), center_r, _ = TISZA_ROUNDS[0]
+    """Paths, beds, trees, benches, lamps, railing, statue and playground for Tisza Kálmán tér."""
+    cx, cy = TISZA_MIDDLE
+    center_r = TISZA_ROUNDS[0][1]
+    ux, uy = unit(*TISZA_AXIS)
+    vx, vy = -uy, ux
+    if vx < 0:
+        vx, vy = -vx, -vy
+
+    def at(a, b):
+        """The point a cm east and b cm south of the middle, in the park's frame."""
+        return (cx + a * vx + b * ux, cy + a * vy + b * uy)
+
+    edge = park.exterior
+
+    def to_edge(start, direction, short=100):
+        """Where a path from start going this way reaches the railing."""
+        far = (start[0] + direction[0] * 40000, start[1] + direction[1] * 40000)
+        hit = LineString([start, far]).intersection(edge)
+        points = [hit] if hit.geom_type == "Point" else list(getattr(hit, "geoms", []))
+        if not points:
+            return far
+        nearest = min(points, key=lambda q: math.hypot(q.x - start[0], q.y - start[1]))
+        return (nearest.x - direction[0] * short, nearest.y - direction[1] * short)
 
     paths = []
+    entrances = []
 
     def add_path(a, b, width):
         paths.append([round(a[0]), round(a[1]), round(b[0]), round(b[1]), width])
 
-    # Paths from each corner of the square to the round place in the middle,
-    # stopping at its edge, and a ring path just inside the railing.
-    for corner in corners:
-        dx, dy = unit(cx - corner[0], cy - corner[1])
-        start = (corner[0] + dx * 300, corner[1] + dy * 300)
-        end = (cx - dx * center_r, cy - dy * center_r)
-        add_path(start, end, PATH_WIDTH)
-    # A path to the second round bed from the middle.
-    (sx, sy), side_r, _ = TISZA_ROUNDS[1]
-    dx, dy = unit(sx - cx, sy - cy)
-    add_path((cx + dx * center_r, cy + dy * center_r), (sx - dx * side_r, sy - dy * side_r), SIDE_PATH_WIDTH)
+    def add_ray(start, direction, width):
+        end = to_edge(start, direction)
+        add_path(start, end, width)
+        entrances.append(Point(end))
+
+    # The twin paths north and south of the middle.
+    for a in (-TWIN_PATH_APART, TWIN_PATH_APART):
+        b = math.sqrt(center_r ** 2 - a ** 2)
+        add_ray(at(a, -b), (-ux, -uy), SIDE_PATH_WIDTH)
+        add_ray(at(a, b), (ux, uy), SIDE_PATH_WIDTH)
     ring = park.buffer(-700)
     ring = ring if ring.geom_type == "Polygon" else max(ring.geoms, key=lambda g: g.area)
+
+    def add_clipped(a, b, width):
+        """A path from a to b, cut short where it would leave the ring path inside the railing."""
+        piece = LineString([a, b]).intersection(ring)
+        for part in getattr(piece, "geoms", [piece]):
+            if part.geom_type == "LineString" and part.length > 1:
+                add_path(part.coords[0], part.coords[-1], width)
+
+    def plaza_edge(b):
+        """How far east of the middle a path b south of it leaves the round place."""
+        return math.sqrt(max(center_r ** 2 - b ** 2, 0.0))
+
+    # The promenades west and east, each with a narrower path beside it
+    # (south of the west one, north of the east one); the statue's terrace
+    # on the east promenade.
+    add_ray(at(-center_r, 0), (-vx, -vy), PROMENADE_WIDTH)
+    add_ray(at(-plaza_edge(BESIDE_PROMENADE), BESIDE_PROMENADE), (-vx, -vy), SIDE_PATH_WIDTH)
+    statue = at(STATUE_OUT, 0)
+    add_path(at(center_r, 0), at(STATUE_OUT - STATUE_TERRACE / 2, 0), PROMENADE_WIDTH)
+    add_path(at(STATUE_OUT - STATUE_TERRACE / 2, 0), at(STATUE_OUT + STATUE_TERRACE / 2, 0), STATUE_TERRACE)
+    add_ray(at(STATUE_OUT + STATUE_TERRACE / 2, 0), (vx, vy), PATH_WIDTH)
+    add_ray(at(plaza_edge(BESIDE_PROMENADE), -BESIDE_PROMENADE), (vx, vy), SIDE_PATH_WIDTH)
+    # Straight diagonals from the middle through the small round places on
+    # to the edge, and one straight to the south-east corner, across the
+    # playground; a short one north-west to the corner by the Népopera.
+    corners = list(park.simplify(400).exterior.coords)[:-1]
+    for (rx, ry), r, _ in TISZA_ROUNDS[1:]:
+        dx, dy = unit(rx - cx, ry - cy)
+        add_path((cx + dx * center_r, cy + dy * center_r), (rx - dx * r, ry - dy * r), PATH_WIDTH)
+        add_ray((rx + dx * r, ry + dy * r), (dx, dy), PATH_WIDTH)
+    south_east = max(corners, key=lambda c: (c[0] - cx) * vx + (c[1] - cy) * vy + (c[0] - cx) * ux + (c[1] - cy) * uy)
+    dx, dy = unit(south_east[0] - cx, south_east[1] - cy)
+    add_ray((cx + dx * center_r, cy + dy * center_r), (dx, dy), PATH_WIDTH)
+    notch = min(corners, key=lambda c: math.hypot(c[0] - at(*NOTCH_TOWARDS)[0], c[1] - at(*NOTCH_TOWARDS)[1]))
+    dx, dy = unit(notch[0] - cx, notch[1] - cy)
+    add_ray((cx + dx * center_r, cy + dy * center_r), (dx, dy), SIDE_PATH_WIDTH)
+    # Across the north-east round place: west along the square, and on
+    # east-south-east to the edge.
+    (rx, ry), r, _ = TISZA_ROUNDS[1]
+    add_ray((rx - vx * r, ry - vy * r), (-vx, -vy), SIDE_PATH_WIDTH)
+    ea, eb = NE_CROSS_TOWARDS
+    ex, ey = unit(ea * vx + eb * ux, ea * vy + eb * uy)
+    add_ray((rx + ex * r, ry + ey * r), (ex, ey), SIDE_PATH_WIDTH)
+    # A path east from the south-west round place all the way to the
+    # playground's east path, which runs north to the path beside the east
+    # promenade: together they edge the playground.
+    (rx, ry), r, _ = TISZA_ROUNDS[2]
+    ra = (rx - cx) * vx + (ry - cy) * vy
+    rb = (rx - cx) * ux + (ry - cy) * uy
+    add_clipped(at(ra + r, rb), at(PLAYGROUND_EAST, rb), SIDE_PATH_WIDTH)
+    add_clipped(at(PLAYGROUND_EAST, -BESIDE_PROMENADE), at(PLAYGROUND_EAST, rb), SIDE_PATH_WIDTH)
+    playground_end = (PLAYGROUND_EAST - SIDE_PATH_WIDTH / 2, rb - SIDE_PATH_WIDTH / 2)
+    # The ring round the middle.
+    for start, end in RING_ARCS:
+        steps = max(2, int((end - start) / 8))
+        points = [at(RING_RADIUS * math.cos(math.radians(start + (end - start) * i / steps)),
+                     RING_RADIUS * math.sin(math.radians(start + (end - start) * i / steps))) for i in range(steps + 1)]
+        # Where the square's edge cuts into the ring (by the Népopera), it
+        # stops at the path just inside the railing.
+        for p0, p1 in zip(points[:-1], points[1:]):
+            add_clipped(p0, p1, SIDE_PATH_WIDTH)
+    # The ring path just inside the railing.
     ring = ring.simplify(300)
     ring_coords = list(ring.exterior.coords)
     for a, b in zip(ring_coords[:-1], ring_coords[1:]):
@@ -881,6 +1197,14 @@ def layout_tisza(space, park):
     def off_walkways(x, y):
         return not walkways.contains(Point(x, y))
 
+    playground = layout_playground(park, at, (vx, vy), walkways, ring, playground_end)
+    # Trees, lamps, leaf piles and lawn fences keep off the playground and the terrace.
+    keep_clear = unary_union([Polygon([at(*c) for c in playground.pop("frame")]).buffer(100),
+                              Point(statue).buffer(STATUE_TERRACE)])
+
+    def clear(x, y, margin=0):
+        return not keep_clear.buffer(margin).contains(Point(x, y)) if margin else not keep_clear.contains(Point(x, y))
+
     trees = []
     tree_spread = Spread(700)
     benches = []
@@ -900,7 +1224,7 @@ def layout_tisza(space, park):
                 nx, ny = ay * side, -ax * side
                 tx, ty = x + nx * (p[4] / 2 + TREE_ROW_OFFSET), y + ny * (p[4] / 2 + TREE_ROW_OFFSET)
                 if in_park(tx, ty, 300) and not path_area.buffer(150).contains(Point(tx, ty)) \
-                        and not space.near_building(Point(tx, ty), 400) and tree_spread.ok(tx, ty):
+                        and not space.near_building(Point(tx, ty), 400) and clear(tx, ty, 300) and tree_spread.ok(tx, ty):
                     trees.append([round(tx), round(ty), round(0.85 + 0.3 * chance("tree", round(tx), round(ty)), 2)])
                     tree_spread.add(tx, ty)
         for n, ((x, y), (ax, ay), s) in enumerate(walk(coords, PATH_BENCH_SPACING, PATH_BENCH_SPACING / 2, 500)):
@@ -909,7 +1233,7 @@ def layout_tisza(space, park):
             # On the gravel at the path's edge, its back to the lawn fence.
             bx, by = x + nx * (p[4] / 2 - PATH_BENCH_INSET), y + ny * (p[4] / 2 - PATH_BENCH_INSET)
             if in_park(bx, by, 200) and off_rounds(bx, by, 100) and not other_walkways.contains(Point(bx, by)) \
-                    and bench_spread.ok(bx, by) \
+                    and bench_spread.ok(bx, by) and clear(bx, by) \
                     and not space.near_building(Point(bx, by), 200):
                 benches.append([round(bx), round(by), yaw_of(-nx, -ny)])
                 bench_spread.add(bx, by)
@@ -922,7 +1246,7 @@ def layout_tisza(space, park):
         for n, ((x, y), (ax, ay), s) in enumerate(walk(coords, PATH_LAMP_SPACING, PATH_LAMP_SPACING / 2, 500)):
             nx, ny = -ay, ax
             lx, ly = x + nx * (p[4] / 2 + 50), y + ny * (p[4] / 2 + 50)
-            if in_park(lx, ly, 150) and off_rounds(lx, ly, 100) and off_walkways(lx, ly) and lamp_spread.ok(lx, ly) \
+            if in_park(lx, ly, 150) and off_rounds(lx, ly, 100) and off_walkways(lx, ly) and clear(lx, ly) and lamp_spread.ok(lx, ly) \
                     and not space.near_building(Point(lx, ly), 200):
                 lamps.append([round(lx), round(ly), yaw_of(-nx, -ny)])
                 lamp_spread.add(lx, ly)
@@ -942,6 +1266,14 @@ def layout_tisza(space, park):
                 if i % 2 == 0 and not walkways.buffer(100).contains(Point(ix, iy)):
                     bins.append([round(ix), round(iy), yaw_of(-math.cos(b), -math.sin(b))])
 
+    # Benches either side of the statue, facing it, and the playground's own.
+    for side in (-1, 1):
+        for along in (-350, 350):
+            bx, by = at(STATUE_OUT + along, side * (STATUE_TERRACE / 2 - PATH_BENCH_INSET))
+            benches.append([round(bx), round(by), yaw_of(-side * ux, -side * uy)])
+    benches += playground.pop("benches")
+    trees += playground.pop("trees")
+
     # Fill the lawns with more trees, away from the paths.
     minx, miny, maxx, maxy = park.bounds
     y = miny
@@ -953,7 +1285,7 @@ def layout_tisza(space, park):
             jy = y + (chance("fy", row, round(x)) - 0.5) * 500
             pt = Point(jx, jy)
             if in_park(jx, jy, 400) and not path_area.buffer(500).contains(pt) \
-                    and not space.near_building(pt, 500) and tree_spread.ok(jx, jy) and chance("keep", row, round(x)) < 0.75:
+                    and not space.near_building(pt, 500) and clear(jx, jy, 400) and tree_spread.ok(jx, jy) and chance("keep", row, round(x)) < 0.75:
                 trees.append([round(jx), round(jy), round(0.8 + 0.4 * chance("ts", row, round(x)), 2)])
                 tree_spread.add(jx, jy)
             x += TREE_FILL_SPACING
@@ -973,7 +1305,7 @@ def layout_tisza(space, park):
             lx, ly = x + nx * (p[4] / 2 + LEAF_PILE_OUT), y + ny * (p[4] / 2 + LEAF_PILE_OUT)
             pt = Point(lx, ly)
             if chance("pile", k, n) < LEAF_PILE_CHANCE and in_park(lx, ly, 300) and off_rounds(lx, ly, 400) \
-                    and not path_area.buffer(150).contains(pt) and not tree_points.contains(pt) and pile_spread.ok(lx, ly):
+                    and not path_area.buffer(150).contains(pt) and not tree_points.contains(pt) and clear(lx, ly, 200) and pile_spread.ok(lx, ly):
                 leaf_piles.append([round(lx), round(ly), round(0.8 + 0.5 * chance("pilesize", k, n), 2)])
                 pile_spread.add(lx, ly)
 
@@ -995,7 +1327,7 @@ def layout_tisza(space, park):
     lawn_fences = []
     for k, (line, p) in enumerate(zip(path_lines, paths)):
         others = unary_union([l.buffer(q[4] / 2 + 40) for j, (l, q) in enumerate(zip(path_lines, paths)) if j != k])
-        keep_off = unary_union([others, rounds_area, park.exterior.buffer(250)])
+        keep_off = unary_union([others, rounds_area, park.exterior.buffer(250), keep_clear])
         for side in ("left", "right"):
             edge = line.parallel_offset(p[4] / 2 + LAWN_FENCE_OFFSET, side)
             for piece in getattr(edge.difference(keep_off), "geoms", [edge.difference(keep_off)]):
@@ -1021,7 +1353,6 @@ def layout_tisza(space, park):
     fence_ring = park.buffer(-FENCE_INSET).simplify(100)
     fence_ring = fence_ring if fence_ring.geom_type == "Polygon" else max(fence_ring.geoms, key=lambda g: g.area)
     fence = []
-    entrances = [Point(p[0], p[1]) for p in paths[:len(corners)]]
     coords = list(fence_ring.exterior.coords)
     for a, b in zip(coords[:-1], coords[1:]):
         seg = LineString([a, b])
@@ -1048,6 +1379,8 @@ def layout_tisza(space, park):
         "leaf_piles": leaf_piles,
         "keepers": keepers,
         "middle": [round(cx), round(cy)],
+        "statue": [round(statue[0]), round(statue[1]), yaw_of(-vx, -vy)],
+        "playground": playground,
     }
 
 
@@ -1096,7 +1429,8 @@ def main():
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
-          f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers")
+          f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers, "
+          f"playground {len(park['playground']['items'])} things, {len(park['playground']['people'])} people")
 
 
 if __name__ == "__main__":
