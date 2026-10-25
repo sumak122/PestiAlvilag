@@ -8,6 +8,8 @@ that the AStreetFurniture actor reads:
   wide enough to have them, facing the road;
 - columns: round advertising columns (hirdetőoszlop) near street corners;
 - benches: round the edges of the parks;
+- bins: litter bins on a post, beside some street lamps and next to the
+  park benches;
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in.
@@ -52,6 +54,14 @@ COLUMN_ALONG = 900
 
 BENCH_SPACING = 2000
 BENCH_INSET = 350
+
+# Litter bins: beside this share of the street lamps, and next to park
+# benches, just past the bench's end (a bench is 180 cm long).
+BIN_CHANCE = 0.3
+BIN_RADIUS = 25
+BIN_MIN_GAP = 2500
+BIN_BESIDE_LAMP = 90
+BIN_BESIDE_BENCH = 125
 
 # Tisza Kálmán tér: the park polygon in the graybox has its middle near here.
 TISZA_PARK_NEAR = (61300, 1100)
@@ -251,7 +261,26 @@ def place_columns(data, space, tisza):
     return columns
 
 
-def place_park_benches(space, tisza_park):
+def place_lamp_bins(lamps, space, tisza):
+    """Bins on a share of the street lamps, a step along the pavement."""
+    bins = []
+    spread = Spread(BIN_MIN_GAP)
+    for x, y, yaw in lamps:
+        if chance("bin", x, y) > BIN_CHANCE:
+            continue
+        # The lamp faces the road; the pavement runs across that.
+        a = math.radians(yaw)
+        for along in (1, -1):
+            bx = x - math.sin(a) * along * BIN_BESIDE_LAMP
+            by = y + math.cos(a) * along * BIN_BESIDE_LAMP
+            if not tisza.contains(Point(bx, by)) and space.free(bx, by, BIN_RADIUS) and spread.ok(bx, by):
+                bins.append([round(bx), round(by), yaw])
+                spread.add(bx, by)
+                break
+    return bins
+
+
+def place_park_benches(space, tisza_park, bins):
     benches = []
     for park in space.parks:
         if park is tisza_park or park.area < 30e4:
@@ -269,6 +298,9 @@ def place_park_benches(space, tisza_park):
                     nx, ny = -nx, -ny
                 if space.free(x, y, 60):
                     benches.append([round(x), round(y), yaw_of(nx, ny)])
+                    bx, by = x + ax * BIN_BESIDE_BENCH, y + ay * BIN_BESIDE_BENCH
+                    if len(benches) % 2 == 0 and space.free(bx, by, BIN_RADIUS):
+                        bins.append([round(bx), round(by), yaw_of(nx, ny)])
     return benches
 
 
@@ -325,6 +357,7 @@ def layout_tisza(space, park):
     trees = []
     tree_spread = Spread(700)
     benches = []
+    bins = []
     lamps = []
     bench_spread = Spread(800)
     lamp_spread = Spread(1200)
@@ -353,6 +386,12 @@ def layout_tisza(space, park):
                     and not space.near_building(Point(bx, by), 200):
                 benches.append([round(bx), round(by), yaw_of(-nx, -ny)])
                 bench_spread.add(bx, by)
+                # Every other bench has a bin just past one end, on the same edge.
+                for along in ((1, -1) if len(benches) % 2 else ()):
+                    ix, iy = bx + ax * along * BIN_BESIDE_BENCH, by + ay * along * BIN_BESIDE_BENCH
+                    if in_park(ix, iy, 200) and off_rounds(ix, iy, 100) and not other_walkways.contains(Point(ix, iy)):
+                        bins.append([round(ix), round(iy), yaw_of(-nx, -ny)])
+                        break
         for n, ((x, y), (ax, ay), s) in enumerate(walk(coords, PATH_LAMP_SPACING, PATH_LAMP_SPACING / 2, 500)):
             nx, ny = -ay, ax
             lx, ly = x + nx * (p[4] / 2 + 50), y + ny * (p[4] / 2 + 50)
@@ -370,6 +409,11 @@ def layout_tisza(space, park):
             if not walkways.buffer(150).contains(Point(bx, by)) and bench_spread.ok(bx, by):
                 benches.append([round(bx), round(by), yaw_of(-math.cos(a), -math.sin(a))])
                 bench_spread.add(bx, by)
+                # Every other bench round the bed has a bin beside it.
+                b = a + BIN_BESIDE_BENCH / (r - 120)
+                ix, iy = x + math.cos(b) * (r - 120), y + math.sin(b) * (r - 120)
+                if i % 2 == 0 and not walkways.buffer(100).contains(Point(ix, iy)):
+                    bins.append([round(ix), round(iy), yaw_of(-math.cos(b), -math.sin(b))])
 
     # Fill the lawns with more trees, away from the paths.
     minx, miny, maxx, maxy = park.bounds
@@ -441,6 +485,7 @@ def layout_tisza(space, park):
         "rounds": rounds,
         "trees": trees,
         "benches": benches,
+        "bins": bins,
         "lamps": lamps,
         "fence": fence,
         "lawn_fences": lawn_fences,
@@ -462,7 +507,9 @@ def main():
     tisza = min(space.parks, key=lambda p: p.centroid.distance(Point(*TISZA_PARK_NEAR)))
     lamps = place_lamps(data, space, tisza)
     columns = place_columns(data, space, tisza)
-    benches = place_park_benches(space, tisza)
+    bins = []
+    benches = place_park_benches(space, tisza, bins)
+    bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
 
     out = {
@@ -471,13 +518,14 @@ def main():
         "lamps": lamps,
         "columns": columns,
         "benches": benches,
+        "bins": bins,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
-          f"{len(park['benches'])} benches, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
+          f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces")
 
 
