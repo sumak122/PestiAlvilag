@@ -107,12 +107,13 @@ TAXI_STANDS = [
     ("Keleti p\u00e1lyaudvar", (91200, -43178)),
 ]
 # A stand laid out by hand instead, where the kerbs nearby are all too close
-# to the traffic: Keleti's cab rank on Baross tér in front of the station,
-# the taxis in a row along the front facing south, the sign at its head.
+# to the traffic: Keleti's cab rank on the arrival side, in the yard along
+# the south wing by its middle pavilion, the taxis in a row facing west
+# (towards the square), the sign on the pavement at its head.
 FIXED_TAXI_STANDS = {
     "Keleti p\u00e1lyaudvar": {
-        "taxis": [[91000, -44700, 90.0], [91000, -44160, 90.0], [91000, -43620, 90.0]],
-        "sign": [91250, -44950, 180.0],
+        "taxis": [[101566, -37278, 180.0], [102106, -37278, 180.0], [102646, -37278, 180.0]],
+        "sign": [101266, -37678, 90.0],
     },
 }
 # Where taxis take the player: a name and a point near the place; the drop
@@ -163,7 +164,7 @@ BAROSS_TRAMS = [(-4500, 2600), (-4500, 5700)]
 # The three tram islands along the front, one on the west side of each track
 # (tracks at x -7300, -5900 and the side track at -4500): middle x, from y
 # to y, width.
-BAROSS_ISLANDS = [(-7570, 1800, 6600, 240), (-6170, 1800, 6600, 240), (-4770, 1800, 6600, 240)]
+BAROSS_ISLANDS = [(-7600, 2200, 6200, 240), (-6200, 2200, 6200, 240), (-4800, 2200, 6200, 240)]
 # The roundabout's lawns: no benches inside a ring of traffic.
 BAROSS_ROUNDABOUT = [(-18650, 10550), (-22200, 8300), (-24250, 9000)]
 

@@ -54,6 +54,8 @@ RESAMPLE_STEP = 4.0
 # Where a line runs through a spread zone (see build_1932_tram_routes), its
 # two tracks ease apart over this many metres of the zone.
 SPREAD_EASE = 25.0
+# Smoothing passes over a spread track (2 m points), easing out its bends.
+SPREAD_SMOOTH = 12
 # Stops: at least this far apart and from the route ends (m), and this far
 # before the crossing they serve.
 STOP_SPACING = 280.0
@@ -317,7 +319,7 @@ def offset_track(axis, spread):
                 t = min(1.0, zone.exterior.distance(here) / SPREAD_EASE)
                 offset = max(offset, TRACK_OFFSET + (far - TRACK_OFFSET) * t * t * (3.0 - 2.0 * t))
         out.append((x + nx * offset, y + ny * offset))
-    return LineString(out)
+    return LineString(smooth(out, passes=SPREAD_SMOOTH))
 
 
 def build_1932_tram_routes(ways, nodes, proj, clip, to_ue, spread=()):
