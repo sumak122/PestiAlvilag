@@ -158,7 +158,11 @@ BAROSS_BED = (-2235, 7472, 760, 740)
 # The two-armed lamps round the long lawn and the bed (their shadows show in the photo).
 BAROSS_LAMPS = [(-3650, 3909), (-3644, 5911), (-999, 4285), (-3623, 8155), (-287, 8276)]
 # Trams waiting on the side track along the front, facing south.
-BAROSS_TRAMS = [(-4800, 2600), (-4800, 5700)]
+BAROSS_TRAMS = [(-4500, 2600), (-4500, 5700)]
+# The three tram islands along the front, one on the west side of each track
+# (tracks at x -7300, -5900 and the side track at -4500): middle x, from y
+# to y, width.
+BAROSS_ISLANDS = [(-7570, 1800, 6600, 240), (-6170, 1800, 6600, 240), (-4770, 1800, 6600, 240)]
 # The roundabout's lawns: no benches inside a ring of traffic.
 BAROSS_ROUNDABOUT = [(-18650, 10550), (-22200, 8300), (-24250, 9000)]
 
@@ -929,7 +933,7 @@ def keleti(local):
 
 
 def layout_baross(space):
-    """Baross tér's trees, flower bed, lamps and waiting trams."""
+    """Baross tér's trees, flower bed, lamps, tram islands and waiting trams."""
     trees = []
     for i, middle in enumerate(BAROSS_CLUMPS):
         for k in range(BAROSS_CLUMP):
@@ -950,6 +954,7 @@ def layout_baross(space):
         "rounds": [[round(bx), round(by), BAROSS_BED[2], BAROSS_BED[3]]],
         "twin_lamps": [[*keleti(p), 0.0] for p in BAROSS_LAMPS],
         "trams": [[*keleti(p), 90.0] for p in BAROSS_TRAMS],
+        "islands": [[*keleti((x, y0)), *keleti((x, y1)), width] for x, y0, y1, width in BAROSS_ISLANDS],
     }
 
 

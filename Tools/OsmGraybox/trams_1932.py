@@ -38,6 +38,10 @@ LINES_1932 = [
 TRACK_OFFSET = 1.6
 # Two halves of one street are at most this far apart (m) to share a middle.
 PAIR_DISTANCE = 30.0
+# Streets whose tracks ran along one side, not down the middle: there the
+# track follows the half on that side. Thököly út was one wide two-way road
+# with the tram on its south side.
+TRACK_SIDE = {"Thököly út": "south"}
 # Points either side whose shifts to the middle are compared (resampled points).
 MEDIAN_WINDOW = 4
 # Cost per metre of other streets, to get from one street of a line to the
@@ -47,6 +51,9 @@ OFF_LINE_COST = 4.0
 SHARE_DISTANCE = 16.0
 # Resample the track every this many metres before offsetting.
 RESAMPLE_STEP = 4.0
+# Where a line runs through a spread zone (see build_1932_tram_routes), its
+# two tracks ease apart over this many metres of the zone.
+SPREAD_EASE = 25.0
 # Stops: at least this far apart and from the route ends (m), and this far
 # before the crossing they serve.
 STOP_SPACING = 280.0
@@ -191,8 +198,17 @@ def middle_of_street(graph, pts, streets):
                 across = math.atan2(q.y - p[1], q.x - p[0])
                 if abs(math.cos(across - heading)) > 0.3:
                     continue
-                best = (d, (q.x, q.y))
-        shifts.append(((best[1][0] - p[0]) / 2.0, (best[1][1] - p[1]) / 2.0) if best else (0.0, 0.0))
+                best = (d, (q.x, q.y), name)
+        if not best:
+            shifts.append((0.0, 0.0))
+            continue
+        (qx, qy), side = best[1], TRACK_SIDE.get(best[2])
+        if side is None:
+            share = 0.5
+        else:
+            # On the far half: move all the way across; on the near half: stay.
+            share = 1.0 if SIDE_KEY[side]((qx, qy)) < SIDE_KEY[side](p) else 0.0
+        shifts.append(((qx - p[0]) * share, (qy - p[1]) * share))
     # A point or two that missed (or wrongly found) its twin would kink the
     # track: take the median shift of the neighbours instead.
     out = []
@@ -277,9 +293,34 @@ def share_stops(stops, track, stop_places):
     return sorted(out)
 
 
-def build_1932_tram_routes(ways, nodes, proj, clip, to_ue):
+def offset_track(axis, spread):
+    """The track left of the axis: TRACK_OFFSET from it, or further apart
+    inside a spread zone, (polygon, metres from the axis) in map metres."""
+    zones = [(zone, far) for zone, far in spread if zone.intersects(axis)]
+    if not zones:
+        track = axis.offset_curve(TRACK_OFFSET)
+        return track if track.geom_type == "LineString" else max(track.geoms, key=lambda g: g.length)
+    pts = resample(axis, 2.0)
+    out = []
+    for i, (x, y) in enumerate(pts):
+        a = pts[max(0, i - 1)]
+        b = pts[min(len(pts) - 1, i + 1)]
+        length = math.dist(a, b) or 1.0
+        nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+        offset = TRACK_OFFSET
+        for zone, far in zones:
+            here = Point(x, y)
+            if zone.contains(here):
+                t = min(1.0, zone.exterior.distance(here) / SPREAD_EASE)
+                offset = max(offset, TRACK_OFFSET + (far - TRACK_OFFSET) * t * t * (3.0 - 2.0 * t))
+        out.append((x + nx * offset, y + ny * offset))
+    return LineString(out)
+
+
+def build_1932_tram_routes(ways, nodes, proj, clip, to_ue, spread=()):
     """Routes in the JSON's "trams" format plus the track lines (map metres)
-    for drawing the rails."""
+    for drawing the rails. In each `spread` zone the two tracks of a line run
+    further apart, as at a stop with islands between the tracks."""
     graph = StreetGraph(ways, nodes, proj, clip)
     graph.main_streets = {
         w["tags"]["name"] for w in ways.values()
@@ -297,9 +338,7 @@ def build_1932_tram_routes(ways, nodes, proj, clip, to_ue):
         for forward in (True, False):
             axis = centre if forward else LineString(centre.coords[::-1])
             # Positive offset is to the left in map metres (x east, y north).
-            track = axis.offset_curve(TRACK_OFFSET)
-            if track.geom_type != "LineString":
-                track = max(track.geoms, key=lambda g: g.length)
+            track = offset_track(axis, spread)
             clipped = track.intersection(inner)
             if clipped.geom_type != "LineString":
                 clipped = max(clipped.geoms, key=lambda g: g.length)

@@ -340,6 +340,8 @@ namespace Furniture
 	constexpr float PlaygroundPeopleDistance = 9000.f;
 	// A tram stands this far above the rails: the half height of its box (ATram).
 	constexpr double ParkedTramLift = 167.0;
+	// Tram islands: low stone platforms beside the tracks (cm).
+	constexpr double TramIslandHeight = 20.0;
 
 	// Shop fronts: the pavement height is found this far out from the wall (cm).
 	constexpr double ShopGroundProbe = 150.0;
@@ -976,7 +978,7 @@ void AStreetFurniture::BuildPark(const FJsonObject& Park)
 			AddObject(Furniture::TwinLamp, Ground, Row[2], 1.0, CullDistance);
 		}
 	});
-	// Trams waiting at a terminus: no route, so they stand still.
+	// Trams waiting on a side track: no route, so they stand still.
 	Furniture::ForEachRow(Park, TEXT("trams"), [&](const TArray<double>& Row)
 	{
 		if (Row.Num() < 3 || !GroundAt(FVector2D(Row[0], Row[1]), Ground))
@@ -990,6 +992,23 @@ void AStreetFurniture::BuildPark(const FJsonObject& Park)
 		{
 			Waiting->SetActorTickEnabled(false);
 		}
+	});
+	Furniture::ForEachRow(Park, TEXT("islands"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 5)
+		{
+			return;
+		}
+		const FVector2D From(Row[0], Row[1]);
+		const FVector2D To(Row[2], Row[3]);
+		if (!GroundAt((From + To) * 0.5, Ground))
+		{
+			return;
+		}
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(To.Y - From.Y, To.X - From.X));
+		Batch(Furniture::Cube, Furniture::Stone, true, 0.f).Add(FTransform(FRotator(0.0, Yaw, 0.0),
+			Ground + FVector(0.0, 0.0, Furniture::TramIslandHeight * 0.5),
+			FVector(FVector2D::Distance(From, To) / 100.0, Row[4] / 100.0, Furniture::TramIslandHeight / 100.0)));
 	});
 	Furniture::ForEachRow(Park, TEXT("fence"), [&](const TArray<double>& Row)
 	{

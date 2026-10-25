@@ -120,6 +120,7 @@ MODERN_WAYS = {
     "697548409", "1348982432", "1348982434", "1348982435",  # today's lawns
     "1348982436", "1348982437", "1348982438",
     "615542063",                                 # paved forecourt north of the hall
+    "252494484", "243417076", "238184615", "239281169",  # across the front of the station
 }
 
 # Positions on Baross tér are measured from the middle of Keleti's main front
@@ -139,8 +140,20 @@ ROUNDABOUT_STEP = 6.0
 ROUNDABOUT_LAWN = ((-18650, 10550), 1300, 1500)
 ROUNDABOUT_LAWNS = [[(-23450, 7550), (-20000, 7500), (-19500, 7900), (-23450, 9850)],
                     [(-24600, 8150), (-23950, 8150), (-23900, 9850), (-24550, 9850)]]
+# With the roads across the front gone, every street meets the others only
+# at the ring: the square's south side carries traffic both ways as far as
+# Kerepesi út, whose two halves part there; the outbound half of the north
+# side (Thököly út) goes on to the ring past the statue island. Each new
+# piece is (node order, tags copied from this way); a place in Baross tér
+# coordinates stands for a new node, "ring" for the nearest ring node.
+BAROSS_TWO_WAY = ["317434805", "243127383", "1344877826"]
+BAROSS_LINKS = [
+    (["275276849", "2762951923"], "25444192"),
+    (["ring", (-16600, 6200), (-15500, 4950), (-14000, 3950), (-12300, 2850), "2585326576"], "327673021"),
+]
+BAROSS_LINK_WIDTH = "7"
 # The gravel island with the Baross statue, its outline round from the west
-# tip; its east end stops at the road that still crosses from side to side.
+# tip.
 STATUE_ISLAND = [(-16160, 6560), (-15340, 5640), (-13940, 4700), (-12300, 3700), (-11600, 3500),
                  (-11600, 5400), (-11245, 6065), (-9500, 7400), (-9400, 8500), (-10180, 8880),
                  (-12500, 9040), (-14850, 8780), (-15970, 7770)]
@@ -167,8 +180,13 @@ TRAM_LEGS = [
                                     (-11000, 10100), (-9000, 10200), (-7600, 10000), (-6800, 9300), (-6600, 8300),
                                     (-6600, 0), (-6400, -1500), (-6000, -2700)]),
 ]
-# The side track along the front where trams wait (no line uses it).
-TRAM_SIDING = [(-6600, -600), (-5600, 400), (-4800, 1400), (-4800, 7600), (-5600, 8500), (-6600, 8900)]
+# Along the station front the two tracks part to TRAM_SPREAD metres either
+# side of the line's middle inside this zone, so with the side track where
+# trams wait (no line uses it) there are three tracks the same distance
+# apart, each with a tram island west of it (street_furniture.py).
+TRAM_SPREAD_ZONE = [(-10000, -1000), (-3000, -1000), (-3000, 9300), (-10000, 9300)]
+TRAM_SPREAD = 7.0
+TRAM_SIDING = [(-6100, -1300), (-5300, -100), (-4500, 1100), (-4500, 7100), (-5200, 8300), (-6200, 9300)]
 
 
 def from_keleti(local):
@@ -249,6 +267,22 @@ def baross_ter_1932(nodes, ways, proj):
                     k += 1
                 run = []
 
+    for wid in BAROSS_TWO_WAY:
+        ways[wid] = dict(ways[wid], tags=dict(ways[wid]["tags"], oneway="no"))
+    for k, (order, like) in enumerate(BAROSS_LINKS):
+        refs = []
+        for i, item in enumerate(order):
+            if isinstance(item, tuple):
+                ref = f"baross-link-{k}-{i}"
+                nodes[ref] = proj.to_latlon(*from_keleti(item))
+                item = ref
+            refs.append(item)
+        for i, item in enumerate(refs):
+            if item == "ring":
+                near = proj.to_metres(*nodes[refs[i + 1 if i == 0 else i - 1]])
+                refs[i] = ring_refs[min(range(len(ring_pts)), key=lambda j: math.dist(ring_pts[j], near))]
+        ways[f"baross-link-{k}"] = {"refs": refs, "tags": dict(ways[like]["tags"], width=BAROSS_LINK_WIDTH)}
+
     # The tram line: its own street, so the 1932 lines can be routed along it.
     fork = "baross-tram-fork"
     nodes[fork] = proj.to_latlon(*from_keleti(TRAM_FORK))
@@ -282,6 +316,7 @@ def baross_ter_1932(nodes, ways, proj):
         "parks": ring_lawns + [LineString([start, end]).buffer(half / 100.0, 24)] + lawns,
         "trams": [LineString([from_keleti(p) for p in TRAM_SIDING])],
         "tram_lines": tram_lines,
+        "tram_spread": [(Polygon([from_keleti(p) for p in TRAM_SPREAD_ZONE]), TRAM_SPREAD)],
     }
 
 
@@ -751,7 +786,7 @@ def convert(osm_path, origin):
     walls = unary_union([p for p, tags in buildings if building_base_m(tags) < DRIVE_UNDER_HEIGHT]) if buildings else None
 
     # Today's tram tracks are left out: the 1932 network was different.
-    tram_routes, tram_tracks = build_1932_tram_routes(ways, nodes, proj, clip, to_ue)
+    tram_routes, tram_tracks = build_1932_tram_routes(ways, nodes, proj, clip, to_ue, baross["tram_spread"])
     for track in tram_tracks + baross["trams"]:
         add_area(trams, track.buffer(TRACK_WIDTH["tram"] / 2.0, cap_style="flat"), {})
 
