@@ -24,6 +24,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "ShopModel.h"
 #include "StoryPerson.h"
+#include "Tram.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFurniture, Log, All);
@@ -113,6 +114,23 @@ namespace Furniture
 	}
 
 	const TArray<FFurniturePart> Bench = MakeBench();
+
+	// Baross tér's lamp (Fortepan 139746): the street lamp's pole with a
+	// crook and a lantern reaching out to each side.
+	TArray<FFurniturePart> MakeTwinLamp()
+	{
+		TArray<FFurniturePart> Parts = Lamp;
+		constexpr int32 FirstArmPart = 3;
+		for (int32 i = FirstArmPart; i < Lamp.Num(); ++i)
+		{
+			FFurniturePart Other = Lamp[i];
+			Other.Location.X = -Other.Location.X;
+			Parts.Add(Other);
+		}
+		return Parts;
+	}
+
+	const TArray<FFurniturePart> TwinLamp = MakeTwinLamp();
 
 	// A litter bin: a round sheet-metal basket in dark green, hung on the
 	// side of a short iron post, open at the top.
@@ -320,6 +338,10 @@ namespace Furniture
 
 	// Children and nannies are not drawn beyond this distance (cm).
 	constexpr float PlaygroundPeopleDistance = 9000.f;
+	// A tram stands this far above the rails: the half height of its box (ATram).
+	constexpr double ParkedTramLift = 167.0;
+	// Tram islands: low stone platforms beside the tracks (cm).
+	constexpr double TramIslandHeight = 20.0;
 
 	// Shop fronts: the pavement height is found this far out from the wall (cm).
 	constexpr double ShopGroundProbe = 150.0;
@@ -536,7 +558,11 @@ void AStreetFurniture::BeginPlay()
 	const TSharedPtr<FJsonObject>* Park = nullptr;
 	if (Root->TryGetObjectField(TEXT("tisza"), Park))
 	{
-		BuildTiszaKalmanTer(**Park);
+		BuildPark(**Park);
+	}
+	if (Root->TryGetObjectField(TEXT("baross"), Park))
+	{
+		BuildPark(**Park);
 	}
 
 	// Hand each batch all its instances at once; one by one is slow.
@@ -885,7 +911,7 @@ void AStreetFurniture::BuildTaxiStands(const FJsonObject& Root)
 	}
 }
 
-void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
+void AStreetFurniture::BuildPark(const FJsonObject& Park)
 {
 	// Gravel paths and the round places, just above the grass.
 	Furniture::ForEachRow(Park, TEXT("paths"), [&](const TArray<double>& Row)
@@ -944,6 +970,45 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		{
 			AddObject(Furniture::Lamp, Ground, Row[2], 1.0, CullDistance);
 		}
+	});
+	Furniture::ForEachRow(Park, TEXT("twin_lamps"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			AddObject(Furniture::TwinLamp, Ground, Row[2], 1.0, CullDistance);
+		}
+	});
+	// Trams waiting on a side track: no route, so they stand still.
+	Furniture::ForEachRow(Park, TEXT("trams"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 3 || !GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			return;
+		}
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ATram* Waiting = GetWorld()->SpawnActor<ATram>(ATram::StaticClass(), Ground + FVector(0.0, 0.0, Furniture::ParkedTramLift),
+			FRotator(0.0, Row[2], 0.0), Params))
+		{
+			Waiting->SetActorTickEnabled(false);
+		}
+	});
+	Furniture::ForEachRow(Park, TEXT("islands"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 5)
+		{
+			return;
+		}
+		const FVector2D From(Row[0], Row[1]);
+		const FVector2D To(Row[2], Row[3]);
+		if (!GroundAt((From + To) * 0.5, Ground))
+		{
+			return;
+		}
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(To.Y - From.Y, To.X - From.X));
+		Batch(Furniture::Cube, Furniture::Stone, true, 0.f).Add(FTransform(FRotator(0.0, Yaw, 0.0),
+			Ground + FVector(0.0, 0.0, Furniture::TramIslandHeight * 0.5),
+			FVector(FVector2D::Distance(From, To) / 100.0, Row[4] / 100.0, Furniture::TramIslandHeight / 100.0)));
 	});
 	Furniture::ForEachRow(Park, TEXT("fence"), [&](const TArray<double>& Row)
 	{

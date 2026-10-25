@@ -23,7 +23,9 @@ struct FFurniturePart;
  * rake them, the statue east of the middle and the big playground in the
  * south-east quarter (ParkModel.h), and the taxi stands near the Népszínház and Keleti with
  * their parked taxis, and the 1930s shop fronts and house gates along
- * Népszínház utca (ShopModel.h). It also starts the leaves blowing about (AFallingLeaves).
+ * Népszínház utca (ShopModel.h), and Baross tér of the early 1930s in front
+ * of Keleti: tree clumps, a flower bed, two-armed lamps, the tram islands
+ * and trams waiting on the side track. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
  * shape and colour, so thousands of them cost little.
@@ -77,7 +79,13 @@ private:
 	bool GroundAt(const FVector2D& At, FVector& OutGround) const;
 
 	void BuildStreets(const FJsonObject& Root);
-	void BuildTiszaKalmanTer(const FJsonObject& Park);
+	/**
+	 * A park or square laid out in the JSON (tisza, baross): paths, flower
+	 * beds, trees, benches, bins, lamps, railings, fences, hedges, a statue,
+	 * a playground, leaf piles and their keepers, and waiting trams; each only
+	 * where the JSON has it.
+	 */
+	void BuildPark(const FJsonObject& Park);
 	/** The sand, things to play on, children and nannies of the playground in Tisza Kálmán tér. */
 	void BuildPlayground(const FJsonObject& Playground);
 	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */

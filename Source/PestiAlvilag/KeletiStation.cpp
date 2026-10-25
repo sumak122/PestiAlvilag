@@ -93,7 +93,7 @@ namespace Keleti
 	constexpr double TrussApex = 3200.0;
 	constexpr int32 HallBays = 18;
 	constexpr double EndScreenBottom = 900.0;  // the glass screen over the tracks at the far end
-	constexpr double GlassFrom = 0.12;         // the glazed strip of each roof slope, from eaves (0) to ridge (1)
+	constexpr double GlassFrom = 0.62;         // the glazed strip of each roof slope, from eaves (0) to ridge (1): the top third, as in the 1944 aerial photo
 	constexpr double GlassTo = 0.94;
 
 	// Tracks and platforms.
@@ -111,14 +111,15 @@ namespace Keleti
 	constexpr double CarriageLength = 2000.0;
 	constexpr double CarriagePitch = 2070.0;
 
-	// The Baross statue on its lawn in front of the station.
-	const FVector2D StatueAt(-3466.0, 0.0);
+	// The Baross statue on its lawn, on the island at the far side of the
+	// square (1944 aerial photo, Fortepan 109125).
+	const FVector2D StatueAt(-12873.0, 6151.0);
 
 	// Lettering (placed by the actor).
 	const FVector FriezeTextAt(-62.0, 0.0, 2725.0);
 	const FVector AtticTextAt(-42.0, 0.0, 3030.0);
 	const FVector RestaurantTextAt(77.0, -3590.0, 480.0);
-	const FVector StatueTextAt(-3466.0 - 173.0, 0.0, 500.0);
+	const FVector StatueTextAt(StatueAt.X - 173.0, StatueAt.Y, 500.0);
 
 	struct FPart
 	{
@@ -417,7 +418,15 @@ namespace Keleti
 	// One stretch of a wing's outside wall: a rusticated ground floor of
 	// arched windows, an upper floor of tall arched windows over little
 	// balconies, columns between the bays, the entablature and the cornice.
-	void Elevation(FBuilder& B, const FFace& F, double S0, double S1)
+	// The middle of the bay Elevation puts at about the middle of a stretch.
+	double MiddleBay(double S0, double S1)
+	{
+		const int32 Bays = FMath::Max(1, FMath::RoundToInt((S1 - S0) / BayWidth));
+		return S0 + (S1 - S0) / Bays * (Bays / 2 + 0.5);
+	}
+
+	// DoorAt: the bay there gets a door down to the pavement instead of a window.
+	void Elevation(FBuilder& B, const FFace& F, double S0, double S1, double DoorAt = -1.0)
 	{
 		F.Block(B, Trim, S0, S1, Base, 40.0, 10.0);
 		F.Rustication(B, S0, S1, RusticTop);
@@ -435,7 +444,25 @@ namespace Keleti
 		for (int32 k = 0; k < Bays; ++k)
 		{
 			const double Mid = S0 + Step * (k + 0.5);
-			F.Arch(B, Trim, Glass, Mid - 95.0, Mid + 95.0, 130.0, 560.0, 16.0, 10.0, false);
+			if (FMath::Abs(Mid - DoorAt) < 1.0)
+			{
+				// Two wooden leaves with brass handles under a glazed fanlight.
+				F.Arch(B, Trim, Glass, Mid - 95.0, Mid + 95.0, 0.0, 560.0, 16.0, 10.0, true);
+				F.Panel(B, Door, Mid - 79.0, Mid + 79.0, 0.0, 400.0, 2.0);
+				F.Block(B, Trim, Mid - 79.0, Mid + 79.0, 400.0, 416.0, 10.0);
+				F.Panel(B, Trim, Mid - 2.0, Mid + 2.0, 0.0, 400.0, 3.0);
+				for (const double Leaf : { Mid - 40.0, Mid + 40.0 })
+				{
+					F.Block(B, Wood, Leaf - 26.0, Leaf + 26.0, 40.0, 170.0, 4.0);
+					F.Block(B, Wood, Leaf - 26.0, Leaf + 26.0, 220.0, 370.0, 4.0);
+				}
+				F.Block(B, Bronze, Mid - 14.0, Mid - 8.0, 185.0, 215.0, 8.0);
+				F.Block(B, Bronze, Mid + 8.0, Mid + 14.0, 185.0, 215.0, 8.0);
+			}
+			else
+			{
+				F.Arch(B, Trim, Glass, Mid - 95.0, Mid + 95.0, 130.0, 560.0, 16.0, 10.0, false);
+			}
 			F.Block(B, Trim, Mid - 125.0, Mid + 125.0, RusticTop + 60.0, UpperSill, 12.0);
 			F.Arch(B, Trim, Glass, Mid - 105.0, Mid + 105.0, UpperSill, UpperSpring, 16.0, 10.0, false);
 		}
@@ -488,8 +515,15 @@ namespace Keleti
 		B.Cylinder(Iron, Center, 7.0, Z, Z + 450.0, 6);
 	}
 
+	// An axis-aligned box between two corners given in any order.
+	void BoxBetween(FBuilder& B, EPart Part, const FVector& P0, const FVector& P1)
+	{
+		B.Box(Part, P0.ComponentMin(P1), P0.ComponentMax(P1));
+	}
+
 	// The station restaurant on the front of the departure wing: a canvas
-	// awning over the ground floor and a terrace behind a hedge.
+	// awning over the ground floor and a terrace behind a hedge, with
+	// tables, lanterns, the door in the middle bay and a menu board.
 	void Restaurant(FBuilder& B, const FFace& F, double S0, double S1)
 	{
 		const double A = S0 + 120.0;
@@ -501,8 +535,43 @@ namespace Keleti
 		{
 			B.Cylinder(Iron, FVector2D(F.At(S, 0.0, 310.0)), 5.0, 0.0, 520.0, 6);
 		}
-		// The hedge in planters, open in the middle for the way in.
-		const double Gap = (A + E) / 2.0;
+		// The hedge in planters, open in front of the door for the way in.
+		const double Gap = MiddleBay(S0, S1);
+		B.LineBox(Trim, F.At(Gap - 140.0, 0.0, 45.0), F.At(Gap + 140.0, 0.0, 45.0), 45.0, 0.0, 15.0);
+		// The menu on a board by the way in.
+		BoxBetween(B, Wood, F.At(Gap + 160.0, 0.0, 420.0), F.At(Gap + 240.0, 130.0, 425.0));
+		BoxBetween(B, Black, F.At(Gap + 166.0, 30.0, 425.0), F.At(Gap + 234.0, 124.0, 427.0));
+		BoxBetween(B, Canvas, F.At(Gap + 175.0, 85.0, 427.0), F.At(Gap + 225.0, 115.0, 428.0));
+		// Tables with white cloths and two chairs each, between the wall and the hedge.
+		const double Bay = (E - A) / 6.0;
+		for (double S = A + Bay * 0.5; S < E; S += Bay)
+		{
+			if (FMath::Abs(S - Gap) < 150.0)
+			{
+				continue;
+			}
+			B.Cylinder(Iron, FVector2D(F.At(S, 0.0, 190.0)), 4.0, 0.0, 72.0, 6);
+			B.Cylinder(Canvas, FVector2D(F.At(S, 0.0, 190.0)), 40.0, 72.0, 77.0, 12);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				const double C = S + Side * 58.0;
+				BoxBetween(B, Wood, F.At(C - 18.0, 42.0, 172.0), F.At(C + 18.0, 46.0, 208.0));
+				BoxBetween(B, Wood, F.At(C + Side * 16.0, 46.0, 172.0), F.At(C + Side * 20.0, 92.0, 208.0));
+				for (const double Leg : { -15.0, 15.0 })
+				{
+					BoxBetween(B, Wood, F.At(C + Leg - 2.0, 0.0, 174.0), F.At(C + Leg + 2.0, 42.0, 178.0));
+					BoxBetween(B, Wood, F.At(C + Leg - 2.0, 0.0, 202.0), F.At(C + Leg + 2.0, 42.0, 206.0));
+				}
+			}
+		}
+		// Lanterns hanging from the awning frame, one per bay.
+		for (double S = A + Bay * 0.5; S < E; S += Bay)
+		{
+			const FVector2D Hook(F.At(S, 0.0, 150.0));
+			B.Cylinder(Iron, Hook, 1.5, 440.0, 610.0, 4);
+			B.Cylinder(Bronze, Hook, 11.0, 400.0, 440.0, 6);
+			B.Cylinder(Canvas, Hook, 8.0, 404.0, 436.0, 6);
+		}
 		B.LineBox(Wood, F.At(A, 0.0, 340.0), F.At(Gap - 120.0, 0.0, 340.0), 25.0, 0.0, 45.0);
 		B.LineBox(Wood, F.At(Gap + 120.0, 0.0, 340.0), F.At(E, 0.0, 340.0), 25.0, 0.0, 45.0);
 		B.LineBox(Lawn, F.At(A, 0.0, 340.0), F.At(Gap - 120.0, 0.0, 340.0), 22.0, 45.0, 110.0);
@@ -572,7 +641,7 @@ namespace Keleti
 
 			// The front of the corner pavilion on Baross tér, and the far end.
 			const FFace West{ FVector(WingFrontX, Side * FrontHalf, 0.0), FVector(0.0, Side, 0.0), FVector(-1.0, 0.0, 0.0) };
-			Elevation(B, West, 0.0, Wing.Front.Out - FrontHalf);
+			Elevation(B, West, 0.0, Wing.Front.Out - FrontHalf, Side < 0.0 ? MiddleBay(0.0, Wing.Front.Out - FrontHalf) : -1.0);
 			if (Side < 0.0)
 			{
 				Restaurant(B, West, 0.0, Wing.Front.Out - FrontHalf);
@@ -865,7 +934,7 @@ namespace Keleti
 			{
 				B.Tube(Truss, RoofPoint(Side, GlassFrom, X) + Lift, RoofPoint(Side, GlassTo, X) + Lift, 5.0, 4);
 			}
-			for (const double T : { GlassFrom, 0.4, 0.68, GlassTo })
+			for (const double T : { 0.3, GlassFrom, 0.78, GlassTo })
 			{
 				B.Tube(Truss, RoofPoint(Side, T, WingFrontX) - FVector(0.0, 0.0, 22.0), RoofPoint(Side, T, EndX) - FVector(0.0, 0.0, 22.0), 10.0, 4);
 			}

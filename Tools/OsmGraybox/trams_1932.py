@@ -17,24 +17,31 @@ from shapely.geometry import LineString, Point
 
 # Streets with trams in 1932 inside the prototype area, each line from one map
 # edge to another. "from"/"to" say which end of the first/last street to use.
-# Karpfenstein utca of 1932 is today's Dobozi utca.
+# Karpfenstein utca of 1932 is today's Dobozi utca. "Baross tér villamos" is
+# the track across Baross tér laid by osm_to_graybox.baross_ter_1932, after
+# the 1944 aerial photo: no trams ran along the Kerepesi út side then.
 LINES_1932 = [
     {"name": "Nagykörút", "streets": ["Erzsébet körút", "József körút"], "from": "north", "to": "south"},
-    {"name": "Rákóczi út - Kerepesi út", "streets": ["Rákóczi út", "Baross tér", "Kerepesi út"], "from": "west", "to": "east"},
+    {"name": "Rákóczi út - Thököly út", "streets": ["Rákóczi út", "Baross tér villamos", "Thököly út"],
+     "from": "west", "to": "north"},
     {"name": "Népszínház utca - Salgótarjáni utca",
      "streets": ["Rákóczi út", "Népszínház utca", "Salgótarjáni utca"], "from": "west", "to": "east"},
     {"name": "Bezerédj utca",
      "streets": ["Rákóczi út", "Népszínház utca", "Csokonai utca", "Bezerédj utca", "II. János Pál pápa tér",
-                 "Baross tér", "Kerepesi út"],
-     "from": "west", "to": "east"},
+                 "Fiumei út", "Baross tér villamos", "Thököly út"],
+     "from": "west", "to": "north"},
     {"name": "Karpfenstein utca", "streets": ["Rákóczi út", "Népszínház utca", "Dobozi utca"], "from": "west", "to": "south"},
-    {"name": "Fiumei út", "streets": ["Kerepesi út", "Baross tér", "Fiumei út"], "from": "east", "to": "south"},
+    {"name": "Fiumei út", "streets": ["Thököly út", "Baross tér villamos", "Fiumei út"], "from": "north", "to": "south"},
 ]
 
 # Each track sits this far left of the street's middle (m): double track, 1435 mm gauge.
 TRACK_OFFSET = 1.6
 # Two halves of one street are at most this far apart (m) to share a middle.
 PAIR_DISTANCE = 30.0
+# Streets whose tracks ran along one side, not down the middle: (side,
+# metres from the middle of the half on that side out towards the kerb).
+# Thököly út was one wide two-way road with the tram on its south side.
+TRACK_SIDE = {"Thököly út": ("south", 2.7)}
 # Points either side whose shifts to the middle are compared (resampled points).
 MEDIAN_WINDOW = 4
 # Cost per metre of other streets, to get from one street of a line to the
@@ -44,6 +51,9 @@ OFF_LINE_COST = 4.0
 SHARE_DISTANCE = 16.0
 # Resample the track every this many metres before offsetting.
 RESAMPLE_STEP = 4.0
+# Where a line runs through a spread zone (see build_1932_tram_routes), its
+# two tracks ease apart over this many metres of the zone.
+SPREAD_EASE = 25.0
 # Stops: at least this far apart and from the route ends (m), and this far
 # before the crossing they serve.
 STOP_SPACING = 280.0
@@ -59,6 +69,8 @@ EXTRA_STOPS = [
     # Mid-block on Népszínház utca (Bözsi néni's, not named on the sign):
     # named after the nearest cross street, like the others.
     ("Nagy Fuvaros utca", (583.92, -212.68)),
+    # On the track along Keleti's main front.
+    ("Keleti pályaudvar", (861.66, 391.78)),
 ]
 EXTRA_STOP_REACH = 100.0
 # Stops are named after the street crossed, by its 1932 name.
@@ -90,7 +102,7 @@ class StreetGraph:
         self.street_lines = {}
         for way in ways.values():
             tags = way["tags"]
-            if tags.get("highway") not in TRAM_HIGHWAYS:
+            if tags.get("highway") not in TRAM_HIGHWAYS and not tags.get("tram_1932"):
                 continue
             name = tags.get("name", "")
             refs = [r for r in way["refs"] if r in nodes]
@@ -186,8 +198,20 @@ def middle_of_street(graph, pts, streets):
                 across = math.atan2(q.y - p[1], q.x - p[0])
                 if abs(math.cos(across - heading)) > 0.3:
                     continue
-                best = (d, (q.x, q.y))
-        shifts.append(((best[1][0] - p[0]) / 2.0, (best[1][1] - p[1]) / 2.0) if best else (0.0, 0.0))
+                best = (d, (q.x, q.y), name)
+        if not best:
+            shifts.append((0.0, 0.0))
+            continue
+        (qx, qy), side = best[1], TRACK_SIDE.get(best[2])
+        if side is None:
+            shifts.append(((qx - p[0]) / 2.0, (qy - p[1]) / 2.0))
+            continue
+        # On the far half: move all the way across; on the near half: stay.
+        # Then on out towards the kerb.
+        far = SIDE_KEY[side[0]]((qx, qy)) < SIDE_KEY[side[0]](p)
+        dx, dy = (qx - p[0], qy - p[1]) if far else (p[0] - qx, p[1] - qy)
+        out = side[1] / (math.hypot(dx, dy) or 1.0)
+        shifts.append((dx * (1.0 + out), dy * (1.0 + out)) if far else (dx * out, dy * out))
     # A point or two that missed (or wrongly found) its twin would kink the
     # track: take the median shift of the neighbours instead.
     out = []
@@ -272,9 +296,34 @@ def share_stops(stops, track, stop_places):
     return sorted(out)
 
 
-def build_1932_tram_routes(ways, nodes, proj, clip, to_ue):
+def offset_track(axis, spread):
+    """The track left of the axis: TRACK_OFFSET from it, or further apart
+    inside a spread zone, (polygon, metres from the axis) in map metres."""
+    zones = [(zone, far) for zone, far in spread if zone.intersects(axis)]
+    if not zones:
+        track = axis.offset_curve(TRACK_OFFSET)
+        return track if track.geom_type == "LineString" else max(track.geoms, key=lambda g: g.length)
+    pts = resample(axis, 2.0)
+    out = []
+    for i, (x, y) in enumerate(pts):
+        a = pts[max(0, i - 1)]
+        b = pts[min(len(pts) - 1, i + 1)]
+        length = math.dist(a, b) or 1.0
+        nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+        offset = TRACK_OFFSET
+        for zone, far in zones:
+            here = Point(x, y)
+            if zone.contains(here):
+                t = min(1.0, zone.exterior.distance(here) / SPREAD_EASE)
+                offset = max(offset, TRACK_OFFSET + (far - TRACK_OFFSET) * t * t * (3.0 - 2.0 * t))
+        out.append((x + nx * offset, y + ny * offset))
+    return LineString(out)
+
+
+def build_1932_tram_routes(ways, nodes, proj, clip, to_ue, spread=()):
     """Routes in the JSON's "trams" format plus the track lines (map metres)
-    for drawing the rails."""
+    for drawing the rails. In each `spread` zone the two tracks of a line run
+    further apart, as at a stop with islands between the tracks."""
     graph = StreetGraph(ways, nodes, proj, clip)
     graph.main_streets = {
         w["tags"]["name"] for w in ways.values()
@@ -292,9 +341,7 @@ def build_1932_tram_routes(ways, nodes, proj, clip, to_ue):
         for forward in (True, False):
             axis = centre if forward else LineString(centre.coords[::-1])
             # Positive offset is to the left in map metres (x east, y north).
-            track = axis.offset_curve(TRACK_OFFSET)
-            if track.geom_type != "LineString":
-                track = max(track.geoms, key=lambda g: g.length)
+            track = offset_track(axis, spread)
             clipped = track.intersection(inner)
             if clipped.geom_type != "LineString":
                 clipped = max(clipped.geoms, key=lambda g: g.length)
