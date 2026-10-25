@@ -88,12 +88,11 @@ namespace FoodMenus
 {
 	constexpr int32 HintLine = 31;
 	constexpr int32 SpeechLine = 6;
-	constexpr float CafeRadius = 300.f;
+	// How close to the café waiter you must be to call him over.
+	constexpr float WaiterRadius = 250.f;
 	constexpr float RestaurantRadius = 450.f;
 	constexpr float VendorRadius = 280.f;
-	// Where to order at the café (in its own frame, by its door) and at the
-	// station restaurant (in Keleti's frame, on its terrace).
-	const FVector CafeOrderAt(260.0, 560.0, 0.0);
+	// Where to order at the station restaurant (in Keleti's frame, on its terrace).
 	const FVector2D RestaurantOrderAt(-350.0, -3590.0);
 
 	const FLinearColor Dim(0.f, 0.f, 0.f, 0.55f);
@@ -159,9 +158,9 @@ void AFoodMenus::LoadPictures()
 
 void AFoodMenus::GatherOrderPoints(TArray<FOrderPoint>& Out) const
 {
-	for (TActorIterator<ACafe> It(GetWorld()); It; ++It)
+	for (TActorIterator<ACafeWaiter> It(GetWorld()); It; ++It)
 	{
-		Out.Add({ It->GetActorTransform().TransformPosition(FoodMenus::CafeOrderAt), FoodMenus::CafeRadius, EFoodMenu::Cafe });
+		Out.Add({ It->GetActorLocation(), FoodMenus::WaiterRadius, EFoodMenu::Cafe, *It });
 	}
 	if (TActorIterator<AKeletiStation>(GetWorld()))
 	{
@@ -248,15 +247,16 @@ void AFoodMenus::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(FoodMenus::HintLine, 0.f, FColor(255, 210, 60),
-			FString::Printf(TEXT("E: look at the menu  (%s, %s)"), Menu.Title, Menu.English));
+			FString::Printf(Nearest->Waiter ? TEXT("E: call the waiter for the menu  (%s, %s)") : TEXT("E: look at the menu  (%s, %s)"),
+				Menu.Title, Menu.English));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::E))
 	{
-		Open(Nearest->Menu);
+		Open(Nearest->Menu, Nearest->Waiter);
 	}
 }
 
-void AFoodMenus::Open(EFoodMenu Which)
+void AFoodMenus::Open(EFoodMenu Which, ACafeWaiter* Waiter)
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || !GEngine || !GEngine->GameViewport)
@@ -265,6 +265,11 @@ void AFoodMenus::Open(EFoodMenu Which)
 	}
 	OpenMenu = Which;
 	Selected = 0;
+	Attending = Waiter;
+	if (Waiter)
+	{
+		Waiter->Attend(PC->GetPawn());
+	}
 	MenuWidget = BuildMenuWidget();
 	GEngine->GameViewport->AddViewportWidgetContent(MenuWidget.ToSharedRef(), 10);
 	PC->SetIgnoreMoveInput(true);
@@ -280,6 +285,11 @@ void AFoodMenus::Close()
 	}
 	MenuWidget.Reset();
 	OpenMenu = EFoodMenu::Count;
+	if (ACafeWaiter* Waiter = Attending.Get())
+	{
+		Waiter->Attend(nullptr);
+	}
+	Attending.Reset();
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
 		PC->SetIgnoreMoveInput(false);
