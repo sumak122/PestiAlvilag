@@ -65,6 +65,12 @@ TREE_FILL_SPACING = 1500
 PATH_LAMP_SPACING = 2500
 PATH_BENCH_SPACING = 1600
 FENCE_INSET = 60
+# A knee-high wire fence on little posts keeps people off the lawns along
+# the paths, and low clipped hedges ring the round places (Fortepan 70268).
+LAWN_FENCE_OFFSET = 15
+LAWN_FENCE_MIN = 300
+HEDGE_OFFSET = 70
+HEDGE_GAP = 150
 FENCE_GAP = 900
 
 
@@ -379,6 +385,36 @@ def layout_tisza(space, park):
         y += TREE_FILL_SPACING * 0.87
         row += 1
 
+    # Wire fences along both edges of every path, broken where other paths
+    # cross and at the round places; hedges round the round places, open
+    # where the paths come in.
+    rounds_area = unary_union([Point(x, y).buffer(r + HEDGE_OFFSET + 60) for (x, y), r, _ in TISZA_ROUNDS])
+    bench_room = unary_union([Point(b[0], b[1]).buffer(120) for b in benches])
+    lawn_fences = []
+    for k, (line, p) in enumerate(zip(path_lines, paths)):
+        others = unary_union([l.buffer(q[4] / 2 + 40) for j, (l, q) in enumerate(zip(path_lines, paths)) if j != k])
+        keep_off = unary_union([others, rounds_area, bench_room, park.exterior.buffer(250)])
+        for side in ("left", "right"):
+            edge = line.parallel_offset(p[4] / 2 + LAWN_FENCE_OFFSET, side)
+            for piece in getattr(edge.difference(keep_off), "geoms", [edge.difference(keep_off)]):
+                if piece.geom_type != "LineString" or piece.length < LAWN_FENCE_MIN:
+                    continue
+                pts = list(piece.coords)
+                for a, b in zip(pts[:-1], pts[1:]):
+                    lawn_fences.append([round(a[0]), round(a[1]), round(b[0]), round(b[1])])
+
+    hedges = []
+    hedge_gaps = walkways.buffer(HEDGE_GAP)
+    for (x, y), r, _ in TISZA_ROUNDS:
+        ring = Point(x, y).buffer(r + HEDGE_OFFSET, 16).exterior
+        rest = ring.difference(hedge_gaps)
+        for piece in getattr(rest, "geoms", [rest]):
+            if piece.geom_type != "LineString" or piece.length < 100:
+                continue
+            pts = list(piece.coords)
+            for a, b in zip(pts[:-1], pts[1:]):
+                hedges.append([round(a[0]), round(a[1]), round(b[0]), round(b[1])])
+
     # The railing just inside the edge, with gaps where paths come in.
     fence_ring = park.buffer(-FENCE_INSET).simplify(100)
     fence_ring = fence_ring if fence_ring.geom_type == "Polygon" else max(fence_ring.geoms, key=lambda g: g.area)
@@ -404,6 +440,8 @@ def layout_tisza(space, park):
         "benches": benches,
         "lamps": lamps,
         "fence": fence,
+        "lawn_fences": lawn_fences,
+        "hedges": hedges,
         "middle": [round(cx), round(cy)],
     }
 
@@ -436,7 +474,8 @@ def main():
         json.dump(out, f, separators=(",", ":"))
     print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
-          f"{len(park['benches'])} benches, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs")
+          f"{len(park['benches'])} benches, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
+          f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces")
 
 
 if __name__ == "__main__":

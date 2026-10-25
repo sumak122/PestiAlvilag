@@ -91,6 +91,13 @@ namespace Furniture
 	// The low iron railing round the park.
 	constexpr double RailingPostSpacing = 250.0;
 	constexpr double RailingHeight = 90.0;
+
+	// The wire fences along the lawns and the hedges round the round places.
+	const FLinearColor Hedge(0.05f, 0.15f, 0.04f);
+	constexpr double LawnFencePostSpacing = 200.0;
+	constexpr double LawnFenceHeight = 45.0;
+	constexpr double HedgeHeight = 70.0;
+	constexpr double HedgeWidth = 55.0;
 }
 
 AStreetFurniture::AStreetFurniture()
@@ -211,6 +218,47 @@ void AStreetFurniture::AddRailing(const FVector2D& A, const FVector2D& B)
 		Batch(Furniture::Cube, Furniture::Iron, false, SmallCullDistance).Add(FTransform(Turn, Ground + FVector(0.0, 0.0, Furniture::RailingHeight - 2.0), FVector(Piece, 0.04, 0.04)));
 		Batch(Furniture::Cube, Furniture::Iron, false, SmallCullDistance).Add(FTransform(Turn, Ground + FVector(0.0, 0.0, 25.0), FVector(Piece, 0.03, 0.03)));
 	}
+}
+
+void AStreetFurniture::AddLawnFence(const FVector2D& A, const FVector2D& B)
+{
+	const double Length = FVector2D::Distance(A, B);
+	if (Length < 1.0)
+	{
+		return;
+	}
+	const FVector2D Along = (B - A) / Length;
+	const FRotator Turn(0.0, FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X)), 0.0);
+	const int32 Posts = FMath::Max(1, FMath::CeilToInt32(Length / Furniture::LawnFencePostSpacing));
+	FVector Ground;
+	for (int32 i = 0; i <= Posts; ++i)
+	{
+		if (GroundAt(A + Along * (Length * i / Posts), Ground))
+		{
+			Batch(Furniture::Cube, Furniture::Wood, false, SmallCullDistance).Add(
+				FTransform(Turn, Ground + FVector(0.0, 0.0, Furniture::LawnFenceHeight / 2.0), FVector(0.04, 0.04, Furniture::LawnFenceHeight / 100.0)));
+		}
+	}
+	// One wire along the top, in one piece.
+	if (GroundAt((A + B) * 0.5, Ground))
+	{
+		Batch(Furniture::Cube, Furniture::Iron, false, SmallCullDistance).Add(
+			FTransform(Turn, Ground + FVector(0.0, 0.0, Furniture::LawnFenceHeight - 4.0), FVector(Length / 100.0, 0.012, 0.012)));
+	}
+}
+
+void AStreetFurniture::AddHedge(const FVector2D& A, const FVector2D& B)
+{
+	FVector Ground;
+	if (!GroundAt((A + B) * 0.5, Ground))
+	{
+		return;
+	}
+	// Longer by its width, so pieces round a curve close up.
+	const double Length = FVector2D::Distance(A, B) + Furniture::HedgeWidth;
+	const FRotator Turn(0.0, FMath::RadiansToDegrees(FMath::Atan2(B.Y - A.Y, B.X - A.X)), 0.0);
+	Batch(Furniture::Cube, Furniture::Hedge, true, SmallCullDistance).Add(
+		FTransform(Turn, Ground + FVector(0.0, 0.0, Furniture::HedgeHeight / 2.0), FVector(Length / 100.0, Furniture::HedgeWidth / 100.0, Furniture::HedgeHeight / 100.0)));
 }
 
 namespace Furniture
@@ -348,6 +396,20 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		if (Row.Num() >= 4)
 		{
 			AddRailing(FVector2D(Row[0], Row[1]), FVector2D(Row[2], Row[3]));
+		}
+	});
+	Furniture::ForEachRow(Park, TEXT("lawn_fences"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() >= 4)
+		{
+			AddLawnFence(FVector2D(Row[0], Row[1]), FVector2D(Row[2], Row[3]));
+		}
+	});
+	Furniture::ForEachRow(Park, TEXT("hedges"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() >= 4)
+		{
+			AddHedge(FVector2D(Row[0], Row[1]), FVector2D(Row[2], Row[3]));
 		}
 	});
 }
