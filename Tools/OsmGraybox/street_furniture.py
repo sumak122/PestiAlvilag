@@ -12,7 +12,8 @@ that the AStreetFurniture actor reads:
   park benches;
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
-  the paths, and a low iron railing with gaps where the paths come in.
+  the paths, and a low iron railing with gaps where the paths come in;
+  in autumn also raked leaf piles and the park keepers who rake them.
 
 Everything is in Unreal centimetres (X east, Y south), [x, y, yaw] with yaw in
 degrees; heights come from the ground in the game.
@@ -82,6 +83,14 @@ LAWN_FENCE_OFFSET = 15
 LAWN_FENCE_MIN = 300
 HEDGE_OFFSET = 70
 HEDGE_GAP = 150
+# Autumn: raked leaf piles on the lawns beside the paths, and park keepers
+# who go from pile to pile with their rakes.
+LEAF_PILE_SPACING = 1800
+LEAF_PILE_OUT = 260
+LEAF_PILE_CHANCE = 0.55
+LEAF_PILE_MIN_GAP = 1500
+KEEPERS = 2
+PILES_PER_KEEPER = 6
 FENCE_GAP = 900
 
 
@@ -433,6 +442,34 @@ def layout_tisza(space, park):
         y += TREE_FILL_SPACING * 0.87
         row += 1
 
+    # Leaf piles on the lawn a few steps off the paths, clear of the trees.
+    tree_points = unary_union([Point(t[0], t[1]).buffer(160) for t in trees])
+    leaf_piles = []
+    pile_spread = Spread(LEAF_PILE_MIN_GAP)
+    for k, (line, p) in enumerate(zip(path_lines, paths)):
+        if line.length < 1500:
+            continue
+        for n, ((x, y), (ax, ay), s) in enumerate(walk(list(line.coords), LEAF_PILE_SPACING, LEAF_PILE_SPACING / 2, 800)):
+            side = 1 if chance("pileside", k, n) < 0.5 else -1
+            nx, ny = ay * side, -ax * side
+            lx, ly = x + nx * (p[4] / 2 + LEAF_PILE_OUT), y + ny * (p[4] / 2 + LEAF_PILE_OUT)
+            pt = Point(lx, ly)
+            if chance("pile", k, n) < LEAF_PILE_CHANCE and in_park(lx, ly, 300) and off_rounds(lx, ly, 400) \
+                    and not path_area.buffer(150).contains(pt) and not tree_points.contains(pt) and pile_spread.ok(lx, ly):
+                leaf_piles.append([round(lx), round(ly), round(0.8 + 0.5 * chance("pilesize", k, n), 2)])
+                pile_spread.add(lx, ly)
+
+    # The keepers share the piles out by where they lie round the middle,
+    # each taking a run of neighbouring ones: [x, y, pile index, ...].
+    by_angle = sorted(range(len(leaf_piles)), key=lambda i: math.atan2(leaf_piles[i][1] - cy, leaf_piles[i][0] - cx))
+    keepers = []
+    for j in range(KEEPERS):
+        start = j * len(by_angle) // KEEPERS
+        run = by_angle[start:start + PILES_PER_KEEPER]
+        if run:
+            first = leaf_piles[run[0]]
+            keepers.append([first[0] + 150, first[1]] + run)
+
     # Wire fences along both edges of every path, broken where other paths
     # cross and at the round places; hedges round the round places, open
     # where the paths come in.
@@ -490,6 +527,8 @@ def layout_tisza(space, park):
         "fence": fence,
         "lawn_fences": lawn_fences,
         "hedges": hedges,
+        "leaf_piles": leaf_piles,
+        "keepers": keepers,
         "middle": [round(cx), round(cy)],
     }
 
@@ -526,7 +565,8 @@ def main():
     print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
-          f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces")
+          f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
+          f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers")
 
 
 if __name__ == "__main__":

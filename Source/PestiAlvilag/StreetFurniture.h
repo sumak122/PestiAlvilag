@@ -18,8 +18,9 @@ struct FFurniturePart;
  * period street lamps along the pavements (a slim pole with a scrolled
  * crook and a hanging bell lantern, after Fortepan 100450), round
  * advertising columns near street corners, benches in the parks, and the
- * 1932 Tisza Kálmán tér with gravel paths, flower beds, trees, benches,
- * lamps and a low railing.
+ * 1932 Tisza Kálmán tér with gravel paths, flower beds, autumn trees,
+ * benches, lamps and a low railing, leaf piles and the park keepers who
+ * rake them. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
  * shape and colour, so thousands of them cost little.
@@ -80,4 +81,7 @@ private:
 
 	TMap<FString, int32> BatchIndex;
 	TArray<TArray<FTransform>> Pending;
+
+	/** Trees that still have leaves to lose: ground point and size. */
+	TArray<FVector4> LeafyTrees;
 };

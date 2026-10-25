@@ -65,7 +65,8 @@ mode spawns it) reads that file and places everything on the ground:
 - litter bins beside some street lamps and next to the park benches;
 - the 1932 layout of Tisza Kálmán tér: paths, flower beds, trees, benches,
   lamps and a railing, with knee-high wire fences along the lawns and low
-  clipped hedges round the round places (after Fortepan 70268).
+  clipped hedges round the round places (after Fortepan 70268), and for
+  autumn raked leaf piles and the routes of two park keepers who rake them.
 
 Run it again whenever the graybox JSON changes:
 

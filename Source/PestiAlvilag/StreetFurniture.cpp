@@ -6,10 +6,13 @@
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "FallingLeaves.h"
+#include "Math/RotationMatrix.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
+#include "ParkKeeper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/ConstructorHelpers.h"
@@ -24,6 +27,7 @@ struct FFurniturePart
 	FVector Location;
 	FVector Scale;
 	bool bCollide;
+	FRotator Rotation = FRotator::ZeroRotator;
 };
 
 namespace Furniture
@@ -36,8 +40,6 @@ namespace Furniture
 	const FLinearColor Stone(0.42f, 0.40f, 0.36f);
 	const FLinearColor Gravel(0.55f, 0.50f, 0.40f);
 	const FLinearColor Bark(0.12f, 0.09f, 0.07f);
-	const FLinearColor Leaves(0.10f, 0.20f, 0.05f);
-	const FLinearColor LeavesLight(0.15f, 0.26f, 0.07f);
 	const FLinearColor Flowers(0.45f, 0.06f, 0.05f);
 	const FLinearColor Lawn(0.09f, 0.22f, 0.05f);
 	// Faded posters on the advertising columns.
@@ -95,11 +97,127 @@ namespace Furniture
 		};
 	}
 
-	// A broad park tree: a trunk and two overlapping crowns.
-	const TArray<FFurniturePart> Tree = {
-		{ Cylinder, Bark, FVector(0, 0, 170), FVector(0.4, 0.4, 3.4), true },
-		{ Sphere, Leaves, FVector(0, 0, 560), FVector(6.0, 6.0, 5.0), false },
-		{ Sphere, LeavesLight, FVector(90, 60, 650), FVector(4.4, 4.4, 3.8), false },
+	// Autumn leaves, on the trees and fallen.
+	const FLinearColor LeafGreen(0.12f, 0.19f, 0.04f);
+	const FLinearColor LeafYellow(0.40f, 0.32f, 0.04f);
+	const FLinearColor LeafGold(0.50f, 0.26f, 0.03f);
+	const FLinearColor LeafOrange(0.45f, 0.12f, 0.02f);
+	const FLinearColor LeafRust(0.24f, 0.07f, 0.02f);
+	const FLinearColor Fallen(0.26f, 0.11f, 0.03f);
+	const FLinearColor FallenGold(0.38f, 0.21f, 0.03f);
+
+	// A round shape stretched from From along Dir (a branch or a trunk).
+	FFurniturePart Limb(const FVector& From, const FVector& Dir, double Length, double Radius, bool bCollide = false)
+	{
+		const FVector Along = Dir.GetSafeNormal();
+		FFurniturePart Part{ Cylinder, Bark, From + Along * (Length * 0.5), FVector(Radius / 50.0, Radius / 50.0, Length / 100.0), bCollide };
+		Part.Rotation = FRotationMatrix::MakeFromZ(Along).Rotator();
+		return Part;
+	}
+
+	// Leaning out at Tilt degrees from upright, towards Yaw.
+	FVector Leaning(double Yaw, double Tilt)
+	{
+		const double Y = FMath::DegreesToRadians(Yaw);
+		const double T = FMath::DegreesToRadians(Tilt);
+		return FVector(FMath::Sin(T) * FMath::Cos(Y), FMath::Sin(T) * FMath::Sin(Y), FMath::Cos(T));
+	}
+
+	// The park trees in autumn, in four kinds: still full with yellowing
+	// leaves, gone golden, thinning out (the branches show through a few
+	// clumps of orange and rust), and already bare. Each stands on a carpet
+	// of its fallen leaves; the barer the tree, the wider the carpet.
+	enum ETree : int32 { TreeFull, TreeGolden, TreeThinning, TreeBare, NumTrees };
+
+	TArray<FFurniturePart> MakeTree(int32 Kind)
+	{
+		TArray<FFurniturePart> Parts;
+		Parts.Add({ Cylinder, Bark, FVector(0, 0, 12), FVector(0.62, 0.62, 0.24), true });
+		Parts.Add(Limb(FVector(0, 0, 0), FVector::UpVector, 380.0, 20.0, true));
+		Parts.Add(Limb(FVector(0, 0, 370), Leaning(20.0, 8.0), 230.0, 13.0));
+
+		// Four main boughs, each forking once near its end.
+		const double Twist = 25.0 * Kind;
+		TArray<FVector> Tips;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			const double Yaw = Twist + 90.0 * i + (i % 2 ? 15.0 : -10.0);
+			const double Tilt = 42.0 + 8.0 * (i % 3);
+			const FVector From(0, 0, 330.0 + 25.0 * i);
+			const FVector Dir = Leaning(Yaw, Tilt);
+			const double Length = 250.0 - 20.0 * (i % 2);
+			Parts.Add(Limb(From, Dir, Length, 8.0));
+			const FVector Fork = From + Dir * (Length * 0.7);
+			const FVector Tip = From + Dir * Length;
+			Tips.Add(Tip);
+			if (Kind >= TreeThinning)
+			{
+				// The twigs show only where the leaves are gone.
+				Parts.Add(Limb(Fork, Leaning(Yaw + 35.0, Tilt - 18.0), 150.0, 4.0));
+				Parts.Add(Limb(Fork, Leaning(Yaw - 35.0, Tilt - 12.0), 130.0, 3.5));
+				Parts.Add(Limb(Tip, Leaning(Yaw, Tilt - 25.0), 90.0, 2.5));
+			}
+		}
+
+		switch (Kind)
+		{
+		case TreeFull:
+			Parts.Add({ Sphere, LeafYellow, FVector(0, 0, 620), FVector(5.4, 5.4, 4.3), false });
+			Parts.Add({ Sphere, LeafGold, FVector(150, 80, 690), FVector(3.4, 3.4, 2.8), false });
+			Parts.Add({ Sphere, LeafOrange, FVector(-170, 60, 600), FVector(3.2, 3.2, 2.6), false });
+			Parts.Add({ Sphere, LeafGreen, FVector(40, -180, 570), FVector(3.0, 3.0, 2.4), false });
+			Parts.Add({ Sphere, LeafGold, FVector(-40, 40, 770), FVector(2.8, 2.8, 2.2), false });
+			Parts.Add({ Cylinder, Fallen, FVector(0, 0, 1), FVector(3.6, 3.0, 0.01), false });
+			break;
+		case TreeGolden:
+			Parts.Add({ Sphere, LeafGold, FVector(0, 0, 610), FVector(5.2, 5.2, 4.1), false });
+			Parts.Add({ Sphere, LeafYellow, FVector(160, -40, 680), FVector(3.4, 3.4, 2.8), false });
+			Parts.Add({ Sphere, LeafOrange, FVector(-150, 120, 590), FVector(2.6, 2.6, 2.2), false });
+			Parts.Add({ Sphere, LeafGold, FVector(0, -60, 770), FVector(2.8, 2.8, 2.2), false });
+			Parts.Add({ Cylinder, FallenGold, FVector(0, 0, 1), FVector(4.0, 3.4, 0.01), false });
+			break;
+		case TreeThinning:
+			Parts.Add({ Sphere, LeafOrange, Tips[0] + FVector(0, 0, 30), FVector(2.4, 2.4, 1.8), false });
+			Parts.Add({ Sphere, LeafRust, Tips[1] + FVector(0, 0, 20), FVector(2.0, 2.0, 1.6), false });
+			Parts.Add({ Sphere, LeafGold, Tips[3] + FVector(0, 0, 40), FVector(2.2, 2.2, 1.7), false });
+			Parts.Add({ Cylinder, Fallen, FVector(0, 0, 1), FVector(5.0, 4.2, 0.01), false });
+			Parts.Add({ Cylinder, FallenGold, FVector(90, -60, 1.2), FVector(3.0, 2.6, 0.01), false });
+			break;
+		default:
+			Parts.Add({ Cylinder, Fallen, FVector(0, 0, 1), FVector(5.6, 4.8, 0.01), false });
+			Parts.Add({ Cylinder, LeafRust, FVector(-80, 70, 1.2), FVector(3.4, 3.0, 0.01), false });
+			break;
+		}
+		return Parts;
+	}
+
+	const TArray<FFurniturePart>& Tree(int32 Kind)
+	{
+		static TArray<TArray<FFurniturePart>> Kinds;
+		if (Kinds.IsEmpty())
+		{
+			for (int32 i = 0; i < NumTrees; ++i)
+			{
+				Kinds.Add(MakeTree(i));
+			}
+		}
+		return Kinds[FMath::Clamp(Kind, 0, NumTrees - 1)];
+	}
+
+	// Which kind a tree at this spot is: about a third still full, a quarter
+	// golden, a quarter thinning, the rest bare.
+	int32 TreeKindAt(const FVector2D& At)
+	{
+		const uint32 Roll = GetTypeHash(FIntPoint(FMath::RoundToInt(At.X), FMath::RoundToInt(At.Y))) % 100;
+		return Roll < 35 ? TreeFull : Roll < 60 ? TreeGolden : Roll < 85 ? TreeThinning : TreeBare;
+	}
+
+	// A raked heap of leaves.
+	const TArray<FFurniturePart> LeafPile = {
+		{ Sphere, Fallen, FVector(0, 0, 8), FVector(1.7, 1.4, 0.55), false },
+		{ Sphere, FallenGold, FVector(22, -15, 16), FVector(1.1, 1.0, 0.45), false },
+		{ Sphere, LeafOrange, FVector(-25, 20, 12), FVector(0.9, 0.8, 0.4), false },
+		{ Sphere, LeafRust, FVector(10, 32, 6), FVector(0.7, 0.7, 0.3), false },
 	};
 
 	// The low iron railing round the park.
@@ -176,7 +294,7 @@ void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVec
 	const FTransform Place(FRotator(0.0, Yaw, 0.0), At, FVector(Scale));
 	for (const FFurniturePart& Part : Parts)
 	{
-		const FTransform Local(FRotator::ZeroRotator, Part.Location, Part.Scale);
+		const FTransform Local(Part.Rotation, Part.Location, Part.Scale);
 		Batch(Part.Shape, Part.Color, Part.bCollide, Cull).Add(Local * Place);
 	}
 }
@@ -329,6 +447,12 @@ void AStreetFurniture::BeginPlay()
 	}
 	Pending.Empty();
 	UE_LOG(LogFurniture, Log, TEXT("Street furniture: %d shapes in %d batches"), Count, Batches.Num());
+
+	// Leaves blowing about, most of them off the trees that still have some.
+	if (AFallingLeaves* Blowing = GetWorld()->SpawnActor<AFallingLeaves>())
+	{
+		Blowing->SetTrees(LeafyTrees);
+	}
 }
 
 void AStreetFurniture::BuildStreets(const FJsonObject& Root)
@@ -395,7 +519,12 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		{
 			// Turn each tree a little so the crowns do not all lean one way.
 			const double Yaw = FMath::Fmod(Row[0] * 0.37 + Row[1] * 0.11, 360.0);
-			AddObject(Furniture::Tree, Ground, Yaw, Row[2], TreeCullDistance);
+			const int32 Kind = Furniture::TreeKindAt(FVector2D(Row[0], Row[1]));
+			AddObject(Furniture::Tree(Kind), Ground, Yaw, Row[2], TreeCullDistance);
+			if (Kind != Furniture::TreeBare)
+			{
+				LeafyTrees.Add(FVector4(Ground, Row[2]));
+			}
 		}
 	});
 	Furniture::ForEachRow(Park, TEXT("benches"), [&](const TArray<double>& Row)
@@ -438,6 +567,48 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		if (Row.Num() >= 4)
 		{
 			AddHedge(FVector2D(Row[0], Row[1]), FVector2D(Row[2], Row[3]));
+		}
+	});
+
+	// Raked leaf piles, and the keepers who go from pile to pile.
+	TArray<FVector> Piles;
+	Furniture::ForEachRow(Park, TEXT("leaf_piles"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 3)
+		{
+			return;
+		}
+		if (GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			AddObject(Furniture::LeafPile, Ground, FMath::Fmod(Row[0] * 0.21 + Row[1] * 0.43, 360.0), Row[2], SmallCullDistance);
+			Piles.Add(Ground);
+		}
+		else
+		{
+			// Keeps the numbering the keepers use.
+			Piles.Add(FVector(Row[0], Row[1], 0.0));
+		}
+	});
+	Furniture::ForEachRow(Park, TEXT("keepers"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 3 || !GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			return;
+		}
+		TArray<FVector> Spots;
+		for (int32 i = 2; i < Row.Num(); ++i)
+		{
+			const int32 Pile = static_cast<int32>(Row[i]);
+			if (Piles.IsValidIndex(Pile) && Piles[Pile].Z != 0.0)
+			{
+				Spots.Add(Piles[Pile]);
+			}
+		}
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AParkKeeper* Keeper = GetWorld()->SpawnActor<AParkKeeper>(AParkKeeper::StaticClass(), Ground + FVector(0.0, 0.0, 90.0), FRotator::ZeroRotator, Params))
+		{
+			Keeper->SetWorkSpots(Spots);
 		}
 	});
 }
