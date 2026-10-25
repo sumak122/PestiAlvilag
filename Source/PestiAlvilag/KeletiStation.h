@@ -9,6 +9,7 @@
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class UTextRenderComponent;
+class UTexture;
 
 /**
  * Keleti pályaudvar, the second hero building: Rochlitz Gyula's station of
@@ -53,7 +54,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Station")
 	TObjectPtr<UProceduralMeshComponent> Overhead;
 
-	/** The glass of the roof strips, seen from above only: lets the sun into the hall. */
+	/**
+	 * The glass: the roof strips (opaque from above, a faint see-through
+	 * tint from below) and the see-through panes of the front arch. Casts
+	 * no shadow, so the sun reaches the platforms.
+	 */
 	UPROPERTY(VisibleAnywhere, Category = "Station")
 	TObjectPtr<UProceduralMeshComponent> Glazing;
 
@@ -71,6 +76,13 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
+
+	/** A see-through engine material for the glass, tinted per pane kind. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> SeeThroughMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UTexture> WhiteTexture;
 
 private:
 	void Build();

@@ -3,6 +3,7 @@
 #include "KeletiStation.h"
 
 #include "Components/TextRenderComponent.h"
+#include "Engine/Texture.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -11,10 +12,12 @@ namespace Keleti
 {
 	// One mesh section (and colour) per material. The parts up to RoofOut
 	// are solid; the roof and its trusses are out of reach and need no
-	// collision. The roof glass is drawn facing the sky only: from inside
-	// the hall it is not there at all, so the sky shows through and the
-	// sun and the sky light fall on the platforms as through clear glass.
-	// The arch and the far end have their iron bars and no panes at all.
+	// collision. The roof glass is drawn opaque facing the sky; from inside
+	// the hall it is a faint grey see-through tint (sootier every other
+	// bay), and the panes of the front arch are the same tint seen from
+	// both sides. Glass casts no shadow, so the sun and the sky light fall
+	// on the platforms as through clear glass. The far end screen has its
+	// iron bars and no panes.
 	enum EPart : int32
 	{
 		Stone,
@@ -39,10 +42,14 @@ namespace Keleti
 		RoofIn,
 		Truss,
 		Pane,
+		PaneIn,
+		PaneInSooty,
+		FrontPane,
 		PartCount
 	};
 	constexpr int32 FirstOverheadPart = RoofOut;
 	constexpr int32 FirstGlazingPart = Pane;
+	constexpr int32 FirstSeeThroughPart = PaneIn;
 
 	// Sizes (cm). X runs from the main front into the hall, Y across it
 	// (+Y towards Kerepesi út), Z up from the pavement.
@@ -699,6 +706,15 @@ namespace Keleti
 		}
 		B.Tube(Iron, Hub + FVector(-25.0, 0.0, 0.0), Hub + FVector(25.0, 0.0, 0.0), 110.0, 16);
 
+		// The panes: the window row and the half circle of the arch.
+		B.TwoSided(FrontPane, { FVector(GlassX, -ArchRadius, BandTop), FVector(GlassX, ArchRadius, BandTop),
+			FVector(GlassX, ArchRadius, ArchSpring), FVector(GlassX, -ArchRadius, ArchSpring) }, FVector::BackwardVector);
+		for (int32 i = 0; i < FanSegments; ++i)
+		{
+			B.TwoSided(FrontPane, { Hub, ArchPoint(GlassX, PI * i / FanSegments, ArchRadius), ArchPoint(GlassX, PI * (i + 1) / FanSegments, ArchRadius) },
+				FVector::BackwardVector);
+		}
+
 		// The wall round the arch, front and back, the arch's soffit, and the
 		// moulded band round it. The panel is cut along rays from the arch's
 		// centre; the rays through the panel's top corners split it cleanly.
@@ -835,6 +851,15 @@ namespace Keleti
 				B.Poly(RoofIn, { RoofPoint(Side, Band[0], ArchWallDepth) + Below, RoofPoint(Side, Band[0], EndX) + Below, RoofPoint(Side, Band[1], EndX) + Below, RoofPoint(Side, Band[1], ArchWallDepth) + Below }, -Up);
 			}
 			B.Poly(Pane, { RoofPoint(Side, GlassFrom, ArchWallDepth), RoofPoint(Side, GlassFrom, EndX), RoofPoint(Side, GlassTo, EndX), RoofPoint(Side, GlassTo, ArchWallDepth) }, Up);
+			// From below, bay by bay between the trusses, every other one sootier.
+			const FVector Under(0.0, 0.0, -2.0);
+			int32 PaneBay = 0;
+			for (double X = ArchWallDepth; X < EndX - 1.0; X += 250.0, ++PaneBay)
+			{
+				const double X1 = FMath::Min(X + 250.0, EndX);
+				B.Poly(PaneBay % 2 ? PaneInSooty : PaneIn, { RoofPoint(Side, GlassFrom, X) + Under, RoofPoint(Side, GlassFrom, X1) + Under,
+					RoofPoint(Side, GlassTo, X1) + Under, RoofPoint(Side, GlassTo, X) + Under }, -Up);
+			}
 			const FVector Lift(0.0, 0.0, 6.0);
 			for (double X = ArchWallDepth + 250.0; X < EndX; X += 250.0)
 			{
@@ -1169,6 +1194,12 @@ AKeletiStation::AKeletiStation()
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	BaseMaterial = BasicShapeMaterial.Object;
+	// The engine's material for 3D widgets: unlit and see-through, its colour
+	// and opacity set from code. Only the panes use it.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
+	SeeThroughMaterial = Translucent.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture> White(TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+	WhiteTexture = White.Object;
 }
 
 FVector2D AKeletiStation::FrontAt()
@@ -1218,7 +1249,11 @@ void AKeletiStation::Build()
 		FLinearColor(0.12f, 0.13f, 0.14f),    // RoofOut
 		FLinearColor(0.10f, 0.09f, 0.08f),    // RoofIn
 		FLinearColor(0.07f, 0.09f, 0.08f),    // Truss
-		FLinearColor(0.45f, 0.52f, 0.55f) };  // Pane
+		FLinearColor(0.45f, 0.52f, 0.55f),    // Pane
+		// See-through glass: colour and how much it hides (alpha).
+		FLinearColor(0.62f, 0.66f, 0.66f, 0.22f),  // PaneIn
+		FLinearColor(0.50f, 0.52f, 0.50f, 0.34f),  // PaneInSooty
+		FLinearColor(0.55f, 0.62f, 0.66f, 0.30f) };  // FrontPane
 
 	Mesh->ClearAllMeshSections();
 	Overhead->ClearAllMeshSections();
@@ -1241,7 +1276,23 @@ void AKeletiStation::Build()
 		const FPart& Part = B.Parts[i];
 		Target->CreateMeshSection_LinearColor(Section, Part.Vertices, Part.Triangles, Part.Normals,
 			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), Target == Mesh);
-		if (BaseMaterial)
+		if (i >= FirstSeeThroughPart && SeeThroughMaterial)
+		{
+			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(SeeThroughMaterial, this);
+			if (WhiteTexture)
+			{
+				Material->SetTextureParameterValue(TEXT("SlateUI"), WhiteTexture);
+			}
+			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
+			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Colors[i]);
+			Target->SetMaterial(Section, Material);
+		}
+		else if (i >= FirstSeeThroughPart)
+		{
+			// No see-through material: leave the pane out, as clear glass.
+			Target->ClearMeshSection(Section);
+		}
+		else if (BaseMaterial)
 		{
 			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			Material->SetVectorParameterValue(TEXT("Color"), Colors[i]);
