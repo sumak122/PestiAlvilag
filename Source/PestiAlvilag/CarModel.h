@@ -524,7 +524,10 @@ namespace CarModel
 		// The glass house, slightly narrower than the body.
 		const double Screen = L.Cowl - 2.0;
 		const double ScreenTop = Screen - 14.0;
-		B.SideOutline(Glass, { FVector2D(Screen, Waist), FVector2D(ScreenTop, GlassTop), FVector2D(RoofBack + 4.0, GlassTop), FVector2D(GlassBack, Waist) }, -(W - 5.0), W - 5.0);
+		// Its foot and top tuck into the body and the roof, so no glass face lies on
+		// a painted one (they would flicker against each other).
+		B.SideOutline(Glass, { FVector2D(Screen + 0.5, Waist - 2.0), FVector2D(ScreenTop - 0.5, GlassTop + 2.0), FVector2D(RoofBack + 4.0, GlassTop + 2.0),
+			FVector2D(GlassBack, Waist - 2.0) }, -(W - 5.0), W - 5.0);
 		// Roof, gently rounded at the back.
 		B.SideOutline(Paint, { FVector2D(ScreenTop + 3.0, GlassTop - 1.0), FVector2D(ScreenTop - 1.0, L.RoofTop - 2.0), FVector2D(ScreenTop - 20.0, L.RoofTop),
 			FVector2D(RoofBack + 10.0, L.RoofTop), FVector2D(RoofBack - 4.0, L.RoofTop - 5.0), FVector2D(RoofBack, GlassTop - 1.0) }, -(W - 2.0), W - 2.0);
