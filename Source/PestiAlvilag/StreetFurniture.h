@@ -80,6 +80,8 @@ private:
 	void BuildTaxiStands(const FJsonObject& Root);
 	/** A stop sign by each tram stop (tram_stops). */
 	void BuildTramStops(const FJsonObject& Root);
+	/** Street food sellers with their carts (food_vendors). */
+	void BuildFoodVendors(const FJsonObject& Root);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;

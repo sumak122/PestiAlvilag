@@ -131,6 +131,11 @@ void APestiPerson::Tick(float DeltaSeconds)
 
 void APestiPerson::Look(APlayerController* PC, float DeltaSeconds)
 {
+	// Not while a menu is up.
+	if (PC->IsLookInputIgnored())
+	{
+		return;
+	}
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	PC->GetInputMouseDelta(MouseX, MouseY);

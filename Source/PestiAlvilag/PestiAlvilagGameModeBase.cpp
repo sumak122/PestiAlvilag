@@ -22,6 +22,7 @@
 #include "TaxiCompany.h"
 #include "TaxiRides.h"
 #include "TramRides.h"
+#include "FoodMenus.h"
 #include "TrafficManager.h"
 
 namespace PestiStart
@@ -113,6 +114,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<ATaxiRides>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ATaxiRides>();
+	}
+
+	// Food to buy at the café, the station restaurant and the street sellers.
+	if (!TActorIterator<AFoodMenus>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AFoodMenus>();
 	}
 
 	// Trams to ride as a passenger.
@@ -319,6 +326,7 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		Money = Save->Money;
 		CompletedMissions = Save->CompletedMissions;
 		TaxiJobs = Save->TaxiJobs;
+		TriedDishes = Save->TriedDishes;
 	}
 }
 
@@ -342,6 +350,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->Money = Money;
 	Save->CompletedMissions = CompletedMissions;
 	Save->TaxiJobs = TaxiJobs;
+	Save->TriedDishes = TriedDishes;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

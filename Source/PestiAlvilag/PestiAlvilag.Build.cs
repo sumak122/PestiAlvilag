@@ -12,8 +12,8 @@ public class PestiAlvilag : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "ProceduralMeshComponent", "Json" });
 
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+		// The food menus are drawn with Slate.
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");

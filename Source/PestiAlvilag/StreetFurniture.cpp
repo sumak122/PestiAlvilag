@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "FallingLeaves.h"
+#include "FoodVendor.h"
 #include "Math/RotationMatrix.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
@@ -519,6 +520,38 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 	});
 	BuildTaxiStands(Root);
 	BuildTramStops(Root);
+	BuildFoodVendors(Root);
+}
+
+void AStreetFurniture::BuildFoodVendors(const FJsonObject& Root)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Vendors = nullptr;
+	if (!Root.TryGetArrayField(TEXT("food_vendors"), Vendors))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& Value : *Vendors)
+	{
+		const TSharedPtr<FJsonObject>* Vendor = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* At = nullptr;
+		if (!Value->TryGetObject(Vendor) || !(*Vendor)->TryGetArrayField(TEXT("at"), At) || At->Num() < 3)
+		{
+			continue;
+		}
+		FVector Ground;
+		if (!GroundAt(FVector2D((*At)[0]->AsNumber(), (*At)[1]->AsNumber()), Ground))
+		{
+			continue;
+		}
+		const FString Kind = (*Vendor)->GetStringField(TEXT("kind"));
+		const EFoodMenu Menu = Kind == TEXT("sausages") ? EFoodMenu::Sausages
+			: Kind == TEXT("pretzels") ? EFoodMenu::Pretzels
+			: EFoodMenu::Chestnuts;
+		if (AFoodVendor* Seller = GetWorld()->SpawnActor<AFoodVendor>(AFoodVendor::StaticClass(), Ground, FRotator(0.0, (*At)[2]->AsNumber(), 0.0)))
+		{
+			Seller->Setup(Menu);
+		}
+	}
 }
 
 void AStreetFurniture::BuildTramStops(const FJsonObject& Root)
