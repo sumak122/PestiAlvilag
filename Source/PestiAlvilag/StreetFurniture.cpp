@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "FallingLeaves.h"
+#include "FleaMarket.h"
 #include "FoodVendor.h"
 #include "Math/RotationMatrix.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -577,6 +578,7 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 	BuildTaxiStands(Root);
 	BuildTramStops(Root);
 	BuildFoodVendors(Root);
+	BuildMarket(Root);
 }
 
 void AStreetFurniture::BuildFoodVendors(const FJsonObject& Root)
@@ -607,6 +609,19 @@ void AStreetFurniture::BuildFoodVendors(const FJsonObject& Root)
 		{
 			Seller->Setup(Menu);
 		}
+	}
+}
+
+void AStreetFurniture::BuildMarket(const FJsonObject& Root)
+{
+	const TSharedPtr<FJsonObject>* Market = nullptr;
+	if (!Root.TryGetObjectField(TEXT("market"), Market))
+	{
+		return;
+	}
+	if (AFleaMarket* Teleki = GetWorld()->SpawnActor<AFleaMarket>(AFleaMarket::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator))
+	{
+		Teleki->Setup(**Market);
 	}
 }
 
