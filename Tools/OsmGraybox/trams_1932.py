@@ -38,10 +38,10 @@ LINES_1932 = [
 TRACK_OFFSET = 1.6
 # Two halves of one street are at most this far apart (m) to share a middle.
 PAIR_DISTANCE = 30.0
-# Streets whose tracks ran along one side, not down the middle: there the
-# track follows the half on that side. Thököly út was one wide two-way road
-# with the tram on its south side.
-TRACK_SIDE = {"Thököly út": "south"}
+# Streets whose tracks ran along one side, not down the middle: (side,
+# metres from the middle of the half on that side out towards the kerb).
+# Thököly út was one wide two-way road with the tram on its south side.
+TRACK_SIDE = {"Thököly út": ("south", 2.7)}
 # Points either side whose shifts to the middle are compared (resampled points).
 MEDIAN_WINDOW = 4
 # Cost per metre of other streets, to get from one street of a line to the
@@ -204,11 +204,14 @@ def middle_of_street(graph, pts, streets):
             continue
         (qx, qy), side = best[1], TRACK_SIDE.get(best[2])
         if side is None:
-            share = 0.5
-        else:
-            # On the far half: move all the way across; on the near half: stay.
-            share = 1.0 if SIDE_KEY[side]((qx, qy)) < SIDE_KEY[side](p) else 0.0
-        shifts.append(((qx - p[0]) * share, (qy - p[1]) * share))
+            shifts.append(((qx - p[0]) / 2.0, (qy - p[1]) / 2.0))
+            continue
+        # On the far half: move all the way across; on the near half: stay.
+        # Then on out towards the kerb.
+        far = SIDE_KEY[side[0]]((qx, qy)) < SIDE_KEY[side[0]](p)
+        dx, dy = (qx - p[0], qy - p[1]) if far else (p[0] - qx, p[1] - qy)
+        out = side[1] / (math.hypot(dx, dy) or 1.0)
+        shifts.append((dx * (1.0 + out), dy * (1.0 + out)) if far else (dx * out, dy * out))
     # A point or two that missed (or wrongly found) its twin would kink the
     # track: take the median shift of the neighbours instead.
     out = []

@@ -152,6 +152,12 @@ BAROSS_LINKS = [
     (["ring", (-16600, 6200), (-15500, 4950), (-14000, 3950), (-12300, 2850), "2585326576"], "327673021"),
 ]
 BAROSS_LINK_WIDTH = "7"
+# Thököly út and the north side of Baross tér leading to it are mapped as two
+# one-way halves with a strip between; in 1932 it was one wide road, so the
+# strip is paved over (closing the gap up to twice this, in m).
+ONE_ROAD_STREETS = {"Thököly út"}
+ONE_ROAD_WAYS = {"330665633", "385715070", "288201042", "246147759", "377538304", "327673021"}
+ONE_ROAD_FILL = 6.0
 # The gravel island with the Baross statue, its outline round from the west
 # tip.
 STATUE_ISLAND = [(-16160, 6560), (-15340, 5640), (-13940, 4700), (-12300, 3700), (-11600, 3500),
@@ -669,7 +675,7 @@ def convert(osm_path, origin):
     clip = box(x0, y0, x1, y1)
 
     buildings, roads, plazas, parks, trams, rails, centerlines = [], [], [], [], [], [], []
-    carriageways = []
+    carriageways, one_road = [], []
 
     def add_area(target, geom, tags):
         for poly in polygons_of(geom.intersection(clip) if geom is not None else None):
@@ -701,6 +707,8 @@ def convert(osm_path, origin):
             width = road_width_m(tags)
             target = plazas if highway == "pedestrian" else roads
             add_area(target, line.buffer(width / 2.0, cap_style="flat", join_style="round"), tags)
+            if tags.get("name") in ONE_ROAD_STREETS or wid in ONE_ROAD_WAYS:
+                one_road.append(line.buffer(width / 2.0, cap_style="flat", join_style="round"))
             if highway in TRAFFIC_SPEEDS:
                 carriageways.append(line.buffer(width / 2.0 - CARRIAGEWAY_TRIM, cap_style="flat"))
             if highway != "pedestrian":
@@ -718,6 +726,8 @@ def convert(osm_path, origin):
         elif railway == "rail" and not is_underground(tags):
             add_area(rails, LineString(pts).buffer(TRACK_WIDTH[railway] / 2.0, cap_style="flat"), tags)
 
+    if one_road:
+        add_area(roads, unary_union(one_road).buffer(ONE_ROAD_FILL).buffer(-ONE_ROAD_FILL), {})
     for poly in baross["plazas"]:
         add_area(plazas, poly, {})
     for poly in baross["parks"]:
@@ -787,7 +797,12 @@ def convert(osm_path, origin):
 
     # Today's tram tracks are left out: the 1932 network was different.
     tram_routes, tram_tracks = build_1932_tram_routes(ways, nodes, proj, clip, to_ue, baross["tram_spread"])
-    for track in tram_tracks + baross["trams"]:
+    # The side track's ends meet the line's tracks wherever those came out.
+    siding = []
+    for line in baross["trams"]:
+        ends = [nearest_points(unary_union(tram_tracks), Point(line.coords[i]))[0].coords[0] for i in (0, -1)]
+        siding.append(LineString([ends[0]] + list(line.coords) + [ends[1]]))
+    for track in tram_tracks + siding:
         add_area(trams, track.buffer(TRACK_WIDTH["tram"] / 2.0, cap_style="flat"), {})
 
     gx0, gy0 = to_ue(x0, y1)  # north-west corner becomes min X, min Y
