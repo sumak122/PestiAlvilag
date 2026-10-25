@@ -716,7 +716,7 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			Put(Model, Foot, Yaw);
 			for (const ShopModel::FLettering& Line : Lettering)
 			{
-				const TCHAR* Field = Line.Line == ShopModel::ELine::Owner ? TEXT("owner") : Line.Line == ShopModel::ELine::Trade ? TEXT("sign") : TEXT("blade");
+				const TCHAR* Field = Line.Line == ShopModel::ELine::Fascia ? TEXT("fascia") : Line.Line == ShopModel::ELine::Glass ? TEXT("glass") : TEXT("blade");
 				Letter(Line, Shop->GetStringField(Field), Foot, Yaw);
 			}
 

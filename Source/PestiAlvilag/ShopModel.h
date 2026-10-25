@@ -9,8 +9,8 @@
  * The shop fronts of Népszínház utca, as they were in the early 1930s: a
  * painted wooden "portál" set against the ground floor of the tenement,
  * with pilasters at the ends, a deep fascia carrying the owner's name in
- * gilt, a cornice, shop windows on a panelled stallriser with the trade
- * written in gold on the glass above, a recessed glazed door with a
+ * gilt (or the trade, or the shop's sign name), a cornice, shop windows
+ * on a panelled stallriser with more gold lettering on the glass above, a recessed glazed door with a
  * stone step, and goods in the window for each trade. Some have a striped
  * canvas awning, a hanging sign or the trade's own sign (a barber's brass
  * basin, a watchmaker's clock), goods set out on the pavement, or the
@@ -35,7 +35,7 @@ namespace ShopModel
 	};
 
 	/** Which words of the shop a piece of lettering shows. */
-	enum class ELine : uint8 { Owner, Trade, Blade, Number };
+	enum class ELine : uint8 { Fascia, Glass, Blade, Number };
 
 	/** Lettering on the shop: where its middle is, which way it faces (yaw in the shop's frame, 0 = out to the street), and its letter height. */
 	struct FLettering
@@ -698,7 +698,7 @@ namespace ShopModel
 		P.Add(Span(FrontX, FrontX + 1.0, -Inner + 8.0, Inner - 8.0, FasciaTop - 10.0, FasciaTop - 8.0, Gilt));
 		P.Add(Span(0.0, 40.0, -Half - 7.0, Half + 7.0, FasciaTop, FasciaTop + 9.0, Paint));
 		P.Add(Span(0.0, 45.0, -Half - 10.0, Half + 10.0, FasciaTop + 9.0, CorniceTop, Paint));
-		Text.Add({ ELine::Owner, FVector(FrontX + 1.5, 0.0, (FasciaBottom + FasciaTop) * 0.5), 0.0, 30.0, Inner * 2.0 - 24.0, Letters });
+		Text.Add({ ELine::Fascia, FVector(FrontX + 1.5, 0.0, (FasciaBottom + FasciaTop) * 0.5), 0.0, 30.0, Inner * 2.0 - 24.0, Letters });
 
 		// Windows either side of the door.
 		const double DoorAt = DoorMiddle(Width, Seed);
@@ -725,11 +725,11 @@ namespace ShopModel
 				Window(P, Paint, Trade, DoorY1, Inner, Dice);
 			}
 			Door(P, Paint, DoorAt);
-			// The trade in gold on the glass over the widest window.
+			// More gold lettering on the glass over the widest window.
 			const double Left = DoorY0 - -Inner;
 			const double Right = Inner - DoorY1;
 			const double Y = Left > Right ? (-Inner + DoorY0) * 0.5 : (DoorY1 + Inner) * 0.5;
-			Text.Add({ ELine::Trade, FVector(31.5, Y, (TransomZ + 7.0 + WindowTop) * 0.5), 0.0, 17.0, FMath::Max(Left, Right) - 24.0, Letters });
+			Text.Add({ ELine::Glass, FVector(31.5, Y, (TransomZ + 7.0 + WindowTop) * 0.5), 0.0, 17.0, FMath::Max(Left, Right) - 24.0, Letters });
 		}
 		// Short pieces of window or wall between the door and pilasters too narrow for a window.
 		if (DoorY0 - -Inner <= 40.0)

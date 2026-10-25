@@ -26,8 +26,9 @@ that the AStreetFurniture actor reads:
   "wait": [x, y] where passengers wait and get off};
 - shops, gates: the shop fronts and tenement gates on the ground floors of
   Népszínház utca, each shop {"at": [x, y, yaw] at the middle of its front
-  on the wall foot, facing out, "width", "trade", "owner", "sign" (the
-  trade lettered on the glass), "blade" (words for a hanging sign),
+  on the wall foot, facing out, "width", "trade", "fascia" (the big
+  lettering: the owner, the trade or the shop's sign name), "glass" (the
+  smaller lettering on the window), "blade" (words for a hanging sign),
   "seed", "closed", "outside" (goods on the pavement), "keeper"}, each
   gate {"at", "width", "number"} (the house number);
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
@@ -1425,6 +1426,19 @@ SHOP_TRADES = [             # trade, how often, sign words, words on a hanging s
     ("cafe", 2, ["KÁVÉMÉRÉS", "KÁVÉ ÉS TEA"], "KÁVÉ"),
 ]
 SHOP_OUTSIDE = {"greengrocer": 0.9, "grocer": 0.3, "tavern": 0.6, "hardware": 0.7, "baker": 0.3, "dairy": 0.3}
+# Shop sign names in the old Pest way, "at the golden hat" (one of each at most).
+SHOP_NAMES = {
+    "hats": ["AZ ARANY KALAPHOZ"],
+    "shoes": ["A PIROS CSIZMÁHOZ"],
+    "grocer": ["AZ ARANY KOSÁRHOZ", "A KÉT OROSZLÁNHOZ"],
+    "baker": ["A FEHÉR GALAMBHOZ"],
+    "tavern": ["A HÁROM HUSZÁRHOZ", "AZ ARANY SZARVASHOZ"],
+    "drapery": ["A PÁRISI DIVATHOZ"],
+    "watches": ["AZ ARANY ÓRÁHOZ"],
+    "cafe": ["A KÉK MACSKÁHOZ"],
+}
+SHOP_NAMED = 0.25           # share of shops with a sign name, where one is left
+SHOP_TRADE_FIRST = 0.4      # share with the trade on the fascia and the owner on the glass
 # Two chemists along the street, at about these shares of its length.
 PHARMACIES = [(0.3, "SZENT JÓZSEF"), (0.75, "MEGVÁLTÓ")]
 SHOP_OWNERS = [
@@ -1485,6 +1499,7 @@ def place_shops(data, furniture_spots):
     pharmacies = list(PHARMACIES)
     numbers = {True: 1, False: 2}
     last_trade = None
+    used_names = set()
     for wall in sorted(walls, key=lambda w: (not w["left"], w["t"])):
         (x0, y0), (x1, y1) = wall["p0"], wall["p1"]
         length = math.dist(wall["p0"], wall["p1"])
@@ -1539,6 +1554,21 @@ def place_shops(data, furniture_spots):
                     trade, _, signs, blade = choices[int(chance(*key) * len(choices))]
                     owner = owners[len(shops) % len(owners)]
                 last_trade = trade
+                # What the fascia and the window glass say: the owner's name
+                # over the trade, the trade over the owner's name, or a shop
+                # sign name "at the ..." over the trade.
+                trade_words = signs[int(chance("sign", *key) * len(signs))]
+                style = chance("style", *key)
+                names = SHOP_NAMES.get(trade, [])
+                if trade == "pharmacy":
+                    fascia, glass = owner, trade_words
+                elif names and style < SHOP_NAMED and trade not in used_names:
+                    fascia, glass = names[int(chance("name", *key) * len(names))], trade_words
+                    used_names.add(trade)
+                elif style < SHOP_NAMED + SHOP_TRADE_FIRST:
+                    fascia, glass = trade_words, owner
+                else:
+                    fascia, glass = owner, trade_words
                 closed = chance("closed", *key) < SHOP_CLOSED
                 outside = not closed and chance("outside", *key) < SHOP_OUTSIDE.get(trade, 0.0)
                 if outside and clear_tree is not None:
@@ -1548,8 +1578,8 @@ def place_shops(data, furniture_spots):
                     "at": [round(sx), round(sy), yaw],
                     "width": round(n * bay - SHOP_GAP),
                     "trade": trade,
-                    "owner": owner,
-                    "sign": signs[int(chance("sign", *key) * len(signs))],
+                    "fascia": fascia,
+                    "glass": glass,
                     "blade": blade,
                     "seed": zlib.crc32(repr(key).encode()) & 0x7FFFFFFF,
                     "closed": closed,
