@@ -93,7 +93,7 @@ namespace Keleti
 	constexpr double TrussApex = 3200.0;
 	constexpr int32 HallBays = 18;
 	constexpr double EndScreenBottom = 900.0;  // the glass screen over the tracks at the far end
-	constexpr double GlassFrom = 0.12;         // the glazed strip of each roof slope, from eaves (0) to ridge (1)
+	constexpr double GlassFrom = 0.62;         // the glazed strip of each roof slope, from eaves (0) to ridge (1): the top third, as in the 1944 aerial photo
 	constexpr double GlassTo = 0.94;
 
 	// Tracks and platforms.
@@ -111,14 +111,15 @@ namespace Keleti
 	constexpr double CarriageLength = 2000.0;
 	constexpr double CarriagePitch = 2070.0;
 
-	// The Baross statue on its lawn in front of the station.
-	const FVector2D StatueAt(-3466.0, 0.0);
+	// The Baross statue on its lawn, on the island at the far side of the
+	// square (1944 aerial photo, Fortepan 109125).
+	const FVector2D StatueAt(-12873.0, 6151.0);
 
 	// Lettering (placed by the actor).
 	const FVector FriezeTextAt(-62.0, 0.0, 2725.0);
 	const FVector AtticTextAt(-42.0, 0.0, 3030.0);
 	const FVector RestaurantTextAt(77.0, -3590.0, 480.0);
-	const FVector StatueTextAt(-3466.0 - 173.0, 0.0, 500.0);
+	const FVector StatueTextAt(StatueAt.X - 173.0, StatueAt.Y, 500.0);
 
 	struct FPart
 	{
@@ -865,7 +866,7 @@ namespace Keleti
 			{
 				B.Tube(Truss, RoofPoint(Side, GlassFrom, X) + Lift, RoofPoint(Side, GlassTo, X) + Lift, 5.0, 4);
 			}
-			for (const double T : { GlassFrom, 0.4, 0.68, GlassTo })
+			for (const double T : { 0.3, GlassFrom, 0.78, GlassTo })
 			{
 				B.Tube(Truss, RoofPoint(Side, T, WingFrontX) - FVector(0.0, 0.0, 22.0), RoofPoint(Side, T, EndX) - FVector(0.0, 0.0, 22.0), 10.0, 4);
 			}

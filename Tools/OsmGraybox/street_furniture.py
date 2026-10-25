@@ -34,7 +34,12 @@ that the AStreetFurniture actor reads:
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in;
-  in autumn also raked leaf piles and the park keepers who rake them.
+  in autumn also raked leaf piles and the park keepers who rake them;
+- baross: Baross tér in front of Keleti as in the 1944 aerial photo
+  (Fortepan 109125): tree clumps on the statue island and a row of trees in
+  the arrival-side yard, the round flower bed, the square's two-armed lamps
+  (Fortepan 139746) and the trams waiting at the terminus, "trams":
+  [[x, y, yaw], ...].
 
 Everything is in Unreal centimetres (X east, Y south), [x, y, yaw] with yaw in
 degrees; heights come from the ground in the game.
@@ -135,6 +140,27 @@ BIN_RADIUS = 25
 BIN_MIN_GAP = 2500
 BIN_BESIDE_LAMP = 90
 BIN_BESIDE_BENCH = 125
+
+# Baross tér, measured from the middle of Keleti's main front (as in
+# osm_to_graybox.py): X east, Y south.
+KELETI_FRONT = (92766, -43178)
+# Tree clumps on and beside the statue island (middles; each clump gets
+# BAROSS_CLUMP trees round it) and the row in the arrival-side yard.
+BAROSS_CLUMPS = [(-12040, 4240), (-11280, 3320), (-10600, 3400), (-9250, 6900), (-8560, 6730),
+                 (-14550, 7140), (-15870, 6560), (-15410, 7280), (-13180, 7600)]
+BAROSS_CLUMP = 3
+BAROSS_CLUMP_SPREAD = 380
+BAROSS_TREE_ROW = ((3800, 8550), (13200, 8500))
+BAROSS_TREE_SPACING = 700
+BAROSS_TREE_RADIUS = 150
+# The round flower bed by the south corner of the front: [x, y, edge, bed].
+BAROSS_BED = (-2235, 7472, 760, 740)
+# The two-armed lamps round the long lawn and the bed (their shadows show in the photo).
+BAROSS_LAMPS = [(-3650, 3909), (-3644, 5911), (-999, 4285), (-3623, 8155), (-287, 8276)]
+# Trams waiting on the terminus tracks, facing south.
+BAROSS_TRAMS = [(-5950, 2700), (-5950, 5800), (-5200, 3600), (-5200, 6700), (-4100, 2900)]
+# The roundabout's lawn: no benches inside a ring of traffic.
+BAROSS_ROUNDABOUT = (-19334, 10195)
 
 # Tisza Kálmán tér: the park polygon in the graybox has its middle near here.
 TISZA_PARK_NEAR = (61300, 1100)
@@ -874,8 +900,9 @@ def place_lamp_bins(lamps, space, tisza):
 
 def place_park_benches(space, tisza_park, bins):
     benches = []
+    roundabout = Point(*keleti(BAROSS_ROUNDABOUT))
     for park in space.parks:
-        if park is tisza_park or park.area < 30e4:
+        if park is tisza_park or park.area < 30e4 or park.contains(roundabout):
             continue
         inner = park.buffer(-BENCH_INSET)
         if inner.is_empty:
@@ -894,6 +921,36 @@ def place_park_benches(space, tisza_park, bins):
                     if len(benches) % 2 == 0 and space.free(bx, by, BIN_RADIUS):
                         bins.append([round(bx), round(by), yaw_of(nx, ny)])
     return benches
+
+
+def keleti(local):
+    """A Baross tér position, given from Keleti's front, on the map."""
+    return (KELETI_FRONT[0] + local[0], KELETI_FRONT[1] + local[1])
+
+
+def layout_baross(space):
+    """Baross tér's trees, flower bed, lamps and waiting trams."""
+    trees = []
+    for i, middle in enumerate(BAROSS_CLUMPS):
+        for k in range(BAROSS_CLUMP):
+            a = 2.0 * math.pi * (k / BAROSS_CLUMP + chance("clump", i))
+            x, y = keleti(middle)
+            x, y = x + math.cos(a) * BAROSS_CLUMP_SPREAD, y + math.sin(a) * BAROSS_CLUMP_SPREAD
+            if space.free(x, y, BAROSS_TREE_RADIUS):
+                trees.append([round(x), round(y), round(0.85 + 0.3 * chance("tree", x, y), 2)])
+    (x0, y0), (x1, y1) = (keleti(p) for p in BAROSS_TREE_ROW)
+    count = int(math.hypot(x1 - x0, y1 - y0) // BAROSS_TREE_SPACING)
+    for k in range(count + 1):
+        x, y = x0 + (x1 - x0) * k / count, y0 + (y1 - y0) * k / count
+        if space.free(x, y, BAROSS_TREE_RADIUS):
+            trees.append([round(x), round(y), round(0.85 + 0.3 * chance("tree", x, y), 2)])
+    bx, by = keleti(BAROSS_BED[:2])
+    return {
+        "trees": trees,
+        "rounds": [[round(bx), round(by), BAROSS_BED[2], BAROSS_BED[3]]],
+        "twin_lamps": [[*keleti(p), 0.0] for p in BAROSS_LAMPS],
+        "trams": [[*keleti(p), 90.0] for p in BAROSS_TRAMS],
+    }
 
 
 # The people in the playground: [kind, x, y, height above the ground, yaw].
@@ -1620,6 +1677,7 @@ def main():
     spots += [tuple(t["sign"][:2]) for t in tram_stops] + [tuple(v["at"][:2]) for v in food_vendors]
     spots += [tuple(t["sign"][:2]) for t in taxi_stands] + [tuple(p[:2]) for t in taxi_stands for p in t["taxis"]]
     shops, gates = place_shops(data, spots)
+    baross = layout_baross(space)
 
     out = {
         "version": 1,
@@ -1637,6 +1695,7 @@ def main():
         "shops": shops,
         "gates": gates,
         "tisza": park,
+        "baross": baross,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -1645,7 +1704,8 @@ def main():
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
           f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers, "
-          f"playground {len(park['playground']['items'])} things, {len(park['playground']['people'])} people")
+          f"playground {len(park['playground']['items'])} things, {len(park['playground']['people'])} people; "
+          f"Baross tér: {len(baross['trees'])} trees, {len(baross['twin_lamps'])} lamps, {len(baross['trams'])} trams")
 
 
 if __name__ == "__main__":

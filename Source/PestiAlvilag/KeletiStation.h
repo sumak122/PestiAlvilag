@@ -23,7 +23,8 @@ class UTexture;
  * three platforms, an arrival train of dark green carriages and a
  * departure train on the other side. Along both sides the two-storey
  * wings with domed corner pavilions, the station restaurant's awning on
- * the departure wing. In front, the Baross statue in its railed lawn.
+ * the departure wing. Out on Baross tér, on the island at the square's far
+ * side, the Baross statue in its railed lawn.
  *
  * The actor's origin is the middle of the main front at pavement level;
  * its +X runs from the front into the hall (east in the city), +Y to the
