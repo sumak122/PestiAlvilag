@@ -11,8 +11,8 @@ class ATram;
 
 /**
  * Riding the tram as a passenger. On foot near a tram standing at a stop,
- * T gets you on (you pay the conductor the fare). On board the camera
- * rides along; T rings the bell to get off at the next stop, or gets you
+ * T gets you on (you pay the conductor the fare) and you sit down on a
+ * free seat on the benches inside; T rings the bell to get off at the next stop, or gets you
  * off at once while the tram stands at one. You step off onto the
  * pavement by the stop sign. Before a tram leaves the map at the end of
  * its route, everybody gets off at its last stop. Not while the police

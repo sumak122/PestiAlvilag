@@ -10,6 +10,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PersonModel.h"
 #include "PestiPerson.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -234,7 +235,7 @@ void ATramRides::Tick(float DeltaSeconds)
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(TramRides::RideLine, 0.f, FColor::White,
-				FString::Printf(TEXT("On the tram (%s)   Next stop: %s   %s"), *Line,
+				FString::Printf(TEXT("On the tram (%s)   Next stop: %s   %s   C: change view"), *Line,
 					*StopName(Tram, Tram->IsAtStop() ? Next + 1 : Next),
 					Tram->IsAtStop() ? TEXT("T: get off here") : bWantOff ? TEXT("Getting off there (T: stay on)") : TEXT("T: ring the bell to get off there")));
 		}
@@ -271,8 +272,15 @@ void ATramRides::Tick(float DeltaSeconds)
 		Say(FString::Printf(TEXT("\u201eJegy n\u00e9lk\u00fcl nem lehet.\u201d  (No ticket, no ride.)   The fare is %s"), *APestiAlvilagGameModeBase::FormatMoney(Fare)));
 		return;
 	}
+	const int32 SeatIndex = Tram->GetFreeSeat();
+	if (SeatIndex == INDEX_NONE)
+	{
+		Say(TEXT("\u201eTele vagyunk!\u201d  (The tram is full.)"));
+		return;
+	}
 	Game->AddMoney(-Fare);
-	Player->RideOn(Tram);
+	const TramModel::FSeat Place = TramModel::Seat(SeatIndex, PersonModel::SeatedMiddle);
+	Player->RideOn(Tram, Place.At, Place.Yaw);
 	Riding = Tram;
 	bWantOff = false;
 	CalledStop = Tram->GetNextStop();

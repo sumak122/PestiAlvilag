@@ -65,10 +65,12 @@ public:
 	bool IsCarrying() const { return bCarrying; }
 
 	/**
-	 * Riding along on something (a tram): he is out of sight, goes where it
-	 * goes, and the camera stands further back; only looking around works.
+	 * Riding along on something (a tram): he sits at SeatAt (where his
+	 * middle goes, on the vehicle, facing SeatYaw) and goes where it goes;
+	 * only looking around works, and C swaps the camera between close
+	 * behind him and out where the whole vehicle shows.
 	 */
-	void RideOn(AActor* Vehicle);
+	void RideOn(AActor* Vehicle, const FVector& SeatAt, double SeatYaw);
 	/** Gets off where there is room near At; false while riding on if not. */
 	bool GetOffAt(const FVector& At, double Yaw);
 	bool IsRiding() const { return bRiding; }
@@ -95,10 +97,15 @@ private:
 	void SwingLimbs(float DeltaSeconds);
 	void TryEnterCar(APlayerController* PC);
 	void SetInWorld(bool bInWorld);
+	void SetRideView(bool bOutside, APlayerController* PC);
 
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
 	bool bCarrying = false;
 	bool bRiding = false;
+	/** Riding with the camera out where the whole vehicle shows. */
+	bool bRideOutside = false;
+	/** Where he sits on the vehicle he rides. */
+	FTransform RideSeat;
 	double OutOfCarTime = -1.0;
 };

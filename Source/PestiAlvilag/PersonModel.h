@@ -19,6 +19,9 @@ namespace PersonModel
 	/** The actor's origin is this far above the feet, as for the old box people (cm). */
 	constexpr double MiddleHeight = 90.0;
 
+	/** A seated person's middle (PersonKit's seated build) above the floor, sitting on a 48 cm seat. */
+	constexpr double SeatedMiddle = MiddleHeight - PersonKit::SeatDrop + 2.0;
+
 	/**
 	 * Dresses a person under Parent, whose origin is MiddleHeight above the
 	 * feet: the legs, arms and body, each placed at its hip or shoulder so it
