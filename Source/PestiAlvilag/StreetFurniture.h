@@ -24,8 +24,8 @@ struct FFurniturePart;
  * south-east quarter (ParkModel.h), and the taxi stands near the Népszínház and Keleti with
  * their parked taxis, and the 1930s shop fronts and house gates along
  * Népszínház utca (ShopModel.h), and Baross tér of the early 1930s in front
- * of Keleti: tree clumps, a flower bed, two-armed lamps and trams waiting at
- * the terminus. It also starts the leaves blowing about (AFallingLeaves).
+ * of Keleti: tree clumps, a flower bed, two-armed lamps, the tram islands
+ * and trams waiting on the side track. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
  * shape and colour, so thousands of them cost little.

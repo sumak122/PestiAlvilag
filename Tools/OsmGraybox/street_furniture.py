@@ -38,8 +38,9 @@ that the AStreetFurniture actor reads:
 - baross: Baross tér in front of Keleti as in the 1944 aerial photo
   (Fortepan 109125): tree clumps on the statue island and a row of trees in
   the arrival-side yard, the round flower bed, the square's two-armed lamps
-  (Fortepan 139746) and the trams waiting at the terminus, "trams":
-  [[x, y, yaw], ...].
+  (Fortepan 139746), the trams waiting on the side track along the front,
+  "trams": [[x, y, yaw], ...], and the tram islands beside the three tracks,
+  "islands": [[x0, y0, x1, y1, width], ...].
 
 Everything is in Unreal centimetres (X east, Y south), [x, y, yaw] with yaw in
 degrees; heights come from the ground in the game.
