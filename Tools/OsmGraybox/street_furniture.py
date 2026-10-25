@@ -140,13 +140,24 @@ TISZA_MIDDLE = (60000, 500)
 TISZA_AXIS = (0.297, 0.955)
 TISZA_ROUNDS = [(TISZA_MIDDLE, 2600, 1300), ((63500, -11150), 1700, 550), ((56750, 11750), 1700, 550)]
 # Twin paths run north and south from the middle either side of a long lawn,
-# wide promenades west (to the Népopera) and east (to the statue), diagonals
-# through the small round places to the corners and one to the south-east
-# corner, a full ring round the middle, and a ring just inside the railing.
+# wide promenades west (to the Népopera) and east (to the statue) with a
+# narrower path beside each, straight diagonals through the small round
+# places and one to the south-east corner, a short one to the corner by the
+# Népopera, a path across the north-east round place, paths round the
+# playground, a full ring round the middle, and a ring just inside the
+# railing (the paths as Daniel marked them on the photo, 2026-10-25).
 TWIN_PATH_APART = 1000
 PROMENADE_WIDTH = 600
 RING_RADIUS = 7300
 RING_ARCS = [(0, 360)]
+# Beside each promenade a narrower path, this far off it; the playground's
+# east path this far east of the middle; the short diagonal heads for the
+# park's corner nearest this point (east, south of the middle), and the
+# path across the north-east round place on to the edge this way.
+BESIDE_PROMENADE = 1900
+PLAYGROUND_EAST = 9300
+NOTCH_TOWARDS = (-4400, -3800)
+NE_CROSS_TOWARDS = (0.79, 0.61)
 # The statue stands east of the middle on a gravel terrace, facing it.
 STATUE_OUT = 6300
 STATUE_TERRACE = 1400
@@ -715,7 +726,7 @@ def place_park_benches(space, tisza_park, bins):
 CHILD_STANDING, CHILD_SEATED, GROWN_UP_SEATED, GROWN_UP_STANDING = range(4)
 
 
-def layout_playground(park, at, along, walkways, ring):
+def layout_playground(park, at, along, walkways, ring, end):
     """The big playground in the south-east quarter, in the park's frame.
 
     Returns its frame (corners as [a, b] east and south of the middle), the
@@ -731,10 +742,12 @@ def layout_playground(park, at, along, walkways, ring):
 
     # The biggest frame that fits inside the ring path.
     best = None
-    for a1 in range(int(a0) + 3000, 25000, 200):
+    # It ends at its east and south paths.
+    a_end, b_end = end[0] - PLAYGROUND_CLEAR, end[1] - PLAYGROUND_CLEAR
+    for a1 in range(int(a0) + 3000, int(a_end) + 1, 200):
         if not inner.contains(box(a0, b0, a1, b0 + 100)):
             break
-        for b1 in range(int(b0) + 3000, 25000, 200):
+        for b1 in range(int(b0) + 3000, int(b_end) + 1, 200):
             if not inner.contains(box(a0, b0, a1, b1)):
                 break
             if best is None or (a1 - a0) * (b1 - b0) > (best[0] - a0) * (best[1] - b0):
@@ -929,31 +942,60 @@ def layout_tisza(space, park):
         b = math.sqrt(center_r ** 2 - a ** 2)
         add_ray(at(a, -b), (-ux, -uy), SIDE_PATH_WIDTH)
         add_ray(at(a, b), (ux, uy), SIDE_PATH_WIDTH)
-    # The promenades west and east; the statue's terrace on the east one.
+    ring = park.buffer(-700)
+    ring = ring if ring.geom_type == "Polygon" else max(ring.geoms, key=lambda g: g.area)
+
+    def add_clipped(a, b, width):
+        """A path from a to b, cut short where it would leave the ring path inside the railing."""
+        piece = LineString([a, b]).intersection(ring)
+        for part in getattr(piece, "geoms", [piece]):
+            if part.geom_type == "LineString" and part.length > 1:
+                add_path(part.coords[0], part.coords[-1], width)
+
+    def plaza_edge(b):
+        """How far east of the middle a path b south of it leaves the round place."""
+        return math.sqrt(max(center_r ** 2 - b ** 2, 0.0))
+
+    # The promenades west and east, each with a narrower path beside it
+    # (south of the west one, north of the east one); the statue's terrace
+    # on the east promenade.
     add_ray(at(-center_r, 0), (-vx, -vy), PROMENADE_WIDTH)
+    add_ray(at(-plaza_edge(BESIDE_PROMENADE), BESIDE_PROMENADE), (-vx, -vy), SIDE_PATH_WIDTH)
     statue = at(STATUE_OUT, 0)
     add_path(at(center_r, 0), at(STATUE_OUT - STATUE_TERRACE / 2, 0), PROMENADE_WIDTH)
     add_path(at(STATUE_OUT - STATUE_TERRACE / 2, 0), at(STATUE_OUT + STATUE_TERRACE / 2, 0), STATUE_TERRACE)
     add_ray(at(STATUE_OUT + STATUE_TERRACE / 2, 0), (vx, vy), PATH_WIDTH)
-    # Diagonals through the small round places to the corners, and one
-    # straight to the south-east corner, across the playground.
+    add_ray(at(plaza_edge(BESIDE_PROMENADE), -BESIDE_PROMENADE), (vx, vy), SIDE_PATH_WIDTH)
+    # Straight diagonals from the middle through the small round places on
+    # to the edge, and one straight to the south-east corner, across the
+    # playground; a short one north-west to the corner by the Népopera.
     corners = list(park.simplify(400).exterior.coords)[:-1]
     for (rx, ry), r, _ in TISZA_ROUNDS[1:]:
         dx, dy = unit(rx - cx, ry - cy)
         add_path((cx + dx * center_r, cy + dy * center_r), (rx - dx * r, ry - dy * r), PATH_WIDTH)
-        corner = min(corners, key=lambda c: math.hypot(c[0] - rx, c[1] - ry))
-        ex, ey = unit(corner[0] - rx, corner[1] - ry)
-        add_ray((rx + ex * r, ry + ey * r), (ex, ey), PATH_WIDTH)
+        add_ray((rx + dx * r, ry + dy * r), (dx, dy), PATH_WIDTH)
     south_east = max(corners, key=lambda c: (c[0] - cx) * vx + (c[1] - cy) * vy + (c[0] - cx) * ux + (c[1] - cy) * uy)
     dx, dy = unit(south_east[0] - cx, south_east[1] - cy)
     add_ray((cx + dx * center_r, cy + dy * center_r), (dx, dy), PATH_WIDTH)
-    # A path east from the south-west round place to the twin paths.
+    notch = min(corners, key=lambda c: math.hypot(c[0] - at(*NOTCH_TOWARDS)[0], c[1] - at(*NOTCH_TOWARDS)[1]))
+    dx, dy = unit(notch[0] - cx, notch[1] - cy)
+    add_ray((cx + dx * center_r, cy + dy * center_r), (dx, dy), SIDE_PATH_WIDTH)
+    # Across the north-east round place: west along the square, and on
+    # east-south-east to the edge.
+    (rx, ry), r, _ = TISZA_ROUNDS[1]
+    add_ray((rx - vx * r, ry - vy * r), (-vx, -vy), SIDE_PATH_WIDTH)
+    ea, eb = NE_CROSS_TOWARDS
+    ex, ey = unit(ea * vx + eb * ux, ea * vy + eb * uy)
+    add_ray((rx + ex * r, ry + ey * r), (ex, ey), SIDE_PATH_WIDTH)
+    # A path east from the south-west round place all the way to the
+    # playground's east path, which runs north to the path beside the east
+    # promenade: together they edge the playground.
     (rx, ry), r, _ = TISZA_ROUNDS[2]
     ra = (rx - cx) * vx + (ry - cy) * vy
     rb = (rx - cx) * ux + (ry - cy) * uy
-    add_path(at(ra + r, rb), at(TWIN_PATH_APART, rb), SIDE_PATH_WIDTH)
-    ring = park.buffer(-700)
-    ring = ring if ring.geom_type == "Polygon" else max(ring.geoms, key=lambda g: g.area)
+    add_clipped(at(ra + r, rb), at(PLAYGROUND_EAST, rb), SIDE_PATH_WIDTH)
+    add_clipped(at(PLAYGROUND_EAST, -BESIDE_PROMENADE), at(PLAYGROUND_EAST, rb), SIDE_PATH_WIDTH)
+    playground_end = (PLAYGROUND_EAST - SIDE_PATH_WIDTH / 2, rb - SIDE_PATH_WIDTH / 2)
     # The ring round the middle.
     for start, end in RING_ARCS:
         steps = max(2, int((end - start) / 8))
@@ -962,10 +1004,7 @@ def layout_tisza(space, park):
         # Where the square's edge cuts into the ring (by the Népopera), it
         # stops at the path just inside the railing.
         for p0, p1 in zip(points[:-1], points[1:]):
-            piece = LineString([p0, p1]).intersection(ring)
-            for part in getattr(piece, "geoms", [piece]):
-                if part.geom_type == "LineString" and part.length > 1:
-                    add_path(part.coords[0], part.coords[-1], SIDE_PATH_WIDTH)
+            add_clipped(p0, p1, SIDE_PATH_WIDTH)
     # The ring path just inside the railing.
     ring = ring.simplify(300)
     ring_coords = list(ring.exterior.coords)
@@ -993,7 +1032,7 @@ def layout_tisza(space, park):
     def off_walkways(x, y):
         return not walkways.contains(Point(x, y))
 
-    playground = layout_playground(park, at, (vx, vy), walkways, ring)
+    playground = layout_playground(park, at, (vx, vy), walkways, ring, playground_end)
     # Trees, lamps, leaf piles and lawn fences keep off the playground and the terrace.
     keep_clear = unary_union([Polygon([at(*c) for c in playground.pop("frame")]).buffer(100),
                               Point(statue).buffer(STATUE_TERRACE)])
