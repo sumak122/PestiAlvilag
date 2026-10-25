@@ -95,6 +95,9 @@ namespace CarModel
 		/** The front edge of the driver's seat cushion, and its top. */
 		double SeatX = -40.0;
 		double SeatTop = Waist - 46.0;
+		/** Where a back-seat passenger's hips are, and the middle of the back doors. */
+		double RearSeatX = -100.0;
+		double RearDoorX = -80.0;
 	};
 
 	/** The driver sits on the left. */
@@ -104,6 +107,10 @@ namespace CarModel
 	constexpr double DriverLegPitch = 25.0;
 	/** Taller people are made this tall in the car, so their hats stay under the roof (cm). */
 	constexpr double DriverMaxHeight = 174.0;
+	/** A back-seat passenger sits on the right, hands in the lap. */
+	constexpr double PassengerY = 30.0;
+	constexpr double PassengerArmPitch = 40.0;
+	constexpr double PassengerLegPitch = 10.0;
 
 	inline FLayout Layout(EBody Body)
 	{
@@ -126,6 +133,7 @@ namespace CarModel
 			L.Cowl = 32.0;
 			L.RoofTop = 82.0;
 			L.SeatX = -30.0;
+			L.RearDoorX = -67.0;
 			L.Exhaust = FVector(-226.0, 40.0, -62.0);
 			break;
 		case EBody::Van:
@@ -851,12 +859,12 @@ namespace CarModel
 	}
 
 	/**
-	 * A driver sitting at the wheel, as one shape in the car's frame: a
-	 * person from PersonKit, seated, the thighs tilted up a little towards
-	 * the pedals and the hands on the wheel. Pieces of the same colour share
-	 * a section.
+	 * Someone sitting in the car, as one shape in the car's frame: a person
+	 * from PersonKit, seated with the hips at Hip (the middle between them),
+	 * the arms reaching forward by ArmPitch and the thighs tilted up by
+	 * LegPitch (degrees). Pieces of the same colour share a section.
 	 */
-	inline void BuildSeatedDriver(const PersonKit::FOutfit& InOutfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
+	inline void BuildSeatedPerson(const PersonKit::FOutfit& InOutfit, const FVector& Hip, double ArmPitch, double LegPitch, TArray<PersonKit::FSection>& Out)
 	{
 		PersonKit::FOutfit Outfit = InOutfit;
 		Outfit.bSeated = true;
@@ -864,16 +872,15 @@ namespace CarModel
 		Outfit.Height = FMath::Min(Outfit.Height, static_cast<float>(DriverMaxHeight));
 		PersonKit::FPerson Person;
 		PersonKit::Build(Outfit, Person);
-		// The hips sit on the cushion, a thigh's thickness above it.
-		const FVector Hip = Person.Pieces[PersonKit::LegRight].Pivot;
-		const FVector Offset(L.SeatX + 2.0 - Hip.X, DriverY, L.SeatTop + 9.0 - Hip.Z);
+		const FVector Joint = Person.Pieces[PersonKit::LegRight].Pivot;
+		const FVector Offset(Hip.X - Joint.X, Hip.Y, Hip.Z - Joint.Z);
 		Out.Reset();
 		for (int32 p = 0; p < PersonKit::NumPieces; ++p)
 		{
 			const PersonKit::FPiece& Piece = Person.Pieces[p];
 			const bool bArm = p == PersonKit::ArmLeft || p == PersonKit::ArmRight;
 			const bool bLeg = p == PersonKit::LegLeft || p == PersonKit::LegRight;
-			const FRotator Tilt(bArm ? DriverArmPitch : bLeg ? DriverLegPitch : 0.0, 0.0, 0.0);
+			const FRotator Tilt(bArm ? ArmPitch : bLeg ? LegPitch : 0.0, 0.0, 0.0);
 			for (const PersonKit::FSection& From : Piece.Sections)
 			{
 				PersonKit::FSection* Into = Out.FindByPredicate([&From](const PersonKit::FSection& Each) { return Each.Color.Equals(From.Color); });
@@ -894,6 +901,24 @@ namespace CarModel
 				}
 			}
 		}
+	}
+
+	/** The driver at the wheel, the hips on the cushion (a thigh's thickness above it) and the hands on the wheel. */
+	inline void BuildSeatedDriver(const PersonKit::FOutfit& Outfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
+	{
+		BuildSeatedPerson(Outfit, FVector(L.SeatX + 2.0, DriverY, L.SeatTop + 9.0), DriverArmPitch, DriverLegPitch, Out);
+	}
+
+	/** A passenger on the back seat. */
+	inline void BuildBackSeatPassenger(const PersonKit::FOutfit& Outfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
+	{
+		BuildSeatedPerson(Outfit, FVector(L.RearSeatX, PassengerY, L.SeatTop + 9.0), PassengerArmPitch, PassengerLegPitch, Out);
+	}
+
+	/** Where someone stands to get in at a back door, on the left (Side -1) or right (1), on the ground. */
+	inline FVector RearDoor(EBody Body, double Side)
+	{
+		return FVector(Layout(Body).RearDoorX, Side * (BodyHalfWidth + 45.0), Ground);
 	}
 
 	/** A key telling styles with the same shapes apart (the colours don't matter). */

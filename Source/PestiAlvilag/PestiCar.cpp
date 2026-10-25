@@ -214,6 +214,22 @@ void APestiCar::LetDriverOut(APlayerController* PC)
 	}
 }
 
+void APestiCar::ShowBackSeatPassenger(const PersonKit::FOutfit& Outfit)
+{
+	Visuals->ShowPassenger(Outfit);
+}
+
+void APestiCar::HideBackSeatPassenger()
+{
+	Visuals->HidePassenger();
+}
+
+FVector APestiCar::GetRearDoor(const FVector& Towards) const
+{
+	const double Side = FVector::DotProduct(Towards - GetActorLocation(), GetActorRightVector()) >= 0.0 ? 1.0 : -1.0;
+	return GetActorTransform().TransformPosition(CarModel::RearDoor(Style.Body, Side));
+}
+
 void APestiCar::UpdateEngineNoise(float Throttle)
 {
 	// The revs climb with the speed in each gear, then drop back at the change up.
