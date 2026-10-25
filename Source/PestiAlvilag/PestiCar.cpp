@@ -12,6 +12,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
+#include "PersonModel.h"
 #include "PoliceCar.h"
 #include "TrafficCar.h"
 #include "Tram.h"
@@ -43,8 +44,13 @@ namespace PestiCar
 	constexpr float ExitSideDistance = 170.f;
 	constexpr double MinTimeInCar = 0.3;
 
-	// The engine has three gears: each runs up to this share of top speed.
-	const float GearTops[] = { 0.28f, 0.6f, 1.f };
+	// The engine has four gears: each runs up to this share of top speed...
+	const float GearTops[] = { 0.2f, 0.42f, 0.68f, 1.f };
+	constexpr int32 NumGears = static_cast<int32>(UE_ARRAY_COUNT(GearTops));
+	// ...where the revs reach this (1 is flat out, so the engine never screams).
+	constexpr float GearChangeRevs = 0.8f;
+	// It changes down once the speed falls this far below the lower gear's top.
+	constexpr float ChangeDownShare = 0.85f;
 	// Lifting off sharply above this share of top speed sometimes bangs the exhaust.
 	constexpr float BackfireSpeed = 0.4f;
 	constexpr float BackfireChance = 0.3f;
@@ -176,6 +182,7 @@ void APestiCar::TakeDriver(APawn* InDriver)
 {
 	Driver = InDriver;
 	DriverInTime = GetWorld()->GetTimeSeconds();
+	Visuals->ShowDriver(PersonModel::PlayerOutfit());
 	LookYaw = 0.f;
 	LookPitch = 0.f;
 }
@@ -199,6 +206,7 @@ void APestiCar::LetDriverOut(APlayerController* PC)
 		{
 			ForwardSpeed = 0.f;
 			Driver = nullptr;
+			Visuals->HideDriver();
 			PC->Possess(Person);
 			PC->SetControlRotation(FRotator(-10.f, GetActorRotation().Yaw, 0.f));
 			return;
@@ -208,22 +216,20 @@ void APestiCar::LetDriverOut(APlayerController* PC)
 
 void APestiCar::UpdateEngineNoise(float Throttle)
 {
-	// The revs climb through each gear, then drop back at the change.
+	// The revs climb with the speed in each gear, then drop back at the change up.
 	const float Share = FMath::Clamp(FMath::Abs(ForwardSpeed) / MaxSpeed, 0.f, 1.f);
-	float Bottom = 0.f;
-	float InGear = 0.f;
-	for (const float Top : PestiCar::GearTops)
+	if (Gear < PestiCar::NumGears - 1 && Share > PestiCar::GearTops[Gear])
 	{
-		if (Share <= Top || Top >= 1.f)
-		{
-			InGear = (Share - Bottom) / (Top - Bottom);
-			break;
-		}
-		Bottom = Top;
+		++Gear;
 	}
+	else if (Gear > 0 && Share < PestiCar::GearTops[Gear - 1] * PestiCar::ChangeDownShare)
+	{
+		--Gear;
+	}
+	const float InGear = Share / PestiCar::GearTops[Gear] * PestiCar::GearChangeRevs;
 	const float Pedal = FMath::Abs(Throttle);
 	// Standing still, the pedal just revs the engine a little.
-	const float Revs = FMath::Max(InGear * 0.85f + 0.1f * Pedal, 0.3f * Pedal * (1.f - Share));
+	const float Revs = FMath::Max(InGear + 0.05f * Pedal, 0.3f * Pedal * (1.f - Share));
 	EngineNoise->SetEngine(Revs, Pedal);
 
 	if (LastPedal > 0.5f && Pedal < 0.05f && Share > PestiCar::BackfireSpeed && FMath::FRand() < PestiCar::BackfireChance)

@@ -127,6 +127,7 @@ private:
 	ATrafficManager* GetTraffic() const;
 
 	ETaxiShift Shift = ETaxiShift::Off;
+	bool bDeluxeTaxiOut = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ATaxiPassenger> Passenger;

@@ -143,5 +143,7 @@ private:
 	double DriverInTime = 0.0;
 	int32 BumpCount = 0;
 	float LastPedal = 0.f;
+	/** The gear the engine is in, from 0. */
+	int32 Gear = 0;
 	double LastBumpTime = -1.0;
 };

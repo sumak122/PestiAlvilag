@@ -47,6 +47,8 @@ namespace PestiStart
 	// on the open ground beside it.
 	const FVector2D TaxiCompanyAt(-12000.f, 3100.f);
 	const FVector2D TaxiAt[] = { FVector2D(-10400.f, 2500.f), FVector2D(-11100.f, 2500.f) };
+	// The special taxi for regulars waits closest to the kiosk.
+	const FVector2D DeluxeTaxiAt(-11800.f, 2500.f);
 
 	// Below this speed next to a police car counts as being caught (cm/s).
 	constexpr float CaughtSpeed = 300.f;
@@ -57,6 +59,18 @@ APestiAlvilagGameModeBase::APestiAlvilagGameModeBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = APestiPerson::StaticClass();
+}
+
+void APestiAlvilagGameModeBase::SpawnDeluxeTaxi()
+{
+	if (TActorIterator<APestiDeluxeTaxi>(GetWorld()))
+	{
+		return;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	const FVector Location(PestiStart::DeluxeTaxiAt, GroundZ(PestiStart::DeluxeTaxiAt) + 150.0);
+	GetWorld()->SpawnActor<APestiDeluxeTaxi>(APestiDeluxeTaxi::StaticClass(), Location, FRotator::ZeroRotator, Params);
 }
 
 APestiAlvilagGameModeBase* APestiAlvilagGameModeBase::Get(const UObject* WorldContextObject)
