@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HomeDoor.h"
+#include "KeletiStation.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
@@ -18,12 +19,15 @@
 
 namespace Prologue
 {
-	// Keleti's main front faces west onto Baross tér (cm, X east, Y south).
-	const FVector2D StartAt(91900.f, -43300.f);
+	// Off the train: on the arrival platform inside Keleti, beside the
+	// first carriage, facing the great arch and Baross tér beyond it
+	// (in the station's own frame: X from the front into the hall, Y
+	// towards the arrival side).
+	const FVector2D StartAt = AKeletiStation::ToCity(FVector2D(5200.0, 1750.0));
 	constexpr double StartYaw = 180.0;
 
-	// The gentleman waits a few steps from the doors with his suitcase.
-	const FVector2D GentlemanAt(91100.f, -42400.f);
+	// The gentleman waits a few steps ahead on the platform with his suitcase.
+	const FVector2D GentlemanAt = AKeletiStation::ToCity(FVector2D(4400.0, 1720.0));
 	const FLinearColor GentlemanCoat(0.30f, 0.22f, 0.12f);
 
 	// His taxi stands at the kerb on Baross tér, about 60 m away.
@@ -82,7 +86,7 @@ void AMissionPrologue::SetUpMission()
 		Suitcase->SetMaterial(0, Paintwork);
 	}
 
-	// Off the train: the picture comes up slowly on the station forecourt.
+	// Off the train: the picture comes up slowly on the platform.
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
 		if (PC->PlayerCameraManager)
@@ -130,6 +134,8 @@ void AMissionPrologue::SetUpMission()
 	Carry.GoalEn = TEXT("Carry the suitcase to the taxi on Baross t\u00e9r");
 	Carry.Target = TaxiLocation;
 	Carry.Radius = 400.f;
+	// Out through the arch and the taxi is in sight; street arrows would only confuse inside the hall.
+	Carry.bGuide = false;
 	Steps.Add(Carry);
 
 	// The way home leads through the park on Tisza Kálmán tér.

@@ -176,7 +176,7 @@ void AMission::Tick(float DeltaSeconds)
 	}
 
 	// Arrows over the turns on the way, while the target is still far off.
-	if (Distance > Mission::RouteMinDistance)
+	if (Step.bGuide && Distance > Mission::RouteMinDistance)
 	{
 		Guide->Guide(At, Step.Target);
 	}
