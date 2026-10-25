@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "PersonKit.h"
 #include "TaxiPassenger.generated.h"
 
 class UMaterialInterface;
@@ -29,6 +30,9 @@ public:
 	/** Hides them while they ride in the taxi. */
 	void SetInWorld(bool bInWorld);
 
+	/** What they wear (made when play begins). */
+	const PersonKit::FOutfit& GetOutfit() const { return Outfit; }
+
 protected:
 	/** Legs, arms and body (PersonKit::EPiece order), dressed when play begins. */
 	UPROPERTY(Transient)
@@ -43,6 +47,7 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	PersonKit::FOutfit Outfit;
 	bool bIsWaiting = true;
 	float WavePhase = 0.f;
 };

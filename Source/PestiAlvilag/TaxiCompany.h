@@ -8,6 +8,7 @@
 
 class APestiTaxi;
 class ATaxiPassenger;
+class AWalkingPerson;
 class ATrafficManager;
 class UMaterialInterface;
 class UStaticMeshComponent;
@@ -19,6 +20,7 @@ enum class ETaxiShift : uint8
 	Off,
 	Waiting,      // on shift, the next fare comes soon
 	ToPickup,     // a fare waits at the kerb
+	Boarding,     // the fare walks to the taxi and gets in
 	ToDropoff,    // the fare rides in the taxi
 };
 
@@ -118,7 +120,11 @@ private:
 	void ToggleShift();
 	void UpdateFare(APestiTaxi* Taxi, float DeltaSeconds);
 	bool StartFare(const FVector& From);
+	void StartBoarding(APestiTaxi* Taxi);
+	void CancelBoarding();
 	void PickUp(APestiTaxi* Taxi);
+	/** The fare gets out of the back of the taxi and walks off (runs, if bHurry). */
+	void LetPassengerOut(APestiTaxi* Taxi, bool bHurry);
 	void DropOff(APestiTaxi* Taxi, bool bPaid);
 	void EndFare();
 	/** A kerb spot on a named 1932 street between MinDistance and MaxDistance from From. */
@@ -127,9 +133,17 @@ private:
 	ATrafficManager* GetTraffic() const;
 
 	ETaxiShift Shift = ETaxiShift::Off;
+	bool bDeluxeTaxiOut = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ATaxiPassenger> Passenger;
+
+	/** The fare walking to the taxi. */
+	UPROPERTY(Transient)
+	TObjectPtr<AWalkingPerson> Walker;
+
+	/** The taxi the fare sits in (or is getting into). */
+	TWeakObjectPtr<APestiTaxi> FareTaxi;
 
 	FVector PickupSpot = FVector::ZeroVector;
 	FString PickupStreet;

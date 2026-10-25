@@ -24,8 +24,8 @@ namespace ExhaustSmoke
 	constexpr float Drag = 1.8f;
 	// See-through grey: colour and how much it hides (alpha).
 	const FLinearColor Colors[2] = {
-		FLinearColor(0.62f, 0.62f, 0.60f, 0.30f),
-		FLinearColor(0.10f, 0.10f, 0.10f, 0.55f) };
+		FLinearColor(0.62f, 0.62f, 0.60f, 0.12f),
+		FLinearColor(0.10f, 0.10f, 0.10f, 0.28f) };
 
 	/** A rough ball of 12 corners, 1 across. */
 	const TArray<FVector>& Ball()

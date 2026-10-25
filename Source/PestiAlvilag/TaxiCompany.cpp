@@ -20,6 +20,7 @@
 #include "PestiTaxi.h"
 #include "TaxiPassenger.h"
 #include "TrafficManager.h"
+#include "WalkingPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace TaxiCompany
@@ -39,6 +40,19 @@ namespace TaxiCompany
 	// A quick ride earns this share of the meter as a tip, less a share per bump.
 	constexpr float BestTip = 0.25f;
 	constexpr float TipLostPerBump = 0.08f;
+	// Fares walk to the taxi, and away from it, at these speeds (cm/s); a scared one runs.
+	constexpr float BoardingSpeed = 150.f;
+	constexpr float LeavingSpeed = 130.f;
+	constexpr float RunningSpeed = 400.f;
+	// Leaving: a step out to the kerb, then on along the street (cm).
+	constexpr double StepOut = 180.0;
+	constexpr double WalkOn = 900.0;
+	// The destination's kerb counts as the kerb side within this distance (cm).
+	constexpr double KerbReach = 2000.0;
+	// The taxi moving off faster than this while the fare gets in leaves them behind (cm/s).
+	constexpr float DriveOffSpeed = 150.f;
+	// The actor's location is a person's middle, this far above the ground (cm).
+	constexpr double Middle = 90.0;
 
 	// The kiosk: a green wooden booth with a roof and a sign (cm, X out the front).
 	struct FKioskPart
@@ -211,6 +225,17 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Regulars get the company's special taxi (checked here, after the save is read).
+	if (!bDeluxeTaxiOut)
+	{
+		APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+		if (Game && Game->GetTaxiJobs() >= TaxiCompany::RegularAfterJobs)
+		{
+			Game->SpawnDeluxeTaxi();
+			bDeluxeTaxiOut = true;
+		}
+	}
+
 	// Starting and ending a shift at the kiosk, on foot.
 	const bool bAtKiosk = Player->IsA<APestiPerson>() && FVector::Dist2D(Player->GetActorLocation(), GetActorLocation()) < SignOnRange;
 	if (bAtKiosk && PC->WasInputKeyJustPressed(EKeys::E))
@@ -236,10 +261,15 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 	else
 	{
 		Guide->Stop();
-		// Leaving the taxi with a fare aboard loses them.
+		if (Shift == ETaxiShift::Boarding)
+		{
+			CancelBoarding();
+		}
+		// Leaving the taxi with a fare aboard loses them: they get out and walk.
 		if (Shift == ETaxiShift::ToDropoff)
 		{
 			Say(TEXT("\u201eHova megy? Na j\u00f3, majd gyalog.\u201d  (Where are you going? Fine, I'll walk.)"));
+			LetPassengerOut(FareTaxi.Get(), false);
 			EndFare();
 		}
 		if (GEngine)
@@ -290,7 +320,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		const double Distance = FVector::Dist2D(At, PickupSpot);
 		if (Distance < PickupRange && bStopped)
 		{
-			PickUp(Taxi);
+			StartBoarding(Taxi);
 			break;
 		}
 		if (Now - FareTime > PatienceSeconds)
@@ -302,6 +332,30 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 		Guide->Guide(At, PickupSpot);
 		Status = FString::Printf(TEXT("Fare waiting on %s: %s %s  (stop beside them)"),
 			*PickupStreet, *PestiText::Metres(Distance), PestiText::Compass(At, PickupSpot));
+		break;
+	}
+
+	case ETaxiShift::Boarding:
+	{
+		// They walk round to the back door and get in, if the taxi waits for them.
+		if (!Walker || Taxi != FareTaxi.Get() || Taxi->GetVelocity().Size2D() > TaxiCompany::DriveOffSpeed)
+		{
+			CancelBoarding();
+			break;
+		}
+		Walker->SetGoal(FVector2D(Taxi->GetRearDoor(Walker->GetActorLocation())));
+		if (Walker->HasArrived())
+		{
+			Walker->Destroy();
+			Walker = nullptr;
+			if (Passenger)
+			{
+				Taxi->ShowBackSeatPassenger(Passenger->GetOutfit());
+			}
+			PickUp(Taxi);
+			break;
+		}
+		Status = TEXT("The fare is getting in...");
 		break;
 	}
 
@@ -372,6 +426,72 @@ bool ATaxiCompany::StartFare(const FVector& From)
 	return true;
 }
 
+void ATaxiCompany::StartBoarding(APestiTaxi* Taxi)
+{
+	if (!Passenger)
+	{
+		return;
+	}
+	// The waving figure at the kerb turns into one who walks to the taxi.
+	const FVector From = Passenger->GetActorLocation();
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Walker = GetWorld()->SpawnActor<AWalkingPerson>(AWalkingPerson::StaticClass(), From, Passenger->GetActorRotation(), Params);
+	if (!Walker)
+	{
+		PickUp(Taxi);
+		return;
+	}
+	Walker->SetOutfit(Passenger->GetOutfit());
+	Walker->SetPath({ FVector2D(Taxi->GetRearDoor(From)) }, TaxiCompany::BoardingSpeed, false);
+	Passenger->SetInWorld(false);
+	FareTaxi = Taxi;
+	Shift = ETaxiShift::Boarding;
+}
+
+void ATaxiCompany::CancelBoarding()
+{
+	if (Walker)
+	{
+		Walker->Destroy();
+		Walker = nullptr;
+	}
+	if (Passenger)
+	{
+		Passenger->SetInWorld(true);
+		Passenger->SetWaiting(true);
+	}
+	FareTaxi.Reset();
+	Shift = ETaxiShift::ToPickup;
+}
+
+void ATaxiCompany::LetPassengerOut(APestiTaxi* Taxi, bool bHurry)
+{
+	if (!Taxi || !Passenger)
+	{
+		return;
+	}
+	Taxi->HideBackSeatPassenger();
+	// Out of the back door on the kerb side (by the destination, or else the
+	// left), a step to the pavement, then off along the street.
+	const bool bThere = FVector::Dist2D(Taxi->GetActorLocation(), DropoffSpot) < TaxiCompany::KerbReach;
+	const FVector Kerb = bThere ? DropoffSpot : Taxi->GetActorLocation() - Taxi->GetActorRightVector() * 300.0;
+	const FVector Door = Taxi->GetRearDoor(Kerb);
+	const FVector2D Out = FVector2D(Door - Taxi->GetActorLocation()).GetSafeNormal();
+	const FVector2D Along = FVector2D(Taxi->GetActorForwardVector()).GetSafeNormal();
+	const FVector2D Step = FVector2D(Door) + Out * TaxiCompany::StepOut;
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AWalkingPerson* Leaving = GetWorld()->SpawnActor<AWalkingPerson>(AWalkingPerson::StaticClass(),
+		Door + FVector(0.0, 0.0, TaxiCompany::Middle), FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Out.Y, Out.X)), 0.0), Params);
+	if (Leaving)
+	{
+		Leaving->SetOutfit(Passenger->GetOutfit());
+		const double Way = FMath::RandBool() ? 1.0 : -1.0;
+		Leaving->SetPath({ Step, Step + Along * (Way * TaxiCompany::WalkOn) }, bHurry ? TaxiCompany::RunningSpeed : TaxiCompany::LeavingSpeed, true);
+	}
+}
+
 void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 {
 	FString Street;
@@ -400,6 +520,7 @@ void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 	{
 		Passenger->SetInWorld(false);
 	}
+	FareTaxi = Taxi;
 	Shift = ETaxiShift::ToDropoff;
 	FareTime = GetWorld()->GetTimeSeconds();
 	BumpsAtPickup = Taxi->GetBumpCount();
@@ -412,16 +533,7 @@ void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 
 void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 {
-	if (Passenger)
-	{
-		// Out on the kerb side.
-		const FVector Left = -Taxi->GetActorRightVector().GetSafeNormal2D();
-		Passenger->SetActorLocation(Taxi->GetActorLocation() + Left * 200.0 + FVector(0.0, 0.0, 10.0));
-		Passenger->SetInWorld(true);
-		Passenger->SetWaiting(false);
-		Passenger->SetLifeSpan(8.f);
-		Passenger = nullptr;
-	}
+	LetPassengerOut(Taxi, !bPaid);
 
 	if (bPaid)
 	{
@@ -442,7 +554,7 @@ void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 			if (Game->GetTaxiJobs() == TaxiCompany::RegularAfterJobs && GEngine)
 			{
 				GEngine->AddOnScreenDebugMessage(TaxiCompany::RegularLine, 10.f, FColor(255, 210, 60), FString::Printf(
-					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on."), TaxiCompany::RegularAfterJobs));
+					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on, and the company's red limousine taxi waits for you by the kiosk."), TaxiCompany::RegularAfterJobs));
 			}
 		}
 		const FString Thanks = Tip > 0
@@ -459,6 +571,16 @@ void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 
 void ATaxiCompany::EndFare()
 {
+	if (Walker)
+	{
+		Walker->Destroy();
+		Walker = nullptr;
+	}
+	if (APestiTaxi* Taxi = FareTaxi.Get())
+	{
+		Taxi->HideBackSeatPassenger();
+	}
+	FareTaxi.Reset();
 	if (Passenger)
 	{
 		Passenger->Destroy();

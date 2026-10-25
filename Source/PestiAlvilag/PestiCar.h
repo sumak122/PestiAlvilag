@@ -100,6 +100,12 @@ public:
 	/** How many times the car has hit something hard enough to jolt a passenger. */
 	int32 GetBumpCount() const { return BumpCount; }
 
+	/** A fare on the back seat (taxis), or nobody. */
+	void ShowBackSeatPassenger(const PersonKit::FOutfit& Outfit);
+	void HideBackSeatPassenger();
+	/** Where someone stands to get in or out at a back door, on the side facing Towards (on the ground). */
+	FVector GetRearDoor(const FVector& Towards) const;
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UBoxComponent> CollisionBox;
@@ -143,5 +149,7 @@ private:
 	double DriverInTime = 0.0;
 	int32 BumpCount = 0;
 	float LastPedal = 0.f;
+	/** The gear the engine is in, from 0. */
+	int32 Gear = 0;
 	double LastBumpTime = -1.0;
 };

@@ -46,7 +46,7 @@ void ATaxiPassenger::BeginPlay()
 	Super::BeginPlay();
 
 	FRandomStream Random(FMath::Rand());
-	PersonKit::FOutfit Outfit = PersonModel::RandomOutfit(Random);
+	Outfit = PersonModel::RandomOutfit(Random);
 	// A free hand to wave with.
 	Outfit.Held = PersonKit::EHeld::None;
 	PersonModel::Dress(this, RootComponent, BaseMaterial, Outfit, Pieces);

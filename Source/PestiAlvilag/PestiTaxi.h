@@ -19,3 +19,17 @@ class PESTIALVILAG_API APestiTaxi : public APestiCar
 public:
 	APestiTaxi();
 };
+
+/**
+ * The company's best car, lent to its regulars once they have driven 20
+ * fares: a long red limousine with a gold chequered band and gold wire
+ * wheels, faster than the other taxis. It works as a taxi like any other.
+ */
+UCLASS()
+class PESTIALVILAG_API APestiDeluxeTaxi : public APestiTaxi
+{
+	GENERATED_BODY()
+
+public:
+	APestiDeluxeTaxi();
+};

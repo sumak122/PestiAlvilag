@@ -83,6 +83,8 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 
 	Style = PickStyle(Paint);
 	Visuals->Show(CollisionBox, Style);
+	Visuals->ShowStreetDriver(FMath::RandRange(0, UCarVisuals::NumDriverLooks - 1));
+	Visuals->SetStreetEngine(true);
 	if (!BaseMaterial)
 	{
 		return;
