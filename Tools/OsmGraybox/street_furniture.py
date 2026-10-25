@@ -64,6 +64,7 @@ TREE_ROW_OFFSET = 450
 TREE_FILL_SPACING = 1500
 PATH_LAMP_SPACING = 2500
 PATH_BENCH_SPACING = 1600
+PATH_BENCH_INSET = 30
 FENCE_INSET = 60
 # A knee-high wire fence on little posts keeps people off the lawns along
 # the paths, and low clipped hedges ring the round places (Fortepan 70268).
@@ -331,6 +332,7 @@ def layout_tisza(space, park):
     # Trees in rows either side of every path, benches and lamps along them.
     for k, (line, p) in enumerate(zip(path_lines, paths)):
         coords = list(line.coords)
+        other_walkways = unary_union([l.buffer(q[4] / 2 + 60) for j, (l, q) in enumerate(zip(path_lines, paths)) if j != k])
         if line.length < 600:
             continue
         for (x, y), (ax, ay), s in walk(coords, TREE_SPACING, TREE_SPACING / 2, 300):
@@ -344,8 +346,10 @@ def layout_tisza(space, park):
         for n, ((x, y), (ax, ay), s) in enumerate(walk(coords, PATH_BENCH_SPACING, PATH_BENCH_SPACING / 2, 500)):
             side = 1 if n % 2 == 0 else -1
             nx, ny = ay * side, -ax * side
-            bx, by = x + nx * (p[4] / 2 + 90), y + ny * (p[4] / 2 + 90)
-            if in_park(bx, by, 200) and off_rounds(bx, by, 100) and off_walkways(bx, by) and bench_spread.ok(bx, by) \
+            # On the gravel at the path's edge, its back to the lawn fence.
+            bx, by = x + nx * (p[4] / 2 - PATH_BENCH_INSET), y + ny * (p[4] / 2 - PATH_BENCH_INSET)
+            if in_park(bx, by, 200) and off_rounds(bx, by, 100) and not other_walkways.contains(Point(bx, by)) \
+                    and bench_spread.ok(bx, by) \
                     and not space.near_building(Point(bx, by), 200):
                 benches.append([round(bx), round(by), yaw_of(-nx, -ny)])
                 bench_spread.add(bx, by)
@@ -389,11 +393,10 @@ def layout_tisza(space, park):
     # cross and at the round places; hedges round the round places, open
     # where the paths come in.
     rounds_area = unary_union([Point(x, y).buffer(r + HEDGE_OFFSET + 60) for (x, y), r, _ in TISZA_ROUNDS])
-    bench_room = unary_union([Point(b[0], b[1]).buffer(120) for b in benches])
     lawn_fences = []
     for k, (line, p) in enumerate(zip(path_lines, paths)):
         others = unary_union([l.buffer(q[4] / 2 + 40) for j, (l, q) in enumerate(zip(path_lines, paths)) if j != k])
-        keep_off = unary_union([others, rounds_area, bench_room, park.exterior.buffer(250)])
+        keep_off = unary_union([others, rounds_area, park.exterior.buffer(250)])
         for side in ("left", "right"):
             edge = line.parallel_offset(p[4] / 2 + LAWN_FENCE_OFFSET, side)
             for piece in getattr(edge.difference(keep_off), "geoms", [edge.difference(keep_off)]):
