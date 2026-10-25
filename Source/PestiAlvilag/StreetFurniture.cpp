@@ -711,7 +711,8 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			const uint32 Seed = static_cast<uint32>(Shop->GetNumberField(TEXT("seed")));
 			TArray<ParkModel::FPart> Model;
 			TArray<ShopModel::FLettering> Lettering;
-			ShopModel::BuildShop(Model, Lettering, Width, ShopModel::TradeOf(*Shop->GetStringField(TEXT("trade"))), Seed,
+			const ShopModel::ETrade Trade = ShopModel::TradeOf(*Shop->GetStringField(TEXT("trade")));
+			ShopModel::BuildShop(Model, Lettering, Width, Trade, Seed,
 				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")));
 			Put(Model, Foot, Yaw);
 			for (const ShopModel::FLettering& Line : Lettering)
@@ -733,6 +734,14 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			if (!Clothes.bWoman && Random.FRand() < 0.4f)
 			{
 				Clothes.Hat = PersonKit::EHat::None;
+			}
+			if (Trade == ShopModel::ETrade::Hats)
+			{
+				// The hatter shows off the best in the shop: a silk top hat, or a smart cloche.
+				Clothes.bApron = false;
+				Clothes.Hat = Clothes.bWoman ? PersonKit::EHat::Cloche : PersonKit::EHat::TopHat;
+				Clothes.HatColor = Clothes.bWoman ? FLinearColor(0.35f, 0.04f, 0.08f) : FLinearColor(0.012f, 0.012f, 0.014f);
+				Clothes.HatBand = Clothes.bWoman ? FLinearColor(0.80f, 0.75f, 0.62f) : FLinearColor(0.10f, 0.10f, 0.11f);
 			}
 			const FTransform Spawn(FRotator(0.0, Yaw + Random.FRandRange(-30.f, 30.f), 0.0), Foot + FRotator(0.0, Yaw, 0.0).RotateVector(Local));
 			AStoryPerson* Keeper = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,

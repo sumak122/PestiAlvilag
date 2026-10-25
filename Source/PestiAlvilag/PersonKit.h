@@ -20,7 +20,7 @@
  */
 namespace PersonKit
 {
-	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche };
+	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, TopHat };
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
 	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket };
 
@@ -432,6 +432,19 @@ namespace PersonKit
 			Loft(B, O.HatColor, { Flat(Crown.X, Crown.Z, 10.5, 9.5), Flat(Crown.X, Crown.Z + 6.0, 10.5, 9.5) }, 14, false, true);
 			Loft(B, O.HatBand, { Flat(Crown.X, Crown.Z + 0.5, 10.7, 9.7), Flat(Crown.X, Crown.Z + 3.0, 10.7, 9.7) }, 14, true, true);
 			Loft(B, O.HatColor, { Flat(Crown.X, Crown.Z - 0.5, 17.5, 16.0), Flat(Crown.X, Crown.Z + 0.3, 17.5, 16.0) }, 16, true, true);
+			break;
+		case EHat::TopHat:
+			// A tall silk hat, a little wider at the top, with a band and a curled brim.
+			Loft(B, O.HatColor, {
+				Flat(Crown.X, Crown.Z, 10.4, 9.4),
+				Flat(Crown.X, Crown.Z + 9.0, 10.0, 9.0),
+				Flat(Crown.X - 0.3, Crown.Z + 17.0, 10.6, 9.6),
+			}, 16, false, true);
+			Loft(B, O.HatBand, { Flat(Crown.X, Crown.Z + 0.6, 10.6, 9.6), Flat(Crown.X, Crown.Z + 4.0, 10.4, 9.4) }, 16, true, true);
+			Loft(B, O.HatColor, {
+				Flat(Crown.X + 0.5, Crown.Z - 0.2, 15.5, 14.0),
+				Flat(Crown.X + 0.5, Crown.Z + 0.6, 15.5, 14.5),
+			}, 16, true, true);
 			break;
 		case EHat::Cloche:
 			Loft(B, O.HatColor, {
