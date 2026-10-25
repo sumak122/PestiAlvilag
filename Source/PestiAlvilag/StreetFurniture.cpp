@@ -3,6 +3,7 @@
 #include "StreetFurniture.h"
 
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
@@ -15,9 +16,12 @@
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
 #include "ParkKeeper.h"
+#include "ParkModel.h"
+#include "PersonModel.h"
 #include "PestiTaxi.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFurniture, Log, All);
@@ -262,6 +266,23 @@ namespace Furniture
 	constexpr double LawnFenceHeight = 45.0;
 	constexpr double HedgeHeight = 70.0;
 	constexpr double HedgeWidth = 55.0;
+
+	/** A statue or playground piece from ParkModel, as furniture parts. */
+	TArray<FFurniturePart> FromParkModel(const TArray<ParkModel::FPart>& Model)
+	{
+		TArray<FFurniturePart> Parts;
+		Parts.Reserve(Model.Num());
+		for (const ParkModel::FPart& Piece : Model)
+		{
+			FFurniturePart Part{ Piece.Shape, Piece.Color, Piece.At, Piece.Size / 100.0, Piece.bCollide };
+			Part.Rotation = FRotator(Piece.Pitch, 0.0, Piece.Roll);
+			Parts.Add(Part);
+		}
+		return Parts;
+	}
+
+	// Children and nannies are not drawn beyond this distance (cm).
+	constexpr float PlaygroundPeopleDistance = 9000.f;
 }
 
 AStreetFurniture::AStreetFurniture()
@@ -740,6 +761,21 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		}
 	});
 
+	const TArray<TSharedPtr<FJsonValue>>* Statue = nullptr;
+	if (Park.TryGetArrayField(TEXT("statue"), Statue) && Statue->Num() >= 3)
+	{
+		const FVector2D At((*Statue)[0]->AsNumber(), (*Statue)[1]->AsNumber());
+		if (GroundAt(At, Ground))
+		{
+			AddObject(Furniture::FromParkModel(ParkModel::Statue()), Ground, (*Statue)[2]->AsNumber(), 1.0, TreeCullDistance);
+		}
+	}
+	const TSharedPtr<FJsonObject>* Playground = nullptr;
+	if (Park.TryGetObjectField(TEXT("playground"), Playground))
+	{
+		BuildPlayground(**Playground);
+	}
+
 	// Raked leaf piles, and the keepers who go from pile to pile.
 	TArray<FVector> Piles;
 	Furniture::ForEachRow(Park, TEXT("leaf_piles"), [&](const TArray<double>& Row)
@@ -779,6 +815,64 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		if (AParkKeeper* Keeper = GetWorld()->SpawnActor<AParkKeeper>(AParkKeeper::StaticClass(), Ground + FVector(0.0, 0.0, 90.0), FRotator::ZeroRotator, Params))
 		{
 			Keeper->SetWorkSpots(Spots);
+		}
+	});
+}
+
+void AStreetFurniture::BuildPlayground(const FJsonObject& Playground)
+{
+	// The sand, just under the paths that cross it.
+	const TArray<TSharedPtr<FJsonValue>>* Sand = nullptr;
+	if (Playground.TryGetArrayField(TEXT("sand"), Sand) && Sand->Num() >= 5)
+	{
+		AddStrip(FVector2D((*Sand)[0]->AsNumber(), (*Sand)[1]->AsNumber()), FVector2D((*Sand)[2]->AsNumber(), (*Sand)[3]->AsNumber()),
+			(*Sand)[4]->AsNumber(), 3.0, 0.5, ParkModel::Colors::Sand);
+	}
+
+	TArray<TArray<FFurniturePart>> Kinds;
+	for (int32 Kind = 0; Kind < ParkModel::NumPlay; ++Kind)
+	{
+		Kinds.Add(Furniture::FromParkModel(ParkModel::Play(Kind)));
+	}
+	FVector Ground;
+	Furniture::ForEachRow(Playground, TEXT("items"), [&](const TArray<double>& Row)
+	{
+		const int32 Kind = Row.Num() >= 4 ? static_cast<int32>(Row[0]) : -1;
+		if (Kinds.IsValidIndex(Kind) && GroundAt(FVector2D(Row[1], Row[2]), Ground))
+		{
+			AddObject(Kinds[Kind], Ground, Row[3], 1.0, CullDistance);
+		}
+	});
+
+	// The children at play and the grown-ups minding them. They stand or sit
+	// still, so they need no ticking.
+	FRandomStream Random(1932);
+	Furniture::ForEachRow(Playground, TEXT("people"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() < 5 || !GroundAt(FVector2D(Row[1], Row[2]), Ground))
+		{
+			return;
+		}
+		const int32 Kind = static_cast<int32>(Row[0]);
+		const bool bChild = Kind == ParkModel::ChildStanding || Kind == ParkModel::ChildSeated;
+		const bool bSeated = Kind == ParkModel::ChildSeated || Kind == ParkModel::GrownUpSeated;
+		PersonKit::FOutfit Clothes = bChild ? ParkModel::ChildOutfit(Random) : ParkModel::GrownUpOutfit(Random);
+		Clothes.bSeated = bSeated;
+		const double Middle = bSeated ? ParkModel::SeatedMiddle(Clothes, Row[3], PersonModel::MiddleHeight) : Row[3] + PersonModel::MiddleHeight;
+		const FTransform Spawn(FRotator(0.0, Row[4], 0.0), Ground + FVector(0.0, 0.0, Middle));
+		AStoryPerson* Person = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Person)
+		{
+			return;
+		}
+		Person->SetOutfit(Clothes);
+		Person->FinishSpawning(Spawn);
+		Person->SetActorTickEnabled(false);
+		TInlineComponentArray<UPrimitiveComponent*> Shapes(Person);
+		for (UPrimitiveComponent* Shape : Shapes)
+		{
+			Shape->SetCachedMaxDrawDistance(Furniture::PlaygroundPeopleDistance);
 		}
 	});
 }
