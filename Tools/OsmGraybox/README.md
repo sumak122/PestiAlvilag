@@ -63,6 +63,8 @@ mode spawns it) reads that file and places everything on the ground:
 - round advertising columns near street corners;
 - benches in the parks;
 - litter bins beside some street lamps and next to the park benches;
+- walking lines along both pavements of every street and down the park
+  paths, which the people out walking (APedestrians) follow;
 - the 1932 layout of Tisza Kálmán tér: paths, flower beds, trees, benches,
   lamps and a railing, with knee-high wire fences along the lawns and low
   clipped hedges round the round places (after Fortepan 70268), and for
