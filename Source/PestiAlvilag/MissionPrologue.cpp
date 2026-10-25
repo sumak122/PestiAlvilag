@@ -43,7 +43,7 @@ namespace Prologue
 
 	// A brown leather case, carried in the right hand.
 	const FVector SuitcaseScale(0.7f, 0.22f, 0.48f);
-	const FVector SuitcaseInHand(0.f, 48.f, -52.f);
+	const FVector SuitcaseInHand(2.f, 30.f, -37.f);
 	const FVector SuitcaseBeside(30.f, 60.f, -66.f);
 	const FLinearColor Leather(0.22f, 0.11f, 0.05f);
 

@@ -2,6 +2,7 @@
 
 #include "ParkKeeper.h"
 
+#include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -41,6 +42,14 @@ namespace ParkKeeper
 AParkKeeper::AParkKeeper()
 {
 	CoatColor = ParkKeeper::WorkCoat;
+	// A park keeper's work clothes: cap, jacket, boots.
+	Outfit.Hat = PersonKit::EHat::FlatCap;
+	Outfit.HatColor = ParkKeeper::WorkCoat * 0.8f;
+	Outfit.Top = PersonKit::ETop::Jacket;
+	Outfit.bTie = false;
+	Outfit.bBoots = true;
+	Outfit.bMoustache = true;
+	Outfit.Trousers = FLinearColor(0.12f, 0.11f, 0.09f);
 	WalkSpeed = ParkKeeper::Walk;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -99,11 +108,11 @@ void AParkKeeper::SetWorkSpots(const TArray<FVector>& InSpots)
 void AParkKeeper::PoseLimbs(float Legs, float Arms)
 {
 	const float Pitches[] = { Legs, -Legs, Arms, Arms };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)) && i < BodyParts.Num(); ++i)
+	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)); ++i)
 	{
-		if (BodyParts[i])
+		if (USceneComponent* Part = Limb(i))
 		{
-			BodyParts[i]->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
 		}
 	}
 }

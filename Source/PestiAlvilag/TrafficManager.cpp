@@ -16,6 +16,7 @@
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
+#include "PersonModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
@@ -53,12 +54,6 @@ namespace Traffic
 	constexpr float StolenLift = 60.f;
 	constexpr double DriverOut = 170.0;
 	constexpr double PoliceSeeTheft = 3000.0;
-	const FLinearColor DriverCoats[] = {
-		FLinearColor(0.10f, 0.07f, 0.05f),
-		FLinearColor(0.12f, 0.12f, 0.12f),
-		FLinearColor(0.05f, 0.06f, 0.10f),
-		FLinearColor(0.16f, 0.12f, 0.08f),
-	};
 	// A car to take the stolen one's place appears this far from the camera,
 	// out of its view (cm).
 	constexpr int32 ReplaceTries = 8;
@@ -163,7 +158,10 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	if (ACarjackedDriver* Driver = World->SpawnActor<ACarjackedDriver>(ACarjackedDriver::StaticClass(),
 		Location + Right * (Side * Traffic::DriverOut), Facing, DriverParams))
 	{
-		Driver->SetCoatColor(Traffic::DriverCoats[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::DriverCoats)) - 1)]);
+		FRandomStream Random(FMath::Rand());
+		PersonKit::FOutfit Clothes = PersonModel::RandomOutfit(Random);
+		Clothes.Held = PersonKit::EHeld::None;
+		Driver->SetOutfit(Clothes);
 		Driver->RunFrom(Danger);
 	}
 

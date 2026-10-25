@@ -11,7 +11,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "CarBody.h"
+#include "PersonModel.h"
 #include "PestiCar.h"
+#include "ProceduralMeshComponent.h"
 #include "PoliceCar.h"
 #include "TrafficCar.h"
 #include "TrafficManager.h"
@@ -30,9 +33,6 @@ namespace PestiPerson
 	constexpr float StrideLength = 120.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
-
-	// A dark winter coat.
-	const FLinearColor CoatColor(0.08f, 0.06f, 0.05f);
 }
 
 APestiPerson::APestiPerson()
@@ -54,8 +54,6 @@ APestiPerson::APestiPerson()
 	Movement->JumpZVelocity = 380.f;
 	Movement->AirControl = 0.2f;
 
-	CarBody::BuildPerson(this, GetCapsuleComponent(), BodyParts, BodyPaints);
-
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
 	CameraArm->SetupAttachment(GetCapsuleComponent());
 	CameraArm->TargetArmLength = PestiPerson::ArmLength;
@@ -73,7 +71,7 @@ void APestiPerson::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, PestiPerson::CoatColor);
+	PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
 }
 
 void APestiPerson::Tick(float DeltaSeconds)
@@ -162,19 +160,19 @@ void APestiPerson::Walk(const APlayerController* PC)
 
 void APestiPerson::SwingLimbs(float DeltaSeconds)
 {
-	// No animation rig yet: swing the arms and legs from the shapes' middles,
-	// legs against arms, faster and wider the faster he goes.
+	// No animation rig yet: swing the arms and legs from the hips and
+	// shoulders, legs against arms, faster and wider the faster he goes.
 	const float Speed = GetCharacterMovement()->IsMovingOnGround() ? static_cast<float>(GetVelocity().Size2D()) : 0.f;
 	StridePhase += DeltaSeconds * Speed / PestiPerson::StrideLength * PI;
 	const float Swing = FMath::Sin(StridePhase) * PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
 	constexpr int32 NumLimbs = 4;
 	// The arm with a load in it hangs still.
 	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, bCarrying ? 0.f : Swing };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < NumLimbs && i < BodyParts.Num(); ++i)
+	for (int32 i = 0; i < NumLimbs && i < Pieces.Num(); ++i)
 	{
-		if (BodyParts[i])
+		if (Pieces[i])
 		{
-			BodyParts[i]->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
+			Pieces[i]->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
 		}
 	}
 }

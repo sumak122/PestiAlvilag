@@ -2,6 +2,7 @@
 
 #include "Cafe.h"
 
+#include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -9,6 +10,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PersonModel.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace Cafe
@@ -62,12 +64,11 @@ namespace Cafe
 		{ 3, -1, FLinearColor(0.12f, 0.12f, 0.12f) },
 	};
 
-	// Seated: the body sinks to the chair, thighs reach forward and down.
-	constexpr double SeatedMiddle = 77.0;
-	constexpr float LegsForward = 50.f;
-	const FVector SeatedLeg(27.0, 11.0, -53.0);
-	constexpr float ArmsOnTable = 40.f;
-	constexpr float SipLift = 35.f;
+	// Seated: hips on the chair (its seat is 48 cm up), arms reaching
+	// forward onto the marble.
+	constexpr double SeatedMiddle = PersonModel::MiddleHeight - PersonKit::SeatDrop + 2.0;
+	constexpr float ArmsOnTable = 67.f;
+	constexpr float SipLift = 15.f;
 	constexpr float SipEvery = 9.f;
 	constexpr float SipLength = 2.f;
 
@@ -260,6 +261,7 @@ void ACafe::SeatGuests()
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FRandomStream Random(1932);
 	for (const FSeat& Seat : Seats)
 	{
 		const FVector Chair = Frame.TransformPosition(FVector(TableX, TableY[Seat.Table] + ChairOff * Seat.Side, 0.0));
@@ -269,7 +271,11 @@ void ACafe::SeatGuests()
 		const double Yaw = FrameYaw + (Seat.Side > 0 ? -90.0 : 90.0);
 		if (ACafeGuest* Guest = GetWorld()->SpawnActor<ACafeGuest>(ACafeGuest::StaticClass(), Ground + FVector(0.0, 0.0, SeatedMiddle), FRotator(0.0, Yaw, 0.0), Params))
 		{
-			Guest->SetCoatColor(Seat.Coat);
+			PersonKit::FOutfit Clothes = PersonModel::RandomOutfit(Random);
+			Clothes.bSeated = true;
+			Clothes.Held = PersonKit::EHeld::None;
+			Clothes.Coat = Seat.Coat;
+			Guest->SetOutfit(Clothes);
 		}
 	}
 
@@ -289,22 +295,15 @@ ACafeGuest::ACafeGuest()
 {
 	// Sitting on a chair: no capsule in the way of the table and chairs.
 	Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Outfit.bSeated = true;
 }
 
 void ACafeGuest::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Legs forward and down from the chair, hands on the table.
-	for (int32 i = 0; i < 2 && i < BodyParts.Num(); ++i)
-	{
-		BodyParts[i]->SetRelativeLocationAndRotation(FVector(Cafe::SeatedLeg.X, i == 0 ? -Cafe::SeatedLeg.Y : Cafe::SeatedLeg.Y, Cafe::SeatedLeg.Z),
-			FRotator(Cafe::LegsForward, 0.f, 0.f));
-	}
-	for (int32 i = 2; i < 4 && i < BodyParts.Num(); ++i)
-	{
-		BodyParts[i]->SetRelativeRotation(FRotator(Cafe::ArmsOnTable, 0.f, 0.f));
-	}
+	// Hands on the table (the legs are made seated).
+	PoseArms();
 	// Not all at the same moment.
 	SipClock = FMath::Fmod(static_cast<float>(GetActorLocation().X + GetActorLocation().Y) * 0.01f, Cafe::SipEvery);
 	if (SipClock < 0.f)
@@ -324,22 +323,41 @@ void ACafeGuest::Tick(float DeltaSeconds)
 		SipClock -= Cafe::SipEvery;
 	}
 	const float Sip = SipClock < Cafe::SipLength ? FMath::Sin(SipClock / Cafe::SipLength * PI) : 0.f;
-	if (BodyParts.Num() > 3 && BodyParts[3])
+	PoseArms();
+	if (USceneComponent* RightArm = Limb(3))
 	{
-		BodyParts[3]->SetRelativeRotation(FRotator(Cafe::ArmsOnTable + Cafe::SipLift * Sip, 0.f, 0.f));
+		RightArm->SetRelativeRotation(FRotator(Cafe::ArmsOnTable + Cafe::SipLift * Sip, 0.f, 0.f));
+	}
+}
+
+void ACafeGuest::PoseArms()
+{
+	for (int32 i = 2; i < 4; ++i)
+	{
+		if (USceneComponent* Arm = Limb(i))
+		{
+			Arm->SetRelativeRotation(FRotator(Cafe::ArmsOnTable, 0.f, 0.f));
+		}
 	}
 }
 
 ACafeWaiter::ACafeWaiter()
 {
 	CoatColor = Cafe::WaiterJacket;
+	// A white jacket and long apron, black trousers and tie, bare-headed.
+	Outfit.Hat = PersonKit::EHat::None;
+	Outfit.Top = PersonKit::ETop::Jacket;
+	Outfit.bApron = true;
+	Outfit.bMoustache = true;
+	Outfit.Tie = FLinearColor(0.02f, 0.02f, 0.02f);
+	Outfit.Trousers = FLinearColor(0.02f, 0.02f, 0.02f);
 	WalkSpeed = Cafe::WaiterSpeed;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	Tray = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Tray"));
 	Tray->SetupAttachment(Capsule);
 	Tray->SetStaticMesh(CylinderMesh.Object);
-	Tray->SetRelativeLocation(FVector(30.0, -32.0, 42.0));
+	Tray->SetRelativeLocation(FVector(52.0, -25.0, 36.0));
 	Tray->SetRelativeScale3D(FVector(0.4, 0.4, 0.015));
 	Tray->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
@@ -405,11 +423,11 @@ void ACafeWaiter::Tick(float DeltaSeconds)
 
 	// Legs swing as he walks; the left arm holds the tray up, the right swings a little.
 	const float Pitches[] = { Legs, -Legs, Cafe::TrayArm, -Legs * 0.6f };
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)) && i < BodyParts.Num(); ++i)
+	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)); ++i)
 	{
-		if (BodyParts[i])
+		if (USceneComponent* Part = Limb(i))
 		{
-			BodyParts[i]->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
 		}
 	}
 }

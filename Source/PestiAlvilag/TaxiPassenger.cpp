@@ -2,29 +2,22 @@
 
 #include "TaxiPassenger.h"
 
+#include "CarBody.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PersonModel.h"
+#include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace TaxiPassenger
 {
-	// The right arm is the fourth body part (see CarBody::BuildPerson).
-	constexpr int32 RightArm = 3;
-	const FVector ArmDown(0.f, 29.f, 22.f);
-	const FVector ArmUp(0.f, 33.f, 72.f);
+	// Hailing: the right arm raised up and forward, waving to and fro.
+	constexpr int32 RightArm = PersonKit::ArmRight;
+	constexpr float ArmUp = 150.f;
 	constexpr float WaveRate = 6.f;
-	constexpr float WaveAngle = 18.f;
-
-	// Coats of the period: browns, greys, a dark blue, a camel.
-	const FLinearColor Coats[] = {
-		FLinearColor(0.08f, 0.05f, 0.03f),
-		FLinearColor(0.10f, 0.10f, 0.10f),
-		FLinearColor(0.02f, 0.03f, 0.08f),
-		FLinearColor(0.35f, 0.25f, 0.12f),
-		FLinearColor(0.05f, 0.05f, 0.05f),
-	};
+	constexpr float WaveAngle = 15.f;
 	const FLinearColor BeaconColor(1.f, 0.75f, 0.1f);
 }
 
@@ -36,7 +29,6 @@ ATaxiPassenger::ATaxiPassenger()
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
-	CarBody::BuildPerson(this, Root, BodyParts, BodyPaints);
 
 	// A tall thin column of light, starting well above the head.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -53,8 +45,11 @@ void ATaxiPassenger::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const FLinearColor Coat = TaxiPassenger::Coats[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(TaxiPassenger::Coats)) - 1)];
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Coat);
+	FRandomStream Random(FMath::Rand());
+	PersonKit::FOutfit Outfit = PersonModel::RandomOutfit(Random);
+	// A free hand to wave with.
+	Outfit.Held = PersonKit::EHeld::None;
+	PersonModel::Dress(this, RootComponent, BaseMaterial, Outfit, Pieces);
 	if (BaseMaterial)
 	{
 		UMaterialInstanceDynamic* Light = UMaterialInstanceDynamic::Create(BaseMaterial, this);
@@ -68,21 +63,21 @@ void ATaxiPassenger::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!bIsWaiting || !BodyParts.IsValidIndex(TaxiPassenger::RightArm) || !BodyParts[TaxiPassenger::RightArm])
+	if (!bIsWaiting || !Pieces.IsValidIndex(TaxiPassenger::RightArm) || !Pieces[TaxiPassenger::RightArm])
 	{
 		return;
 	}
 	WavePhase += DeltaSeconds * TaxiPassenger::WaveRate;
-	BodyParts[TaxiPassenger::RightArm]->SetRelativeRotation(FRotator(0.f, 0.f, FMath::Sin(WavePhase) * TaxiPassenger::WaveAngle));
+	Pieces[TaxiPassenger::RightArm]->SetRelativeRotation(FRotator(TaxiPassenger::ArmUp + FMath::Sin(WavePhase) * TaxiPassenger::WaveAngle, 0.f, 0.f));
 }
 
 void ATaxiPassenger::SetWaiting(bool bWaiting)
 {
 	bIsWaiting = bWaiting;
 	Beacon->SetVisibility(bWaiting);
-	if (BodyParts.IsValidIndex(TaxiPassenger::RightArm) && BodyParts[TaxiPassenger::RightArm])
+	if (Pieces.IsValidIndex(TaxiPassenger::RightArm) && Pieces[TaxiPassenger::RightArm])
 	{
-		BodyParts[TaxiPassenger::RightArm]->SetRelativeLocationAndRotation(bWaiting ? TaxiPassenger::ArmUp : TaxiPassenger::ArmDown, FRotator::ZeroRotator);
+		Pieces[TaxiPassenger::RightArm]->SetRelativeRotation(FRotator(bWaiting ? TaxiPassenger::ArmUp : 0.f, 0.f, 0.f));
 	}
 }
 
