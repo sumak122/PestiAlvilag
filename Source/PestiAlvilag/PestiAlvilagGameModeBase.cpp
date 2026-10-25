@@ -20,6 +20,7 @@
 #include "PestiTaxi.h"
 #include "StreetFurniture.h"
 #include "TaxiCompany.h"
+#include "TaxiRides.h"
 #include "TrafficManager.h"
 
 namespace PestiStart
@@ -105,6 +106,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<APedestrians>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<APedestrians>();
+	}
+
+	// Taxis to ride in as a paying passenger.
+	if (!TActorIterator<ATaxiRides>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ATaxiRides>();
 	}
 
 	// Start traffic unless the level already has its own manager.
@@ -304,6 +311,7 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 	{
 		Money = Save->Money;
 		CompletedMissions = Save->CompletedMissions;
+		TaxiJobs = Save->TaxiJobs;
 	}
 }
 
@@ -326,6 +334,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	}
 	Save->Money = Money;
 	Save->CompletedMissions = CompletedMissions;
+	Save->TaxiJobs = TaxiJobs;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

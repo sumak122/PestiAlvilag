@@ -40,6 +40,9 @@ public:
 	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
 	void LeaveTraffic() { ReleaseAllJunctions(); }
 
+	/** Stops and waits where it is for this long (s), e.g. for someone hailing a taxi. */
+	void HoldStill(float Seconds) { HoldTime = FMath::Max(HoldTime, Seconds); }
+
 	/** Degrees per second the car can turn at cruising speed. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float TurnRate = 110.f;
@@ -88,6 +91,7 @@ protected:
 	int32 PointIndex = 0;
 	float CurrentSpeed = 0.f;
 	float BlockedTime = 0.f;
+	float HoldTime = 0.f;
 	TArray<CarBody::EPaint> BodyPaints;
 
 private:

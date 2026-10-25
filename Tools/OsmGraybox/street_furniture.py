@@ -16,6 +16,8 @@ that the AStreetFurniture actor reads:
   park benches;
 - taxi_stands: a rank of parked taxis by the kerb near the Népszínház and
   Keleti station, each {"name", "taxis": [[x, y, yaw], ...], "sign": [x, y, yaw]};
+- taxi_destinations: where a taxi can take the player, a pavement spot at
+  each, {"name", "at": [x, y, yaw]};
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
   gravel paths, round flower beds, rows of trees, benches and lamps along
   the paths, and a low iron railing with gaps where the paths come in;
@@ -84,6 +86,16 @@ ROUND_WALK_OUT = 300
 TAXI_STANDS = [
     ("N\u00e9psz\u00ednh\u00e1z", (-6700, 200)),
     ("Keleti p\u00e1lyaudvar", (91200, -43178)),
+]
+# Where taxis take the player: a name and a point near the place; the drop
+# is on the nearest pavement walking line.
+TAXI_DESTINATIONS = [
+    ("N\u00e9psz\u00ednh\u00e1z", (-6700, 200)),
+    ("Keleti p\u00e1lyaudvar", (91200, -43178)),
+    ("B\u00f6zsi n\u00e9ni (home)", (58550, 21720)),
+    ("Teleki t\u00e9r", (105715, 29355)),
+    ("Tisza K\u00e1lm\u00e1n t\u00e9r", (61300, 1100)),
+    ("Taxi company", (-12000, 3100)),
 ]
 TAXIS_PER_STAND = 3
 TAXI_SPACING = 540
@@ -464,6 +476,21 @@ def place_taxi_stands(data, space):
     return stands
 
 
+def place_taxi_destinations(sidewalks):
+    """The pavement spot nearest each of TAXI_DESTINATIONS."""
+    lines = [LineString(ring_points(w)) for w in sidewalks]
+    out = []
+    for name, anchor in TAXI_DESTINATIONS:
+        near = Point(anchor)
+        line = min(lines, key=lambda l: l.distance(near))
+        along = line.project(near)
+        p = line.interpolate(along)
+        q = line.interpolate(min(along + 50, line.length))
+        o = line.interpolate(max(along - 50, 0))
+        out.append({"name": name, "at": [round(p.x), round(p.y), yaw_of(q.x - o.x, q.y - o.y)]})
+    return out
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -746,6 +773,7 @@ def main():
     park = layout_tisza(space, tisza)
     sidewalks = place_sidewalks(data, space, tisza, park)
     taxi_stands = place_taxi_stands(data, space)
+    taxi_destinations = place_taxi_destinations(sidewalks)
 
     out = {
         "version": 1,
@@ -756,6 +784,7 @@ def main():
         "bins": bins,
         "sidewalks": sidewalks,
         "taxi_stands": taxi_stands,
+        "taxi_destinations": taxi_destinations,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:

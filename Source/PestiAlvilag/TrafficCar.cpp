@@ -122,6 +122,14 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Pulled up for someone (a fare hailing a taxi): wait where it is.
+	if (HoldTime > 0.f)
+	{
+		HoldTime -= DeltaSeconds;
+		CurrentSpeed = 0.f;
+		return;
+	}
+
 	FVector Location = GetActorLocation();
 
 	// Advance along the lane, switching lanes at the end of each street piece.

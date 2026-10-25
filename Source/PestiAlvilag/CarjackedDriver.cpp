@@ -31,7 +31,7 @@ void ACarjackedDriver::RunFrom(const FVector& Danger)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(CarjackedDriver::ShoutKey, CarjackedDriver::ShoutSeconds, FColor::Orange,
-			TEXT("„Hé! Az autóm! Rendőr!”   (Hey! My car! Police!)"));
+			TEXT("\u201eH\u00e9! Az aut\u00f3m! Rend\u0151r!\u201d   (Hey! My car! Police!)"));
 	}
 }
 
