@@ -34,6 +34,12 @@ public:
 	/** Called by the manager right after spawning. */
 	void StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex, const FLinearColor& Paint);
 
+	/** The colour it was painted. */
+	const FLinearColor& GetPaint() const { return PaintColor; }
+
+	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
+	void LeaveTraffic() { ReleaseAllJunctions(); }
+
 	/** Degrees per second the car can turn at cruising speed. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float TurnRate = 110.f;
@@ -95,4 +101,5 @@ private:
 	float JunctionWaitTime = 0.f;
 	TArray<int32> HeldNodes;
 	TArray<CarBody::EPaint> BodyPaints;
+	FLinearColor PaintColor = FLinearColor::Black;
 };

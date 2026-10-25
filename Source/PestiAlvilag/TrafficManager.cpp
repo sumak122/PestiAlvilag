@@ -3,6 +3,8 @@
 #include "TrafficManager.h"
 
 #include "Algo/BinarySearch.h"
+#include "Camera/PlayerCameraManager.h"
+#include "CarjackedDriver.h"
 #include "Dom/JsonObject.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -12,6 +14,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -43,6 +46,25 @@ namespace Traffic
 	constexpr float TramSpawnRoom = 2000.f;
 	// Height of the car's centre above the road surface (hover + half height).
 	constexpr float RideHeight = 90.f;
+
+	// Stealing a car: the player's car is set down a little above the AI
+	// car's place and settles, the driver gets out this far to the side, and
+	// a police car this close sees it (cm).
+	constexpr float StolenLift = 60.f;
+	constexpr double DriverOut = 170.0;
+	constexpr double PoliceSeeTheft = 3000.0;
+	const FLinearColor DriverCoats[] = {
+		FLinearColor(0.10f, 0.07f, 0.05f),
+		FLinearColor(0.12f, 0.12f, 0.12f),
+		FLinearColor(0.05f, 0.06f, 0.10f),
+		FLinearColor(0.16f, 0.12f, 0.08f),
+	};
+	// A car to take the stolen one's place appears this far from the camera,
+	// out of its view (cm).
+	constexpr int32 ReplaceTries = 8;
+	constexpr double ReplaceNear = 6000.0;
+	constexpr double ReplaceFar = 25000.0;
+	constexpr double ReplaceOutOfViewDot = 0.17;
 }
 
 ATrafficManager::ATrafficManager()
@@ -98,6 +120,115 @@ void ATrafficManager::Tick(float DeltaSeconds)
 	if (bShowDebug)
 	{
 		DrawDebugView();
+	}
+	if (CarsToReplace > 0)
+	{
+		ReplaceCars();
+	}
+}
+
+APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
+{
+	if (!IsValid(Car) || Cast<APoliceCar>(Car))
+	{
+		return nullptr;
+	}
+	UWorld* World = GetWorld();
+	const FVector Location = Car->GetActorLocation();
+	const FRotator Facing(0.f, Car->GetActorRotation().Yaw, 0.f);
+	const FLinearColor Paint = Car->GetPaint();
+	Car->LeaveTraffic();
+	Cars.Remove(Car);
+	Car->Destroy();
+
+	// The same car, now one the player drives (it settles onto the ground itself).
+	const FTransform Place(Facing, Location + FVector(0.f, 0.f, Traffic::StolenLift));
+	APestiCar* Stolen = World->SpawnActorDeferred<APestiCar>(APestiCar::StaticClass(), Place, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Stolen)
+	{
+		return nullptr;
+	}
+	Stolen->BodyColor = Paint;
+	Stolen->FinishSpawning(Place);
+	++CarsToReplace;
+
+	// The driver gets out on the side away from the player and runs off.
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const FVector Danger = Player ? Player->GetActorLocation() : Location;
+	const FVector Right = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y);
+	const double Side = FVector::DotProduct(Danger - Location, Right) > 0.0 ? -1.0 : 1.0;
+	FActorSpawnParameters DriverParams;
+	DriverParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ACarjackedDriver* Driver = World->SpawnActor<ACarjackedDriver>(ACarjackedDriver::StaticClass(),
+		Location + Right * (Side * Traffic::DriverOut), Facing, DriverParams))
+	{
+		Driver->SetCoatColor(Traffic::DriverCoats[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::DriverCoats)) - 1)]);
+		Driver->RunFrom(Danger);
+	}
+
+	// A policeman close by sees it.
+	for (const ATrafficCar* Other : Cars)
+	{
+		if (Cast<APoliceCar>(Other) && FVector::Dist2D(Other->GetActorLocation(), Location) < Traffic::PoliceSeeTheft)
+		{
+			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+			{
+				Game->ReportCrime(1);
+			}
+			break;
+		}
+	}
+	return Stolen;
+}
+
+void ATrafficManager::ReplaceCars()
+{
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC || !PC->PlayerCameraManager || Lanes.IsEmpty())
+	{
+		return;
+	}
+	const FVector Camera = PC->PlayerCameraManager->GetCameraLocation();
+	const FVector2D Looking = FVector2D(PC->PlayerCameraManager->GetCameraRotation().Vector()).GetSafeNormal();
+	for (int32 Try = 0; Try < Traffic::ReplaceTries; ++Try)
+	{
+		const int32 LaneIdx = FMath::RandRange(0, Lanes.Num() - 1);
+		const FTrafficLane& Lane = Lanes[LaneIdx];
+		if (Lane.Points.Num() < 2)
+		{
+			continue;
+		}
+		const int32 PointIdx = FMath::RandRange(0, Lane.Points.Num() - 2);
+		FVector Location = Lane.Points[PointIdx];
+		const FVector2D Away = FVector2D(Location - Camera);
+		const double Distance = Away.Size();
+		// Close enough to matter, but where the camera is not looking.
+		if (Distance < Traffic::ReplaceNear || Distance > Traffic::ReplaceFar
+			|| FVector2D::DotProduct(Away / Distance, Looking) > Traffic::ReplaceOutOfViewDot
+			|| !IsAreaClear(Location, MinSpawnSpacing, nullptr))
+		{
+			continue;
+		}
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Location + FVector(0.f, 0.f, 200.f), Location - FVector(0.f, 0.f, 1000.f), ECC_Visibility))
+		{
+			Location.Z = Hit.ImpactPoint.Z;
+		}
+		Location.Z += Traffic::RideHeight;
+		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ATrafficCar* Car = GetWorld()->SpawnActor<ATrafficCar>(ATrafficCar::StaticClass(), Location, Facing, SpawnParams);
+		if (!Car)
+		{
+			continue;
+		}
+		Car->StartOnLane(this, LaneIdx, PointIdx + 1,
+			Traffic::Paints[FMath::RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)]);
+		Cars.Add(Car);
+		--CarsToReplace;
+		return;
 	}
 }
 

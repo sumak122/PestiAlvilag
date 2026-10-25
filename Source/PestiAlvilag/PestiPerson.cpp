@@ -12,6 +12,9 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "PestiCar.h"
+#include "PoliceCar.h"
+#include "TrafficCar.h"
+#include "TrafficManager.h"
 
 namespace PestiPerson
 {
@@ -117,7 +120,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			TEXT("On foot   (F: get in car, Shift: sprint, Space: jump, N: traffic view, P: police test, F9: new game)"));
+			TEXT("On foot   (F: get in or steal a car, Shift: sprint, Space: jump, N: traffic view, P: police test, F9: new game)"));
 	}
 }
 
@@ -178,6 +181,11 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 
 void APestiPerson::TryEnterCar(APlayerController* PC)
 {
+	// The F that got him out of a car may still read as pressed this frame.
+	if (GetWorld()->GetTimeSeconds() - OutOfCarTime < PestiPerson::MinTimeOnFoot)
+	{
+		return;
+	}
 	APestiCar* Nearest = nullptr;
 	double NearestDist = EnterCarRange;
 	for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
@@ -189,8 +197,26 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 			NearestDist = Dist;
 		}
 	}
-	// The F that got him out of a car may still read as pressed this frame.
-	if (!Nearest || GetWorld()->GetTimeSeconds() - OutOfCarTime < PestiPerson::MinTimeOnFoot)
+	// A car from the traffic that is nearer still: pull the driver out and take it.
+	ATrafficCar* Victim = nullptr;
+	for (TActorIterator<ATrafficCar> It(GetWorld()); It; ++It)
+	{
+		const double Dist = FVector::Dist2D(It->GetActorLocation(), GetActorLocation());
+		if (!Cast<APoliceCar>(*It) && Dist < NearestDist)
+		{
+			Victim = *It;
+			NearestDist = Dist;
+		}
+	}
+	if (Victim)
+	{
+		for (TActorIterator<ATrafficManager> It(GetWorld()); It; ++It)
+		{
+			Nearest = It->StealCar(Victim);
+			break;
+		}
+	}
+	if (!Nearest)
 	{
 		return;
 	}

@@ -77,6 +77,7 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	NextLaneIndex = Manager->PickNextLane(LaneIndex);
 	PointIndex = InPointIndex;
 	CurrentSpeed = 0.f;
+	PaintColor = Paint;
 
 	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Paint);
 	if (!BaseMaterial)
