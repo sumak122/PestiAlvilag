@@ -33,8 +33,10 @@ private:
  * ("sidewalks") from the street furniture file, keeps a crowd of walkers
  * within reach of the camera, each going along a line on the right-hand
  * side, turning onto a line that joins at its end (or turning back), and
- * moves the ones that fall far behind to a line nearer the camera. After
- * the first moment, people only appear out of the camera's view or far off.
+ * moves the ones that fall far behind, once nobody can see them, to a line
+ * nearer the camera. After the first moment, people only appear out of the
+ * camera's view or behind a building, and they never jump: at a corner or
+ * a turn they walk over to the next line.
  */
 UCLASS()
 class PESTIALVILAG_API APedestrians : public AActor
@@ -85,6 +87,10 @@ private:
 		double GroundZ = 0.0;
 		float GroundClock = 0.f;
 		bool bGroundKnown = false;
+		/** Where he is drawn: follows his place on the line, without jumps. */
+		FVector2D Shown = FVector2D::ZeroVector;
+		float ShownYaw = 0.f;
+		bool bPlaced = false;
 	};
 
 	bool LoadLines();
@@ -98,6 +104,8 @@ private:
 	/** At the end of a line: on to a line that starts or ends near here, or back. */
 	void TurnAtEnd(FWalker& Walker);
 	FVector2D PointOn(const FLine& Line, double Along, FVector2D& OutTangent) const;
+	/** True when a building stands between the camera and someone standing here. */
+	bool BehindBuilding(const FVector& Camera, const FVector2D& At, double GroundZ) const;
 	bool GroundUnder(const FVector2D& At, double Near, double& OutZ) const;
 
 	TArray<FLine> Lines;
