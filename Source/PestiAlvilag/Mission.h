@@ -23,6 +23,8 @@ struct FMissionStep
 	bool bOnFoot = true;
 	/** The step only ends when the player presses E within Radius. */
 	bool bPressE = false;
+	/** Arrows over the street turns on the way while the target is far off. */
+	bool bGuide = true;
 };
 
 /**

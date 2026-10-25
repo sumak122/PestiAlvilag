@@ -66,6 +66,8 @@ public:
 private:
 	void UpdateWanted(float DeltaSeconds);
 	void ClearWanted(const TCHAR* Message);
+	/** Puts up the hero buildings the level doesn't have yet. */
+	void SpawnLandmarks();
 	/** Ground height under a map point, or 0 when nothing is there. */
 	double GroundZ(const FVector2D& At) const;
 	/** Reads the save slot the first time it is needed. */

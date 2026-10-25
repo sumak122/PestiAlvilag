@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HomeDoor.h"
+#include "KeletiStation.h"
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
 #include "Nepszinhaz.h"
@@ -61,12 +62,7 @@ void APestiAlvilagGameModeBase::StartPlay()
 {
 	Super::StartPlay();
 
-	// Put up the Népszínház unless the level already has one.
-	if (!TActorIterator<ANepszinhaz>(GetWorld()))
-	{
-		const FVector Location(PestiStart::TheatreAt, GroundZ(PestiStart::TheatreAt));
-		GetWorld()->SpawnActor<ANepszinhaz>(ANepszinhaz::StaticClass(), Location, FRotator(0.f, PestiStart::TheatreYaw, 0.f));
-	}
+	SpawnLandmarks();
 
 	// Put up the taxi company and its taxis unless the level already has one.
 	if (!TActorIterator<ATaxiCompany>(GetWorld()))
@@ -112,8 +108,10 @@ void APestiAlvilagGameModeBase::StartPlay()
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
 {
-	// A new game starts at Keleti station for the prologue, a saved one at
-	// the home door, whatever PlayerStart the level has.
+	// A new game starts on the platform at Keleti station for the
+	// prologue, a saved one at the home door, whatever PlayerStart the
+	// level has. The station must stand first: the player starts inside it.
+	SpawnLandmarks();
 	LoadSaveOnce();
 	FVector2D StartAt = AMissionPrologue::StartAt();
 	double StartYaw = AMissionPrologue::StartYaw();
@@ -134,6 +132,25 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 	GetWorld()->SpawnActor<APestiCar>(APestiCar::StaticClass(), CarLocation, Facing, CarParams);
 
 	return Pawn;
+}
+
+void APestiAlvilagGameModeBase::SpawnLandmarks()
+{
+	// Put up the Népszínház unless the level already has one.
+	if (!TActorIterator<ANepszinhaz>(GetWorld()))
+	{
+		const FVector Location(PestiStart::TheatreAt, GroundZ(PestiStart::TheatreAt));
+		GetWorld()->SpawnActor<ANepszinhaz>(ANepszinhaz::StaticClass(), Location, FRotator(0.f, PestiStart::TheatreYaw, 0.f));
+	}
+
+	// And Keleti station, its front on Baross tér.
+	if (!TActorIterator<AKeletiStation>(GetWorld()))
+	{
+		// Its ground height is taken on the square just in front of it.
+		const FVector2D At = AKeletiStation::FrontAt();
+		const double Z = GroundZ(At - FVector2D(800.0, 0.0));
+		GetWorld()->SpawnActor<AKeletiStation>(AKeletiStation::StaticClass(), FVector(At, Z), FRotator::ZeroRotator);
+	}
 }
 
 double APestiAlvilagGameModeBase::GroundZ(const FVector2D& At) const
