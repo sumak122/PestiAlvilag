@@ -8,7 +8,7 @@
  * A dress-up kit for the people of 1932 Pest: one smooth, rounded body
  * (a man or a woman, any height and build) and a wardrobe of pieces to put
  * on it: hats, coats and jackets, a dress or trousers, shoes, a tie, a
- * scarf, a moustache, and something to carry. An outfit lists the pieces
+ * scarf, a sash, a moustache, and something to carry. An outfit lists the pieces
  * and their colours; Build turns it into meshes, so every walker can be
  * dressed differently without anyone modelling him by hand.
  *
@@ -20,7 +20,7 @@
  */
 namespace PersonKit
 {
-	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche };
+	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood };
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
 	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket };
 
@@ -38,6 +38,8 @@ namespace PersonKit
 		bool bScarf = false;
 		bool bMoustache = false;
 		bool bApron = false;
+		/** A cloth sash wound round the waist. */
+		bool bSash = false;
 		bool bBoots = false;
 		EHeld Held = EHeld::None;
 		/**
@@ -59,6 +61,7 @@ namespace PersonKit
 		FLinearColor Shoes = FLinearColor(0.03f, 0.02f, 0.02f);
 		FLinearColor Scarf = FLinearColor(0.35f, 0.30f, 0.20f);
 		FLinearColor Apron = FLinearColor(0.90f, 0.90f, 0.88f);
+		FLinearColor Sash = FLinearColor(0.45f, 0.06f, 0.05f);
 		FLinearColor HeldColor = FLinearColor(0.25f, 0.13f, 0.06f);
 	};
 
@@ -393,6 +396,18 @@ namespace PersonKit
 				{ FVector(16.5 * G, 0.0, Z(50.0)), FVector(0.4, 0.0, 0.0), FVector(0.0, 15.0 * G, 0.0) },
 			}, 4, true, true, PI * 0.25);
 		}
+		if (O.bSash && !O.bSeated)
+		{
+			// Wound round the waist over the coat, its end hanging at the left front.
+			Loft(B, O.Sash, {
+				Flat(0.5, Z(97.0), 13.8 * G * Thick + 0.8, 17.4 * G * Thick + 0.8),
+				Flat(0.5, Z(109.0), 12.6 * G * G * Thick + 0.8, 16.6 * G * G * Thick + 0.8),
+			}, 14, true, true);
+			Loft(B, O.Sash, {
+				{ FVector(13.8 * G * Thick + 1.2, -6.0, Z(99.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 3.5, 0.0) },
+				{ FVector(14.8 * G * Thick + 1.6, -7.5, Z(72.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 4.0, 0.0) },
+			}, 4, true, true, PI * 0.25);
+		}
 		if (O.bScarf)
 		{
 			Loft(B, O.Scarf, { Flat(0.5, Z(146.0), 8.0, 8.5), Flat(1.0, Z(152.0), 7.0, 7.0) }, 10, true, true);
@@ -443,6 +458,33 @@ namespace PersonKit
 			}, 14, true, true);
 			Loft(B, O.HatBand, { Flat(Crown.X, Crown.Z - 2.5, 11.7, 10.4), Flat(Crown.X, Crown.Z - 0.5, 11.5, 10.2) }, 14, true, true);
 			break;
+		case EHat::Hood:
+		{
+			// A loose hood: a cowl round the head, open at the face, its edge
+			// drawn to a peak over the brow, and a short cape over the shoulders.
+			auto Cowl = [&HeadAt, Hr](double X, double Up, double RadiusY, double RadiusZ)
+			{
+				return FRing{ HeadAt + FVector(X, 0.0, Up) * Hr, FVector(0.0, RadiusY * Hr, 0.0), FVector(0.0, 0.0, RadiusZ * Hr) };
+			};
+			Loft(B, O.HatColor, {
+				Cowl(8.5, 1.0, 9.2, 11.5),
+				Cowl(2.0, 2.0, 11.0, 13.0),
+				Cowl(-6.0, 1.0, 10.8, 12.5),
+				Cowl(-12.0, -1.0, 7.5, 9.5),
+				Cowl(-14.5, -2.0, 3.0, 4.0),
+			}, 14, false, true);
+			Loft(B, O.HatColor, {
+				{ HeadAt + FVector(2.0, 0.0, 11.5) * Hr, FVector(0.0, 7.0, 0.0), FVector(0.0, 0.0, 3.0) },
+				{ HeadAt + FVector(8.0, 0.0, 11.0) * Hr, FVector(0.0, 4.0, 0.0), FVector(0.0, 0.0, 2.0) },
+				{ HeadAt + FVector(12.0, 0.0, 8.0) * Hr, FVector(0.0, 0.6, 0.0), FVector(0.0, 0.0, 0.6) },
+			}, 10, false, true);
+			Loft(B, O.HatColor, {
+				Flat(-0.5, Z(134.0), 12.8 * G * Thick, 21.0 * G * Thick),
+				Flat(-1.0, Z(144.0), 10.5 * Thick, 14.5 * Thick),
+				Flat(-2.5, Z(155.0), 8.6, 9.8),
+			}, 14, false, false);
+			break;
+		}
 		default:
 			break;
 		}

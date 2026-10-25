@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Cafe.h"
 #include "HomeDoor.h"
+#include "KeletiEagle.h"
 #include "KeletiStation.h"
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
@@ -186,6 +187,14 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		const FVector2D At = AKeletiStation::FrontAt();
 		const double Z = GroundZ(At - FVector2D(800.0, 0.0));
 		GetWorld()->SpawnActor<AKeletiStation>(AKeletiStation::StaticClass(), FVector(At, Z), FRotator::ZeroRotator);
+	}
+
+	// And the eagle that circles over it.
+	if (!TActorIterator<AKeletiEagle>(GetWorld()))
+	{
+		const FVector2D At = AKeletiStation::FrontAt();
+		const double Z = GroundZ(At - FVector2D(800.0, 0.0));
+		GetWorld()->SpawnActor<AKeletiEagle>(AKeletiEagle::StaticClass(), FVector(At, Z), FRotator::ZeroRotator);
 	}
 }
 

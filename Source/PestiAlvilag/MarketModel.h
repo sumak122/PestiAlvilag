@@ -8,7 +8,7 @@
  * The Teleki tér market's stalls, sheds and goods as a list of basic shapes
  * (the engine's cube, cylinder, sphere and cone, each 100 cm across):
  * trestle tables and blankets, canvas awnings, clothes rails, shoes, pots,
- * old iron, books, furniture, vegetables and crockery. AFleaMarket puts the
+ * old iron, books, furniture, vegetables, crockery and carpets. AFleaMarket puts the
  * shapes in the game.
  *
  * Header-only (like PersonKit and TramModel) so it can be built and looked
@@ -19,7 +19,7 @@ namespace MarketModel
 {
 	enum EShape : int32 { Cube, Cylinder, Sphere, Cone };
 	enum class EBuild : uint8 { Table, Shed, Blanket };
-	enum class EGoods : uint8 { Clothes, Shoes, Pots, Junk, Books, Furniture, Produce, Crockery };
+	enum class EGoods : uint8 { Clothes, Shoes, Pots, Junk, Books, Furniture, Produce, Crockery, Carpets };
 
 	/** One shape: where its middle is, its whole size, and its turn (degrees, as FRotator). */
 	struct FShape
@@ -79,6 +79,13 @@ namespace MarketModel
 			FLinearColor(0.30f, 0.08f, 0.06f), FLinearColor(0.08f, 0.12f, 0.20f), FLinearColor(0.10f, 0.16f, 0.08f),
 			FLinearColor(0.42f, 0.32f, 0.18f), FLinearColor(0.08f, 0.07f, 0.06f) };
 		const FLinearColor Metals[] = { Iron, Copper, Enamel, Rust };
+		const FLinearColor Brass(0.62f, 0.44f, 0.14f);
+		// Carpet dyes: madder red, indigo, rust, green, saffron, and a wool cream.
+		const FLinearColor Madder(0.38f, 0.05f, 0.04f);
+		const FLinearColor Indigo(0.06f, 0.07f, 0.22f);
+		const FLinearColor Wool(0.80f, 0.72f, 0.55f);
+		const FLinearColor Dyes[] = {
+			Madder, Indigo, FLinearColor(0.50f, 0.16f, 0.06f), FLinearColor(0.09f, 0.20f, 0.12f), FLinearColor(0.62f, 0.42f, 0.10f) };
 		const FLinearColor Glazes[] = {
 			Enamel, FLinearColor(0.70f, 0.72f, 0.78f), FLinearColor(0.55f, 0.35f, 0.20f), FLinearColor(0.20f, 0.30f, 0.45f) };
 	}
@@ -171,8 +178,9 @@ namespace MarketModel
 					B.Add(Cube, Post, FVector(X, Y, (TableTop - 4.0) * 0.5), FVector(6.0, 6.0, TableTop - 4.0));
 				}
 			}
-			// Some in the open have a canvas awning on two poles behind.
-			if (Build == EBuild::Table && Random.Unit() < AwningChance)
+			// Some in the open have a canvas awning on two poles behind (not a
+			// carpet seller, whose carpets hang there).
+			if (Build == EBuild::Table && Goods != EGoods::Carpets && Random.Unit() < AwningChance)
 			{
 				for (const double Y : { -TableWidth * 0.5, TableWidth * 0.5 })
 				{
@@ -334,6 +342,98 @@ namespace MarketModel
 				}
 			}
 			break;
+		case EGoods::Carpets:
+		{
+			// Rolled carpets across the table, a folded pile, a brass coffee pot with cups.
+			for (int32 i = 0; i < 4; ++i)
+			{
+				const FLinearColor& Dye = Pick(Dyes, Random);
+				const FVector At(Random.Range(-4.0, 4.0), -HalfWidth + 22.0 + i * 46.0, Top + 14.0);
+				B.Add(Cylinder, Dye, At, FVector(28.0, 28.0, TableDepth - 6.0), 90.0);
+				for (const double End : { -1.0, 1.0 })
+				{
+					B.Add(Cylinder, Wool, At + FVector(End * (TableDepth * 0.5 - 4.0), 0.0, 0.0), FVector(26.0, 26.0, 3.0), 90.0);
+				}
+			}
+			for (int32 i = 0; i < 2; ++i)
+			{
+				B.Add(Cylinder, Pick(Dyes, Random), FVector(Random.Range(-4.0, 4.0), -HalfWidth + 45.0 + i * 46.0, Top + 38.0),
+					FVector(26.0, 26.0, TableDepth - 14.0), 90.0);
+			}
+			for (int32 k = 0; k < 4; ++k)
+			{
+				B.Add(Cube, Pick(Dyes, Random), FVector(0.0, HalfWidth - 40.0, Top + 3.0 + k * 6.0), FVector(70.0, 70.0, 6.0), 0.0, Random.Range(-6.0, 6.0));
+			}
+			const FVector Pot(-10.0, HalfWidth - 40.0, Top + 24.0 + 16.0);
+			B.Add(Cylinder, Brass, Pot, FVector(18.0, 18.0, 22.0));
+			B.Add(Cone, Brass, Pot + FVector(0.0, 0.0, 16.0), FVector(14.0, 14.0, 12.0));
+			B.Add(Sphere, Brass, Pot + FVector(0.0, 0.0, 24.0), FVector(5.0, 5.0, 5.0));
+			B.Add(Cube, Brass, Pot + FVector(13.0, 0.0, 4.0), FVector(16.0, 3.0, 3.0), 35.0);
+			for (const double Y : { -16.0, 16.0 })
+			{
+				B.Add(Cylinder, Wool, FVector(26.0, HalfWidth - 40.0 + Y, Top + 24.0 + 3.0), FVector(6.0, 6.0, 6.0));
+			}
+
+			// A frame behind the seller with three carpets hanging from it.
+			// The side ones have a diamond medallion, the middle one a crest.
+			const double FrameX = -TableDepth * 0.5 - 125.0;
+			for (const double Y : { -195.0, 195.0 })
+			{
+				B.Add(Cylinder, Post, FVector(FrameX, Y, 140.0), FVector(8.0, 8.0, 280.0), 0.0, 0.0, 0.0, true);
+			}
+			B.Add(Cylinder, Post, FVector(FrameX, 0.0, 268.0), FVector(6.0, 6.0, 400.0), 0.0, 0.0, 90.0);
+			for (int32 i = -1; i <= 1; ++i)
+			{
+				const double Y = i * 126.0;
+				const FVector Rug(FrameX + 6.0, Y, 160.0);
+				const FLinearColor& Field = i == 0 ? Madder : Pick(Dyes, Random);
+				const FLinearColor& Border = i == 0 ? Indigo : (Field == Madder ? Indigo : Madder);
+				auto Face = [&](double Lift, const FLinearColor& Color, double DY, double DZ, const FVector& Size, double Turn = 0.0)
+				{
+					B.Add(Cube, Color, Rug + FVector(Lift, DY, DZ), Size, 0.0, 0.0, Turn);
+				};
+				Face(0.0, Border, 0.0, 0.0, FVector(3.0, 118.0, 200.0));
+				Face(1.6, Wool, 0.0, 0.0, FVector(1.0, 104.0, 186.0));
+				Face(2.2, Field, 0.0, 0.0, FVector(1.0, 96.0, 178.0));
+				Face(0.0, Wool, 0.0, -104.0, FVector(1.5, 112.0, 8.0));
+				if (i != 0)
+				{
+					Face(2.8, Border, 0.0, 0.0, FVector(1.0, 56.0, 56.0), 45.0);
+					Face(3.4, Wool, 0.0, 0.0, FVector(1.0, 34.0, 34.0), 45.0);
+					Face(4.0, Field, 0.0, 0.0, FVector(1.0, 14.0, 14.0), 45.0);
+					for (const double DZ : { -62.0, 62.0 })
+					{
+						Face(2.8, Wool, 0.0, DZ, FVector(1.0, 18.0, 18.0), 45.0);
+					}
+					continue;
+				}
+				// The Assassins' crest, in wool on the madder field: two blades
+				// sweeping up from wide feet to meet in a point at the top, and
+				// a small point between their feet.
+				for (const double Side : { -1.0, 1.0 })
+				{
+					// Each blade rises straight from its foot and leans in to the point.
+					constexpr int32 Steps = 9;
+					FVector2D Last(Side * 32.0, -40.0);
+					for (int32 k = 1; k <= Steps; ++k)
+					{
+						const double T = static_cast<double>(k) / Steps;
+						const FVector2D Next(Side * 32.0 * (1.0 - FMath::Pow(T, 1.8)), -40.0 + 84.0 * T);
+						const FVector2D Mid = (Last + Next) * 0.5;
+						const FVector2D Step = Next - Last;
+						const double Width = FMath::Lerp(15.0, 3.0, (k - 0.5) / Steps);
+						Face(2.8, Wool, Mid.X, Mid.Y, FVector(1.0, Step.Size() + 3.0, Width),
+							-FMath::RadiansToDegrees(FMath::Atan2(Step.Y, Step.X)));
+						Last = Next;
+					}
+					// The foot of each blade, turned in under the arch.
+					Face(2.8, Wool, Side * 25.0, -45.0, FVector(1.0, 20.0, 8.0), -Side * 22.0);
+				}
+				Face(2.8, Wool, 0.0, -30.0, FVector(1.0, 13.0, 13.0), 45.0);
+				Face(3.2, Madder, 0.0, -24.0, FVector(1.0, 13.0, 9.0));
+			}
+			break;
+		}
 		case EGoods::Crockery:
 		default:
 			// Stacks of plates, jugs and bowls.

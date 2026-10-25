@@ -691,7 +691,8 @@ def place_food_vendors(space, sidewalks):
 # side, on the west an open flea market of tables and blankets with a crowd
 # along the south side. (The photos also show a lot of little wooden booths
 # across Népszínház utca, where the map has a later building.) Two stalls
-# belong to people the story needs.
+# belong to people the story needs, and one to a carpet seller from Baghdad
+# who is a little secret (an Assassin's Creed Mirage nod).
 MARKET_NEAR = (105715, 29355)
 MARKET_GROUND_IN = 60       # the market ground stops this far inside the square
 MARKET_SHEDS_FROM = (103450, 26230)  # the north-west corner of the shed grid
@@ -711,6 +712,7 @@ MARKET_SHED_GOODS = [("produce", 5), ("pots", 2), ("crockery", 2), ("clothes", 2
 MARKET_KEEPERS = [          # who the story needs, what they sell, near which point
     ("Pista b\u00e1csi", "junk", (101500, 30500)),
     ("B\u00f6zsi n\u00e9ni", "clothes", (104300, 32300)),
+    ("Ibn Iszh\u00e1k", "carpets", (102500, 31900)),   # by the crowd along the south side
 ]
 MARKET_SHOPPERS = 20        # strolling the aisles, looking at stalls
 MARKET_CROWD = 30           # the throng along the south side of the flea market
