@@ -106,6 +106,11 @@ namespace Nepszinhaz
 			Poly(Part, { C[0], C[3], C[7], C[4] }, FVector::BackwardVector);
 			Poly(Part, { C[2], C[3], C[7], C[6] }, FVector::RightVector);
 			Poly(Part, { C[0], C[1], C[5], C[4] }, FVector::LeftVector);
+			// Anything lifted off the ground (cornices, ledges, sills) can be seen from below.
+			if (Min.Z > 0.5)
+			{
+				Poly(Part, { C[0], C[3], C[2], C[1] }, FVector::DownVector);
+			}
 		}
 
 		// A round shaft narrowing from R0 to R1, with a lid when bTop.

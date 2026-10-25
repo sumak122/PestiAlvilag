@@ -94,6 +94,11 @@ class LocalProjection:
 # of the graybox so they don't stand inside them. r9906133: Keleti pályaudvar.
 HERO_BUILDINGS = {"r9906133"}
 
+# Footprints smaller than this are modern street clutter (tram shelters,
+# kiosks, toilets). With no height in OSM they would come out as four-storey
+# pillars, and 1932 had none of them, so they are left out.
+MIN_BUILDING_AREA = 25.0
+
 
 def parse_osm(path):
     root = ET.parse(path).getroot()
@@ -462,9 +467,10 @@ def convert(osm_path, origin):
         railway = tags.get("railway")
 
         if building and building != "no" and is_closed(way) and not is_underground(tags):
-            if "w" + wid in HERO_BUILDINGS:
+            footprint = Polygon(pts).buffer(0)
+            if "w" + wid in HERO_BUILDINGS or footprint.area < MIN_BUILDING_AREA:
                 continue
-            add_area(buildings, Polygon(pts).buffer(0), dict(tags, id="w" + wid))
+            add_area(buildings, footprint, dict(tags, id="w" + wid))
         elif any((k, tags.get(k)) in PARK_TAGS for k in ("leisure", "landuse")) and is_closed(way):
             add_area(parks, Polygon(pts).buffer(0), tags)
         elif highway == "pedestrian" and tags.get("area") == "yes" and is_closed(way):
@@ -504,7 +510,7 @@ def convert(osm_path, origin):
             continue
         geom = geom.buffer(0)
         if is_building:
-            if "r" + rel["id"] in HERO_BUILDINGS:
+            if "r" + rel["id"] in HERO_BUILDINGS or geom.area < MIN_BUILDING_AREA:
                 continue
             add_area(buildings, geom, dict(tags, id="r" + rel["id"]))
         else:

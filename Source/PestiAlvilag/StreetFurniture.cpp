@@ -68,6 +68,20 @@ namespace Furniture
 		{ Cube, Iron, FVector(0, 80, 23), FVector(0.45, 0.06, 0.46), false },
 	};
 
+	// A litter bin: a round sheet-metal basket in dark green, hung on the
+	// side of a short iron post, open at the top.
+	const FLinearColor BinPaint(0.05f, 0.13f, 0.07f);
+	const FLinearColor BinInside(0.02f, 0.02f, 0.02f);
+	const TArray<FFurniturePart> Bin = {
+		{ Cylinder, Iron, FVector(0, 0, 50), FVector(0.07, 0.07, 1.0), true },
+		{ Sphere, Iron, FVector(0, 0, 101), FVector(0.1, 0.1, 0.1), false },
+		{ Cylinder, BinPaint, FVector(24, 0, 63), FVector(0.4, 0.4, 0.56), true },
+		{ Cylinder, Iron, FVector(24, 0, 34), FVector(0.42, 0.42, 0.03), false },
+		{ Cylinder, Iron, FVector(24, 0, 90), FVector(0.44, 0.44, 0.04), false },
+		{ Cylinder, BinInside, FVector(24, 0, 91.5), FVector(0.36, 0.36, 0.02), false },
+		{ Cube, Iron, FVector(12, 0, 80), FVector(0.24, 0.05, 0.05), false },
+	};
+
 	// The round advertising column; the poster drum comes in three colours.
 	TArray<FFurniturePart> Column(int32 Variant)
 	{
@@ -341,6 +355,13 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance);
 		}
 	});
+	Furniture::ForEachRow(Root, TEXT("bins"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance);
+		}
+	});
 }
 
 void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
@@ -382,6 +403,13 @@ void AStreetFurniture::BuildTiszaKalmanTer(const FJsonObject& Park)
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
 			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance);
+		}
+	});
+	Furniture::ForEachRow(Park, TEXT("bins"), [&](const TArray<double>& Row)
+	{
+		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
+		{
+			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance);
 		}
 	});
 	Furniture::ForEachRow(Park, TEXT("lamps"), [&](const TArray<double>& Row)
