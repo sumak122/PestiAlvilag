@@ -22,7 +22,8 @@ struct FFurniturePart;
  * benches, lamps and a low railing, leaf piles and the park keepers who
  * rake them, the statue east of the middle and the big playground in the
  * south-east quarter (ParkModel.h), and the taxi stands near the Népszínház and Keleti with
- * their parked taxis. It also starts the leaves blowing about (AFallingLeaves).
+ * their parked taxis, and the 1930s shop fronts and house gates along
+ * Népszínház utca (ShopModel.h). It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
  * shape and colour, so thousands of them cost little.
@@ -87,6 +88,8 @@ private:
 	void BuildFoodVendors(const FJsonObject& Root);
 	/** The Teleki tér market (an AFleaMarket). */
 	void BuildMarket(const FJsonObject& Root);
+	/** The shop fronts and tenement gates of Népszínház utca (shops, gates), with some shopkeepers (ShopModel.h). */
+	void BuildShops(const FJsonObject& Root);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;

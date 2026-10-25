@@ -22,6 +22,7 @@
 #include "PestiTaxi.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "ShopModel.h"
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -319,6 +320,17 @@ namespace Furniture
 
 	// Children and nannies are not drawn beyond this distance (cm).
 	constexpr float PlaygroundPeopleDistance = 9000.f;
+
+	// Shop fronts: the pavement height is found this far out from the wall (cm).
+	constexpr double ShopGroundProbe = 150.0;
+	// Shop parts smaller than this (goods, handles) go with the small things (cm).
+	constexpr double ShopSmallPart = 45.0;
+	// Shop lettering is not drawn beyond this distance (cm).
+	constexpr float ShopLetteringDistance = 12000.f;
+	// A capital letter of the lettering is about this much of its height wide.
+	constexpr double LetterWidth = 0.62;
+	// Shopkeepers are not drawn beyond this distance (cm).
+	constexpr float ShopkeeperDistance = 9000.f;
 }
 
 AStreetFurniture::AStreetFurniture()
@@ -579,6 +591,7 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 	BuildTramStops(Root);
 	BuildFoodVendors(Root);
 	BuildMarket(Root);
+	BuildShops(Root);
 }
 
 void AStreetFurniture::BuildFoodVendors(const FJsonObject& Root)
@@ -622,6 +635,144 @@ void AStreetFurniture::BuildMarket(const FJsonObject& Root)
 	if (AFleaMarket* Teleki = GetWorld()->SpawnActor<AFleaMarket>(AFleaMarket::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator))
 	{
 		Teleki->Setup(**Market);
+	}
+}
+
+void AStreetFurniture::BuildShops(const FJsonObject& Root)
+{
+	// Where a shop or gate stands: the foot of the wall at the pavement's height, facing out.
+	auto Place = [this](const FJsonObject& Item, FVector& OutFoot, double& OutYaw)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* At = nullptr;
+		if (!Item.TryGetArrayField(TEXT("at"), At) || At->Num() < 3)
+		{
+			return false;
+		}
+		OutYaw = (*At)[2]->AsNumber();
+		const FVector2D Foot((*At)[0]->AsNumber(), (*At)[1]->AsNumber());
+		const double Turn = FMath::DegreesToRadians(OutYaw);
+		FVector Pavement;
+		if (!GroundAt(Foot + FVector2D(FMath::Cos(Turn), FMath::Sin(Turn)) * Furniture::ShopGroundProbe, Pavement))
+		{
+			return false;
+		}
+		OutFoot = FVector(Foot, Pavement.Z);
+		return true;
+	};
+	// The shapes go in two batches: the front itself, seen from far down the street, and the small goods.
+	auto Put = [this](const TArray<ParkModel::FPart>& Model, const FVector& Foot, double Yaw)
+	{
+		TArray<FFurniturePart> Large;
+		TArray<FFurniturePart> Small;
+		for (const FFurniturePart& Part : Furniture::FromParkModel(Model))
+		{
+			const bool bSmall = Part.Scale.GetMax() * 100.0 < Furniture::ShopSmallPart;
+			(bSmall ? Small : Large).Add(Part);
+		}
+		AddObject(Large, Foot, Yaw, 1.0, CullDistance);
+		AddObject(Small, Foot, Yaw, 1.0, SmallCullDistance);
+	};
+	auto Letter = [this](const ShopModel::FLettering& Lettering, const FString& Words, const FVector& Foot, double Yaw)
+	{
+		if (Words.IsEmpty())
+		{
+			return;
+		}
+		const FRotator Turn(0.0, Yaw, 0.0);
+		UTextRenderComponent* Text = NewObject<UTextRenderComponent>(this);
+		Text->SetupAttachment(RootComponent);
+		Text->SetWorldLocationAndRotation(Foot + Turn.RotateVector(Lettering.At), FRotator(0.0, Yaw + Lettering.Yaw, 0.0));
+		Text->SetText(FText::FromString(Words));
+		Text->SetHorizontalAlignment(EHTA_Center);
+		Text->SetVerticalAlignment(EVRTA_TextCenter);
+		// Long names are lettered smaller, so they fit the board.
+		Text->SetWorldSize(static_cast<float>(FMath::Min(Lettering.Size, Lettering.Room / (Furniture::LetterWidth * FMath::Max(1, Words.Len())))));
+		Text->SetTextRenderColor(Lettering.Color.ToFColor(true));
+		Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Text->SetCastShadow(false);
+		Text->SetCullDistance(Furniture::ShopLetteringDistance);
+		Text->RegisterComponent();
+	};
+
+	FRandomStream Random(1932);
+	const TArray<TSharedPtr<FJsonValue>>* Shops = nullptr;
+	if (Root.TryGetArrayField(TEXT("shops"), Shops))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Shops)
+		{
+			const TSharedPtr<FJsonObject> Shop = Value->AsObject();
+			FVector Foot;
+			double Yaw = 0.0;
+			if (!Shop.IsValid() || !Place(*Shop, Foot, Yaw))
+			{
+				continue;
+			}
+			const double Width = Shop->GetNumberField(TEXT("width"));
+			const uint32 Seed = static_cast<uint32>(Shop->GetNumberField(TEXT("seed")));
+			TArray<ParkModel::FPart> Model;
+			TArray<ShopModel::FLettering> Lettering;
+			ShopModel::BuildShop(Model, Lettering, Width, ShopModel::TradeOf(*Shop->GetStringField(TEXT("trade"))), Seed,
+				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")));
+			Put(Model, Foot, Yaw);
+			for (const ShopModel::FLettering& Line : Lettering)
+			{
+				const TCHAR* Field = Line.Line == ShopModel::ELine::Owner ? TEXT("owner") : Line.Line == ShopModel::ELine::Trade ? TEXT("sign") : TEXT("blade");
+				Letter(Line, Shop->GetStringField(Field), Foot, Yaw);
+			}
+
+			// The shopkeeper in the doorway, looking out at the street.
+			if (!Shop->GetBoolField(TEXT("keeper")))
+			{
+				continue;
+			}
+			const double Door = ShopModel::DoorMiddle(Width, Seed);
+			const FVector Local(ShopModel::KeeperOut, Door + (Door > 0.0 ? 20.0 : -20.0), PersonModel::MiddleHeight);
+			PersonKit::FOutfit Clothes = PersonModel::RandomOutfit(Random);
+			Clothes.Held = PersonKit::EHeld::None;
+			Clothes.bApron = Random.FRand() < 0.6f;
+			if (!Clothes.bWoman && Random.FRand() < 0.4f)
+			{
+				Clothes.Hat = PersonKit::EHat::None;
+			}
+			const FTransform Spawn(FRotator(0.0, Yaw + Random.FRandRange(-30.f, 30.f), 0.0), Foot + FRotator(0.0, Yaw, 0.0).RotateVector(Local));
+			AStoryPerson* Keeper = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,
+				ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			if (!Keeper)
+			{
+				continue;
+			}
+			Keeper->SetOutfit(Clothes);
+			Keeper->FinishSpawning(Spawn);
+			Keeper->SetActorTickEnabled(false);
+			TInlineComponentArray<UPrimitiveComponent*> Shapes(Keeper);
+			for (UPrimitiveComponent* Shape : Shapes)
+			{
+				Shape->SetCachedMaxDrawDistance(Furniture::ShopkeeperDistance);
+			}
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Gates = nullptr;
+	if (Root.TryGetArrayField(TEXT("gates"), Gates))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Gates)
+		{
+			const TSharedPtr<FJsonObject> Gate = Value->AsObject();
+			FVector Foot;
+			double Yaw = 0.0;
+			if (!Gate.IsValid() || !Place(*Gate, Foot, Yaw))
+			{
+				continue;
+			}
+			TArray<ParkModel::FPart> Model;
+			TArray<ShopModel::FLettering> Lettering;
+			ShopModel::BuildGate(Model, Lettering, Gate->GetNumberField(TEXT("width")));
+			Put(Model, Foot, Yaw);
+			for (const ShopModel::FLettering& Line : Lettering)
+			{
+				Letter(Line, Gate->GetStringField(TEXT("number")), Foot, Yaw);
+			}
+		}
 	}
 }
 
