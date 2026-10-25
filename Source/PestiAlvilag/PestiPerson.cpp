@@ -33,6 +33,9 @@ namespace PestiPerson
 	constexpr float StrideLength = 120.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
+
+	// The camera stands this far back while riding a tram (cm).
+	constexpr float RideArmLength = 1100.f;
 }
 
 APestiPerson::APestiPerson()
@@ -94,6 +97,10 @@ void APestiPerson::Tick(float DeltaSeconds)
 		bCameraAimed = true;
 	}
 	Look(PC, DeltaSeconds);
+	if (bRiding)
+	{
+		return;
+	}
 	Walk(PC);
 
 	if (bCarrying)
@@ -259,6 +266,40 @@ void APestiPerson::SetInWorld(bool bInWorld)
 		GetCharacterMovement()->StopMovementImmediately();
 		GetCharacterMovement()->DisableMovement();
 	}
+}
+
+void APestiPerson::RideOn(AActor* Vehicle)
+{
+	bRiding = true;
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	SetActorRelativeLocation(FVector::ZeroVector);
+	CameraArm->TargetArmLength = PestiPerson::RideArmLength;
+}
+
+bool APestiPerson::GetOffAt(const FVector& At, double Yaw)
+{
+	AActor* Vehicle = GetAttachParentActor();
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	// Where he wants, or a step to either side if someone stands there.
+	const FVector Along = FRotator(0.0, Yaw, 0.0).Vector();
+	for (const double Step : { 0.0, 100.0, -100.0, 200.0, -200.0 })
+	{
+		if (TryStepOutAt(At + Along * Step, Yaw))
+		{
+			bRiding = false;
+			CameraArm->TargetArmLength = PestiPerson::ArmLength;
+			return true;
+		}
+	}
+	if (Vehicle)
+	{
+		AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	}
+	return false;
 }
 
 void APestiPerson::SetCarrying(bool bInCarrying)

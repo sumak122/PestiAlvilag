@@ -51,6 +51,21 @@ STOP_END_ROOM = 60.0
 STOP_BEFORE_CROSSING = 25.0
 STOP_SHARE_DISTANCE = 60.0
 STOP_ROADS = {"primary", "secondary", "tertiary"}
+# Stops the story needs, (name, map metres x east, y north): a track passing
+# within EXTRA_STOP_REACH gets a stop at its nearest point, and the automatic
+# stops too close to it are dropped.
+EXTRA_STOPS = [
+    ("Teleki tér", (1057.15, -293.55)),
+    ("Népszínház utca (Bözsi néni)", (583.92, -212.68)),
+]
+EXTRA_STOP_REACH = 100.0
+# Stops are named after the street crossed, by its 1932 name.
+NAMES_1932 = {
+    "II. János Pál pápa tér": "Tisza Kálmán tér",
+    "Teleki László tér": "Teleki tér",
+    "Dobozi utca": "Karpfenstein utca",
+}
+EXTRA_STOP_ROOM = 150.0
 
 TRAM_HIGHWAYS = {
     "primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link",
@@ -210,37 +225,48 @@ def smooth(pts, passes=2):
     return pts
 
 
-def stop_points(graph, path_nodes, track):
-    """Distances along the track (m) of the stops: just before crossings,
-    main roads first, spaced out."""
+def stop_points(graph, path_nodes, track, own_streets):
+    """The stops as (distance along the track in m, name): the story's
+    stops (EXTRA_STOPS), then just before crossings, main roads first,
+    spaced out. A stop is named after the street it crosses."""
     on_path = set(path_nodes)
     main, minor = [], []
     for n in path_nodes:
-        names = {name for nxt, _, name in graph.edges.get(n, ()) if nxt not in on_path and name}
+        names = {name for nxt, _, name in graph.edges.get(n, ()) if nxt not in on_path and name} - own_streets
+        names = {NAMES_1932.get(name, name) for name in names}
         if names:
             at = track.project(Point(graph.pos[n])) - STOP_BEFORE_CROSSING
-            (main if names & graph.main_streets else minor).append(at)
+            mains = sorted(names & {NAMES_1932.get(m, m) for m in graph.main_streets})
+            if mains:
+                main.append((at, mains[0]))
+            else:
+                minor.append((at, sorted(names)[0]))
     stops = []
-    for at in sorted(main) + sorted(minor):
-        if STOP_END_ROOM < at < track.length - STOP_END_ROOM and all(abs(at - s) > STOP_SPACING for s in stops):
-            stops.append(at)
+    for name, (x, y) in EXTRA_STOPS:
+        if track.distance(Point(x, y)) < EXTRA_STOP_REACH:
+            stops.append((track.project(Point(x, y)), name))
+    extras = list(stops)
+    for at, name in sorted(main) + sorted(minor):
+        if (STOP_END_ROOM < at < track.length - STOP_END_ROOM and all(abs(at - s) > STOP_SPACING for s, _ in stops)
+                and all(abs(at - s) > EXTRA_STOP_ROOM for s, _ in extras)):
+            stops.append((at, name))
     return sorted(stops)
 
 
 def share_stops(stops, track, stop_places):
-    """Lines sharing a track share its stops: move a stop onto an earlier
-    line's stop nearby on the same track."""
+    """Lines sharing a track share its stops (and their names): move a stop
+    onto an earlier line's stop nearby on the same track."""
     out = []
-    for at in stops:
+    for at, name in stops:
         here = track.interpolate(at)
-        for place in stop_places:
+        for place, place_name in stop_places:
             if track.distance(place) < 1.5 and place.distance(here) < STOP_SHARE_DISTANCE:
-                at = track.project(place)
+                at, name = track.project(place), place_name
                 break
         else:
-            stop_places.append(here)
-        if all(abs(at - s) > 1.0 for s in out):
-            out.append(at)
+            stop_places.append((here, name))
+        if all(abs(at - s) > 1.0 for s, _ in out):
+            out.append((at, name))
     return sorted(out)
 
 
@@ -274,13 +300,13 @@ def build_1932_tram_routes(ways, nodes, proj, clip, to_ue):
                 continue
             if track.project(Point(clipped.coords[0])) > track.project(Point(clipped.coords[-1])):
                 clipped = LineString(clipped.coords[::-1])
-            stops = stop_points(graph, path_nodes if forward else path_nodes[::-1], clipped)
+            stops = stop_points(graph, path_nodes if forward else path_nodes[::-1], clipped, set(line["streets"]))
             stops = share_stops(stops, clipped, stop_places)
             tracks.append(clipped)
             routes.append({
                 "ref": "",
                 "name": line["name"],
                 "points": [c for x, y in clipped.coords for c in to_ue(x, y)],
-                "stops": [{"at": round(s * 100)} for s in stops],
+                "stops": [{"at": round(s * 100), "name": name} for s, name in stops],
             })
     return routes, tracks

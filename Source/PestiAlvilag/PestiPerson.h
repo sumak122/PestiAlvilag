@@ -64,6 +64,15 @@ public:
 	void SetCarrying(bool bInCarrying);
 	bool IsCarrying() const { return bCarrying; }
 
+	/**
+	 * Riding along on something (a tram): he is out of sight, goes where it
+	 * goes, and the camera stands further back; only looking around works.
+	 */
+	void RideOn(AActor* Vehicle);
+	/** Gets off where there is room near At; false while riding on if not. */
+	bool GetOffAt(const FVector& At, double Yaw);
+	bool IsRiding() const { return bRiding; }
+
 protected:
 	/** Legs, arms and body (PersonKit::EPiece order), made when play begins. */
 	UPROPERTY(Transient)
@@ -90,5 +99,6 @@ private:
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
 	bool bCarrying = false;
+	bool bRiding = false;
 	double OutOfCarTime = -1.0;
 };

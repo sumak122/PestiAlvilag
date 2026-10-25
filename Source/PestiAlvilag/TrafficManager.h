@@ -27,8 +27,11 @@ struct FTramRoute
 	TArray<FVector> Points;
 	/** Distance along the track at each point. */
 	TArray<float> PointDistances;
+	/** Distance along the track of each stop, in running order, and its name. */
 	TArray<float> Stops;
+	TArray<FString> StopNames;
 	FString Ref;
+	FString Name;
 	float Length = 0.f;
 	float Speed = 700.f;
 

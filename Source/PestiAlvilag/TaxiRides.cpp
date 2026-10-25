@@ -223,8 +223,8 @@ void ATaxiRides::Tick(float DeltaSeconds)
 		return;
 	}
 
-	// Only on foot, with nothing in hand.
-	if (!Player || Player->IsCarrying())
+	// Only on foot, with nothing in hand, not on a tram.
+	if (!Player || Player->IsCarrying() || Player->IsRiding())
 	{
 		if (bChoosing)
 		{
