@@ -40,7 +40,7 @@ public:
 
 	/** Walking speed with something heavy in hand; no running then (cm/s). */
 	UPROPERTY(EditAnywhere, Category = "Person")
-	float CarrySpeed = 130.f;
+	float CarrySpeed = 260.f;
 
 	/** How close a car must be to get in (cm, centre to centre). */
 	UPROPERTY(EditAnywhere, Category = "Person")
