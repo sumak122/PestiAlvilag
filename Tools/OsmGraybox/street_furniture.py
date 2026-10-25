@@ -65,6 +65,8 @@ SIDEWALK_OUT = 170
 SIDEWALK_CLEAR = 60
 SIDEWALK_MIN = 800
 SIDEWALK_SIMPLIFY = 50
+# In the park people walk round the flower beds this far out from them.
+ROUND_WALK_OUT = 300
 
 # Litter bins: beside this share of the street lamps, and next to park
 # benches, just past the bench's end (a bench is 180 cm long).
@@ -311,8 +313,35 @@ def place_sidewalks(data, space, tisza, park):
             for part in getattr(edge, "geoms", [edge]):
                 if part.geom_type == "LineString" and not part.is_empty:
                     add(part)
+    # The park paths, cut where they reach a round place. From each cut a
+    # short way leads in to a walk round the flower bed, and that walk is
+    # split where the ways come in, so every line ends where others start.
+    rounds = [(Point(r[0], r[1]), r[2], r[3]) for r in park["rounds"]]
+    places = unary_union([c.buffer(r) for c, r, _ in rounds])
+    entries = [[] for _ in rounds]
     for p in park["paths"]:
-        sidewalks.append([p[0], p[1], p[2], p[3]])
+        rest = LineString([(p[0], p[1]), (p[2], p[3])]).difference(places)
+        for piece in getattr(rest, "geoms", [rest]):
+            if piece.geom_type != "LineString" or piece.length < 100:
+                continue
+            sidewalks.append([round(v) for xy in piece.coords for v in xy])
+            for end in (piece.coords[0], piece.coords[-1]):
+                for k, (c, r, bed) in enumerate(rounds):
+                    if abs(c.distance(Point(end)) - r) < 30:
+                        entries[k].append(math.atan2(end[1] - c.y, end[0] - c.x))
+                        ring = bed + ROUND_WALK_OUT
+                        a = entries[k][-1]
+                        sidewalks.append([round(end[0]), round(end[1]),
+                                          round(c.x + math.cos(a) * ring), round(c.y + math.sin(a) * ring)])
+    for k, (c, r, bed) in enumerate(rounds):
+        angles = sorted(entries[k])
+        ring = bed + ROUND_WALK_OUT
+        for i, a0 in enumerate(angles):
+            a1 = angles[(i + 1) % len(angles)] + (2 * math.pi if i + 1 == len(angles) else 0.0)
+            steps = max(2, int((a1 - a0) * ring / 300))
+            arc = [(c.x + math.cos(a0 + (a1 - a0) * t / steps) * ring, c.y + math.sin(a0 + (a1 - a0) * t / steps) * ring)
+                   for t in range(steps + 1)]
+            sidewalks.append([round(v) for xy in arc for v in xy])
     return sidewalks
 
 
