@@ -10,11 +10,9 @@ class USceneComponent;
 class UStaticMeshComponent;
 
 /**
- * The shared look of the prototype's cars: an early 1930s saloon built from
- * engine shapes. Long bonnet with grille and round headlamps at the front,
- * cabin with dark windows at the back, spare wheel and red tail lamps on the
- * rear, so you can tell which way a car faces. Fits a 420 x 170 x 140 cm box
- * centred on the parent, with the ground 90 cm below the centre.
+ * Simple shapes built from engine parts (an old tram and a box man), and
+ * the paint material every shape in the game is coloured from. The cars
+ * are made by CarModel and CarVisuals.
  */
 namespace CarBody
 {
@@ -30,16 +28,6 @@ namespace CarBody
 		Trousers,
 		Accent,
 	};
-
-	/** Call from an actor constructor. Adds the parts under Parent. */
-	void Build(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
-
-	/**
-	 * Call from an actor constructor, after Build: taxi markings on the
-	 * saloon. A yellow and black chequered band round the cabin, a yellow
-	 * roof lamp and the meter's red "free" flag by the driver's door.
-	 */
-	void BuildTaxi(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);
 
 	/** Call from an actor constructor. A 10 x 2.2 x 3.5 m tram, ground 165 cm below the parent's centre. */
 	void BuildTram(AActor* Owner, USceneComponent* Parent, TArray<TObjectPtr<UStaticMeshComponent>>& OutParts, TArray<EPaint>& OutPaints);

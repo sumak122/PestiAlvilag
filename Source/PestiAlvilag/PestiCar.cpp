@@ -2,12 +2,12 @@
 
 #include "PestiCar.h"
 
-#include "CarBody.h"
 #include "Camera/CameraComponent.h"
+#include "CarVisuals.h"
 #include "Components/BoxComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineSound.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -42,22 +42,29 @@ namespace PestiCar
 	// How far beside the car the driver steps out (cm from the centre).
 	constexpr float ExitSideDistance = 170.f;
 	constexpr double MinTimeInCar = 0.3;
+
+	// The engine has three gears: each runs up to this share of top speed.
+	const float GearTops[] = { 0.28f, 0.6f, 1.f };
+	// Lifting off sharply above this share of top speed sometimes bangs the exhaust.
+	constexpr float BackfireSpeed = 0.4f;
+	constexpr float BackfireChance = 0.3f;
 }
 
 APestiCar::APestiCar()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	BaseMaterial = CarBody::LoadPaintMaterial();
-
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->SetBoxExtent(PestiCar::BoxExtent);
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
-	// The box bottom floats HoverHeight above the road; the body reaches a
-	// little lower so the car looks grounded.
-	CarBody::Build(this, CollisionBox, BodyParts, BodyPaints);
+	// The box bottom floats HoverHeight above the road; the body and wheels
+	// reach down to the road (see CarModel). Built in BeginPlay, in its style.
+	Visuals = CreateDefaultSubobject<UCarVisuals>(TEXT("Visuals"));
+
+	EngineNoise = CreateDefaultSubobject<UEngineSound>(TEXT("EngineNoise"));
+	EngineNoise->SetupAttachment(CollisionBox);
 
 	CameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArm"));
 	CameraArm->SetupAttachment(CollisionBox);
@@ -79,7 +86,12 @@ void APestiCar::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, BodyColor);
+	if (!bStyleSet)
+	{
+		Style = CarModel::FStyle();
+		Style.PaintColor = BodyColor;
+	}
+	Visuals->Show(CollisionBox, Style);
 
 	SnapToGround();
 }
@@ -89,9 +101,19 @@ void APestiCar::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
+	// Nobody at the wheel: the engine is off.
+	Visuals->SetEngineRunning(PC != nullptr);
 	if (!PC)
 	{
+		if (EngineNoise->IsPlaying())
+		{
+			EngineNoise->Stop();
+		}
 		return;
+	}
+	if (!EngineNoise->IsPlaying())
+	{
+		EngineNoise->Start();
 	}
 
 	auto KeyAxis = [PC](const FKey& Positive, const FKey& Negative)
@@ -122,6 +144,9 @@ void APestiCar::Tick(float DeltaSeconds)
 
 	UpdateFreeLook(PC, DeltaSeconds);
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);
+	Visuals->SetSteer(Steer);
+	Visuals->SetThrottle(FMath::Abs(Throttle));
+	UpdateEngineNoise(Throttle);
 
 	// Turning needs some speed, and gets gentler near top speed.
 	const float AbsSpeed = FMath::Abs(ForwardSpeed);
@@ -179,6 +204,34 @@ void APestiCar::LetDriverOut(APlayerController* PC)
 			return;
 		}
 	}
+}
+
+void APestiCar::UpdateEngineNoise(float Throttle)
+{
+	// The revs climb through each gear, then drop back at the change.
+	const float Share = FMath::Clamp(FMath::Abs(ForwardSpeed) / MaxSpeed, 0.f, 1.f);
+	float Bottom = 0.f;
+	float InGear = 0.f;
+	for (const float Top : PestiCar::GearTops)
+	{
+		if (Share <= Top || Top >= 1.f)
+		{
+			InGear = (Share - Bottom) / (Top - Bottom);
+			break;
+		}
+		Bottom = Top;
+	}
+	const float Pedal = FMath::Abs(Throttle);
+	// Standing still, the pedal just revs the engine a little.
+	const float Revs = FMath::Max(InGear * 0.85f + 0.1f * Pedal, 0.3f * Pedal * (1.f - Share));
+	EngineNoise->SetEngine(Revs, Pedal);
+
+	if (LastPedal > 0.5f && Pedal < 0.05f && Share > PestiCar::BackfireSpeed && FMath::FRand() < PestiCar::BackfireChance)
+	{
+		EngineNoise->Backfire();
+		Visuals->Backfire();
+	}
+	LastPedal = Pedal;
 }
 
 void APestiCar::UpdateSpeed(float Throttle, bool bHandbrake, float DeltaSeconds)

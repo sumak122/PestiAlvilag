@@ -16,6 +16,7 @@
 #include "PestiPerson.h"
 #include "PestiText.h"
 #include "RouteGuideComponent.h"
+#include "CarBody.h"
 #include "PestiTaxi.h"
 #include "TaxiPassenger.h"
 #include "TrafficManager.h"

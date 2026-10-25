@@ -38,11 +38,11 @@ APoliceCar::APoliceCar()
 {
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
-	// On the cabin roof (see CarBody: the cabin is centred at x -75, top at z 70).
+	// On the saloon's roof (see CarModel: the roof runs from about x -150 to x 0, top at z 80).
 	RoofSign = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RoofSign"));
 	RoofSign->SetupAttachment(RootComponent);
 	RoofSign->SetStaticMesh(CubeMesh.Object);
-	RoofSign->SetRelativeLocation(FVector(-75.f, 0.f, 80.f));
+	RoofSign->SetRelativeLocation(FVector(-75.f, 0.f, 91.f));
 	RoofSign->SetRelativeScale3D(FVector(0.9f, 0.9f, 0.22f));
 	RoofSign->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
@@ -50,7 +50,7 @@ APoliceCar::APoliceCar()
 	{
 		UTextRenderComponent* Text = CreateDefaultSubobject<UTextRenderComponent>(PartName);
 		Text->SetupAttachment(RootComponent);
-		Text->SetRelativeLocation(FVector(-75.f, Side * 46.f, 80.f));
+		Text->SetRelativeLocation(FVector(-75.f, Side * 46.f, 91.f));
 		Text->SetRelativeRotation(FRotator(0.f, Side * 90.f, 0.f));
 		Text->SetText(FText::FromString(PoliceCar::SignWord));
 		Text->SetHorizontalAlignment(EHTA_Center);
@@ -74,6 +74,18 @@ void APoliceCar::BeginPlay()
 		SignPaint->SetVectorParameterValue(TEXT("Color"), PoliceCar::SignWhite);
 		RoofSign->SetMaterial(0, SignPaint);
 	}
+}
+
+CarModel::FStyle APoliceCar::PickStyle(const FLinearColor& Paint) const
+{
+	// A plain saloon in the force's dark blue, on steel disc wheels.
+	CarModel::FStyle Look;
+	Look.PaintColor = Paint;
+	Look.Wheel = CarModel::EWheel::Disc;
+	Look.SpokeColor = Paint;
+	Look.bPolice = true;
+	Look.AccentColor = FLinearColor(0.05f, 0.25f, 1.0f);
+	return Look;
 }
 
 void APoliceCar::Tick(float DeltaSeconds)

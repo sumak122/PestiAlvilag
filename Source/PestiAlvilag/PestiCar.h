@@ -3,15 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CarBody.h"
+#include "CarModel.h"
 #include "GameFramework/Pawn.h"
 #include "PestiCar.generated.h"
 
 class UBoxComponent;
 class UCameraComponent;
-class UMaterialInterface;
+class UCarVisuals;
+class UEngineSound;
 class USpringArmComponent;
-class UStaticMeshComponent;
 
 /**
  * A simple arcade car for the feasibility prototype, built from engine shapes
@@ -90,6 +90,13 @@ public:
 	/** Puts a person behind the wheel; they get out again with F. */
 	void TakeDriver(APawn* InDriver);
 
+	/** The car's look; set it before the car is spawned (SpawnActorDeferred), or it is a saloon in BodyColor. */
+	void SetStyle(const CarModel::FStyle& InStyle)
+	{
+		Style = InStyle;
+		bStyleSet = true;
+	}
+
 	/** How many times the car has hit something hard enough to jolt a passenger. */
 	int32 GetBumpCount() const { return BumpCount; }
 
@@ -97,8 +104,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UBoxComponent> CollisionBox;
 
+	/** The body and wheels (see CarModel), turning wheels and exhaust smoke. */
 	UPROPERTY(VisibleAnywhere, Category = "Car")
-	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	TObjectPtr<UCarVisuals> Visuals;
+
+	/** The engine's putter while someone drives. */
+	UPROPERTY(VisibleAnywhere, Category = "Car")
+	TObjectPtr<UEngineSound> EngineNoise;
 
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<USpringArmComponent> CameraArm;
@@ -106,10 +118,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Car")
 	TObjectPtr<UCameraComponent> ChaseCamera;
 
-	UPROPERTY()
-	TObjectPtr<UMaterialInterface> BaseMaterial;
-
-	TArray<CarBody::EPaint> BodyPaints;
+	CarModel::FStyle Style;
+	bool bStyleSet = false;
 
 	virtual void BeginPlay() override;
 
@@ -120,6 +130,7 @@ private:
 	void ToggleCamera();
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void LetDriverOut(APlayerController* PC);
+	void UpdateEngineNoise(float Throttle);
 
 	bool bOverheadCamera = false;
 	// Free look: the camera's turn away from straight behind the car (degrees).
@@ -131,5 +142,6 @@ private:
 	TObjectPtr<APawn> Driver;
 	double DriverInTime = 0.0;
 	int32 BumpCount = 0;
+	float LastPedal = 0.f;
 	double LastBumpTime = -1.0;
 };

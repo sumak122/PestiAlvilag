@@ -3,6 +3,7 @@
 #include "TrafficCar.h"
 
 #include "CarBody.h"
+#include "CarVisuals.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -51,16 +52,17 @@ ATrafficCar::ATrafficCar()
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
-	CarBody::Build(this, CollisionBox, BodyParts, BodyPaints);
+	// Built in StartOnLane, once the car knows its paint.
+	Visuals = CreateDefaultSubobject<UCarVisuals>(TEXT("Visuals"));
 
-	// Trafficator arms stick out sideways from the front of the cabin; the
+	// Trafficator arms swing out sideways from behind the front doors; the
 	// car's left is -Y. Hidden until the car signals.
 	auto MakeTrafficator = [&](const TCHAR* PartName, float Side)
 	{
 		UStaticMeshComponent* Arm = CreateDefaultSubobject<UStaticMeshComponent>(PartName);
 		Arm->SetupAttachment(CollisionBox);
 		Arm->SetStaticMesh(CubeMesh.Object);
-		Arm->SetRelativeLocation(FVector(15.f, Side * 90.f, 45.f));
+		Arm->SetRelativeLocation(FVector(-45.f, Side * 86.f, 30.f));
 		Arm->SetRelativeScale3D(FVector(0.05f, 0.3f, 0.06f));
 		Arm->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Arm->SetVisibility(false);
@@ -79,7 +81,8 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	CurrentSpeed = 0.f;
 	PaintColor = Paint;
 
-	CarBody::Paint(this, BaseMaterial, BodyParts, BodyPaints, Paint);
+	Style = PickStyle(Paint);
+	Visuals->Show(CollisionBox, Style);
 	if (!BaseMaterial)
 	{
 		return;
@@ -275,7 +278,17 @@ void ATrafficCar::UpdateTrafficators(float DistToJunction)
 	TrafficatorRight->SetVisibility(bRight);
 }
 
+CarModel::FStyle ATrafficCar::PickStyle(const FLinearColor& Paint) const
+{
+	FRandomStream Random(FMath::Rand());
+	return CarModel::RandomStyle(Random, Paint);
+}
+
 ATrafficTaxi::ATrafficTaxi()
 {
-	CarBody::BuildTaxi(this, CollisionBox, BodyParts, BodyPaints);
+}
+
+CarModel::FStyle ATrafficTaxi::PickStyle(const FLinearColor& /*Paint*/) const
+{
+	return CarModel::TaxiStyle();
 }
