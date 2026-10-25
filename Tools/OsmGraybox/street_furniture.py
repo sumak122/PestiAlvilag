@@ -8,6 +8,9 @@ that the AStreetFurniture actor reads:
   wide enough to have them, facing the road;
 - columns: round advertising columns (hirdetőoszlop) near street corners;
 - benches: round the edges of the parks;
+- sidewalks: the lines people walk along, on both pavements of every
+  street and down the paths of Tisza Kálmán tér, as flat [x0, y0, x1, y1,
+  ...] lists;
 - bins: litter bins on a post, beside some street lamps and next to the
   park benches;
 - park: the 1932 layout of Tisza Kálmán tér (today II. János Pál pápa tér):
@@ -55,6 +58,13 @@ COLUMN_ALONG = 900
 
 BENCH_SPACING = 2000
 BENCH_INSET = 350
+
+# People walk this far out from the edge of the carriageway, in a line
+# kept clear of the buildings; pieces shorter than this are left out (cm).
+SIDEWALK_OUT = 170
+SIDEWALK_CLEAR = 60
+SIDEWALK_MIN = 800
+SIDEWALK_SIMPLIFY = 50
 
 # Litter bins: beside this share of the street lamps, and next to park
 # benches, just past the bench's end (a bench is 180 cm long).
@@ -268,6 +278,42 @@ def place_columns(data, space, tisza):
             if placed:
                 break
     return columns
+
+
+def place_sidewalks(data, space, tisza, park):
+    """Walking lines along both pavements of each street, and the park paths."""
+    blocked = unary_union([b.buffer(SIDEWALK_CLEAR) for b in space.buildings] + [tisza.buffer(-100)])
+    if space.trams is not None:
+        blocked = blocked.union(space.trams.buffer(SIDEWALK_CLEAR))
+    blocked = prep(blocked)
+    sidewalks = []
+
+    def add(line):
+        pieces = [line] if not blocked.intersects(line) else []
+        if not pieces:
+            rest = line.difference(blocked.context)
+            pieces = [p for p in getattr(rest, "geoms", [rest]) if p.geom_type == "LineString"]
+        for piece in pieces:
+            piece = piece.simplify(SIDEWALK_SIMPLIFY)
+            if piece.length >= SIDEWALK_MIN:
+                sidewalks.append([round(v) for xy in piece.coords for v in xy])
+
+    for street in data["centerlines"]:
+        width = street.get("width", 0)
+        points = ring_points(street["points"])
+        if street["highway"] == "service" or len(points) < 2:
+            continue
+        line = LineString(points)
+        if line.length < 100:
+            continue
+        for side in ("left", "right"):
+            edge = line.parallel_offset(width / 2 + SIDEWALK_OUT, side, join_style=2)
+            for part in getattr(edge, "geoms", [edge]):
+                if part.geom_type == "LineString" and not part.is_empty:
+                    add(part)
+    for p in park["paths"]:
+        sidewalks.append([p[0], p[1], p[2], p[3]])
+    return sidewalks
 
 
 def place_lamp_bins(lamps, space, tisza):
@@ -550,6 +596,7 @@ def main():
     benches = place_park_benches(space, tisza, bins)
     bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
+    sidewalks = place_sidewalks(data, space, tisza, park)
 
     out = {
         "version": 1,
@@ -558,11 +605,12 @@ def main():
         "columns": columns,
         "benches": benches,
         "bins": bins,
+        "sidewalks": sidewalks,
         "tisza": park,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "

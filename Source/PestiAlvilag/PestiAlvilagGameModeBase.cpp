@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
 #include "Nepszinhaz.h"
+#include "Pedestrians.h"
 #include "PestiCar.h"
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
@@ -98,6 +99,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AStreetFurniture>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AStreetFurniture>();
+	}
+
+	// People walking the pavements.
+	if (!TActorIterator<APedestrians>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<APedestrians>();
 	}
 
 	// Start traffic unless the level already has its own manager.
