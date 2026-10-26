@@ -113,8 +113,18 @@ namespace PersonModel
 		{
 			const FPiece& Piece = Person.Pieces[p];
 			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner);
-			Mesh->SetupAttachment(Parent);
-			Mesh->SetRelativeLocation(Piece.Pivot - FVector(0.0, 0.0, MiddleHeight));
+			// A shin hangs from its thigh's knee; everything else from the middle.
+			const EPiece Hangs = ParentOf(p);
+			if (Hangs != NumPieces && InOutPieces.IsValidIndex(Hangs) && InOutPieces[Hangs])
+			{
+				Mesh->SetupAttachment(InOutPieces[Hangs]);
+				Mesh->SetRelativeLocation(Piece.Pivot - Person.Pieces[Hangs].Pivot);
+			}
+			else
+			{
+				Mesh->SetupAttachment(Parent);
+				Mesh->SetRelativeLocation(Piece.Pivot - FVector(0.0, 0.0, MiddleHeight));
+			}
 			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Mesh->SetCanEverAffectNavigation(false);
 			for (int32 s = 0; s < Piece.Sections.Num(); ++s)
@@ -133,6 +143,26 @@ namespace PersonModel
 			Owner->AddInstanceComponent(Mesh);
 			InOutPieces.Add(Mesh);
 		}
+	}
+
+	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee, float RightKnee)
+	{
+		const float Pitches[] = { Left, Right, LeftKnee, RightKnee, Left * SkirtFollow, Right * SkirtFollow };
+		const EPiece Parts[] = { LegLeft, LegRight, ShinLeft, ShinRight, SkirtLeft, SkirtRight };
+		for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Parts)); ++i)
+		{
+			if (Pieces.IsValidIndex(Parts[i]) && Pieces[Parts[i]])
+			{
+				Pieces[Parts[i]]->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			}
+		}
+	}
+
+	void StrideLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Phase, float Swing, float KneeAmount)
+	{
+		const float Thigh = FMath::Sin(Phase) * Swing;
+		// The leg swinging forward bends most; the knee comes straight as the foot lands.
+		PoseLegs(Pieces, Thigh, -Thigh, KneeBend(Phase, KneeAmount), KneeBend(Phase + PI, KneeAmount));
 	}
 
 	FOutfit RandomOutfit(FRandomStream& Random)

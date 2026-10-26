@@ -878,8 +878,13 @@ namespace CarModel
 		for (int32 p = 0; p < PersonKit::NumPieces; ++p)
 		{
 			const PersonKit::FPiece& Piece = Person.Pieces[p];
-			const bool bArm = p == PersonKit::ArmLeft || p == PersonKit::ArmRight;
-			const bool bLeg = p == PersonKit::LegLeft || p == PersonKit::LegRight;
+			// A shin turns with its thigh, about the hip.
+			const PersonKit::EPiece Hangs = PersonKit::ParentOf(p);
+			const int32 Swung = Hangs != PersonKit::NumPieces ? static_cast<int32>(Hangs) : p;
+			const FVector Pivot = Person.Pieces[Swung].Pivot;
+			const FVector Below = Piece.Pivot - Pivot;
+			const bool bArm = Swung == PersonKit::ArmLeft || Swung == PersonKit::ArmRight;
+			const bool bLeg = Swung == PersonKit::LegLeft || Swung == PersonKit::LegRight;
 			const FRotator Tilt(bArm ? ArmPitch : bLeg ? LegPitch : 0.0, 0.0, 0.0);
 			for (const PersonKit::FSection& From : Piece.Sections)
 			{
@@ -892,7 +897,7 @@ namespace CarModel
 				const int32 First = Into->Vertices.Num();
 				for (int32 i = 0; i < From.Vertices.Num(); ++i)
 				{
-					Into->Vertices.Add(Offset + Piece.Pivot + Tilt.RotateVector(From.Vertices[i]));
+					Into->Vertices.Add(Offset + Pivot + Tilt.RotateVector(Below + From.Vertices[i]));
 					Into->Normals.Add(Tilt.RotateVector(From.Normals[i]));
 				}
 				for (const int32 Corner : From.Triangles)

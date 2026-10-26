@@ -429,12 +429,13 @@ void ACafeWaiter::Tick(float DeltaSeconds)
 	}
 
 	// Legs swing as he walks; the left arm holds the tray up, the right swings a little.
-	const float Pitches[] = { Legs, -Legs, Cafe::TrayArm, -Legs * 0.6f };
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)); ++i)
+	PersonModel::PoseLegs(Pieces, Legs, -Legs, -0.5f * FMath::Max(Legs, 0.f), -0.5f * FMath::Max(-Legs, 0.f));
+	const float Arms[] = { Cafe::TrayArm, -Legs * 0.6f };
+	for (int32 i = 0; i < 2; ++i)
 	{
-		if (USceneComponent* Part = Limb(i))
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
 		{
-			Part->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
 		}
 	}
 }

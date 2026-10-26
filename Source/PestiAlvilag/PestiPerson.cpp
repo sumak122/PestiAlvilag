@@ -212,18 +212,21 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 	// shoulders, legs against arms, faster and wider the faster he goes.
 	const float Speed = GetCharacterMovement()->IsMovingOnGround() ? static_cast<float>(GetVelocity().Size2D()) : 0.f;
 	StridePhase += DeltaSeconds * Speed / PestiPerson::StrideLength * PI;
-	const float Swing = FMath::Sin(StridePhase) * PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
-	constexpr int32 NumLimbs = 4;
+	const float Reach = PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
+	const float Swing = FMath::Sin(StridePhase) * Reach;
+	// The knees bend with the stride, more when running.
+	PersonModel::StrideLegs(Pieces, StridePhase, Reach, FMath::Clamp(Speed / JogSpeed, 0.f, 1.7f));
 	// The arm with a load in it hangs still; both arms holding something in front reach forward.
 	const float Hold = bRiding ? PestiPerson::SeatHoldPitch : PestiPerson::HoldPitch;
 	const float LeftArm = bHoldingInFront ? Hold : -Swing;
 	const float RightArm = bHoldingInFront ? Hold : bCarrying ? 0.f : Swing;
-	const float Swings[NumLimbs] = { Swing, -Swing, LeftArm, RightArm };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < NumLimbs && i < Pieces.Num(); ++i)
+	const float Arms[] = { LeftArm, RightArm };
+	for (int32 i = 0; i < 2; ++i)
 	{
-		if (Pieces[i])
+		const int32 Arm = PersonKit::ArmLeft + i;
+		if (Pieces.IsValidIndex(Arm) && Pieces[Arm])
 		{
-			Pieces[i]->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
+			Pieces[Arm]->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
 		}
 	}
 }

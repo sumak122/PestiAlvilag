@@ -8,6 +8,10 @@
 #include "Pedestrians.generated.h"
 
 class AOsmGraybox;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UStaticMesh;
+class UStaticMeshComponent;
 
 /**
  * Someone out walking: a story person moved by APedestrians rather than by
@@ -21,8 +25,18 @@ class PESTIALVILAG_API APedestrian : public AStoryPerson
 public:
 	APedestrian();
 
-	/** Puts him at Location (his middle) facing Yaw, walking at Speed. */
-	void WalkTo(const FVector& Location, double Yaw, float Speed, float DeltaSeconds);
+	/**
+	 * Puts him at Location (his middle) facing Yaw, walking at Speed. With
+	 * ArmsUp above 0 he throws his arms up in fright as he goes.
+	 */
+	void WalkTo(const FVector& Location, double Yaw, float Speed, float DeltaSeconds, float ArmsUp = 0.f);
+
+	/**
+	 * Holds him still in a pose: tipped back by Rotation's pitch (90 is lying
+	 * on his back), thighs forward by Legs, knees bent by Knees (degrees) and
+	 * arms raised forward by Arms.
+	 */
+	void Hold(const FVector& Location, const FRotator& Rotation, float Legs, float Knees, float Arms);
 
 private:
 	float Stride = 0.f;
@@ -67,7 +81,24 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BaseMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> CylinderMesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> BloodPaint;
+
 private:
+	/**
+	 * What he is doing besides walking: stepping out of the way of someone
+	 * running, stumbling back after a bump, leaping clear of a car, running
+	 * off from a car on the pavement, knocked down (and getting up again), or
+	 * run over at speed and lying still.
+	 */
+	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead };
+
 	struct FLine
 	{
 		TArray<FVector2D> Points;
@@ -91,6 +122,17 @@ private:
 		FVector2D Shown = FVector2D::ZeroVector;
 		float ShownYaw = 0.f;
 		bool bPlaced = false;
+		EReact React = EReact::None;
+		/** Seconds left in what he is doing now, and how long since it began. */
+		float ReactLeft = 0.f;
+		float ReactTime = 0.f;
+		/** How fast he is moved off his walk while reacting (cm/s). */
+		FVector2D Shove = FVector2D::ZeroVector;
+		/** Not before this time does he notice a car coming (he may freeze instead). */
+		float NoticeAt = -1.f;
+		bool bFrozen = false;
+		/** The blood under him once he is run over. */
+		UStaticMeshComponent* Blood = nullptr;
 	};
 
 	bool LoadLines();
@@ -107,6 +149,17 @@ private:
 	/** True when a building stands between the camera and someone standing here. */
 	bool BehindBuilding(const FVector& Camera, const FVector2D& At, double GroundZ) const;
 	bool GroundUnder(const FVector2D& At, double Near, double& OutZ) const;
+	/** Sees how the player, on foot or at the wheel, comes past him, and has him react. */
+	void ReactToPlayer(FWalker& Walker, double Now);
+	void StartReact(FWalker& Walker, EReact React, float Seconds, const FVector2D& Shove);
+	/** The car hit him: knocked down, or killed at speed. */
+	void RunOver(FWalker& Walker, double Speed);
+	/** Has him pose as what he is doing now demands; false when just walking. */
+	bool PoseReacting(FWalker& Walker, float DeltaSeconds);
+	/** Back to walking (and the blood gone), once he is cleared away. */
+	void ClearReact(FWalker& Walker);
+	/** Someone calls out (only now and then, and not over other speech). */
+	void Shout(const TCHAR* Hu, const TCHAR* En);
 
 	TArray<FLine> Lines;
 	/** Line ends on a coarse grid: cell -> (line, end: 0 start, 1 end). */
@@ -116,4 +169,13 @@ private:
 	TArray<FWalker> Walkers;
 	FRandomStream Random;
 	bool bReady = false;
+
+	/** The player (or the car he drives) and how fast it goes, worked out each frame. */
+	TWeakObjectPtr<AActor> LastPlayer;
+	FVector LastPlayerAt = FVector::ZeroVector;
+	FVector PlayerVelocity = FVector::ZeroVector;
+	FVector PlayerAt = FVector::ZeroVector;
+	FVector2D PlayerForward = FVector2D(1.0, 0.0);
+	bool bPlayerDriving = false;
+	double LastShout = -10.0;
 };

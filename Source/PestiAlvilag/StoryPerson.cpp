@@ -121,14 +121,15 @@ void AStoryPerson::Tick(float DeltaSeconds)
 void AStoryPerson::SwingLimbs(float Speed, float DeltaSeconds)
 {
 	StridePhase = Speed > 0.f ? StridePhase + DeltaSeconds * Speed / StoryPerson::StrideLength * PI : 0.f;
-	const float Swing = FMath::Sin(StridePhase) * StoryPerson::MaxSwing * FMath::Clamp(Speed / 300.f, 0.f, 1.f);
-	constexpr int32 NumLimbs = 4;
-	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, Swing };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < NumLimbs; ++i)
+	const float Reach = StoryPerson::MaxSwing * FMath::Clamp(Speed / 300.f, 0.f, 1.f);
+	const float Swing = FMath::Sin(StridePhase) * Reach;
+	PersonModel::StrideLegs(Pieces, StridePhase, Reach, FMath::Clamp(Speed / 150.f, 0.f, 1.6f));
+	const float Arms[] = { -Swing, Swing };  // left arm, right arm
+	for (int32 i = 0; i < 2; ++i)
 	{
-		if (USceneComponent* Part = Limb(i))
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
 		{
-			Part->SetRelativeRotation(FRotator(Swings[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
 		}
 	}
 }

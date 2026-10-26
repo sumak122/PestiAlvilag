@@ -12,11 +12,15 @@
  * and their colours; Build turns it into meshes, so every walker can be
  * dressed differently without anyone modelling him by hand.
  *
- * The person comes in five pieces that move: the body (with the head and
- * everything worn on it) and each arm and leg, which hang from the shoulder
- * and hip so they can swing. Each piece is in centimetres with its pivot at
- * the origin, X forward, Y to the right, Z up; the feet stand at Z = 0 in
- * the body's frame.
+ * The person comes in nine pieces that move: the body (with the head and
+ * everything worn on it), each arm, which hangs from the shoulder, each leg
+ * in two: the thigh, which hangs from the hip, and the shin and foot, which
+ * hang from the knee (ShinOf, KneeBend) so the knee can bend; and the two
+ * halves of a coat's or dress's skirts, which hang from the hips and follow
+ * the thighs part of the way (SkirtFollow). Pieces with nothing on them
+ * (the skirts of a man in a waistcoat) are empty. Each piece is in centimetres
+ * with its pivot at the origin, X forward, Y to the right, Z up; the feet
+ * stand at Z = 0 in the body's frame.
  */
 namespace PersonKit
 {
@@ -68,7 +72,45 @@ namespace PersonKit
 	/** How far a seated person's feet are above the standing person's ground (cm). */
 	constexpr double SeatDrop = 44.0;
 
-	enum EPiece : int32 { LegLeft, LegRight, ArmLeft, ArmRight, Body, NumPieces };
+	enum EPiece : int32 { LegLeft, LegRight, ArmLeft, ArmRight, Body, ShinLeft, ShinRight, SkirtLeft, SkirtRight, NumPieces };
+
+	/**
+	 * Below the hips, a long coat's or dress's skirts hang in two flaps,
+	 * hinged inside the rigid top of the skirts so they never come away from
+	 * the body, and each flap follows its thigh by this share of the thigh's
+	 * swing: the hem parts as he strides, as cloth would.
+	 */
+	constexpr float SkirtFollow = 0.5f;
+
+	/** The piece a piece hangs from: a shin from its thigh, anything else from the body (NumPieces). */
+	inline EPiece ParentOf(int32 Piece)
+	{
+		return Piece == ShinLeft ? LegLeft : Piece == ShinRight ? LegRight : NumPieces;
+	}
+
+	/** The shin under a thigh (LegLeft or LegRight). */
+	inline EPiece ShinOf(int32 Leg)
+	{
+		return Leg == LegLeft ? ShinLeft : ShinRight;
+	}
+
+	/** The half of the skirts over a thigh (LegLeft or LegRight). */
+	inline EPiece SkirtOf(int32 Leg)
+	{
+		return Leg == LegLeft ? SkirtLeft : SkirtRight;
+	}
+
+	/**
+	 * How far the knee bends (degrees, negative: the foot goes back) at this
+	 * point of a stride whose thigh swings by Sin(Phase): most while the leg
+	 * swings forward, a little while it bears the weight. Amount is 0 when
+	 * standing and 1 at a brisk walk; above that, at a run, it bends more.
+	 */
+	inline float KneeBend(float Phase, float Amount)
+	{
+		const float Swinging = FMath::Max(0.f, static_cast<float>(FMath::Cos(Phase)));
+		return -(6.f + 42.f * Swinging * Swinging) * Amount;
+	}
 
 	/** One colour of one piece: a smooth-shaded triangle list. */
 	struct FSection
@@ -355,30 +397,19 @@ namespace PersonKit
 				Block(B, SkirtColor, FVector(LapEnd * 0.5 - 4.0, 0.0, Z(92.0) - 1.0), FVector(LapEnd * 0.5 + 4.0, 19.0 * G, 10.0));
 			}
 		}
-		else if (O.Top == ETop::Jacket)
+		else if (bCoat || O.Top == ETop::Dress || W)
 		{
-			Loft(B, O.Coat, {
-				Flat(0.5, Z(104.0), 12.3 * G * G, 16.0 * G * G),
-				Flat(0.0, Z(92.0), 14.0 * G, 18.0 * G),
-				Flat(-0.5, Z(78.0), 14.5 * G, 18.5 * G),
-			}, 14, true, true);
-		}
-		else if (O.Top == ETop::Overcoat)
-		{
-			Loft(B, O.Coat, {
-				Flat(0.5, Z(104.0), 12.8 * G * G, 16.8 * G * G),
-				Flat(0.0, Z(90.0), 15.0 * G, 19.0 * G),
-				Flat(-1.0, Z(70.0), 17.0 * G, 21.0 * G),
-				Flat(-1.5, Z(52.0), 18.5 * G, 22.5 * G),
-			}, 14, true, true);
-		}
-		else if (O.Top == ETop::Dress || W)
-		{
-			Loft(B, O.Top == ETop::Dress ? O.Coat : O.Trousers, {
-				Flat(0.5, Z(104.0), 11.0 * G * G, 14.0 * G * G),
-				Flat(0.0, Z(92.0), 14.0 * G, 18.5 * G),
-				Flat(-0.5, Z(60.0), 17.0 * G, 21.0 * G),
-				Flat(-1.0, Z(38.0), 19.0 * G, 23.0 * G),
+			// The hips and the top of the skirts, rigid with the body and
+			// roomy enough for the thighs to swing inside; a jacket ends here,
+			// longer skirts go on below in two flaps (see the legs).
+			const FLinearColor& HipColor = bCoat || O.Top == ETop::Dress ? O.Coat : O.Trousers;
+			const bool bJacket = O.Top == ETop::Jacket;
+			const bool bOvercoat = O.Top == ETop::Overcoat;
+			Loft(B, HipColor, {
+				Flat(0.5, Z(104.0), (bCoat ? 12.5 : 11.0) * G * G, (bCoat ? 16.4 : 14.0) * G * G),
+				Flat(0.0, Z(92.0), (bJacket ? 14.0 : 14.6) * G, (bJacket ? 18.0 : 18.6) * G),
+				bJacket ? Flat(-0.5, Z(76.0), 14.8 * G, 18.6 * G)
+					: Flat(-0.5, Z(bOvercoat ? 74.0 : 72.0), (bOvercoat ? 16.6 : 16.0) * G, (bOvercoat ? 20.4 : 20.0) * G),
 			}, 14, true, true);
 		}
 		if (O.Top == ETop::Overcoat)
@@ -489,11 +520,42 @@ namespace PersonKit
 			break;
 		}
 
-		// Legs: trousers (or stockings under a skirt) and shoes, from the hip.
+		// Legs: trousers (or stockings under a skirt), from the hip to the
+		// knee, then the shin and shoe from the knee. The skirts of a coat or
+		// dress below the hips hang in halves beside them (SkirtFollow), so
+		// they part as he strides instead of the legs poking through them.
+		// The flaps of long skirts: rows of stops down from inside the rigid
+		// top (height, half depth, half width of both flaps together, how far
+		// forward), and the height of the hinge.
+		struct FStop
+		{
+			double Z, Depth, Width, X;
+		};
+		TArray<FStop> Skirt;
+		double Hinge = 0.0;
+		FLinearColor SkirtColor = O.Coat;
+		if (!O.bSeated)
+		{
+			if (O.Top == ETop::Overcoat)
+			{
+				Skirt = { FStop{ Z(81.0), 15.4 * G, 18.4 * G, -0.3 }, FStop{ Z(74.0), 15.8 * G, 18.6 * G, -0.5 }, FStop{ Z(50.0), 18.4 * G, 21.2 * G, -1.5 } };
+				Hinge = Z(77.0);
+			}
+			else if (O.Top == ETop::Dress || W)
+			{
+				Skirt = { FStop{ Z(79.0), 15.0 * G, 17.8 * G, -0.3 }, FStop{ Z(72.0), 15.3 * G, 18.0 * G, -0.5 }, FStop{ Z(38.0), 19.0 * G, 21.6 * G, -1.0 } };
+				Hinge = Z(75.0);
+				SkirtColor = O.Top == ETop::Dress ? O.Coat : O.Trousers;
+			}
+		}
 		for (const EPiece Leg : { LegLeft, LegRight })
 		{
 			FPiece& L = Out.Pieces[Leg];
+			FPiece& Shin = Out.Pieces[ShinOf(Leg)];
+			FPiece& Coat = Out.Pieces[SkirtOf(Leg)];
 			const double Side = Leg == LegLeft ? -1.0 : 1.0;
+			// Hinged inside the top of the skirts, over this leg.
+			Coat.Pivot = FVector(0.0, 9.0 * Side * G, Hinge);
 			const FVector Hip = L.Pivot;
 			const double Lg = W ? 0.85 : 1.0;
 			const FLinearColor LegColor = W ? O.Skin * 0.8f : O.Trousers;
@@ -504,6 +566,7 @@ namespace PersonKit
 				const double Knee = Hip.X + 44.0 * H;
 				const double KneeZ = Hip.Z - 3.0;
 				const double Floor = SeatDrop;
+				Shin.Pivot = FVector(Knee, Hip.Y, KneeZ);
 				auto Across = [&Hip](double X, double Zc, double Rz, double Ry)
 				{
 					return FRing{ FVector(X, Hip.Y, Zc), FVector(0.0, 0.0, Rz), FVector(0.0, Ry, 0.0) };
@@ -514,12 +577,12 @@ namespace PersonKit
 					Across(Knee, KneeZ, 6.2 * Lg, 6.2 * Lg),
 				}, 10, true, false);
 				Blob(L, LegColor, FVector(Knee, Hip.Y, KneeZ), FVector(6.4, 6.4, 6.4) * Lg, 10, 5);
-				Loft(L, LegColor, {
+				Loft(Shin, LegColor, {
 					Flat(Knee, KneeZ, 6.2 * Lg, 6.0 * Lg, Hip.Y),
 					Flat(Knee - 0.5, Floor + 10.0, 5.6 * Lg, 5.2 * Lg, Hip.Y),
 				}, 10, false, true);
 				const FVector Foot(Knee - 2.0, Hip.Y + 0.5 * Side, Floor);
-				Loft(L, O.Shoes, {
+				Loft(Shin, O.Shoes, {
 					{ Foot + FVector(-6.0 * Sz, 0.0, 4.5), FVector(0.0, 4.0 * Sz, 0.0), FVector(0.0, 0.0, 3.5) },
 					{ Foot + FVector(0.0, 0.0, 5.0), FVector(0.0, 4.8 * Sz, 0.0), FVector(0.0, 0.0, 4.5) },
 					{ Foot + FVector(8.0 * Sz, 0.0, 3.8), FVector(0.0, 4.8 * Sz, 0.0), FVector(0.0, 0.0, 3.6) },
@@ -528,16 +591,25 @@ namespace PersonKit
 				}, 10, true, true, PI * 0.5);
 				continue;
 			}
+			const double KneeZ = Z(50.0);
+			const FVector Knee(Hip.X + 0.8, Hip.Y, KneeZ);
+			Shin.Pivot = Knee;
+			// The thigh, round at the knee so the bend shows no gap.
 			Loft(L, LegColor, {
 				Flat(Hip.X, Hip.Z + 4.0, 9.0 * G * Lg, 8.5 * G * Lg, Hip.Y),
 				Flat(Hip.X + 0.5, Z(70.0), 7.5 * G * Lg, 7.0 * G * Lg, Hip.Y),
-				Flat(Hip.X + 0.8, Z(48.0), 6.2 * Lg, 6.0 * Lg, Hip.Y),
+				Flat(Knee.X, KneeZ, 6.3 * Lg, 6.1 * Lg, Hip.Y),
+			}, 10, true, false);
+			Blob(L, LegColor, Knee, FVector(6.4, 6.2, 6.4) * Lg, 10, 5);
+			// The shin, from the knee down.
+			Loft(Shin, LegColor, {
+				Flat(Knee.X, KneeZ, 6.2 * Lg, 6.0 * Lg, Hip.Y),
 				Flat(Hip.X, Z(30.0), 6.3 * Lg, 6.0 * Lg, Hip.Y),
 				Flat(Hip.X - 0.5, Z(10.0), 5.6 * Lg, 5.2 * Lg, Hip.Y),
-			}, 10, false, true);
+			}, 10, true, true);
 			// The shoe (or a boot), lofted from heel to toe.
 			const FVector Foot(Hip.X, Hip.Y + 0.5 * Side, 0.0);
-			Loft(L, O.Shoes, {
+			Loft(Shin, O.Shoes, {
 				{ Foot + FVector(-6.0 * Sz, 0.0, 4.5), FVector(0.0, 4.0 * Sz, 0.0), FVector(0.0, 0.0, 3.5) },
 				{ Foot + FVector(0.0, 0.0, 5.0), FVector(0.0, 4.8 * Sz, 0.0), FVector(0.0, 0.0, 4.5) },
 				{ Foot + FVector(8.0 * Sz, 0.0, 3.8), FVector(0.0, 4.8 * Sz, 0.0), FVector(0.0, 0.0, 3.6) },
@@ -546,7 +618,18 @@ namespace PersonKit
 			}, 10, true, true, PI * 0.5);
 			if (O.bBoots)
 			{
-				Loft(L, O.Shoes, { Flat(Foot.X - 0.5, 5.0, 6.0, 5.8, Hip.Y), Flat(Foot.X - 0.5, Z(28.0), 6.6, 6.4, Hip.Y) }, 10, false, true);
+				Loft(Shin, O.Shoes, { Flat(Foot.X - 0.5, 5.0, 6.0, 5.8, Hip.Y), Flat(Foot.X - 0.5, Z(28.0), 6.6, 6.4, Hip.Y) }, 10, false, true);
+			}
+			// This leg's half of the skirts: an oval from the middle seam out
+			// to the side, widening to the hem, overlapping the other half a little.
+			if (Skirt.Num() > 1)
+			{
+				TArray<FRing> Rings;
+				for (const FStop& Stop : Skirt)
+				{
+					Rings.Add({ FVector(Stop.X, Side * Stop.Width * 0.45, Stop.Z), FVector(Stop.Depth, 0.0, 0.0), FVector(0.0, Stop.Width * 0.62, 0.0) });
+				}
+				Loft(Coat, SkirtColor, Rings, 14, false, true);
 			}
 		}
 
