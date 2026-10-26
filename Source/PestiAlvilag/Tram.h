@@ -119,6 +119,8 @@ private:
 	void AddPassenger(int32 SeatIndex, const PersonKit::FOutfit& Outfit);
 	void RemovePassenger(int32 Which);
 	void PlaceOnTrack();
+	/** Knocks the player down if he stands in front of the moving tram. */
+	void HitPlayerInTheWay();
 	void SetInService(bool bInService);
 	bool IsStartClear() const;
 

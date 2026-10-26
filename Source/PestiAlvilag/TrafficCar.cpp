@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PestiPerson.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -211,6 +212,14 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		CurrentSpeed = FMath::Max(CurrentSpeed, TrafficCar::UnstickSpeed);
 		SetActorLocation(Location + GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed * DeltaSeconds, false);
 		return;
+	}
+	// Running into him on foot hurts him.
+	if (bBlockedByPlayer)
+	{
+		if (APestiPerson* Person = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0)))
+		{
+			Person->HitByVehicle(CurrentSpeed, GetActorForwardVector());
+		}
 	}
 	CurrentSpeed = 0.f;
 }

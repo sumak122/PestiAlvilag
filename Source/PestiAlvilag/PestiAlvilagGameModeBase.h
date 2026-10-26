@@ -45,6 +45,10 @@ public:
 	/** 0 = not wanted; higher means more trouble. */
 	int32 GetWantedLevel() const { return WantedLevel; }
 	void ReportCrime(int32 CrimeLevel);
+	/** Seconds still to stay out of police sight to lose them. */
+	float GetEscapeSecondsLeft() const { return FMath::Max(0.f, EscapeTime - TimeUnseen); }
+	/** How far an arrest has got, from 0 to 1. */
+	float GetArrestFraction() const { return ArrestTime > 0.f ? FMath::Clamp(ArrestProgress / ArrestTime, 0.f, 1.f) : 0.f; }
 	/** Police call these every frame they see the player or are right beside them. */
 	void NotifySeenByPolice();
 	void NotifyPoliceNear();
@@ -72,7 +76,24 @@ public:
 	bool HasTriedDish(FName DishId) const { return TriedDishes.Contains(DishId); }
 	int32 GetDishesTried() const { return TriedDishes.Num(); }
 
+	/** The hidden lighters found so far, by number. */
+	bool HasFoundLighter(int32 Index) const { return FoundLighters.Contains(Index); }
+	int32 GetLightersFound() const { return FoundLighters.Num(); }
+	void AddFoundLighter(int32 Index) { FoundLighters.AddUnique(Index); }
+
 	void MarkMissionDone(FName MissionId);
+	/** Starts the first story mission not yet passed, after a short pause. */
+	void StartNextMission();
+
+	/**
+	 * The player's health. Cars and trams hurt him when they hit him, and so
+	 * does a hard fall; food heals him and sleeping at home makes him well
+	 * again. At nothing he faints and comes round at home.
+	 */
+	float GetHealth() const { return Health; }
+	float GetMaxHealth() const { return MaxHealth; }
+	void HurtPlayer(float Amount);
+	void HealPlayer(float Amount);
 	bool IsMissionDone(FName MissionId) const { return CompletedMissions.Contains(MissionId); }
 
 	/** Home can be slept at once the prologue has led the player there. */
@@ -85,6 +106,10 @@ public:
 
 private:
 	void UpdateWanted(float DeltaSeconds);
+	void UpdateFaint();
+	void SpawnNextMission();
+	/** Where he stands on the pavement outside the home door. */
+	static FVector2D HomeStartAt();
 	void ClearWanted(const TCHAR* Message);
 	/** Puts up the hero buildings the level doesn't have yet. */
 	void SpawnLandmarks();
@@ -95,10 +120,16 @@ private:
 	void StartNewGame();
 
 	int32 WantedLevel = 0;
+	float Health = 100.f;
+	float MaxHealth = 100.f;
+	/** While fainted: when he comes round; otherwise below 0. */
+	double FaintUntil = -1.0;
+	double NextMissionAt = -1.0;
 	int32 Money = 0;
 	TArray<FName> CompletedMissions;
 	int32 TaxiJobs = 0;
 	TArray<FName> TriedDishes;
+	TArray<int32> FoundLighters;
 	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;

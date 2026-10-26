@@ -16,6 +16,7 @@
 #include "PestiTaxi.h"
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
+#include "PestiHud.h"
 
 namespace Prologue
 {
@@ -210,7 +211,7 @@ void AMissionPrologue::OnStepDone(int32 Step)
 			TEXT("So you made it, son! Come in, I'll show you your room."), 8.f);
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(Prologue::MessageLine, 12.f, FColor::Yellow,
+			APestiHUD::Show(this, Prologue::MessageLine, 12.f, FColor::Yellow,
 				TEXT("Ez most az otthonod: az ajt\u00f3n\u00e1l E-vel alhatsz \u00e9s menthetsz.  (This is your home now: press E at the door to sleep and save.)"));
 		}
 	}

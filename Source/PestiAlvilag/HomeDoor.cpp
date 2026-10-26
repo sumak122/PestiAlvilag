@@ -14,6 +14,7 @@
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "UObject/ConstructorHelpers.h"
+#include "PestiHud.h"
 
 namespace HomeDoor
 {
@@ -114,9 +115,11 @@ void AHomeDoor::Tick(float DeltaSeconds)
 		{
 			PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, HomeDoor::SleepFade, FLinearColor::Black);
 		}
+		// A night's sleep makes him well again.
+		Game->HealPlayer(Game->GetMaxHealth());
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(9, 4.f, FColor(255, 230, 160),
+			APestiHUD::Show(this, 9, 4.f, FColor(255, 230, 160),
 				Game->SaveToDisk() ? TEXT("J\u00e1t\u00e9k mentve  (Game saved)") : TEXT("Nem siker\u00fclt menteni  (Could not save)"));
 		}
 	}
@@ -127,7 +130,7 @@ void AHomeDoor::Tick(float DeltaSeconds)
 	}
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(4, 0.f, FColor(255, 200, 60),
+		APestiHUD::Show(this, 4, 0.f, FColor(255, 200, 60),
 			TEXT("Otthon  (Home)   E: alv\u00e1s \u00e9s ment\u00e9s  (sleep and save)"));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::E))

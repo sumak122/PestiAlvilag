@@ -75,6 +75,14 @@ public:
 	bool GetOffAt(const FVector& At, double Yaw);
 	bool IsRiding() const { return bRiding; }
 
+	/**
+	 * A car or tram has hit him at Speed (cm/s), going along Push: it hurts
+	 * more the faster it was going, and knocks him aside.
+	 */
+	void HitByVehicle(float Speed, const FVector& Push);
+
+	virtual void Landed(const FHitResult& Hit) override;
+
 protected:
 	/** Legs, arms and body (PersonKit::EPiece order), made when play begins. */
 	UPROPERTY(Transient)
@@ -108,4 +116,8 @@ private:
 	/** Where he sits on the vehicle he rides. */
 	FTransform RideSeat;
 	double OutOfCarTime = -1.0;
+	/** The last time a vehicle hurt him, so one bump hurts only once. */
+	double LastHitTime = -100.0;
+	/** The fastest he has been falling since he left the ground (cm/s). */
+	float FallSpeed = 0.f;
 };

@@ -18,6 +18,7 @@
 #include "TrafficManager.h"
 #include "Tram.h"
 #include "WalkingPerson.h"
+#include "PestiHud.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTramRides, Log, All);
 
@@ -348,7 +349,7 @@ void ATramRides::Say(const FString& Text, float Seconds) const
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(TramRides::SpeechLine, Seconds, TramRides::Yellow, Text);
+		APestiHUD::Show(this, TramRides::SpeechLine, Seconds, TramRides::Yellow, Text);
 	}
 }
 
@@ -421,7 +422,7 @@ void ATramRides::Tick(float DeltaSeconds)
 		}
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(TramRides::RideLine, 0.f, FColor::White,
+			APestiHUD::Show(this, TramRides::RideLine, 0.f, FColor::White,
 				FString::Printf(TEXT("On the tram (%s)   Next stop: %s   %s   C: change view"), *Line,
 					*StopName(Tram, Tram->IsAtStop() ? Next + 1 : Next),
 					Tram->IsAtStop() ? TEXT("T: get off here") : bWantOff ? TEXT("Getting off there (T: stay on)") : TEXT("T: ring the bell to get off there")));
@@ -441,7 +442,7 @@ void ATramRides::Tick(float DeltaSeconds)
 	}
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(TramRides::HintLine, 0.f, TramRides::Yellow,
+		APestiHUD::Show(this, TramRides::HintLine, 0.f, TramRides::Yellow,
 			FString::Printf(TEXT("T: get on the tram towards %s   (fare %s)"), *LastStopName(Tram), *APestiAlvilagGameModeBase::FormatMoney(Fare)));
 	}
 	if (!bT)

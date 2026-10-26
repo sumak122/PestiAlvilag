@@ -22,6 +22,7 @@
 #include "TrafficManager.h"
 #include "WalkingPerson.h"
 #include "UObject/ConstructorHelpers.h"
+#include "PestiHud.h"
 
 namespace TaxiCompany
 {
@@ -210,7 +211,7 @@ void ATaxiCompany::Say(const FString& Line) const
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(TaxiCompany::SpeechLine, 6.f, FColor(255, 220, 120), Line);
+		APestiHUD::Show(this, TaxiCompany::SpeechLine, 6.f, FColor(255, 220, 120), Line);
 	}
 }
 
@@ -247,7 +248,7 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 	{
 		if (bAtKiosk && GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60),
+			APestiHUD::Show(this, TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60),
 				TEXT("Budapesti Aut\u00f3taxi   E: start a taxi shift"));
 		}
 		return;
@@ -274,7 +275,7 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 		}
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), bAtKiosk
+			APestiHUD::Show(this, TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), bAtKiosk
 				? FString(TEXT("Taxi shift   E: end the shift"))
 				: FString(TEXT("Taxi shift: get into one of the company's black and yellow taxis")));
 		}
@@ -399,7 +400,7 @@ void ATaxiCompany::UpdateFare(APestiTaxi* Taxi, float DeltaSeconds)
 
 	if (GEngine && !Status.IsEmpty())
 	{
-		GEngine->AddOnScreenDebugMessage(TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), Status);
+		APestiHUD::Show(this, TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), Status);
 	}
 }
 
@@ -553,7 +554,7 @@ void ATaxiCompany::DropOff(APestiTaxi* Taxi, bool bPaid)
 			Game->AddTaxiJob();
 			if (Game->GetTaxiJobs() == TaxiCompany::RegularAfterJobs && GEngine)
 			{
-				GEngine->AddOnScreenDebugMessage(TaxiCompany::RegularLine, 10.f, FColor(255, 210, 60), FString::Printf(
+				APestiHUD::Show(this, TaxiCompany::RegularLine, 10.f, FColor(255, 210, 60), FString::Printf(
 					TEXT("%d fares driven: the cabbies know you now. Taxi rides cost you half from here on, and the company's red limousine taxi waits for you by the kiosk."), TaxiCompany::RegularAfterJobs));
 			}
 		}

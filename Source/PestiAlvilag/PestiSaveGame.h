@@ -34,4 +34,8 @@ public:
 	/** Dishes the player has eaten at least once, by id (FoodMenus). */
 	UPROPERTY()
 	TArray<FName> TriedDishes;
+
+	/** The hidden lighters found, by number (LighterModel::All). */
+	UPROPERTY()
+	TArray<int32> FoundLighters;
 };

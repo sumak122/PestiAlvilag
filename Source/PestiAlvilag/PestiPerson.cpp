@@ -13,11 +13,13 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "CarBody.h"
 #include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "ProceduralMeshComponent.h"
 #include "PoliceCar.h"
 #include "TrafficCar.h"
 #include "TrafficManager.h"
+#include "PestiHud.h"
 
 namespace PestiPerson
 {
@@ -33,6 +35,18 @@ namespace PestiPerson
 	constexpr float StrideLength = 120.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
+
+	// Being hit: slower than this does no harm, and each cm/s over it
+	// takes this much health (a car at 36 km/h takes about half). One bump
+	// hurts once, and knocks him this hard at most (cm/s).
+	constexpr float HarmlessSpeed = 250.f;
+	constexpr float HurtPerSpeed = 0.06f;
+	constexpr double HitCooldown = 0.8;
+	constexpr float MaxKnock = 900.f;
+	constexpr float KnockUp = 350.f;
+	// Landing faster than this hurts, more the harder he lands (cm/s).
+	constexpr float SafeFallSpeed = 900.f;
+	constexpr float HurtPerFallSpeed = 0.1f;
 
 	// The camera's pivot above his middle, on foot (cm).
 	constexpr float PivotHeight = 60.f;
@@ -115,12 +129,16 @@ void APestiPerson::Tick(float DeltaSeconds)
 	}
 	Look(PC, DeltaSeconds);
 	Walk(PC);
+	if (GetCharacterMovement()->IsFalling())
+	{
+		FallSpeed = FMath::Max(FallSpeed, static_cast<float>(-GetVelocity().Z));
+	}
 
 	if (bCarrying)
 	{
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White, TEXT("On foot, carrying something heavy"));
+			APestiHUD::Show(this, 1, 0.f, FColor::White, TEXT("On foot, carrying something heavy"));
 		}
 		return;
 	}
@@ -137,7 +155,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
+		APestiHUD::Show(this, 1, 0.f, FColor::White,
 			TEXT("On foot   (F: get in or steal a car, Shift: sprint, Space: jump, N: traffic view, P: police test, F9: new game)"));
 	}
 }
@@ -268,6 +286,35 @@ bool APestiPerson::TryStepOutAt(const FVector& At, double Yaw)
 	SetActorLocationAndRotation(Location, FRotator(0.f, Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
 	SetInWorld(true);
 	return true;
+}
+
+void APestiPerson::HitByVehicle(float Speed, const FVector& Push)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (bRiding || IsHidden() || Speed < PestiPerson::HarmlessSpeed || Now - LastHitTime < PestiPerson::HitCooldown)
+	{
+		return;
+	}
+	LastHitTime = Now;
+	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+	{
+		Game->HurtPlayer((Speed - PestiPerson::HarmlessSpeed) * PestiPerson::HurtPerSpeed);
+	}
+	const FVector Knock = Push.GetSafeNormal2D() * FMath::Min(Speed, PestiPerson::MaxKnock) + FVector(0.0, 0.0, PestiPerson::KnockUp);
+	LaunchCharacter(Knock, true, true);
+}
+
+void APestiPerson::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	if (FallSpeed > PestiPerson::SafeFallSpeed)
+	{
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			Game->HurtPlayer((FallSpeed - PestiPerson::SafeFallSpeed) * PestiPerson::HurtPerFallSpeed);
+		}
+	}
+	FallSpeed = 0.f;
 }
 
 void APestiPerson::SetInWorld(bool bInWorld)

@@ -18,6 +18,7 @@
 #include "ProceduralMeshComponent.h"
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
+#include "PestiHud.h"
 
 namespace MarketBuild
 {
@@ -138,7 +139,7 @@ void AFleaMarket::Tick(float DeltaSeconds)
 	}
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(MarketBuild::HintLine, 0.f, FColor(255, 210, 60), TEXT("E: talk to the carpet seller"));
+		APestiHUD::Show(this, MarketBuild::HintLine, 0.f, FColor(255, 210, 60), TEXT("E: talk to the carpet seller"));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::E))
 	{
@@ -146,7 +147,7 @@ void AFleaMarket::Tick(float DeltaSeconds)
 		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(MarketBuild::CarpetLines));
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(MarketBuild::SpeechLine, 6.f, FColor(255, 210, 60), MarketBuild::CarpetLines[CarpetLine % Count]);
+			APestiHUD::Show(this, MarketBuild::SpeechLine, 6.f, FColor(255, 210, 60), MarketBuild::CarpetLines[CarpetLine % Count]);
 		}
 		CarpetLine = (CarpetLine + 1) % Count;
 	}

@@ -7,8 +7,10 @@
 #include "Components/SceneComponent.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
+#include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -17,6 +19,11 @@ namespace Tram
 {
 	// Box half size: 10 m long, 2.2 m wide, 3.3 m tall.
 	const FVector BoxExtent(500.f, 110.f, 165.f);
+	// A moving tram hurts someone in front of it: within this much of its
+	// front end, and this far outside its box (cm), going faster than this (cm/s).
+	constexpr double FrontReach = 200.0;
+	constexpr double HitReach = 50.0;
+	constexpr float HarmlessSpeed = 150.f;
 	// The body leans along the track between these points ahead and behind (cm).
 	constexpr float AxleSpread = 300.f;
 	// How far ahead the tram watches the rails (cm).
@@ -338,6 +345,26 @@ void ATram::Tick(float DeltaSeconds)
 		return;
 	}
 	PlaceOnTrack();
+	HitPlayerInTheWay();
+}
+
+void ATram::HitPlayerInTheWay()
+{
+	APestiPerson* Person = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (!Person || CurrentSpeed < Tram::HarmlessSpeed)
+	{
+		return;
+	}
+	// Only the front of the tram, where he would be in its way.
+	const FVector Local = GetActorTransform().InverseTransformPosition(Person->GetActorLocation());
+	if (Local.X < Tram::BoxExtent.X - Tram::FrontReach || Local.X > Tram::BoxExtent.X + Tram::HitReach
+		|| FMath::Abs(Local.Y) > Tram::BoxExtent.Y + Tram::HitReach || FMath::Abs(Local.Z) > Tram::BoxExtent.Z + Tram::HitReach)
+	{
+		return;
+	}
+	// Knocked on ahead and out to the side he stands on.
+	const FVector Push = GetActorForwardVector() + GetActorRightVector() * (Local.Y >= 0.0 ? 1.0 : -1.0);
+	Person->HitByVehicle(CurrentSpeed, Push);
 }
 
 void ATram::PlaceOnTrack()
