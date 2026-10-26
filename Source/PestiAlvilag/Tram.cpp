@@ -2,17 +2,20 @@
 
 #include "Tram.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "CarBody.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "TrafficManager.h"
+#include "TramSound.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace Tram
@@ -37,6 +40,22 @@ namespace Tram
 	constexpr float StartRoom = 1500.f;
 	// People getting on and off stand this far out from the side (cm).
 	constexpr double StepOut = 60.0;
+	// Trams are heard within this distance of the camera (cm), fall silent
+	// again beyond the second, and only this many at once.
+	constexpr double HearRange = 4500.0;
+	constexpr double ForgetRange = 5500.0;
+	constexpr int32 MaxHeard = 4;
+	int32 Heard = 0;
+	// The sound fades out to nothing over this distance (cm).
+	constexpr float SoundFalloff = 4000.f;
+	constexpr float SoundVolume = 0.8f;
+	// The track bends this much under the tram (degrees between its axles)
+	// before the wheels squeal, and squeal fully at the second.
+	constexpr float SquealFrom = 4.f;
+	constexpr float SquealFull = 14.f;
+	// The driver rings at someone on the rails this far ahead (cm), at most every few seconds.
+	constexpr double WarnReach = 1500.0;
+	constexpr float BellPause = 4.f;
 	// The colour of each TramModel part. Budapest trams were yellow.
 	const FLinearColor Colors[TramModel::PartCount] = {
 		FLinearColor(0.85f, 0.55f, 0.03f),    // Livery
@@ -91,6 +110,12 @@ void ATram::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	BuildBody();
+}
+
+void ATram::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopSound();
+	Super::EndPlay(EndPlayReason);
 }
 
 void ATram::BuildBody()
@@ -278,6 +303,7 @@ void ATram::Tick(float DeltaSeconds)
 		return;
 	}
 	const FTramRoute& Route = Manager->GetTramRoute(RouteIndex);
+	UpdateSound();
 
 	// Off the map: wait, then come back in at the start when there is room.
 	if (OutOfServiceLeft > 0.f)
@@ -303,11 +329,19 @@ void ATram::Tick(float DeltaSeconds)
 	if (DwellLeft > 0.f)
 	{
 		DwellLeft -= DeltaSeconds;
+		SoundPull = 0.f;
+		SoundBrake = 0.f;
 		if (DwellLeft > 0.f)
 		{
 			return;
 		}
 		++NextStop;
+		// "Ding-ding": off we go.
+		if (Sound && bSoundHeard)
+		{
+			Sound->Ring();
+			BellWait = Tram::BellPause;
+		}
 	}
 
 	float WantedSpeed = FMath::Min(MaxSpeed, Route.Speed);
@@ -320,6 +354,8 @@ void ATram::Tick(float DeltaSeconds)
 		{
 			CurrentSpeed = 0.f;
 			DwellLeft = DwellTime;
+			SoundPull = 0.f;
+			SoundBrake = 0.f;
 			return;
 		}
 		WantedSpeed = FMath::Min(WantedSpeed, FMath::Sqrt(2.f * BrakeDeceleration * FMath::Max(0.f, ToStop)) + 20.f);
@@ -334,6 +370,8 @@ void ATram::Tick(float DeltaSeconds)
 	WantedSpeed *= FMath::Clamp((Clear - StopGap) / (Tram::LookAhead - StopGap), 0.f, 1.f);
 
 	const float Rate = WantedSpeed < CurrentSpeed ? BrakeDeceleration : Acceleration;
+	SoundPull = WantedSpeed > CurrentSpeed + 5.f ? 1.f : 0.f;
+	SoundBrake = WantedSpeed < CurrentSpeed - 5.f ? 1.f : 0.f;
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, WantedSpeed, DeltaSeconds, Rate);
 	Distance += CurrentSpeed * DeltaSeconds;
 
@@ -346,6 +384,73 @@ void ATram::Tick(float DeltaSeconds)
 	}
 	PlaceOnTrack();
 	HitPlayerInTheWay();
+	WarnPlayerAhead(DeltaSeconds);
+}
+
+void ATram::WarnPlayerAhead(float DeltaSeconds)
+{
+	BellWait -= DeltaSeconds;
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!Sound || !bSoundHeard || BellWait > 0.f || !Player || CurrentSpeed < Tram::HarmlessSpeed)
+	{
+		return;
+	}
+	// Someone (on foot or in a car) standing on the rails in front.
+	const FVector Local = GetActorTransform().InverseTransformPosition(Player->GetActorLocation());
+	if (Local.X > Tram::BoxExtent.X && Local.X < Tram::BoxExtent.X + Tram::WarnReach && FMath::Abs(Local.Y) < Tram::BoxExtent.Y + Tram::HitReach)
+	{
+		Sound->Ring();
+		BellWait = Tram::BellPause;
+	}
+}
+
+void ATram::UpdateSound()
+{
+	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	const double ToCamera = Camera && IsInService() ? FVector::Dist(Camera->GetCameraLocation(), GetActorLocation()) : Tram::ForgetRange + 1.0;
+	if (bSoundHeard && ToCamera > Tram::ForgetRange)
+	{
+		StopSound();
+	}
+	else if (!bSoundHeard && ToCamera < Tram::HearRange && Tram::Heard < Tram::MaxHeard)
+	{
+		if (!Sound)
+		{
+			Sound = NewObject<UTramSound>(this);
+			Sound->SetupAttachment(CollisionBox);
+			Sound->bAllowSpatialization = true;
+			Sound->bOverrideAttenuation = true;
+			Sound->AttenuationOverrides.bAttenuate = true;
+			Sound->AttenuationOverrides.bSpatialize = true;
+			Sound->AttenuationOverrides.AttenuationShapeExtents = FVector(Tram::BoxExtent.X, 0.0, 0.0);
+			Sound->AttenuationOverrides.FalloffDistance = Tram::SoundFalloff;
+			Sound->RegisterComponent();
+			AddInstanceComponent(Sound);
+		}
+		Sound->SetVolumeMultiplier(Tram::SoundVolume);
+		Sound->Start();
+		bSoundHeard = true;
+		++Tram::Heard;
+	}
+	if (bSoundHeard && Sound)
+	{
+		const float Bend = FMath::Clamp((BendDegrees - Tram::SquealFrom) / (Tram::SquealFull - Tram::SquealFrom), 0.f, 1.f);
+		Sound->SetMotion(CurrentSpeed / TramSynth::CruiseSpeed, SoundPull, SoundBrake, Bend);
+	}
+}
+
+void ATram::StopSound()
+{
+	if (!bSoundHeard)
+	{
+		return;
+	}
+	if (Sound)
+	{
+		Sound->Stop();
+	}
+	bSoundHeard = false;
+	Tram::Heard = FMath::Max(0, Tram::Heard - 1);
 }
 
 void ATram::HitPlayerInTheWay()
@@ -375,6 +480,9 @@ void ATram::PlaceOnTrack()
 	const FVector Behind = Route.LocationAt(Distance - Tram::AxleSpread);
 	Location.Z = GroundZ + Tram::BoxExtent.Z + 2.0;
 	const FRotator Facing = (Ahead - Behind).GetSafeNormal2D().Rotation();
+	const FVector FrontHalf = (Ahead - Location).GetSafeNormal2D();
+	const FVector BackHalf = (Location - Behind).GetSafeNormal2D();
+	BendDegrees = static_cast<float>(FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(FrontHalf, BackHalf), -1.0, 1.0))));
 	SetActorLocationAndRotation(Location, FRotator(0.f, Facing.Yaw, 0.f));
 }
 

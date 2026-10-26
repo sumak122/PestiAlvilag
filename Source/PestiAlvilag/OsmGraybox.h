@@ -59,8 +59,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor ParkColor = FLinearColor(0.10f, 0.25f, 0.06f);
 
+	/** The tram track bed: granite setts. */
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
-	FLinearColor TramColor = FLinearColor(0.35f, 0.10f, 0.08f);
+	FLinearColor TramColor = FLinearColor(0.20f, 0.19f, 0.17f);
+
+	/** The row of bigger stones along each side of the tram track bed. */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
+	FLinearColor TrackEdgeColor = FLinearColor(0.34f, 0.32f, 0.29f);
+
+	/** The groove beside each tram rail head, where the wheel flange runs. */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
+	FLinearColor RailGrooveColor = FLinearColor(0.02f, 0.02f, 0.02f);
+
+	/** Tram rail heads, polished by the wheels. */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
+	FLinearColor RailHeadColor = FLinearColor(0.50f, 0.50f, 0.52f);
 
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor RailColor = FLinearColor(0.22f, 0.15f, 0.10f);

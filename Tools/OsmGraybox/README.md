@@ -51,7 +51,10 @@ Notes:
   just before crossings, main roads first, about 300 m apart, each named
   after the street it crosses (by its 1932 name); `EXTRA_STOPS` adds the
   stops the story needs (Teleki tér, Bözsi néni's on Népszínház utca). The `tram`
-  area layer draws these tracks; today's OSM tram tracks are ignored.
+  area layer draws these tracks' beds; today's OSM tram tracks are ignored.
+  `tram_edge` (edge stones round the beds), `tram_groove` and `tram_rail`
+  (grooved rails, 1435 mm gauge, flush with the setts) add the track detail;
+  lines sharing a track get one pair of rails.
   Karpfenstein utca (1932) is today's Dobozi utca.
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.
 

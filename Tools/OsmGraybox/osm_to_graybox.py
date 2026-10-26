@@ -47,6 +47,15 @@ ROAD_WIDTHS = {
 }
 LANE_WIDTH = 3.2
 TRACK_WIDTH = {"tram": 2.4, "rail": 3.0}
+# Tram track detail (m): grooved rails laid flush in the setts, 1435 mm
+# gauge between the rail heads' inner edges, each head with its groove on the
+# inside, and a row of bigger edge stones along each side of the track bed.
+TRAM_GAUGE = 1.435
+RAIL_HEAD = 0.07
+RAIL_GROOVE = 0.04
+TRACK_EDGE = 0.22
+# A track this close (m) to one laid before it is the same track.
+SHARED_TRACK = 0.4
 PARK_TAGS = {
     ("leisure", "park"),
     ("leisure", "garden"),
@@ -425,6 +434,42 @@ def polygons_of(geom):
     return []
 
 
+def track_strip(track, inner, outer):
+    """The strip between two offsets (m, positive to the left) of a track line."""
+    width = abs(outer - inner)
+    middle = track.offset_curve((inner + outer) / 2.0, join_style="mitre", mitre_limit=2.0)
+    if middle.is_empty:
+        return None
+    return middle.buffer(width / 2.0, cap_style="flat", join_style="mitre", mitre_limit=2.0)
+
+
+def track_detail(tracks):
+    """Edge stones, rail grooves and rail heads of the tram tracks, as flat
+    strips (three geometries). Lines sharing a track lie almost on top of
+    each other, so each track only gets rails where no track before it has
+    them already. The edge stones run round the outside of the track beds."""
+    beds = unary_union([t.buffer(TRACK_WIDTH["tram"] / 2.0, cap_style="flat") for t in tracks])
+    edges = beds.difference(beds.buffer(-TRACK_EDGE, join_style="mitre"))
+    half_gauge = TRAM_GAUGE / 2.0
+    grooves, rails, laid = [], [], None
+    for track in tracks:
+        own = track if laid is None else track.difference(laid)
+        for part in getattr(own, "geoms", [own]):
+            if part.geom_type != "LineString" or part.length < 1.0:
+                continue
+            for side in (1.0, -1.0):
+                for target, inner, outer in (
+                    (grooves, half_gauge, half_gauge + RAIL_GROOVE),
+                    (rails, half_gauge + RAIL_GROOVE, half_gauge + RAIL_GROOVE + RAIL_HEAD),
+                ):
+                    strip = track_strip(part, side * inner, side * outer)
+                    if strip is not None:
+                        target.append(strip)
+        cover = track.buffer(SHARED_TRACK)
+        laid = cover if laid is None else laid.union(cover)
+    return edges, unary_union(grooves), unary_union(rails)
+
+
 def to_ue(x, y):
     """Map metres (x east, y north) to Unreal cm (X east, Y south)."""
     return (round(x * 100.0), round(-y * 100.0))
@@ -704,6 +749,7 @@ def convert(osm_path, origin):
     clip = box(x0, y0, x1, y1)
 
     buildings, roads, plazas, parks, trams, rails, centerlines = [], [], [], [], [], [], []
+    tram_edges, tram_grooves, tram_rails = [], [], []
     carriageways, one_road = [], []
 
     def add_area(target, geom, tags):
@@ -830,6 +876,9 @@ def convert(osm_path, origin):
     for track in tram_tracks + siding:
         add_area(trams, track.buffer(TRACK_WIDTH["tram"] / 2.0, cap_style="flat"), {})
 
+    for target, strips in zip((tram_edges, tram_grooves, tram_rails), track_detail(tram_tracks + siding)):
+        add_area(target, strips, {})
+
     gx0, gy0 = to_ue(x0, y1)  # north-west corner becomes min X, min Y
     gx1, gy1 = to_ue(x1, y0)
     return {
@@ -844,6 +893,9 @@ def convert(osm_path, origin):
             merged_layer("park", parks),
             merged_layer("tram", trams),
             merged_layer("rail", rails),
+            merged_layer("tram_edge", tram_edges),
+            merged_layer("tram_groove", tram_grooves),
+            merged_layer("tram_rail", tram_rails),
         ],
         "buildings": out_buildings,
         "centerlines": centerlines,
