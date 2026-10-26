@@ -466,9 +466,9 @@ void ALighters::PickUp(int32 Index)
 		{
 			continue;
 		}
-		TArray<USceneComponent*> Children;
-		Gone->GetChildrenComponents(true, Children);
-		for (USceneComponent* Child : Children)
+		TArray<USceneComponent*> Attached;
+		Gone->GetChildrenComponents(true, Attached);
+		for (USceneComponent* Child : Attached)
 		{
 			Child->DestroyComponent();
 		}
