@@ -56,7 +56,7 @@ AMarketHall::AMarketHall()
 	NameText->SetVerticalAlignment(EVRTA_TextCenter);
 	NameText->SetWorldSize(70.f);
 	NameText->SetTextRenderColor(FColor(216, 180, 90));
-	NameText->SetText(FText::FromString(TEXT("VÁSÁRCSARNOK")));
+	NameText->SetText(FText::FromString(TEXT("V\u00c1S\u00c1RCSARNOK")));
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	BaseMaterial = BasicShapeMaterial.Object;
