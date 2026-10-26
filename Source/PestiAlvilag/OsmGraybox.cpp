@@ -27,6 +27,9 @@ namespace OsmGraybox
 		Park,
 		Tram,
 		Rail,
+		TramEdge,
+		TramGroove,
+		TramRail,
 		Roofs,
 		FirstWalls
 	};
@@ -52,6 +55,9 @@ namespace OsmGraybox
 	constexpr double RoadZ = 8.0;
 	constexpr double RailZ = 10.0;
 	constexpr double TramZ = 12.0;
+	// The tram tracks' edge stones and rail grooves, then the rail heads on top.
+	constexpr double TrackDetailZ = 14.0;
+	constexpr double RailHeadZ = 16.0;
 
 	struct FSection
 	{
@@ -481,6 +487,9 @@ bool AOsmGraybox::Build()
 		{ TEXT("park"), Park, ParkZ },
 		{ TEXT("tram"), Tram, TramZ },
 		{ TEXT("rail"), Rail, RailZ },
+		{ TEXT("tram_edge"), TramEdge, TrackDetailZ },
+		{ TEXT("tram_groove"), TramGroove, TrackDetailZ },
+		{ TEXT("tram_rail"), TramRail, RailHeadZ },
 	};
 
 	const TArray<TSharedPtr<FJsonValue>>* Areas = nullptr;
@@ -545,7 +554,8 @@ bool AOsmGraybox::Build()
 		}
 	}
 
-	TArray<FLinearColor> Colors = { GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor, RoofColor };
+	TArray<FLinearColor> Colors = { GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor,
+		TrackEdgeColor, RailGrooveColor, RailHeadColor, RoofColor };
 	for (int32 i = 0; i < NumWallColors; ++i)
 	{
 		Colors.Add(WallColors.IsValidIndex(i) ? WallColors[i] : FLinearColor(0.62f, 0.55f, 0.45f));

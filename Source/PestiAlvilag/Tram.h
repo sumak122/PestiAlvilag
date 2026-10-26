@@ -14,6 +14,7 @@ class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
 class UTexture;
+class UTramSound;
 
 /**
  * A tram that runs one route along its track, stops at the stops, and
@@ -34,6 +35,7 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Called by the manager right after spawning. */
 	void StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance);
@@ -110,6 +112,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
 
+	/** Motors, wheels and bell; made when the camera first comes near. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTramSound> Sound;
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<ATrafficManager> Manager;
@@ -123,6 +129,11 @@ private:
 	void HitPlayerInTheWay();
 	void SetInService(bool bInService);
 	bool IsStartClear() const;
+	/** Plays the tram's sound while the camera is near enough to hear it. */
+	void UpdateSound();
+	void StopSound();
+	/** Rings the bell at someone standing on the rails ahead. */
+	void WarnPlayerAhead(float DeltaSeconds);
 
 	int32 RouteIndex = INDEX_NONE;
 	float Distance = 0.f;
@@ -138,4 +149,11 @@ private:
 	TArray<int32> TakenSeats;
 	TArray<PersonKit::FOutfit> PassengerOutfits;
 	int32 ReservedSeat = INDEX_NONE;
+	/** What the sound hears: speeding up or slowing down (0..1), and how much the track bends under it (degrees). */
+	float SoundPull = 0.f;
+	float SoundBrake = 0.f;
+	float BendDegrees = 0.f;
+	bool bSoundHeard = false;
+	/** Seconds before the bell may be rung at the player again. */
+	float BellWait = 0.f;
 };
