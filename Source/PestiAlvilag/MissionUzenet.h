@@ -8,6 +8,7 @@
 
 class AStoryPerson;
 class APestiPerson;
+class UStaticMesh;
 
 /**
  * Act 1, mission 2, "Üzenet" (The message). Bözsi néni waits on the pavement
@@ -28,10 +29,6 @@ public:
 	AMissionUzenet();
 
 protected:
-	/** The letter, then the parcel, in the player's hand. */
-	UPROPERTY(VisibleAnywhere, Category = "Mission")
-	TObjectPtr<UStaticMeshComponent> InHand;
-
 	virtual void SetUpMission() override;
 	virtual void OnStepStarted(int32 Step) override;
 	virtual void OnStepDone(int32 Step) override;
@@ -49,8 +46,16 @@ private:
 	};
 
 	void SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn);
-	/** Puts the letter or the parcel in his hand. */
-	void Hold(const FVector& Size, const FLinearColor& Color);
+	/** The letter goes in his coat's breast pocket, its top showing. */
+	void PocketLetter();
+	/** The parcel, tied with string and sealed, held out in front in both hands. */
+	void HoldParcel();
+	/** Whatever he has goes (to Pista bácsi or Bözsi néni). */
+	void PutAway();
+	/** A box shape of what he has, on the holder (cm, in its frame). */
+	void AddPart(const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn = FRotator::ZeroRotator);
+	/** Where the holder goes on him: the parcel sits on his lap when he rides. */
+	void PlaceHolder();
 
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Bozsi;
@@ -64,6 +69,18 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APestiPerson> Carrier;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> CubeMesh;
+
+	/** What he has, on him: the holder and its parts. */
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> Holder;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+
+	bool bParcel = false;
 
 	TArray<FLater> Lines;
 };

@@ -7,6 +7,7 @@
 #include "GameFramework/Actor.h"
 #include "Mission.generated.h"
 
+class UGoalMarkerComponent;
 class UMaterialInterface;
 class URouteGuideComponent;
 class UStaticMeshComponent;
@@ -28,8 +29,8 @@ struct FMissionStep
 };
 
 /**
- * A story mission: a list of steps, each with a goal line on screen, a tall
- * light over the target and see-through arrows over the turns on the way. A
+ * A story mission: a list of steps, each with a goal line on screen, a small
+ * art deco marker over the target and see-through arrows over the turns on the way. A
  * mission sets itself up in SetUpMission (people, things, the steps), reacts
  * as steps begin and end, and pays its reward when the last step is done.
  *
@@ -55,8 +56,9 @@ public:
 	FString TitleEn;
 
 protected:
+	/** The mark over the target; it moves from step to step on its own. */
 	UPROPERTY(VisibleAnywhere, Category = "Mission")
-	TObjectPtr<UStaticMeshComponent> Beacon;
+	TObjectPtr<UGoalMarkerComponent> Marker;
 
 	/** Arrows over the turns on the way to the target. */
 	UPROPERTY(VisibleAnywhere, Category = "Mission")
