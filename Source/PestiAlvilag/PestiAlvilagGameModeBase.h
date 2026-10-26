@@ -76,6 +76,11 @@ public:
 	bool HasTriedDish(FName DishId) const { return TriedDishes.Contains(DishId); }
 	int32 GetDishesTried() const { return TriedDishes.Num(); }
 
+	/** The hidden lighters found so far, by number. */
+	bool HasFoundLighter(int32 Index) const { return FoundLighters.Contains(Index); }
+	int32 GetLightersFound() const { return FoundLighters.Num(); }
+	void AddFoundLighter(int32 Index) { FoundLighters.AddUnique(Index); }
+
 	void MarkMissionDone(FName MissionId);
 	/** Starts the first story mission not yet passed, after a short pause. */
 	void StartNextMission();
@@ -124,6 +129,7 @@ private:
 	TArray<FName> CompletedMissions;
 	int32 TaxiJobs = 0;
 	TArray<FName> TriedDishes;
+	TArray<int32> FoundLighters;
 	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;

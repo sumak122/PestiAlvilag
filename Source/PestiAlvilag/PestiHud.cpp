@@ -11,6 +11,8 @@
 #include "Fonts/SlateFontInfo.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
+#include "LighterModel.h"
+#include "Lighters.h"
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "Rendering/DrawElements.h"
@@ -32,6 +34,10 @@ namespace PestiHud
 	const FLinearColor Red = FLinearColor(FColor(176, 52, 44));
 	const FLinearColor RedHi = FLinearColor(FColor(224, 87, 63));
 	const FLinearColor RedEmpty = FLinearColor(FColor(176, 52, 44, 56));
+	const FLinearColor Velvet = FLinearColor(FColor(58, 15, 18));
+	const FLinearColor VelvetDark = FLinearColor(FColor(28, 10, 11));
+	const FLinearColor NotFoundMark = FLinearColor(FColor(214, 178, 94, 90));
+	const FLinearColor CabinetShade = FLinearColor(0.f, 0.f, 0.f, 0.6f);
 
 	// The panels are laid out for a screen 1080 units high; Slate scales them.
 	constexpr float Margin = 36.f;
@@ -46,6 +52,19 @@ namespace PestiHud
 	constexpr float SpeechWidth = 1180.f;
 	constexpr float SpeechFromBottom = 150.f;
 	constexpr float AnnounceY = 330.f;
+
+	// The lighter cabinet: six niches across, five down, the chosen one large
+	// on the right, the rewards along the bottom.
+	constexpr float CabinetWidth = 1580.f;
+	constexpr float CabinetHeight = 935.f;
+	constexpr int32 NicheColumns = 6;
+	constexpr float NicheWidth = 142.f;
+	constexpr float NicheHeight = 128.f;
+	constexpr float NicheGap = 12.f;
+	constexpr int32 RewardEvery = 10;
+	// The pictures are 160 by 200.
+	constexpr float PictureWidth = 160.f;
+	constexpr float PictureHeight = 200.f;
 
 	// Keys of the lines that are not notes.
 	constexpr int32 SpeechKeyA = 6;
@@ -132,6 +151,12 @@ public:
 		{
 			PaintAnnounce(Paint, Hud->Big, Wide * 0.5f);
 		}
+		if (const ALighters* Collection = Hud->Cabinet.Get())
+		{
+			const FPainter Over{ Geometry, Out, LayerId + 3, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			PaintCabinet(Over, *Collection, Wide, High);
+			return LayerId + 6;
+		}
 		return LayerId + 3;
 	}
 
@@ -187,6 +212,22 @@ private:
 		FSlateFontInfo Bold(float Px, float SpacingPx = 0.f) const { return Font(BoldFace, Px, SpacingPx); }
 		FSlateFontInfo Plain(float Px, float SpacingPx = 0.f) const { return Font(TextFace, Px, SpacingPx); }
 
+		/** A rectangle's outline. */
+		void Frame(float X, float Y, float W, float H, const FLinearColor& Color, float Thickness, int32 Up = 1) const
+		{
+			Lines({ FVector2f(X, Y), FVector2f(X + W, Y), FVector2f(X + W, Y + H), FVector2f(X, Y + H), FVector2f(X, Y) }, Color, Thickness, Up);
+		}
+
+		void Picture(const FSlateBrush* Brush, float X, float Y, float W, float H, float Opacity = 1.f, int32 Up = 1) const
+		{
+			if (Brush)
+			{
+				FSlateDrawElement::MakeBox(Out, Layer + Up,
+					Geometry.ToPaintGeometry(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))),
+					Brush, ESlateDrawEffect::None, FLinearColor(1.f, 1.f, 1.f, Opacity));
+			}
+		}
+
 		FVector2f Measure(const FString& Words, const FSlateFontInfo& Info) const
 		{
 			const auto Size = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Info);
@@ -203,6 +244,33 @@ private:
 				Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(FVector2f(Left, TopY))),
 				Words, Info, ESlateDrawEffect::None, Color);
 			return Size.X;
+		}
+
+		/** Text broken into lines no wider than Width, centred on X; gives the last line's baseline. */
+		float Wrapped(const FString& Words, const FSlateFontInfo& Info, float X, float Baseline, float Width, float LineHeight, const FLinearColor& Color) const
+		{
+			TArray<FString> Parts;
+			Words.ParseIntoArray(Parts, TEXT(" "));
+			FString Current;
+			for (const FString& Part : Parts)
+			{
+				const FString Longer = Current.IsEmpty() ? Part : Current + TEXT(" ") + Part;
+				if (!Current.IsEmpty() && Measure(Longer, Info).X > Width)
+				{
+					Text(Current, Info, X, Baseline, Color, 0.5f);
+					Current = Part;
+					Baseline += LineHeight;
+				}
+				else
+				{
+					Current = Longer;
+				}
+			}
+			if (!Current.IsEmpty())
+			{
+				Text(Current, Info, X, Baseline, Color, 0.5f);
+			}
+			return Baseline;
 		}
 
 		/** A dark plaque with its corners stepped in twice, edged in gold. */
@@ -428,6 +496,108 @@ private:
 		Paint.Diamond(CentreX, Y - 50.f, 12.f, PestiHud::Gold, 2);
 		Paint.Text(Big.Hu, Paint.Deco(Big.Hu.Len() > 24 ? 40.f : 54.f, 4.f), CentreX, Y + 14.f, PestiHud::Gold, 0.5f);
 		Paint.Text(Big.En, Paint.Plain(22.f, 1.f), CentreX, Y + 54.f, PestiHud::Cream, 0.5f);
+	}
+
+	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
+	{
+		using namespace PestiHud;
+		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Paint.Hud);
+		const TArray<LighterModel::FLighter>& All = LighterModel::All();
+		const int32 Total = All.Num();
+		const int32 Found = Game ? Game->GetLightersFound() : 0;
+		auto IsFound = [Game](int32 Index) { return Game && Game->HasFoundLighter(Index); };
+
+		Paint.Box(0.f, 0.f, Wide, High, CabinetShade);
+		const float W = CabinetWidth;
+		const float H = CabinetHeight;
+		const float X = (Wide - W) * 0.5f;
+		const float Y = (High - H) * 0.5f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Tab(TEXT("GY\u0170JTEM\u00c9NY"), X + W * 0.5f, Y);
+		Paint.Rays(X + W * 0.5f, Y + 80.f, 90.f, 13, Dim);
+		Paint.Text(TEXT("\u00d6ngy\u00fajt\u00f3k"), Paint.Deco(40.f, 2.f), X + W * 0.5f - 20.f, Y + 70.f, Gold, 1.f);
+		Paint.Text(TEXT("Lighters"), Paint.Plain(22.f, 1.f), X + W * 0.5f, Y + 70.f, Grey);
+		Paint.Text(FString::Printf(TEXT("%d / %d"), Found, Total), Paint.Bold(22.f, 2.f), X + W * 0.5f, Y + 104.f, Cream, 0.5f);
+
+		// The niches.
+		const float GridX = X + 50.f;
+		const float GridY = Y + 130.f;
+		const int32 Rows = FMath::DivideAndRoundUp(Total, NicheColumns);
+		const int32 Chosen = FMath::Clamp(Collection.GetSelected(), 0, Total - 1);
+		for (int32 i = 0; i < Total; ++i)
+		{
+			const float NX = GridX + (i % NicheColumns) * (NicheWidth + NicheGap);
+			const float NY = GridY + (i / NicheColumns) * (NicheHeight + NicheGap);
+			const bool bFound = IsFound(i);
+			const bool bChosen = i == Chosen;
+			Paint.Box(NX, NY, NicheWidth, NicheHeight, bFound ? Velvet : VelvetDark);
+			Paint.Frame(NX, NY, NicheWidth, NicheHeight, bChosen ? Gold : Dim, bChosen ? 3.f : 1.5f);
+			if (bChosen)
+			{
+				Paint.Frame(NX + 5.f, NY + 5.f, NicheWidth - 10.f, NicheHeight - 10.f, Gold, 1.f);
+			}
+			if (bFound && Collection.GetPicture(i))
+			{
+				const float S = FMath::Min((NicheWidth - 24.f) / PictureWidth, (NicheHeight - 30.f) / PictureHeight);
+				Paint.Picture(Collection.GetPicture(i), NX + NicheWidth * 0.5f - PictureWidth * 0.5f * S, NY + NicheHeight - 10.f - PictureHeight * S,
+					PictureWidth * S, PictureHeight * S);
+			}
+			else if (!bFound)
+			{
+				Paint.Text(TEXT("?"), Paint.Deco(40.f), NX + NicheWidth * 0.5f, NY + NicheHeight * 0.5f + 14.f, NotFoundMark, 0.5f);
+			}
+			Paint.Text(FString::FromInt(i + 1), Paint.Plain(13.f), NX + 8.f, NY + 18.f, Brass);
+		}
+
+		// The chosen one, large, with its story.
+		const float GridBottom = GridY + Rows * (NicheHeight + NicheGap) - NicheGap;
+		const float DX = GridX + NicheColumns * (NicheWidth + NicheGap) + 30.f;
+		const float DW = X + W - 50.f - DX;
+		const float Middle = DX + DW * 0.5f;
+		Paint.Line(DX - 15.f, GridY, DX - 15.f, GridBottom, Dim, 1.f);
+		Paint.Box(DX, GridY, DW, 300.f, Velvet);
+		Paint.Frame(DX, GridY, DW, 300.f, Gold, 2.f);
+		const LighterModel::FLighter& Lighter = All[Chosen];
+		if (IsFound(Chosen))
+		{
+			Paint.Picture(Collection.GetPicture(Chosen), Middle - 110.f, GridY + 20.f, 220.f, 275.f);
+			Paint.Text(Lighter.NameHu, Paint.Deco(30.f, 1.f), Middle, GridY + 352.f, Gold, 0.5f);
+			Paint.Text(Lighter.NameEn, Paint.Plain(19.f), Middle, GridY + 382.f, Grey, 0.5f);
+			Paint.Diamond(Middle, GridY + 405.f, 7.f, Gold, 2);
+			const float Last = Paint.Wrapped(FString(TEXT("\u201e")) + Lighter.LineHu + TEXT("\u201d"), Paint.Bold(21.f), Middle, GridY + 445.f, DW - 30.f, 28.f, Cream);
+			Paint.Wrapped(Lighter.LineEn, Paint.Plain(18.f), Middle, Last + 34.f, DW - 30.f, 24.f, Grey);
+		}
+		else
+		{
+			Paint.Text(TEXT("?"), Paint.Deco(120.f), Middle, GridY + 195.f, NotFoundMark, 0.5f);
+			Paint.Text(TEXT("M\u00e9g nem tal\u00e1ltad meg"), Paint.Deco(30.f, 1.f), Middle, GridY + 352.f, Gold, 0.5f);
+			Paint.Text(TEXT("Not found yet"), Paint.Plain(19.f), Middle, GridY + 382.f, Grey, 0.5f);
+			Paint.Diamond(Middle, GridY + 405.f, 7.f, Gold, 2);
+			Paint.Wrapped(TEXT("Pista b\u00e1csi a zsibv\u00e1s\u00e1ron tudhat valamit."), Paint.Bold(21.f), Middle, GridY + 445.f, DW - 30.f, 28.f, Cream);
+			Paint.Wrapped(TEXT("Pista b\u00e1csi at the flea market may know something."), Paint.Plain(18.f), Middle, GridY + 507.f, DW - 30.f, 24.f, Grey);
+		}
+
+		// The rewards along the bottom.
+		const float RY = GridBottom + 24.f;
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const int32 Needed = (i + 1) * RewardEvery;
+			const bool bGot = Found >= Needed;
+			const float RX = GridX + i * 310.f;
+			Paint.Panel(RX, RY, 290.f, 62.f);
+			Paint.Text(FString::FromInt(Needed), Paint.Deco(30.f), RX + 40.f, RY + 42.f, bGot ? Gold : Brass, 0.5f);
+			Paint.Text(i < 2 ? FString(TEXT("+3 peng\u0151")) : FString(LighterModel::Golden().NameHu), Paint.Bold(20.f), RX + 78.f, RY + 40.f, bGot ? Cream : Grey);
+			if (bGot)
+			{
+				Paint.Lines({ FVector2f(RX + 254.f, RY + 32.f), FVector2f(RX + 261.f, RY + 39.f), FVector2f(RX + 273.f, RY + 24.f) }, Gold, 3.f, 2);
+			}
+			if (i == 2)
+			{
+				Paint.Picture(Collection.GetPicture(Total), RX + 200.f, RY + 6.f, 40.f, 50.f, bGot ? 1.f : 0.25f, 2);
+			}
+		}
+		Paint.Text(TEXT("L: bez\u00e1r\u00e1s (close)   \u00b7   nyilak: v\u00e1laszt\u00e1s (arrows: choose)"), Paint.Plain(17.f),
+			X + W - 50.f, RY + 42.f, Grey, 1.f);
 	}
 
 	TWeakObjectPtr<const APestiHUD> Owner;

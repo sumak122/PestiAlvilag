@@ -22,3 +22,6 @@ Data/Food/*.png -filter -diff -merge binary
 
 # The screen fonts (OFL, from Google Fonts) are small: kept in git itself, not LFS.
 Data/Fonts/*.ttf binary
+
+# The lighter pictures for the collection cabinet are small: kept in git itself, not LFS.
+Data/Lighters/*.png -filter -diff -merge binary

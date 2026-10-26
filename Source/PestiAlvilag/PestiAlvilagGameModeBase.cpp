@@ -11,6 +11,7 @@
 #include "HomeDoor.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
+#include "Lighters.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
@@ -149,6 +150,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AFoodMenus>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AFoodMenus>();
+	}
+
+	// The thirty lighters hidden about the district (after the furniture they lie on).
+	if (!TActorIterator<ALighters>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ALighters>();
 	}
 
 	// Trams to ride as a passenger.
@@ -447,6 +454,7 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		CompletedMissions = Save->CompletedMissions;
 		TaxiJobs = Save->TaxiJobs;
 		TriedDishes = Save->TriedDishes;
+		FoundLighters = Save->FoundLighters;
 	}
 }
 
@@ -471,6 +479,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->CompletedMissions = CompletedMissions;
 	Save->TaxiJobs = TaxiJobs;
 	Save->TriedDishes = TriedDishes;
+	Save->FoundLighters = FoundLighters;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

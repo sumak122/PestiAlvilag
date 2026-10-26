@@ -7,6 +7,7 @@
 #include "PestiHud.generated.h"
 
 struct FCompositeFont;
+class ALighters;
 class SPestiHud;
 
 /**
@@ -18,7 +19,8 @@ class SPestiHud;
  * far and which way; under it the other short notes (hints, controls). Top
  * right the money and the health bars, and red diamonds when the police want
  * you. At the bottom who is talking and what they say, and in the middle the
- * big announcements.
+ * big announcements. Over everything, while it is open, the cabinet of
+ * lighters found (ALighters).
  *
  * Everything on screen goes through Show (by key, like the engine's debug
  * messages it replaces) or the goal, speech and announcement calls.
@@ -48,6 +50,8 @@ public:
 	void Say(const FString& Who, const FString& Hu, const FString& En, float Seconds);
 	/** A big line across the middle of the screen. */
 	void Announce(const FString& Hu, const FString& En, float Seconds);
+	/** The lighter collection cabinet over everything, or null to put it away. */
+	void SetCabinet(const ALighters* Shown) { Cabinet = Shown; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -85,4 +89,5 @@ private:
 	FString GoalWay;
 	FSpeech Speech;
 	FSpeech Big;
+	TWeakObjectPtr<const ALighters> Cabinet;
 };
