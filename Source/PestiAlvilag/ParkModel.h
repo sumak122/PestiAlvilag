@@ -9,7 +9,8 @@
  * The shapes of the newer things in Tisza Kálmán tér: the statue east of
  * the middle and the big playground in the south-east quarter (sandpits,
  * swings, seesaws, a roundabout, a climbing frame, a slide and a drinking
- * fountain), and how its children and nannies are dressed. Header-only and
+ * fountain), and how its children and nannies are dressed; and the Four
+ * Seasons fountain in Rákóczi tér. Header-only and
  * free of engine objects, so the offline preview builds the same shapes.
  *
  * Every object is in cm with its middle on the ground at the origin,
@@ -63,6 +64,9 @@ namespace ParkModel
 		const FLinearColor ParkGreen(0.08f, 0.22f, 0.10f);
 		const FLinearColor FadedRed(0.42f, 0.09f, 0.05f);
 		const FLinearColor Bucket(0.55f, 0.10f, 0.04f);
+		const FLinearColor Water(0.06f, 0.11f, 0.12f);
+		/** Falling water, a little lighter. */
+		const FLinearColor Spray(0.30f, 0.38f, 0.40f);
 	}
 
 	/** Pitch and roll that turn a shape's Z axis along Dir (any length). */
@@ -147,6 +151,100 @@ namespace ParkModel
 			Part.At = FVector(Part.At.X * Scale, Part.At.Y * Scale, Top + Part.At.Z * Scale);
 			Part.Size = FVector(Part.Size.X * Scale, Part.Size.Y * Scale, Part.Size.Z * Scale);
 			P.Add(Part);
+		}
+		return P;
+	}
+
+	/**
+	 * The Four Seasons fountain in Rákóczi tér (Ybl Miklós's design, moved
+	 * here in 1922): a round stone basin with a rim to sit on, a drum in the
+	 * water with the four seasons seated round it looking out (spring with
+	 * flowers, summer with a sheaf, autumn with a basket of grapes, winter
+	 * hooded and cloaked), and a column carrying a bowl the water falls from.
+	 */
+	inline TArray<FPart> FourSeasonsFountain()
+	{
+		using namespace Colors;
+		TArray<FPart> P;
+		constexpr double Radius = 420.0;
+		constexpr int32 RimPieces = 28;
+		P.Add({ Cylinder, StoneDark, FVector(0, 0, 6), FVector(2 * Radius + 80, 2 * Radius + 80, 12), 0.0, 0.0, true });
+		P.Add({ Cylinder, StoneLight, FVector(0, 0, 22), FVector(2 * Radius, 2 * Radius, 20), 0.0, 0.0, true });
+		P.Add({ Cylinder, Water, FVector(0, 0, 40), FVector(2 * Radius - 50, 2 * Radius - 50, 4) });
+		for (int32 i = 0; i < RimPieces; ++i)
+		{
+			const double A0 = 2.0 * PI * i / RimPieces, A1 = 2.0 * PI * (i + 1) / RimPieces;
+			const double R = Radius - 18.0;
+			P.Add(Bar(FVector(FMath::Cos(A0) * R, FMath::Sin(A0) * R, 42), FVector(FMath::Cos(A1) * R, FMath::Sin(A1) * R, 42), 40, StoneLight, true));
+		}
+		// The drum, the column and the bowl with its finial.
+		P.Add({ Cylinder, StoneLight, FVector(0, 0, 72), FVector(300, 300, 64), 0.0, 0.0, true });
+		P.Add({ Cylinder, StoneDark, FVector(0, 0, 106), FVector(316, 316, 6) });
+		P.Add({ Cylinder, StoneLight, FVector(0, 0, 210), FVector(80, 80, 200), 0.0, 0.0, true });
+		P.Add({ Cylinder, StoneDark, FVector(0, 0, 290), FVector(100, 100, 14) });
+		P.Add({ Cone, StoneLight, FVector(0, 0, 315), FVector(240, 240, 40), 180.0, 0.0 });
+		P.Add({ Cylinder, StoneLight, FVector(0, 0, 337), FVector(250, 250, 8) });
+		P.Add({ Cylinder, Water, FVector(0, 0, 341.5), FVector(226, 226, 2) });
+		P.Add({ Cylinder, StoneLight, FVector(0, 0, 366), FVector(36, 36, 50) });
+		P.Add({ Sphere, StoneLight, FVector(0, 0, 398), FVector(52, 52, 44) });
+		P.Add({ Cone, StoneLight, FVector(0, 0, 432), FVector(22, 22, 30) });
+		// Water falling from the bowl's rim into the basin.
+		for (int32 i = 0; i < 12; ++i)
+		{
+			const double A = 2.0 * PI * (i + 0.5) / 12;
+			const FVector D(FMath::Cos(A), FMath::Sin(A), 0.0);
+			P.Add(Bar(FVector(D.X * 122, D.Y * 122, 336), FVector(D.X * 168, D.Y * 168, 44), 5, Spray));
+		}
+
+		// The seasons, seated on the drum's edge, each looking out between the jets.
+		for (int32 Season = 0; Season < 4; ++Season)
+		{
+			const double A = PI / 4.0 + PI / 2.0 * Season;
+			const FVector D(FMath::Cos(A), FMath::Sin(A), 0.0);
+			const FVector S(-D.Y, D.X, 0.0);
+			auto At = [&](double Out, double Side, double Z) { return D * Out + S * Side + FVector(0, 0, Z); };
+			const bool bWinter = Season == 3;
+			for (const double Side : { -12.0, 12.0 })
+			{
+				P.Add(Bar(At(92, Side, 116), At(146, Side, 120), 20, StoneLight));
+				P.Add(Bar(At(148, Side, 120), At(156, Side, 72), 16, StoneLight));
+				P.Add(Box(At(162, Side, 70), FVector(18, 18, 8), StoneLight));
+			}
+			P.Add({ Cylinder, StoneLight, At(90, 0, 150), FVector(bWinter ? 46.0 : 36.0, bWinter ? 46.0 : 36.0, 62) });
+			P.Add({ Sphere, StoneLight, At(92, 0, 194), FVector(24, 24, 27) });
+			for (const double Side : { -1.0, 1.0 })
+			{
+				P.Add(Bar(At(90, Side * 19, 174), At(118, Side * 14, 140), 11, StoneLight));
+			}
+			switch (Season)
+			{
+			case 0:
+				// Spring: a lapful of flowers and a garland in her hair.
+				for (int32 k = 0; k < 4; ++k)
+				{
+					P.Add({ Sphere, StoneLight, At(124, -15.0 + 10.0 * k, 132 + (k % 2) * 4), FVector(13, 13, 11) });
+				}
+				P.Add({ Cylinder, StoneLight, At(92, 0, 205), FVector(28, 28, 5) });
+				break;
+			case 1:
+				// Summer: a sheaf of wheat on the arm.
+				P.Add(Bar(At(122, 20, 112), At(118, 22, 188), 18, StoneLight));
+				P.Add({ Sphere, StoneLight, At(118, 22, 192), FVector(24, 24, 18) });
+				break;
+			case 2:
+				// Autumn: a basket of grapes in the lap.
+				P.Add({ Cylinder, StoneLight, At(124, 0, 136), FVector(34, 34, 16) });
+				for (int32 k = 0; k < 3; ++k)
+				{
+					P.Add({ Sphere, StoneLight, At(124, -8.0 + 8.0 * k, 147), FVector(12, 12, 12) });
+				}
+				break;
+			default:
+				// Winter: an old man with the hood of his cloak up.
+				P.Add({ Sphere, StoneLight, At(88, 0, 198), FVector(32, 32, 36) });
+				P.Add(Bar(At(96, 0, 182), At(104, 0, 150), 18, StoneLight));
+				break;
+			}
 		}
 		return P;
 	}

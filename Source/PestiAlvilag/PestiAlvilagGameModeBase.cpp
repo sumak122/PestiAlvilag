@@ -13,6 +13,7 @@
 #include "KeletiStation.h"
 #include "Knockables.h"
 #include "Lighters.h"
+#include "MarketHall.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
@@ -250,6 +251,13 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		const FVector2D At = AKeletiStation::FrontAt();
 		const double Z = GroundZ(At - FVector2D(800.0, 0.0));
 		GetWorld()->SpawnActor<AKeletiStation>(AKeletiStation::StaticClass(), FVector(At, Z), FRotator::ZeroRotator);
+	}
+
+	// And the market hall on Rákóczi tér, its gateway facing the square.
+	if (!TActorIterator<AMarketHall>(GetWorld()))
+	{
+		const double Z = GroundZ(AMarketHall::ToCity(FVector2D(-800.0, 0.0)));
+		GetWorld()->SpawnActor<AMarketHall>(AMarketHall::StaticClass(), FVector(AMarketHall::FrontAt(), Z), FRotator(0.0, AMarketHall::Yaw(), 0.0));
 	}
 
 	// And the eagle that circles over it.
