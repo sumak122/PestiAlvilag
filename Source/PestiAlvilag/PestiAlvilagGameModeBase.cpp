@@ -11,11 +11,14 @@
 #include "HomeDoor.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
+#include "MissionUzenet.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "PestiCar.h"
+#include "PestiHud.h"
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
 #include "PestiTaxi.h"
@@ -42,6 +45,16 @@ namespace PestiStart
 	const FVector2D HomeDoorAt(58392.f, 21268.f);
 	constexpr float HomeDoorYaw = 108.6f;
 	const FName Prologue(TEXT("Prologue"));
+	const FName Uzenet(TEXT("Uzenet"));
+
+	// The next story mission starts a little after the last one is passed.
+	constexpr float NextMissionDelay = 8.f;
+
+	// Fainting: the picture goes dark, and he comes round at home (or back
+	// at the station before he has a home), a pengő poorer for the doctor.
+	constexpr float FaintFade = 1.5f;
+	constexpr float FaintDark = 2.5f;
+	constexpr int32 DoctorFee = 100;
 
 	// The taxi company's kiosk west of the square, two of its taxis waiting
 	// on the open ground beside it.
@@ -59,6 +72,7 @@ APestiAlvilagGameModeBase::APestiAlvilagGameModeBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = APestiPerson::StaticClass();
+	HUDClass = APestiHUD::StaticClass();
 }
 
 void APestiAlvilagGameModeBase::SpawnDeluxeTaxi()
@@ -149,11 +163,26 @@ void APestiAlvilagGameModeBase::StartPlay()
 		GetWorld()->SpawnActor<ATrafficManager>();
 	}
 
-	// A new game begins with the prologue (traffic first: it finds its route on the lanes).
+	// A new game begins with the prologue, a saved one with the first
+	// mission not yet passed (traffic first: the prologue finds its route on the lanes).
 	LoadSaveOnce();
+	SpawnNextMission();
+}
+
+void APestiAlvilagGameModeBase::StartNextMission()
+{
+	NextMissionAt = GetWorld()->GetTimeSeconds() + PestiStart::NextMissionDelay;
+}
+
+void APestiAlvilagGameModeBase::SpawnNextMission()
+{
 	if (!IsMissionDone(PestiStart::Prologue))
 	{
 		GetWorld()->SpawnActor<AMissionPrologue>();
+	}
+	else if (!IsMissionDone(PestiStart::Uzenet))
+	{
+		GetWorld()->SpawnActor<AMissionUzenet>();
 	}
 }
 
@@ -168,8 +197,7 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 	double StartYaw = AMissionPrologue::StartYaw();
 	if (IsMissionDone(PestiStart::Prologue))
 	{
-		const FVector2D Out = FVector2D(FRotator(0.f, PestiStart::HomeDoorYaw, 0.f).Vector()) * 150.0;
-		StartAt = PestiStart::HomeDoorAt + Out;
+		StartAt = HomeStartAt();
 		StartYaw = PestiStart::HomeDoorYaw;
 	}
 	const FVector PersonLocation(StartAt, GroundZ(StartAt) + 100.0);
@@ -212,6 +240,12 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	}
 }
 
+FVector2D APestiAlvilagGameModeBase::HomeStartAt()
+{
+	const FVector2D Out = FVector2D(FRotator(0.f, PestiStart::HomeDoorYaw, 0.f).Vector()) * 150.0;
+	return PestiStart::HomeDoorAt + Out;
+}
+
 double APestiAlvilagGameModeBase::GroundZ(const FVector2D& At) const
 {
 	FHitResult Hit;
@@ -244,26 +278,93 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 	}
 
 	UpdateWanted(DeltaSeconds);
+	UpdateFaint();
 
-	if (GEngine)
+	if (NextMissionAt > 0.0 && GetWorld()->GetTimeSeconds() >= NextMissionAt)
 	{
-		GEngine->AddOnScreenDebugMessage(5, 0.f, FColor(255, 220, 120), FString::Printf(TEXT("P\u00e9nz (money): %s"), *FormatMoney(Money)));
+		NextMissionAt = -1.0;
+		SpawnNextMission();
+	}
+}
+
+void APestiAlvilagGameModeBase::HurtPlayer(float Amount)
+{
+	if (FaintUntil < 0.0)
+	{
+		Health = FMath::Max(0.f, Health - Amount);
+	}
+}
+
+void APestiAlvilagGameModeBase::HealPlayer(float Amount)
+{
+	Health = FMath::Min(MaxHealth, Health + Amount);
+}
+
+void APestiAlvilagGameModeBase::UpdateFaint()
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (FaintUntil < 0.0)
+	{
+		if (Health > 0.f || !PC)
+		{
+			return;
+		}
+		// Down he goes: the picture darkens and the police lose interest.
+		FaintUntil = Now + PestiStart::FaintDark;
+		PC->SetIgnoreMoveInput(true);
+		if (PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraFade(0.f, 1.f, PestiStart::FaintFade, FLinearColor::Black, false, true);
+		}
+		WantedLevel = 0;
+		TimeUnseen = 0.f;
+		ArrestProgress = 0.f;
+		return;
+	}
+	if (Now < FaintUntil)
+	{
+		return;
 	}
 
-	if (GEngine && WantedLevel > 0)
+	// He comes round at home, or on the platform before he has a home.
+	FaintUntil = -1.0;
+	Health = MaxHealth;
+	const bool bHome = IsMissionDone(PestiStart::Prologue);
+	const FVector2D WakeAt = bHome ? HomeStartAt() : AMissionPrologue::StartAt();
+	const double WakeYaw = bHome ? PestiStart::HomeDoorYaw : AMissionPrologue::StartYaw();
+	if (PC)
 	{
-		GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red,
-			FString::Printf(TEXT("WANTED %s   lose them: %d s%s"), *FString::ChrN(WantedLevel, TEXT('*')),
-				FMath::CeilToInt(FMath::Max(0.f, EscapeTime - TimeUnseen)),
-				ArrestProgress > 0.f ? *FString::Printf(TEXT("   ARREST %d%%"), FMath::RoundToInt(100.f * ArrestProgress / ArrestTime)) : TEXT("")));
+		if (APestiPerson* Person = Cast<APestiPerson>(PC->GetPawn()))
+		{
+			Person->SetActorLocationAndRotation(FVector(WakeAt, GroundZ(WakeAt) + 100.0), FRotator(0.0, WakeYaw, 0.0), false, nullptr, ETeleportType::TeleportPhysics);
+			PC->SetControlRotation(FRotator(-10.0, WakeYaw, 0.0));
+		}
+		PC->SetIgnoreMoveInput(false);
+		if (PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, PestiStart::FaintFade, FLinearColor::Black);
+		}
+	}
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		if (bHome)
+		{
+			AddMoney(-PestiStart::DoctorFee);
+			Hud->Announce(TEXT("EL\u00c1JULT\u00c1L"), TEXT("You fainted. B\u00f6zsi n\u00e9ni fetched the doctor: \u22121 peng\u0151"), 6.f);
+		}
+		else
+		{
+			Hud->Announce(TEXT("EL\u00c1JULT\u00c1L"), TEXT("You fainted. A porter helped you back to your feet."), 6.f);
+		}
 	}
 }
 
 void APestiAlvilagGameModeBase::ReportCrime(int32 CrimeLevel)
 {
-	if (WantedLevel == 0 && GEngine)
+	if (WantedLevel == 0)
 	{
-		GEngine->AddOnScreenDebugMessage(3, 4.f, FColor::Red, TEXT("The police are after you!"));
+		APestiHUD::Show(this, 3, 4.f, FColor::Red, TEXT("The police are after you!"));
 	}
 	WantedLevel = FMath::Clamp(FMath::Max(WantedLevel, CrimeLevel), 0, PestiStart::MaxWantedLevel);
 	TimeUnseen = 0.f;
@@ -318,11 +419,7 @@ void APestiAlvilagGameModeBase::ClearWanted(const TCHAR* Message)
 	WantedLevel = 0;
 	TimeUnseen = 0.f;
 	ArrestProgress = 0.f;
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Red, TEXT(""));
-		GEngine->AddOnScreenDebugMessage(3, 4.f, FColor::Yellow, Message);
-	}
+	APestiHUD::Show(this, 3, 4.f, FColor::Yellow, Message);
 }
 
 void APestiAlvilagGameModeBase::AddMoney(int32 Filler)

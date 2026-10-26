@@ -19,3 +19,6 @@
 
 # The menu pictures are small and made by Tools/FoodArt: kept in git itself, not LFS.
 Data/Food/*.png -filter -diff -merge binary
+
+# The screen fonts (OFL, from Google Fonts) are small: kept in git itself, not LFS.
+Data/Fonts/*.ttf binary

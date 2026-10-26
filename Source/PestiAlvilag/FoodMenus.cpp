@@ -22,6 +22,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "PestiHud.h"
 
 namespace Food
 {
@@ -88,6 +89,8 @@ namespace FoodMenus
 {
 	constexpr int32 HintLine = 31;
 	constexpr int32 SpeechLine = 6;
+	// A good meal puts some strength back (health, of 100).
+	constexpr float Heal = 35.f;
 	// How close to the café waiter you must be to call him over.
 	constexpr float WaiterRadius = 250.f;
 	constexpr float RestaurantRadius = 450.f;
@@ -182,7 +185,7 @@ void AFoodMenus::Say(const FString& Text, float Seconds) const
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(FoodMenus::SpeechLine, Seconds, FColor(255, 210, 60), Text);
+		APestiHUD::Show(this, FoodMenus::SpeechLine, Seconds, FColor(255, 210, 60), Text);
 	}
 }
 
@@ -246,7 +249,7 @@ void AFoodMenus::Tick(float DeltaSeconds)
 	const Food::FMenu& Menu = Food::Menu(Nearest->Menu);
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(FoodMenus::HintLine, 0.f, FColor(255, 210, 60),
+		APestiHUD::Show(this, FoodMenus::HintLine, 0.f, FColor(255, 210, 60),
 			FString::Printf(TEXT("E: %s  (%s, %s)"),
 				Nearest->Waiter ? TEXT("call the waiter for the menu") : TEXT("look at the menu"), Menu.Title, Menu.English));
 	}
@@ -308,6 +311,7 @@ void AFoodMenus::Order()
 		return;
 	}
 	Game->AddMoney(-Dish.Price);
+	Game->HealPlayer(FoodMenus::Heal);
 	const bool bNew = Game->TryDish(FName(Dish.Id));
 	Close();
 	FString Text = FString::Printf(TEXT("\u201eJ\u00f3 \u00e9tv\u00e1gyat!\u201d  (Enjoy your meal!)   %s, %s"),

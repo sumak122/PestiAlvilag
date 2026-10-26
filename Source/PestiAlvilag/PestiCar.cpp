@@ -16,6 +16,7 @@
 #include "PoliceCar.h"
 #include "TrafficCar.h"
 #include "Tram.h"
+#include "PestiHud.h"
 
 namespace PestiCar
 {
@@ -168,7 +169,7 @@ void APestiCar::Tick(float DeltaSeconds)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
+		APestiHUD::Show(this, 1, 0.f, FColor::White,
 			FString::Printf(TEXT("%d km/h   (F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
 	}
 }

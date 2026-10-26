@@ -9,6 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiPerson.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -260,7 +261,12 @@ void APoliceCar::MoveChasing(const FVector& Delta, const APawn* Player, float De
 	const AActor* Blocker = Hit.GetActor();
 	if (Blocker == Player)
 	{
-		// Bumping the player: hold position against them.
+		// Bumping the player: hold position against them. Running into
+		// him on foot hurts him.
+		if (APestiPerson* Person = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0)))
+		{
+			Person->HitByVehicle(CurrentSpeed, GetActorForwardVector());
+		}
 		CurrentSpeed *= 0.5f;
 		return;
 	}

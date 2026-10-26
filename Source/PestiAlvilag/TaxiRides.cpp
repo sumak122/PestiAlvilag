@@ -16,6 +16,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
+#include "PestiHud.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTaxiRides, Log, All);
 
@@ -140,7 +141,7 @@ void ATaxiRides::Say(const FString& Text, float Seconds) const
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(TaxiRides::SpeechLine, Seconds, FColor(255, 210, 60), Text);
+		APestiHUD::Show(this, TaxiRides::SpeechLine, Seconds, FColor(255, 210, 60), Text);
 	}
 }
 
@@ -155,13 +156,13 @@ void ATaxiRides::ShowChoices(const FVector& From) const
 	for (int32 i = Count - 1; i >= 0; --i)
 	{
 		const bool bHere = FVector2D::Distance(FVector2D(From), Places[i].At) < TaxiRides::TooClose;
-		GEngine->AddOnScreenDebugMessage(TaxiRides::FirstPlaceLine + i, 0.f, bHere ? FColor(120, 120, 120) : FColor(255, 210, 60),
+		APestiHUD::Show(this, TaxiRides::FirstPlaceLine + i, 0.f, bHere ? FColor(120, 120, 120) : FColor(255, 210, 60),
 			bHere ? FString::Printf(TEXT("   %d  %s   (you are here)"), i + 1, *Places[i].Name)
 				: FString::Printf(TEXT("   %d  %s   %s"), i + 1, *Places[i].Name, *APestiAlvilagGameModeBase::FormatMoney(FareTo(From, Places[i]))));
 	}
 	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
 	const bool bRegular = Game && Game->GetTaxiJobs() >= RegularAfterJobs;
-	GEngine->AddOnScreenDebugMessage(TaxiRides::HeadLine, 0.f, FColor::White,
+	APestiHUD::Show(this, TaxiRides::HeadLine, 0.f, FColor::White,
 		FString::Printf(TEXT("\u201eHov\u00e1 lesz?\u201d  (Where to?)   Number key: go   T: never mind%s"),
 			bRegular ? TEXT("   [regular: half fare]") : TEXT("")));
 }
@@ -241,7 +242,7 @@ void ATaxiRides::Tick(float DeltaSeconds)
 		}
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(TaxiRides::HeadLine, 0.f, FColor(255, 210, 60), TEXT("T: ride in the taxi"));
+			APestiHUD::Show(this, TaxiRides::HeadLine, 0.f, FColor(255, 210, 60), TEXT("T: ride in the taxi"));
 		}
 		if (PC->WasInputKeyJustPressed(EKeys::T))
 		{

@@ -4,6 +4,7 @@
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "PestiHud.h"
 
 namespace CarjackedDriver
 {
@@ -30,7 +31,7 @@ void ACarjackedDriver::RunFrom(const FVector& Danger)
 	Heading = Away.IsNearlyZero() ? FVector2D(GetActorForwardVector()) : Away.GetSafeNormal();
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(CarjackedDriver::ShoutKey, CarjackedDriver::ShoutSeconds, FColor::Orange,
+		APestiHUD::Show(this, CarjackedDriver::ShoutKey, CarjackedDriver::ShoutSeconds, FColor::Orange,
 			TEXT("\u201eH\u00e9! Az aut\u00f3m! Rend\u0151r!\u201d   (Hey! My car! Police!)"));
 	}
 }

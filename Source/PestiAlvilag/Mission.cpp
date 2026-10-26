@@ -5,12 +5,12 @@
 #include "CarBody.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiHud.h"
 #include "PestiPerson.h"
 #include "PestiText.h"
 #include "RouteGuideComponent.h"
@@ -18,13 +18,6 @@
 
 namespace Mission
 {
-	constexpr int32 GoalLine = 7;
-	constexpr int32 SpeechLine = 8;
-	constexpr int32 AnnounceLine = 9;
-	const FColor GoalColor(255, 230, 160);
-	const FColor SpeechColor(255, 255, 255);
-	const FColor AnnounceColor(255, 200, 60);
-
 	constexpr float BeaconHeight = 1500.f;
 	// Closer than this the light alone is enough; no arrows.
 	constexpr double RouteMinDistance = 4000.0;
@@ -110,19 +103,17 @@ double AMission::GroundZ(const FVector2D& At, double Fallback) const
 
 void AMission::Say(const FString& Who, const FString& LineHu, const FString& LineEn, float Seconds) const
 {
-	if (GEngine)
+	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(Mission::SpeechLine, Seconds, Mission::SpeechColor,
-			FString::Printf(TEXT("%s: \u201e%s\u201d  (%s)"), *Who, *LineHu, *LineEn));
+		Hud->Say(Who, LineHu, LineEn, Seconds);
 	}
 }
 
 void AMission::Announce(const FString& LineHu, const FString& LineEn, float Seconds) const
 {
-	if (GEngine)
+	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(Mission::AnnounceLine, Seconds, Mission::AnnounceColor,
-			FString::Printf(TEXT("%s   (%s)"), *LineHu, *LineEn), true, FVector2D(1.6f, 1.6f));
+		Hud->Announce(LineHu, LineEn, Seconds);
 	}
 }
 
@@ -157,22 +148,27 @@ void AMission::Tick(float DeltaSeconds)
 	const bool bOnFoot = Player->IsA<APestiPerson>();
 	const bool bThere = Distance < Step.Radius && (bOnFoot || !Step.bOnFoot);
 
-	FString Goal = FString::Printf(TEXT("C\u00e9l: %s  (%s)"), *Step.GoalHu, *Step.GoalEn);
+	// On the goal panel's right: the key to press, getting out, or how far and which way.
+	FString Far;
+	FString Way;
 	if (bThere && Step.bPressE)
 	{
-		Goal += TEXT("   E");
+		Far = TEXT("E");
+		Way = TEXT("press");
 	}
 	else if (Distance >= Step.Radius)
 	{
-		Goal += FString::Printf(TEXT("   %s %s"), *PestiText::Metres(Distance), PestiText::Compass(At, Step.Target));
+		Far = PestiText::Metres(Distance);
+		Way = PestiText::CompassHu(At, Step.Target);
 	}
 	else if (!bOnFoot)
 	{
-		Goal += TEXT("   Sz\u00e1llj ki!  (Get out!)");
+		Far = TEXT("Sz\u00e1llj ki!");
+		Way = TEXT("get out");
 	}
-	if (GEngine)
+	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(Mission::GoalLine, 0.f, Mission::GoalColor, Goal);
+		Hud->SetGoal(Step.GoalHu, Step.GoalEn, Far, Way);
 	}
 
 	// Arrows over the turns on the way, while the target is still far off.
@@ -206,17 +202,18 @@ void AMission::Pass()
 	CurrentStep = INDEX_NONE;
 	Beacon->SetVisibility(false);
 	Guide->Stop();
-	if (GEngine)
+	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(Mission::GoalLine, 0.f, Mission::GoalColor, TEXT(""));
+		Hud->ClearGoal();
 	}
 
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
 		Game->AddMoney(Reward);
 		Game->MarkMissionDone(MissionId);
-		Announce(FString::Printf(TEXT("K\u00dcLDET\u00c9S TELJES\u00cdTVE: %s  +%s"), *TitleHu, *APestiAlvilagGameModeBase::FormatMoney(Reward)),
-			FString::Printf(TEXT("Mission passed: %s"), *TitleEn), 6.f);
+		Announce(TEXT("K\u00dcLDET\u00c9S TELJES\u00cdTVE"),
+			FString::Printf(TEXT("Mission passed  \u00b7  %s (%s)  \u00b7  +%s"), *TitleHu, *TitleEn, *APestiAlvilagGameModeBase::FormatMoney(Reward)), 6.f);
+		Game->StartNextMission();
 	}
 
 	// Leave the people where they are for a while, then tidy up.

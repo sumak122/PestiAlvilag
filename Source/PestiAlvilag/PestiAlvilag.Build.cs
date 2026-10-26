@@ -12,7 +12,7 @@ public class PestiAlvilag : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "ProceduralMeshComponent", "Json" });
 
-		// The food menus are drawn with Slate.
+		// The food menus and the screen panels (HUD) are drawn with Slate.
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
 		// The car engine sound is made while the game runs (USynthComponent).
