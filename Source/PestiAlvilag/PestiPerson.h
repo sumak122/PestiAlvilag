@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "FreeRun.h"
 #include "PestiPerson.generated.h"
 
 class UCameraComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
+class USceneComponent;
 class USpringArmComponent;
 
 /**
@@ -16,7 +18,9 @@ class USpringArmComponent;
  * coat, fedora and red scarf, with a GTA style camera behind him.
  *
  * Keys: W/A/S/D or left stick to jog, Shift or left stick click to sprint,
- * Space or gamepad A to jump, mouse or right stick to look around,
+ * Space or gamepad A to jump, or running at something low or something to
+ * get under, to vault over it or slide under it (FreeRun), mouse or right
+ * stick to look around,
  * F or gamepad B to get into the car next to you, or to pull the driver out
  * of a car in the traffic and take it.
  */
@@ -95,6 +99,10 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> Pieces;
 
+	/** What the pieces hang from: tilted and lowered as a whole to vault and slide. */
+	UPROPERTY(VisibleAnywhere, Category = "Person")
+	TObjectPtr<USceneComponent> PoseRoot;
+
 	UPROPERTY(VisibleAnywhere, Category = "Person")
 	TObjectPtr<USpringArmComponent> CameraArm;
 
@@ -113,6 +121,11 @@ private:
 	void TryEnterCar(APlayerController* PC);
 	void SetInWorld(bool bInWorld);
 	void SetRideView(bool bOutside, APlayerController* PC);
+	/** Over or under the thing ahead, as FreeRun found it. */
+	void StartMove(const FreeRun::FChance& Chance);
+	void TickMove(float DeltaSeconds);
+	void FinishMove();
+	void ApplyPose(const FreeRun::FPose& Pose);
 
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
@@ -128,4 +141,17 @@ private:
 	double LastHitTime = -100.0;
 	/** The fastest he has been falling since he left the ground (cm/s). */
 	float FallSpeed = 0.f;
+
+	/** The vault or slide under way, and how far into it (s). */
+	FreeRun::EMove FreeMove = FreeRun::EMove::None;
+	FreeRun::FChance MoveChance;
+	FVector MoveFrom = FVector::ZeroVector;
+	FVector MoveDir = FVector::ForwardVector;
+	float MoveClock = 0.f;
+	float MoveLength = 0.f;
+	/** Pressed at the right moment: out of it faster. Pressed nearly on it: a stumble after. */
+	bool bMoveClean = false;
+	bool bMoveLate = false;
+	double BoostUntil = -1.0;
+	double StumbleUntil = -1.0;
 };

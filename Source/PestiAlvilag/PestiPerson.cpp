@@ -4,6 +4,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -62,6 +63,16 @@ namespace PestiPerson
 	constexpr float SeatMinPitch = -12.f;
 	constexpr float RideArmLength = 1100.f;
 	constexpr float RidePivotHeight = 150.f;
+
+	// Vaulting and sliding: no slower than this (cm/s), each move this long at least (s).
+	constexpr float FreeRunMinSpeed = 200.f;
+	constexpr float MinVaultSeconds = 0.45f;
+	constexpr float MinSlideSeconds = 0.55f;
+	constexpr float MaxMoveSeconds = 1.1f;
+	// Running faster than the jog by this much counts as running at it (cm/s).
+	constexpr float RunningMargin = 50.f;
+	// A late move goes this much slower than he came.
+	constexpr float LatePace = 0.8f;
 }
 
 APestiPerson::APestiPerson()
@@ -71,6 +82,9 @@ APestiPerson::APestiPerson()
 	BaseMaterial = CarBody::LoadPaintMaterial();
 
 	GetCapsuleComponent()->InitCapsuleSize(PestiPerson::CapsuleRadius, PestiPerson::CapsuleHalfHeight);
+
+	PoseRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PoseRoot"));
+	PoseRoot->SetupAttachment(GetCapsuleComponent());
 
 	// The body turns to face where he walks; the camera follows the mouse.
 	bUseControllerRotationYaw = false;
@@ -100,14 +114,21 @@ void APestiPerson::BeginPlay()
 {
 	Super::BeginPlay();
 
-	PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
+	PersonModel::Dress(this, PoseRoot, BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
 }
 
 void APestiPerson::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	SwingLimbs(DeltaSeconds);
+	if (FreeMove != FreeRun::EMove::None)
+	{
+		TickMove(DeltaSeconds);
+	}
+	else
+	{
+		SwingLimbs(DeltaSeconds);
+	}
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
@@ -132,6 +153,10 @@ void APestiPerson::Tick(float DeltaSeconds)
 		return;
 	}
 	Look(PC, DeltaSeconds);
+	if (FreeMove != FreeRun::EMove::None)
+	{
+		return;
+	}
 	Walk(PC);
 	if (GetCharacterMovement()->IsFalling())
 	{
@@ -147,8 +172,28 @@ void APestiPerson::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Something ahead to vault or slide under: say so, and Space does it.
+	FreeRun::FChance Chance;
+	const bool bChance = !bHoldingInFront && GetCharacterMovement()->IsMovingOnGround()
+		&& GetVelocity().Size2D() >= PestiPerson::FreeRunMinSpeed
+		&& FreeRun::FindMove(GetWorld(), this, GetActorLocation(), GetVelocity(),
+			GetCapsuleComponent()->GetScaledCapsuleRadius(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), Chance);
+	if (bChance)
+	{
+		if (APestiHUD* Hud = APestiHUD::Get(this))
+		{
+			const bool bVault = Chance.Move == FreeRun::EMove::Vault;
+			Hud->Prompt(TEXT("SPACE"), bVault ? TEXT("\u00c1tugr\u00e1s") : TEXT("Al\u00e1cs\u00fasz\u00e1s"), bVault ? TEXT("Vault") : TEXT("Slide"),
+				Chance.Face >= FreeRun::GoodFrom && Chance.Face <= FreeRun::GoodTo);
+		}
+	}
 	if (PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom))
 	{
+		if (bChance)
+		{
+			StartMove(Chance);
+			return;
+		}
 		Jump();
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
@@ -160,7 +205,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		APestiHUD::Show(this, 1, 0.f, FColor::White,
-			TEXT("On foot   (F: get in or steal a car, Shift: sprint, Space: jump, N: traffic view, P: police test, F9: new game)"));
+			TEXT("On foot   (F: get in or steal a car, Shift: sprint, Space: jump, or vault and slide running at things, N: traffic view, P: police test, F9: new game)"));
 	}
 }
 
@@ -203,7 +248,12 @@ void APestiPerson::Walk(const APlayerController* PC)
 	AddMovementInput(FRotationMatrix(Heading).GetUnitAxis(EAxis::Y), Right);
 
 	const bool bRun = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::Gamepad_LeftThumbstick);
-	GetCharacterMovement()->MaxWalkSpeed = bCarrying ? CarrySpeed : bRun ? RunSpeed : JogSpeed;
+	// A clean vault or slide carries him on a little faster; a stumble slows him.
+	const double Now = GetWorld()->GetTimeSeconds();
+	const float Run = Now < BoostUntil ? RunSpeed * FreeRun::CleanBoost : RunSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = bCarrying ? CarrySpeed
+		: Now < StumbleUntil ? JogSpeed * FreeRun::StumbleSlow
+		: bRun ? Run : JogSpeed;
 }
 
 void APestiPerson::SwingLimbs(float DeltaSeconds)
@@ -227,6 +277,96 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 		if (Pieces.IsValidIndex(Arm) && Pieces[Arm])
 		{
 			Pieces[Arm]->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
+		}
+	}
+
+	// Just after a bad landing: a lurch over the stride.
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now < StumbleUntil)
+	{
+		const float T = 1.f - static_cast<float>((StumbleUntil - Now) / FreeRun::StumbleSeconds);
+		ApplyPose(FreeRun::Stumble(T));
+	}
+	else if (PoseRoot && !PoseRoot->GetRelativeTransform().Equals(FTransform::Identity))
+	{
+		PoseRoot->SetRelativeTransform(FTransform::Identity);
+	}
+}
+
+void APestiPerson::StartMove(const FreeRun::FChance& Chance)
+{
+	const float Speed = static_cast<float>(GetVelocity().Size2D());
+	bMoveClean = Chance.Face >= FreeRun::GoodFrom && Chance.Face <= FreeRun::GoodTo && Speed > JogSpeed + PestiPerson::RunningMargin;
+	bMoveLate = Chance.Face < FreeRun::Late;
+	FreeMove = Chance.Move;
+	MoveChance = Chance;
+	MoveFrom = GetActorLocation();
+	MoveDir = (Chance.To - MoveFrom).GetSafeNormal2D();
+	MoveClock = 0.f;
+	const float Pace = bMoveClean ? RunSpeed * FreeRun::CleanBoost
+		: FMath::Max(Speed, JogSpeed) * (bMoveLate ? PestiPerson::LatePace : 1.f);
+	const float Shortest = Chance.Move == FreeRun::EMove::Vault ? PestiPerson::MinVaultSeconds : PestiPerson::MinSlideSeconds;
+	MoveLength = FMath::Clamp(static_cast<float>(FVector::Dist2D(MoveFrom, Chance.To)) / Pace, Shortest, PestiPerson::MaxMoveSeconds);
+	SetActorRotation(FRotator(0.0, MoveDir.Rotation().Yaw, 0.0));
+	// He goes where the move takes him, through the thing he passes over or under.
+	GetCharacterMovement()->DisableMovement();
+}
+
+void APestiPerson::TickMove(float DeltaSeconds)
+{
+	MoveClock += DeltaSeconds;
+	const float T = FMath::Clamp(MoveClock / FMath::Max(MoveLength, 0.01f), 0.f, 1.f);
+	const FVector To = MoveChance.To;
+	const FVector Flat = FMath::Lerp(MoveFrom, To, static_cast<double>(T));
+	const bool bVault = FreeMove == FreeRun::EMove::Vault;
+	const double Z = bVault ? FreeRun::ArcZ(MoveFrom.Z, To.Z, MoveChance.PeakZ, MoveChance.Over, T) : Flat.Z;
+	SetActorLocation(FVector(Flat.X, Flat.Y, Z), false, nullptr, ETeleportType::TeleportPhysics);
+	// Whoever watches his speed (people stepping aside) sees him going.
+	GetCharacterMovement()->Velocity = MoveDir * (FVector::Dist2D(MoveFrom, To) / FMath::Max(MoveLength, 0.01f));
+	ApplyPose(bVault ? FreeRun::Vault(T) : FreeRun::Slide(T));
+	if (T >= 1.f)
+	{
+		FinishMove();
+	}
+}
+
+void APestiPerson::FinishMove()
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	const float Pace = static_cast<float>(GetCharacterMovement()->Velocity.Size2D());
+	FreeMove = FreeRun::EMove::None;
+	PoseRoot->SetRelativeTransform(FTransform::Identity);
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->SetMovementMode(MOVE_Walking);
+	float Out = Pace;
+	if (bMoveClean)
+	{
+		BoostUntil = Now + FreeRun::BoostSeconds;
+		Out = RunSpeed * FreeRun::CleanBoost;
+	}
+	else if (bMoveLate)
+	{
+		StumbleUntil = Now + FreeRun::StumbleSeconds;
+		Out = JogSpeed * FreeRun::StumbleSlow;
+	}
+	Movement->Velocity = MoveDir * Out;
+}
+
+void APestiPerson::ApplyPose(const FreeRun::FPose& Pose)
+{
+	if (PoseRoot)
+	{
+		PoseRoot->SetRelativeLocationAndRotation(FVector(0.0, 0.0, Pose.Lift), FRotator(Pose.Pitch, Pose.Yaw, Pose.Roll));
+	}
+	PersonModel::PoseLegs(Pieces, Pose.LegL, Pose.LegR, Pose.KneeL, Pose.KneeR);
+	// Rolling an arm about the forward axis takes it out to its side: the left one one way, the right the other.
+	const FRotator Arms[] = { FRotator(Pose.ArmL, 0.f, Pose.ArmOutL), FRotator(Pose.ArmR, 0.f, -Pose.ArmOutR) };
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const int32 Arm = PersonKit::ArmLeft + i;
+		if (Pieces.IsValidIndex(Arm) && Pieces[Arm])
+		{
+			Pieces[Arm]->SetRelativeRotation(Arms[i]);
 		}
 	}
 }
@@ -352,7 +492,7 @@ void APestiPerson::RideOn(AActor* Vehicle, const FVector& SeatAt, double SeatYaw
 	SetActorEnableCollision(false);
 	PersonKit::FOutfit Seated = PersonModel::PlayerOutfit();
 	Seated.bSeated = true;
-	PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, Seated, Pieces);
+	PersonModel::Dress(this, PoseRoot, BaseMaterial, Seated, Pieces);
 	RideSeat = FTransform(FRotator(0.0, SeatYaw, 0.0), SeatAt);
 	AttachToActor(Vehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	SetActorRelativeTransform(RideSeat);
@@ -398,7 +538,7 @@ bool APestiPerson::GetOffAt(const FVector& At, double Yaw)
 			CameraArm->bEnableCameraLag = true;
 			CameraArm->bDoCollisionTest = true;
 			CameraArm->SocketOffset = FVector(0.f, 0.f, PestiPerson::PivotHeight);
-			PersonModel::Dress(this, GetCapsuleComponent(), BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
+			PersonModel::Dress(this, PoseRoot, BaseMaterial, PersonModel::PlayerOutfit(), Pieces);
 			return true;
 		}
 	}

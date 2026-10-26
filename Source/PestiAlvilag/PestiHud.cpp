@@ -52,6 +52,8 @@ namespace PestiHud
 	constexpr float SpeechWidth = 1180.f;
 	constexpr float SpeechFromBottom = 150.f;
 	constexpr float AnnounceY = 330.f;
+	// The key sign for a move: this far down the screen (share of its height).
+	constexpr float PromptDown = 0.68f;
 
 	// The lighter cabinet: six niches across, five down, the chosen one large
 	// on the right, the rewards along the bottom.
@@ -150,6 +152,10 @@ public:
 		if (Hud->Big.Until >= Now)
 		{
 			PaintAnnounce(Paint, Hud->Big, Wide * 0.5f);
+		}
+		if (Hud->KeySign.Until >= Now)
+		{
+			PaintPrompt(Paint, Hud->KeySign, Wide * 0.5f, High * PestiHud::PromptDown);
 		}
 		if (const ALighters* Collection = Hud->Cabinet.Get())
 		{
@@ -498,6 +504,38 @@ private:
 		Paint.Text(Big.En, Paint.Plain(22.f, 1.f), CentreX, Y + 54.f, PestiHud::Cream, 0.5f);
 	}
 
+	void PaintPrompt(const FPainter& Paint, const APestiHUD::FPrompt& Sign, float CentreX, float CentreY) const
+	{
+		// The key in a little gold-edged plate, what it does beside it.
+		const FSlateFontInfo KeyFont = Paint.Bold(14.f, 1.5f);
+		const FSlateFontInfo HuFont = Paint.Deco(19.f, 2.f);
+		const FSlateFontInfo EnFont = Paint.Plain(13.f, 1.f);
+		const float KeyW = Paint.Measure(Sign.Key, KeyFont).X + 20.f;
+		const float KeyH = 27.f;
+		const float Words = FMath::Max(Paint.Measure(Sign.Hu, HuFont).X, Paint.Measure(Sign.En, EnFont).X);
+		const float Gap = 13.f;
+		const float Whole = KeyW + Gap + Words;
+		const float Left = CentreX - Whole * 0.5f;
+		Paint.Band(CentreX, CentreY - 28.f, Whole + 160.f, 56.f);
+		const float KeyY = CentreY - KeyH * 0.5f;
+		if (Sign.bNow)
+		{
+			Paint.Box(Left, KeyY, KeyW, KeyH, PestiHud::Gold, 1);
+			Paint.Text(Sign.Key, KeyFont, Left + KeyW * 0.5f, CentreY + 5.f, PestiHud::Solid, 0.5f);
+			Paint.Diamond(Left - 11.f, CentreY, 7.f, PestiHud::Gold, 2);
+			Paint.Diamond(Left + Whole + 11.f, CentreY, 7.f, PestiHud::Gold, 2);
+		}
+		else
+		{
+			Paint.Box(Left, KeyY, KeyW, KeyH, PestiHud::Solid, 1);
+			Paint.Frame(Left, KeyY, KeyW, KeyH, PestiHud::Gold, 1.5f, 2);
+			Paint.Text(Sign.Key, KeyFont, Left + KeyW * 0.5f, CentreY + 5.f, PestiHud::Gold, 0.5f);
+		}
+		const float WordsX = Left + KeyW + Gap;
+		Paint.Text(Sign.Hu, HuFont, WordsX, CentreY + 1.f, Sign.bNow ? PestiHud::Gold : PestiHud::Cream);
+		Paint.Text(Sign.En, EnFont, WordsX, CentreY + 19.f, PestiHud::Grey);
+	}
+
 	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
 	{
 		using namespace PestiHud;
@@ -703,4 +741,9 @@ void APestiHUD::Say(const FString& Who, const FString& Hu, const FString& En, fl
 void APestiHUD::Announce(const FString& Hu, const FString& En, float Seconds)
 {
 	Big = FSpeech{ FString(), Hu, En, Now() + Seconds };
+}
+
+void APestiHUD::Prompt(const FString& Key, const FString& Hu, const FString& En, bool bNow)
+{
+	KeySign = FPrompt{ Key, Hu, En, bNow, Now() + PestiHud::OneFrame };
 }

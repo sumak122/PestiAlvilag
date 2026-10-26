@@ -19,7 +19,8 @@ class SPestiHud;
  * far and which way; under it the other short notes (hints, controls). Top
  * right the money and the health bars, and red diamonds when the police want
  * you. At the bottom who is talking and what they say, and in the middle the
- * big announcements. Over everything, while it is open, the cabinet of
+ * big announcements, and under the middle the key to press for a move
+ * (a vault, a slide). Over everything, while it is open, the cabinet of
  * lighters found (ALighters).
  *
  * Everything on screen goes through Show (by key, like the engine's debug
@@ -54,6 +55,12 @@ public:
 	void Announce(const FString& Hu, const FString& En, float Seconds);
 	/** The lighter collection cabinet over everything, or null to put it away. */
 	void SetCabinet(const ALighters* Shown);
+	/**
+	 * For this frame, a key sign under the middle of the screen: the key
+	 * and what it does, in Hungarian with the English under it. bNow lights
+	 * the key up: this is the moment to press it.
+	 */
+	void Prompt(const FString& Key, const FString& Hu, const FString& En, bool bNow);
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,6 +74,14 @@ private:
 		FString Text;
 		FLinearColor Color;
 		double Until = 0.0;
+	};
+	struct FPrompt
+	{
+		FString Key;
+		FString Hu;
+		FString En;
+		bool bNow = false;
+		double Until = -1.0;
 	};
 	struct FSpeech
 	{
@@ -91,5 +106,6 @@ private:
 	FString GoalWay;
 	FSpeech Speech;
 	FSpeech Big;
+	FPrompt KeySign;
 	TWeakObjectPtr<const ALighters> Cabinet;
 };

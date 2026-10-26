@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "ChaseModel.h"
 #include "MarketHallModel.h"
 #include "MarketModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -199,6 +200,13 @@ void AMarketHall::Fill()
 			SpawnPerson(Middle + Forward * MarketHallFill::ShopperOut + Side * PeopleRandom.FRandRange(-80.f, 80.f),
 				Stall.Yaw + 180.0 + PeopleRandom.FRandRange(-25.f, 25.f), PeopleRandom, false);
 		}
+	}
+	// Deliveries out on the square in front of the gateway: things to run over and under.
+	const TArray<ChaseModel::FSpot> Yard = ChaseModel::HallYard();
+	for (int32 k = 0; k < Yard.Num(); ++k)
+	{
+		MarketModel::FRandom Random(static_cast<uint32>(k * 13 + 5));
+		ChaseModel::Build(Pieces, Yard[k].At, Yard[k].Yaw, Yard[k].Kind, Random);
 	}
 	for (const MarketModel::FShape& Piece : Pieces)
 	{
