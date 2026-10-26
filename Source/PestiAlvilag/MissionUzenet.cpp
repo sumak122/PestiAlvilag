@@ -37,15 +37,15 @@ namespace Uzenet
 	constexpr int32 HintKey = 33;
 	constexpr float HintSeconds = 12.f;
 
-	const TCHAR* const BozsiName = TEXT("Bözsi néni");
-	const TCHAR* const PistaName = TEXT("Pista bácsi");
+	const TCHAR* const BozsiName = TEXT("B\u00f6zsi n\u00e9ni");
+	const TCHAR* const PistaName = TEXT("Pista b\u00e1csi");
 }
 
 AMissionUzenet::AMissionUzenet()
 {
 	MissionId = TEXT("Uzenet");
 	Reward = 580;
-	TitleHu = TEXT("Üzenet");
+	TitleHu = TEXT("\u00dczenet");
 	TitleEn = TEXT("The message");
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -96,24 +96,24 @@ void AMissionUzenet::SetUpMission()
 		: FVector(Uzenet::PistaAt, GroundZ(Uzenet::PistaAt) + 90.0);
 
 	FMissionStep Talk;
-	Talk.GoalHu = TEXT("Beszélj Bözsi nénivel a kapu előtt");
-	Talk.GoalEn = TEXT("Talk to Aunt Bözsi outside the front door");
+	Talk.GoalHu = TEXT("Besz\u00e9lj B\u00f6zsi n\u00e9nivel a kapu el\u0151tt");
+	Talk.GoalEn = TEXT("Talk to Aunt B\u00f6zsi outside the front door");
 	Talk.Target = BozsiLocation;
 	Talk.Radius = Uzenet::TalkRadius;
 	Talk.bPressE = true;
 	Steps.Add(Talk);
 
 	FMissionStep Letter;
-	Letter.GoalHu = TEXT("Vidd el a levelet Pista bácsinak a Teleki téri piacra");
-	Letter.GoalEn = TEXT("Take the letter to Pista bácsi at the Teleki tér market");
+	Letter.GoalHu = TEXT("Vidd el a levelet Pista b\u00e1csinak a Teleki t\u00e9ri piacra");
+	Letter.GoalEn = TEXT("Take the letter to Pista b\u00e1csi at the Teleki t\u00e9r market");
 	Letter.Target = PistaLocation;
 	Letter.Radius = Uzenet::TalkRadius;
 	Letter.bPressE = true;
 	Steps.Add(Letter);
 
 	FMissionStep Back;
-	Back.GoalHu = TEXT("Vidd vissza a csomagot Bözsi néninek");
-	Back.GoalEn = TEXT("Take the parcel back to Aunt Bözsi");
+	Back.GoalHu = TEXT("Vidd vissza a csomagot B\u00f6zsi n\u00e9ninek");
+	Back.GoalEn = TEXT("Take the parcel back to Aunt B\u00f6zsi");
 	Back.Target = BozsiLocation;
 	Back.Radius = Uzenet::TalkRadius;
 	Back.bPressE = true;
@@ -125,7 +125,7 @@ void AMissionUzenet::OnStepStarted(int32 Step)
 	if (Step == 1)
 	{
 		APestiHUD::Show(this, Uzenet::HintKey, Uzenet::HintSeconds, FColor(255, 210, 60),
-			TEXT("Tipp: a megállóban T-vel felszállhatsz a villamosra  (Tip: press T at a stop to ride the tram)"));
+			TEXT("Tipp: a meg\u00e1ll\u00f3ban T-vel felsz\u00e1llhatsz a villamosra  (Tip: press T at a stop to ride the tram)"));
 	}
 }
 
@@ -141,10 +141,10 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		Carrier = Cast<APestiPerson>(Player);
 		Hold(Uzenet::LetterSize, Uzenet::LetterPaper);
 		Say(Uzenet::BozsiName,
-			TEXT("Jókor jössz, fiam. Vidd el ezt a levelet Pista bácsinak a Teleki téri zsibvásárra."),
-			TEXT("Good timing, son. Take this letter to Pista bácsi at the Teleki tér flea market."), 7.f);
+			TEXT("J\u00f3kor j\u00f6ssz, fiam. Vidd el ezt a levelet Pista b\u00e1csinak a Teleki t\u00e9ri zsibv\u00e1s\u00e1rra."),
+			TEXT("Good timing, son. Take this letter to Pista b\u00e1csi at the Teleki t\u00e9r flea market."), 7.f);
 		SayLater(7.f, Uzenet::BozsiName,
-			TEXT("Ad majd egy csomagot, azt hozd vissza nekem. A villamos gyorsabb, a megálló itt van a ház előtt."),
+			TEXT("Ad majd egy csomagot, azt hozd vissza nekem. A villamos gyorsabb, a meg\u00e1ll\u00f3 itt van a h\u00e1z el\u0151tt."),
 			TEXT("He'll give you a parcel; bring it back to me. The tram is quicker, the stop is right outside the house."));
 	}
 	else if (Step == 1)
@@ -155,12 +155,12 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		}
 		Carrier = Cast<APestiPerson>(Player);
 		Hold(Uzenet::ParcelSize, Uzenet::BrownPaper);
-		Say(Uzenet::PistaName, TEXT("Bözsitől? Lássuk csak..."), TEXT("From Bözsi? Let's see..."), 4.f);
+		Say(Uzenet::PistaName, TEXT("B\u00f6zsit\u0151l? L\u00e1ssuk csak..."), TEXT("From B\u00f6zsi? Let's see..."), 4.f);
 		SayLater(4.f, Uzenet::PistaName,
-			TEXT("Na, ezt vidd vissza neki. És bele ne nézz, fiam!"),
+			TEXT("Na, ezt vidd vissza neki. \u00c9s bele ne n\u00e9zz, fiam!"),
 			TEXT("Right, take this back to her. And don't you look inside, son!"));
 		SayLater(10.f, Uzenet::PistaName,
-			TEXT("Furcsa... nem is hallottalak jönni."),
+			TEXT("Furcsa... nem is hallottalak j\u00f6nni."),
 			TEXT("Funny... I never heard you coming."));
 	}
 	else if (Step == 2)
@@ -173,7 +173,7 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		Carrier = nullptr;
 		Lines.Reset();
 		Say(Uzenet::BozsiName,
-			TEXT("Ügyes fiú vagy! Egy ilyen fiúnak mindig akad munka."),
+			TEXT("\u00dcgyes fi\u00fa vagy! Egy ilyen fi\u00fanak mindig akad munka."),
 			TEXT("Good lad! There's always work for a boy like you."), 8.f);
 	}
 }

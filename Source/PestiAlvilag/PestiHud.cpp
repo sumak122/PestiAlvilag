@@ -278,7 +278,7 @@ private:
 		const float W = FMath::Max(PestiHud::GoalMinWidth, TextWidth + 60.f + (bFar ? 140.f : 0.f));
 		const float H = PestiHud::GoalHeight;
 		Paint.Panel(X, Y, W, H);
-		Paint.Tab(TEXT("CÉL"), X + 70.f, Y);
+		Paint.Tab(TEXT("C\u00c9L"), X + 70.f, Y);
 		Paint.Text(Hud.GoalHu, HuFont, X + 30.f, Y + 50.f, PestiHud::Cream);
 		Paint.Text(Hud.GoalEn, EnFont, X + 30.f, Y + 80.f, PestiHud::Grey);
 		if (bFar)
@@ -340,12 +340,12 @@ private:
 		Paint.Rays(X + W * 0.5f, Y + 2.f, 26.f, 9, PestiHud::Dim);
 		const int32 Money = Game->GetMoney();
 		Paint.Text(FString::Printf(TEXT("%d,%02d"), Money / 100, Money % 100), Paint.Deco(36.f, 1.f), X + W - 112.f, Y + 58.f, PestiHud::Gold, 1.f);
-		Paint.Text(TEXT("pengő"), Paint.Plain(20.f), X + W - 104.f, Y + 58.f, PestiHud::Grey);
+		Paint.Text(TEXT("peng\u0151"), Paint.Plain(20.f), X + W - 104.f, Y + 58.f, PestiHud::Grey);
 		Paint.Line(X + 28.f, Y + 76.f, X + W - 28.f, Y + 76.f, PestiHud::Dim, 1.f);
 		Paint.Diamond(X + W * 0.5f, Y + 76.f, 6.f, PestiHud::Gold, 2);
 
 		// Health: ten bars between two bracket ends.
-		Paint.Text(TEXT("EGÉSZSÉG"), Paint.Bold(15.f, 3.f), X + 28.f, Y + 104.f, PestiHud::Grey);
+		Paint.Text(TEXT("EG\u00c9SZS\u00c9G"), Paint.Bold(15.f, 3.f), X + 28.f, Y + 104.f, PestiHud::Grey);
 		Paint.Text(TEXT("health"), Paint.Plain(15.f, 1.f), X + W - 28.f, Y + 104.f, PestiHud::Brass, 1.f);
 		const float BX = X + 40.f;
 		const float BY = Y + 114.f;
@@ -385,8 +385,8 @@ private:
 		// Being arrested shows instead of the seconds left to lose them.
 		const float Arrest = Game->GetArrestFraction();
 		const FString Label = Arrest > 0.f
-			? FString::Printf(TEXT("ELFOGÁS %d%%"), FMath::RoundToInt(100.f * Arrest))
-			: FString::Printf(TEXT("KÖRÖZÉS %d"), FMath::CeilToInt(Game->GetEscapeSecondsLeft()));
+			? FString::Printf(TEXT("ELFOG\u00c1S %d%%"), FMath::RoundToInt(100.f * Arrest))
+			: FString::Printf(TEXT("K\u00d6R\u00d6Z\u00c9S %d"), FMath::CeilToInt(Game->GetEscapeSecondsLeft()));
 		Paint.Text(Label, Paint.Bold(15.f, 3.f), X + W - 124.f, Y + H + 33.f, PestiHud::RedHi, 1.f);
 	}
 
@@ -408,7 +408,7 @@ private:
 			Paint.Diamond(CentreX - NameW * 0.5f - 20.f, CentreY - 52.f, 8.f, PestiHud::Gold, 2);
 			Paint.Diamond(CentreX + NameW * 0.5f + 20.f, CentreY - 52.f, 8.f, PestiHud::Gold, 2);
 			Paint.Text(Name, Info, CentreX, CentreY - 45.f, PestiHud::Gold, 0.5f);
-			Hu = TEXT("„") + Hu + TEXT("”");
+			Hu = TEXT("\u201e") + Hu + TEXT("\u201d");
 		}
 		Paint.Text(Hu, Paint.Bold(27.f), CentreX, CentreY + 4.f, PestiHud::Cream, 0.5f);
 		if (bTwo)
