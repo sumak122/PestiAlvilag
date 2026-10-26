@@ -55,7 +55,7 @@ import json
 import math
 import zlib
 
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import linemerge, unary_union
 from shapely.prepared import prep
 from shapely.strtree import STRtree
@@ -289,7 +289,8 @@ class Space:
     """What is in the way: buildings, carriageways, lanes, tram tracks."""
 
     def __init__(self, data):
-        self.buildings = [Polygon(ring_points(b["rings"][0])) for b in data["buildings"]]
+        # The hero buildings the game puts up itself are in the way too.
+        self.buildings = [Polygon(ring_points(b["rings"][0])) for b in data["buildings"] + data.get("landmarks", [])]
         self.building_tree = STRtree(self.buildings)
         roads = []
         trams = []
@@ -904,11 +905,11 @@ def place_lamp_bins(lamps, space, tisza):
     return bins
 
 
-def place_park_benches(space, tisza_park, bins):
+def place_park_benches(space, tisza_park, bins, own_parks=()):
     benches = []
     roundabout = [Point(*keleti(p)) for p in BAROSS_ROUNDABOUT]
     for park in space.parks:
-        if park is tisza_park or park.area < 30e4 or any(park.contains(p) for p in roundabout):
+        if park is tisza_park or park in own_parks or park.area < 30e4 or any(park.contains(p) for p in roundabout):
             continue
         inner = park.buffer(-BENCH_INSET)
         if inner.is_empty:
@@ -957,6 +958,165 @@ def layout_baross(space):
         "twin_lamps": [[*keleti(p), 0.0] for p in BAROSS_LAMPS],
         "trams": [[*keleti(p), 90.0] for p in BAROSS_TRAMS],
         "islands": [[*keleti((x, y0)), *keleti((x, y1)), width] for x, y0, y1, width in BAROSS_ISLANDS],
+    }
+
+
+# Rákóczi tér's garden in the early 1930s, after the 1944 aerial photo
+# (Fortepan 109125): a big oval promenade in the middle lined with benches
+# round a lawn with a flower bed, the Four Seasons fountain (Ybl Miklós,
+# moved here in 1922) in the west part, paths out to the corners and the
+# sides, and the rest thick with trees. Unreal cm; the garden's outline is
+# RAKOCZI_GARDEN in osm_to_graybox.py.
+RAKOCZI_NEAR = (12000, 42000)
+RAKOCZI_MIDDLE = (12100, 41900)
+RAKOCZI_TURN = -9.0               # degrees the oval is turned from east
+RAKOCZI_OVAL = (2300, 1550)       # half lengths of the promenade's middle line
+RAKOCZI_PROMENADE = 520
+RAKOCZI_BED = (700, 480)          # gravel round and flower bed in the middle
+RAKOCZI_FOUNTAIN = (-3400, -600)  # from the middle, in the oval's frame
+RAKOCZI_FOUNTAIN_ROUND = 750
+RAKOCZI_SPOKES = [190.0, 135.0, 45.0, 0.0, -45.0, -135.0, 90.0, -90.0]   # path directions from the middle (degrees, oval frame)
+RAKOCZI_SPOKE_WIDTH = 380
+RAKOCZI_BENCH_STEP = 520
+RAKOCZI_TREE_STEP = 470
+RAKOCZI_TREE_CLEAR = 330          # from paths, the oval and the edge
+RAKOCZI_LAMPS = 10
+
+
+def layout_rakoczi(space, garden):
+    """Paths, trees, benches, lamps, fences and the fountain for Rákóczi tér's garden."""
+    cx, cy = RAKOCZI_MIDDLE
+    turn = math.radians(RAKOCZI_TURN)
+    ux, uy = math.cos(turn), math.sin(turn)
+    vx, vy = -uy, ux
+
+    def at(a, b):
+        """The point a cm along the oval's long axis and b across it."""
+        return (cx + a * ux + b * vx, cy + a * uy + b * vy)
+
+    def oval(t, grow=0.0):
+        ra, rb = RAKOCZI_OVAL
+        return at(math.cos(t) * (ra + grow), math.sin(t) * (rb + grow))
+
+    edge = garden.exterior
+    inside = garden.buffer(-120)
+    paths, entrances = [], []
+
+    def add_path(a, b, width):
+        paths.append([round(a[0]), round(a[1]), round(b[0]), round(b[1]), width])
+
+    # The promenade round the oval, in short straight pieces.
+    pieces = 48
+    for k in range(pieces):
+        add_path(oval(2 * math.pi * k / pieces), oval(2 * math.pi * (k + 1) / pieces), RAKOCZI_PROMENADE)
+    fountain = at(*RAKOCZI_FOUNTAIN)
+    # Paths from the oval out to the edge: the corners, the sides, and past the fountain.
+    spoke_angles = []
+    for deg in RAKOCZI_SPOKES:
+        d = math.radians(deg)
+        t = math.atan2(math.sin(d) * RAKOCZI_OVAL[0], math.cos(d) * RAKOCZI_OVAL[1])
+        start = oval(t, RAKOCZI_PROMENADE / 2 - 20)
+        dx, dy = math.cos(d) * ux - math.sin(d) * uy, math.cos(d) * uy + math.sin(d) * ux
+        hit = LineString([start, (start[0] + dx * 30000, start[1] + dy * 30000)]).intersection(edge)
+        hits = [hit] if hit.geom_type == "Point" else list(getattr(hit, "geoms", []))
+        if not hits:
+            continue
+        end = min(hits, key=lambda q: math.hypot(q.x - start[0], q.y - start[1]))
+        add_path(start, (end.x, end.y), RAKOCZI_SPOKE_WIDTH)
+        entrances.append(Point(end.x, end.y))
+        spoke_angles.append(t)
+    # A gravel round about the fountain.
+    rounds = [[round(cx), round(cy), RAKOCZI_BED[0], RAKOCZI_BED[1]]]
+    for k in range(24):
+        a0, a1 = 2 * math.pi * k / 24, 2 * math.pi * (k + 1) / 24
+        r = RAKOCZI_FOUNTAIN_ROUND - 150
+        add_path((fountain[0] + math.cos(a0) * r, fountain[1] + math.sin(a0) * r),
+                 (fountain[0] + math.cos(a1) * r, fountain[1] + math.sin(a1) * r), 330)
+    path_lines = [LineString([(p[0], p[1]), (p[2], p[3])]).buffer(p[4] / 2) for p in paths]
+    walkways = unary_union(path_lines + [Point(fountain).buffer(RAKOCZI_FOUNTAIN_ROUND)])
+
+    def near_spoke(t, gap):
+        return any(abs(math.atan2(math.sin(t - s), math.cos(t - s))) < gap for s in spoke_angles)
+
+    # Benches both sides of the promenade: the outer row facing in, the inner facing out.
+    benches, bins = [], []
+    ring_len = 2 * math.pi * math.sqrt((RAKOCZI_OVAL[0] ** 2 + RAKOCZI_OVAL[1] ** 2) / 2)
+    count = int(ring_len // RAKOCZI_BENCH_STEP)
+    for side in (1, -1):
+        grow = side * (RAKOCZI_PROMENADE / 2 + 40)
+        for k in range(count):
+            t = 2 * math.pi * (k + 0.5) / count
+            if near_spoke(t, 0.16):
+                continue
+            x, y = oval(t, grow)
+            mx, my = at(0, 0)
+            nx, ny = unit(mx - x, my - y)
+            if side < 0:
+                nx, ny = -nx, -ny
+            benches.append([round(x), round(y), yaw_of(nx, ny)])
+            if k % 4 == 1 and side > 0:
+                bx, by = oval(t + 0.05, grow)
+                bins.append([round(bx), round(by), yaw_of(nx, ny)])
+    # Low wire fences round the middle lawn and along the garden's edge, open at the paths.
+    lawn_fences = []
+    for k in range(pieces):
+        t0, t1 = 2 * math.pi * k / pieces, 2 * math.pi * (k + 1) / pieces
+        if near_spoke((t0 + t1) / 2, 0.12):
+            continue
+        a, b = oval(t0, -RAKOCZI_PROMENADE / 2 - 15), oval(t1, -RAKOCZI_PROMENADE / 2 - 15)
+        lawn_fences.append([round(a[0]), round(a[1]), round(b[0]), round(b[1])])
+    border = list(garden.buffer(-60).exterior.coords)
+    for (x0, y0), (x1, y1) in zip(border, border[1:]):
+        length = math.hypot(x1 - x0, y1 - y0)
+        steps = max(1, int(length // 300))
+        for k in range(steps):
+            a = (x0 + (x1 - x0) * k / steps, y0 + (y1 - y0) * k / steps)
+            b = (x0 + (x1 - x0) * (k + 1) / steps, y0 + (y1 - y0) * (k + 1) / steps)
+            mid = Point((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+            if all(mid.distance(e) > RAKOCZI_SPOKE_WIDTH / 2 + 120 for e in entrances):
+                lawn_fences.append([round(a[0]), round(a[1]), round(b[0]), round(b[1])])
+    # Trees everywhere else, a little jittered, thicker towards the corners.
+    trees = []
+    oval_band = Polygon([oval(2 * math.pi * k / 64, RAKOCZI_PROMENADE / 2 + 260) for k in range(64)])
+    minx, miny, maxx, maxy = garden.bounds
+    y = miny
+    row = 0
+    while y < maxy:
+        x = minx + (RAKOCZI_TREE_STEP / 2 if row % 2 else 0)
+        while x < maxx:
+            jx = x + (chance("rtx", x, y) - 0.5) * 300
+            jy = y + (chance("rty", x, y) - 0.5) * 300
+            p = Point(jx, jy)
+            if (inside.contains(p) and edge.distance(p) > RAKOCZI_TREE_CLEAR and not oval_band.contains(p)
+                    and walkways.distance(p) > RAKOCZI_TREE_CLEAR and chance("rtree", x, y) < 0.9):
+                trees.append([round(jx), round(jy), round(0.8 + 0.4 * chance("rts", x, y), 2)])
+            x += RAKOCZI_TREE_STEP
+        y += RAKOCZI_TREE_STEP * 0.87
+        row += 1
+    # Lamps round the promenade, on its outer edge.
+    lamps = []
+    for k in range(RAKOCZI_LAMPS):
+        t = 2 * math.pi * (k + 0.25) / RAKOCZI_LAMPS
+        x, y = oval(t, RAKOCZI_PROMENADE / 2 + 120)
+        mx, my = at(0, 0)
+        lamps.append([round(x), round(y), yaw_of(*unit(mx - x, my - y))])
+    # A few raked leaf piles under the trees by the promenade.
+    leaf_piles = []
+    for k in range(9):
+        t = 2 * math.pi * (k + 0.6) / 9
+        x, y = oval(t, RAKOCZI_PROMENADE / 2 + 380)
+        if not near_spoke(t, 0.2) and inside.contains(Point(x, y)):
+            leaf_piles.append([round(x), round(y), round(0.8 + 0.5 * chance("rpile", k), 2)])
+    return {
+        "paths": paths,
+        "rounds": rounds,
+        "trees": trees,
+        "benches": benches,
+        "bins": bins,
+        "lamps": lamps,
+        "lawn_fences": lawn_fences,
+        "leaf_piles": leaf_piles,
+        "fountain": [round(fountain[0]), round(fountain[1]), RAKOCZI_TURN],
     }
 
 
@@ -1505,8 +1665,20 @@ SHOP_NAMES = {
 }
 SHOP_NAMED = 0.25           # share of shops with a sign name, where one is left
 SHOP_TRADE_FIRST = 0.4      # share with the trade on the fascia and the owner on the glass
-# Two chemists along the street, at about these shares of its length.
-PHARMACIES = [(0.3, "SZENT JÓZSEF"), (0.75, "MEGVÁLTÓ")]
+# Two chemists along the street, at about these shares of its length, on
+# the left (odd numbers) or the right side.
+PHARMACIES = [(0.3, "SZENT JÓZSEF", True), (0.75, "MEGVÁLTÓ", False)]
+# The streets round Rákóczi tér and its market hall get shops too, but only
+# near the square (this box, Unreal cm): each street, and the chemist it has.
+MARKET_QUARTER = box(3500, 32000, 29000, 50500)
+MARKET_QUARTER_STREETS = [
+    ("Rákóczi tér", [(0.32, "RÁKÓCZI", True)]),
+    ("József körút", []),
+    ("Vásár utca", []),
+    ("Déri Miksa utca", []),
+    ("Víg utca", []),
+    ("Salétrom utca", []),
+]
 SHOP_OWNERS = [
     "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
     "TÓTH ISTVÁN", "NAGY FERENC", "FISCHER ADOLF", "LÖWY DÁVID", "ROTH SAMU", "SPITZER HERMAN", "HORVÁTH GYULA",
@@ -1521,10 +1693,12 @@ SHOP_OWNERS = [
 ]
 
 
-def shop_walls(data):
-    """The street-facing walls along the shop street, each [p0, p1] with the
-    building's outside on the right, plus the street line."""
-    pieces = [LineString(ring_points(c["points"])) for c in data["centerlines"] if c.get("name") == SHOP_STREET]
+def shop_walls(data, street_name, area=None):
+    """The street-facing walls along a shop street (inside area, if given),
+    each [p0, p1] with the building's outside on the right, plus the street line."""
+    pieces = [LineString(ring_points(c["points"])) for c in data["centerlines"] if c.get("name") == street_name]
+    if area is not None:
+        pieces = [p for p in pieces if p.intersects(area)]
     street = linemerge(pieces)
     lines = list(street.geoms) if hasattr(street, "geoms") else [street]
     walls = []
@@ -1539,7 +1713,7 @@ def shop_walls(data):
                     length = math.dist(p0, p1)
                     mid = Point((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
                     line = min(lines, key=lambda l: l.distance(mid))
-                    if length >= SHOP_MIN_WALL and line.distance(mid) < SHOP_STREET_REACH:
+                    if length >= SHOP_MIN_WALL and line.distance(mid) < SHOP_STREET_REACH and (area is None or area.contains(mid)):
                         t = line.project(mid)
                         a, b = line.interpolate(max(t - 50, 0)), line.interpolate(min(t + 50, line.length))
                         dx, dy = unit(b.x - a.x, b.y - a.y)
@@ -1553,16 +1727,24 @@ def shop_walls(data):
     return walls, lines
 
 
-def place_shops(data, furniture_spots):
-    """Shop fronts and gates on the ground floors of the shop street."""
-    walls, lines = shop_walls(data)
+def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharmacies=PHARMACIES, taken=None):
+    """Shop fronts and gates on the ground floors of a shop street. Walls in
+    taken (building id and first corner) already have shops from another street."""
+    walls, lines = shop_walls(data, street_name, area)
+    if taken is not None:
+        walls = [w for w in walls if (w["id"], tuple(w["p0"])) not in taken]
+        taken.update((w["id"], tuple(w["p0"])) for w in walls)
+    if not walls:
+        return [], []
+    # The Népszínház utca shops keep the names they had before other streets got shops.
+    salt = () if street_name == SHOP_STREET else (street_name,)
     total = sum(l.length for l in lines)
     clear = [Point(x, y) for x, y in furniture_spots]
     clear_tree = STRtree(clear) if clear else None
     trades = [t for t in SHOP_TRADES for _ in range(t[1])]
     shops, gates = [], []
-    owners = sorted(SHOP_OWNERS, key=lambda n: chance("owner", n))
-    pharmacies = list(PHARMACIES)
+    owners = sorted(SHOP_OWNERS, key=lambda n: chance("owner", *salt, n))
+    pharmacies = list(pharmacies)
     numbers = {True: 1, False: 2}
     last_trade = None
     used_names = set()
@@ -1612,7 +1794,7 @@ def place_shops(data, furniture_spots):
                 sx, sy = at(s)
                 share = wall["t"] / total
                 key = ("shop", wall["id"], k)
-                if pharmacies and abs(share - pharmacies[0][0]) < 0.08 and wall["left"] == (len(pharmacies) == 2):
+                if pharmacies and abs(share - pharmacies[0][0]) < 0.08 and wall["left"] == pharmacies[0][2]:
                     trade, signs, blade = "pharmacy", ["GYÓGYSZERTÁR"], "PATIKA"
                     owner = pharmacies.pop(0)[1]
                 else:
@@ -1671,7 +1853,8 @@ def main():
     lamps = place_lamps(data, space, tisza)
     columns = place_columns(data, space, tisza)
     bins = []
-    benches = place_park_benches(space, tisza, bins)
+    garden = min(space.parks, key=lambda p: p.centroid.distance(Point(*RAKOCZI_NEAR)))
+    benches = place_park_benches(space, tisza, bins, [garden])
     bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
     sidewalks = place_sidewalks(data, space, tisza, park)
@@ -1683,8 +1866,16 @@ def main():
     spots = [(l[0], l[1]) for l in lamps + columns + bins + benches]
     spots += [tuple(t["sign"][:2]) for t in tram_stops] + [tuple(v["at"][:2]) for v in food_vendors]
     spots += [tuple(t["sign"][:2]) for t in taxi_stands] + [tuple(p[:2]) for t in taxi_stands for p in t["taxis"]]
-    shops, gates = place_shops(data, spots)
+    taken = set()
+    shops, gates = place_shops(data, spots, taken=taken)
+    quarter_shops = 0
+    for street_name, chemists in MARKET_QUARTER_STREETS:
+        more_shops, more_gates = place_shops(data, spots, street_name, MARKET_QUARTER, chemists, taken)
+        shops += more_shops
+        gates += more_gates
+        quarter_shops += len(more_shops)
     baross = layout_baross(space)
+    rakoczi = layout_rakoczi(space, garden)
 
     out = {
         "version": 1,
@@ -1703,16 +1894,18 @@ def main():
         "gates": gates,
         "tisza": park,
         "baross": baross,
+        "rakoczi": rakoczi,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls, {len(shops)} shops and {len(gates)} gates on {SHOP_STREET}; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls, {len(shops) - quarter_shops} shops on {SHOP_STREET} and {quarter_shops} round Rákóczi tér, {len(gates)} gates; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
           f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers, "
           f"playground {len(park['playground']['items'])} things, {len(park['playground']['people'])} people; "
-          f"Baross tér: {len(baross['trees'])} trees, {len(baross['twin_lamps'])} lamps, {len(baross['trams'])} trams")
+          f"Baross tér: {len(baross['trees'])} trees, {len(baross['twin_lamps'])} lamps, {len(baross['trams'])} trams; "
+          f"Rákóczi tér: {len(rakoczi['paths'])} paths, {len(rakoczi['trees'])} trees, {len(rakoczi['benches'])} benches, {len(rakoczi['lamps'])} lamps")
 
 
 if __name__ == "__main__":

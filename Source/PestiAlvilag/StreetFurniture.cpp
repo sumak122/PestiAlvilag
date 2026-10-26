@@ -564,6 +564,10 @@ void AStreetFurniture::BeginPlay()
 	{
 		BuildPark(**Park);
 	}
+	if (Root->TryGetObjectField(TEXT("rakoczi"), Park))
+	{
+		BuildPark(**Park);
+	}
 
 	// Hand each batch all its instances at once; one by one is slow.
 	int32 Count = 0;
@@ -1039,6 +1043,15 @@ void AStreetFurniture::BuildPark(const FJsonObject& Park)
 		if (GroundAt(At, Ground))
 		{
 			AddObject(Furniture::FromParkModel(ParkModel::Statue()), Ground, (*Statue)[2]->AsNumber(), 1.0, TreeCullDistance);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Fountain = nullptr;
+	if (Park.TryGetArrayField(TEXT("fountain"), Fountain) && Fountain->Num() >= 3)
+	{
+		const FVector2D At((*Fountain)[0]->AsNumber(), (*Fountain)[1]->AsNumber());
+		if (GroundAt(At, Ground))
+		{
+			AddObject(Furniture::FromParkModel(ParkModel::FourSeasonsFountain()), Ground, (*Fountain)[2]->AsNumber(), 1.0, TreeCullDistance);
 		}
 	}
 	const TSharedPtr<FJsonObject>* Playground = nullptr;

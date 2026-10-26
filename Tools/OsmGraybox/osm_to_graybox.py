@@ -103,13 +103,24 @@ class LocalProjection:
 
 
 # Buildings the game puts up itself from code (hero buildings): left out
-# of the graybox so they don't stand inside them. r9906133: Keleti pályaudvar.
-HERO_BUILDINGS = {"r9906133"}
+# of the graybox so they don't stand inside them. r9906133: Keleti pályaudvar;
+# r4514296: the Rákóczi tér market hall.
+HERO_BUILDINGS = {"r9906133", "r4514296"}
 
 # Buildings that are too new for 1932 and would stand in the way: the two
 # entrance pavilions of the Köztársaság tér / II. János Pál pápa tér metro
-# station (2014) in Tisza Kálmán tér.
-MODERN_BUILDINGS = {"w269953709", "w272486842"}
+# station (2014) in Tisza Kálmán tér, and the M4 entrance (2014) and the car
+# park's pavilion on Rákóczi tér.
+MODERN_BUILDINGS = {"w269953709", "w272486842", "r4514297", "r4514298"}
+
+# Rákóczi tér in the early 1930s (1944 aerial photo, Fortepan 109125): one
+# tree garden filling the square, the rest paved up to the market hall,
+# instead of today's lawns over the underground car park, whose ramps go.
+# Outlines in Unreal cm (X east, Y south); street_furniture.py lays out the
+# garden's paths, trees and fountain.
+RAKOCZI_GARDEN = [(6900, 39850), (14700, 37950), (17050, 44800), (6900, 45200)]
+RAKOCZI_SQUARE = [(6300, 39450), (15850, 37050), (16780, 37420), (19330, 44520), (19100, 45100), (6300, 45750)]
+RAKOCZI_DROP_WAYS = {"240802393", "240802394"}
 
 # Footprints smaller than this are modern street clutter (tram shelters,
 # kiosks, toilets). With no height in OSM they would come out as four-storey
@@ -475,6 +486,11 @@ def to_ue(x, y):
     return (round(x * 100.0), round(-y * 100.0))
 
 
+def from_ue(p):
+    """Unreal cm (X east, Y south) to map metres (x east, y north)."""
+    return (p[0] / 100.0, -p[1] / 100.0)
+
+
 def polygon_record(poly):
     """Rings as flat Unreal XY lists plus earcut triangles.
 
@@ -744,12 +760,15 @@ def convert(osm_path, origin):
     nodes, ways, relations, (minlat, minlon, maxlat, maxlon) = parse_osm(osm_path)
     proj = LocalProjection(*origin)
     baross = baross_ter_1932(nodes, ways, proj)
+    for wid in RAKOCZI_DROP_WAYS:
+        ways.pop(wid, None)
     x0, y0 = proj.to_metres(minlat, minlon)
     x1, y1 = proj.to_metres(maxlat, maxlon)
     clip = box(x0, y0, x1, y1)
 
     buildings, roads, plazas, parks, trams, rails, centerlines = [], [], [], [], [], [], []
     tram_edges, tram_grooves, tram_rails = [], [], []
+    landmarks = []
     carriageways, one_road = [], []
 
     def add_area(target, geom, tags):
@@ -770,6 +789,8 @@ def convert(osm_path, origin):
 
         if building and building != "no" and is_closed(way) and not is_underground(tags):
             footprint = Polygon(pts).buffer(0)
+            if "w" + wid in HERO_BUILDINGS:
+                landmarks.append((footprint, "w" + wid))
             if "w" + wid in HERO_BUILDINGS | MODERN_BUILDINGS or footprint.area < MIN_BUILDING_AREA:
                 continue
             add_area(buildings, footprint, dict(tags, id="w" + wid))
@@ -821,11 +842,20 @@ def convert(osm_path, origin):
             continue
         geom = geom.buffer(0)
         if is_building:
+            if "r" + rel["id"] in HERO_BUILDINGS:
+                landmarks.append((geom, "r" + rel["id"]))
             if "r" + rel["id"] in HERO_BUILDINGS | MODERN_BUILDINGS or geom.area < MIN_BUILDING_AREA:
                 continue
             add_area(buildings, geom, dict(tags, id="r" + rel["id"]))
         else:
             add_area(parks, geom, tags)
+
+    # Rákóczi tér: the garden in place of today's lawns, paving round it.
+    garden = Polygon([from_ue(p) for p in RAKOCZI_GARDEN])
+    square = Polygon([from_ue(p) for p in RAKOCZI_SQUARE])
+    parks[:] = [(p, t) for p, t in parks if not p.intersects(square)]
+    add_area(parks, garden, {})
+    add_area(plazas, square.difference(unary_union([p for p, _ in roads])), {})
 
     def merged_layer(name, items):
         merged = unary_union([p for p, _ in items]) if items else None
@@ -868,6 +898,14 @@ def convert(osm_path, origin):
                 rec["front"] = front
         out_buildings.append(rec)
 
+    # The hero buildings' footprints, for the street furniture to keep clear of.
+    out_landmarks = []
+    for poly, landmark_id in landmarks:
+        rec = polygon_record(poly)
+        if rec is not None:
+            rec["id"] = landmark_id
+            out_landmarks.append(rec)
+
     walls = unary_union([p for p, tags in buildings if building_base_m(tags) < DRIVE_UNDER_HEIGHT]) if buildings else None
 
     # Today's tram tracks are left out: the 1932 network was different.
@@ -898,6 +936,7 @@ def convert(osm_path, origin):
             merged_layer("tram_rail", tram_rails),
         ],
         "buildings": out_buildings,
+        "landmarks": out_landmarks,
         "centerlines": centerlines,
         "lanes": build_lanes(ways, nodes, proj, clip, walls),
         "trams": tram_routes,
