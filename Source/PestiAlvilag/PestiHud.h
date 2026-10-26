@@ -53,7 +53,7 @@ public:
 	/** A big line across the middle of the screen. */
 	void Announce(const FString& Hu, const FString& En, float Seconds);
 	/** The lighter collection cabinet over everything, or null to put it away. */
-	void SetCabinet(const ALighters* Shown) { Cabinet = Shown; }
+	void SetCabinet(const ALighters* Shown);
 
 protected:
 	virtual void BeginPlay() override;

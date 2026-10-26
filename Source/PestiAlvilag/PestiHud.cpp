@@ -610,6 +610,12 @@ APestiHUD* APestiHUD::Get(const UObject* WorldContextObject)
 	return PC ? Cast<APestiHUD>(PC->GetHUD()) : nullptr;
 }
 
+void APestiHUD::SetCabinet(const ALighters* Shown)
+{
+	// Here, where ALighters is fully known: the weak pointer needs its whole type.
+	Cabinet = Shown;
+}
+
 void APestiHUD::BeginPlay()
 {
 	Super::BeginPlay();
