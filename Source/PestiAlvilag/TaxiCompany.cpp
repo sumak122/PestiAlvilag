@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GoalMarkerComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -138,7 +139,6 @@ ATaxiCompany::ATaxiCompany()
 	RootComponent = Root;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	for (const TaxiCompany::FKioskPart& Spec : TaxiCompany::KioskSpecs)
 	{
 		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Spec.Name);
@@ -166,17 +166,9 @@ ATaxiCompany::ATaxiCompany()
 	SignFront = MakeSign(TEXT("SignFront"), 1.0, 0.0);
 	SignBack = MakeSign(TEXT("SignBack"), -1.0, 180.0);
 
-	// The destination light; it lives in the world, not on the kiosk.
-	Beacon = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Beacon"));
-	Beacon->SetupAttachment(Root);
-	Beacon->SetUsingAbsoluteLocation(true);
-	Beacon->SetUsingAbsoluteRotation(true);
-	Beacon->SetUsingAbsoluteScale(true);
-	Beacon->SetStaticMesh(CylinderMesh.Object);
-	Beacon->SetWorldScale3D(FVector(0.6f, 0.6f, 30.f));
-	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Beacon->SetCastShadow(false);
-	Beacon->SetVisibility(false);
+	// The destination mark; it lives in the world, not on the kiosk.
+	Marker = CreateDefaultSubobject<UGoalMarkerComponent>(TEXT("Marker"));
+	Marker->SetupAttachment(Root);
 
 	Guide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("Guide"));
 	Guide->SetupAttachment(Root);
@@ -196,9 +188,6 @@ void ATaxiCompany::BeginPlay()
 		Paintwork->SetVectorParameterValue(TEXT("Color"), TaxiCompany::KioskSpecs[i].Color);
 		KioskParts[i]->SetMaterial(0, Paintwork);
 	}
-	UMaterialInstanceDynamic* Light = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-	Light->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.f, 0.75f, 0.1f));
-	Beacon->SetMaterial(0, Light);
 }
 
 ATrafficManager* ATaxiCompany::GetTraffic() const
@@ -527,8 +516,7 @@ void ATaxiCompany::PickUp(APestiTaxi* Taxi)
 	BumpsAtPickup = Taxi->GetBumpCount();
 	BumpsSaid = 0;
 	bPassengerScared = false;
-	Beacon->SetWorldLocation(DropoffSpot + FVector(0.0, 0.0, 1500.0));
-	Beacon->SetVisibility(true);
+	Marker->ShowAt(DropoffSpot);
 	Say(FString::Printf(TEXT("\u201e%s, legyen sz\u00edves!\u201d  (%s, please!)"), *DropoffStreet, *DropoffStreet));
 }
 
@@ -587,7 +575,7 @@ void ATaxiCompany::EndFare()
 		Passenger->Destroy();
 		Passenger = nullptr;
 	}
-	Beacon->SetVisibility(false);
+	Marker->Hide();
 	Guide->Stop();
 	if (Shift != ETaxiShift::Off)
 	{

@@ -10,6 +10,7 @@ class APestiTaxi;
 class ATaxiPassenger;
 class AWalkingPerson;
 class ATrafficManager;
+class UGoalMarkerComponent;
 class UMaterialInterface;
 class UStaticMeshComponent;
 class UTextRenderComponent;
@@ -103,9 +104,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Taxi")
 	TObjectPtr<UTextRenderComponent> SignBack;
 
-	/** The yellow light over the destination. */
+	/** The mark over the destination. */
 	UPROPERTY(VisibleAnywhere, Category = "Taxi")
-	TObjectPtr<UStaticMeshComponent> Beacon;
+	TObjectPtr<UGoalMarkerComponent> Marker;
 
 	/** Arrows over the crossings on the way to the fare or the destination. */
 	UPROPERTY(VisibleAnywhere, Category = "Taxi")

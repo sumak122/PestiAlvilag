@@ -33,6 +33,10 @@ namespace PestiPerson
 	// Limbs swing this far at a run (degrees), and one stride is this many cm.
 	constexpr float MaxSwing = 35.f;
 	constexpr float StrideLength = 120.f;
+	// Holding something in front: how far the arms reach forward, standing
+	// and sitting (degrees).
+	constexpr float HoldPitch = 50.f;
+	constexpr float SeatHoldPitch = 40.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
 
@@ -210,8 +214,11 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 	StridePhase += DeltaSeconds * Speed / PestiPerson::StrideLength * PI;
 	const float Swing = FMath::Sin(StridePhase) * PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
 	constexpr int32 NumLimbs = 4;
-	// The arm with a load in it hangs still.
-	const float Swings[NumLimbs] = { Swing, -Swing, -Swing, bCarrying ? 0.f : Swing };  // left leg, right leg, left arm, right arm
+	// The arm with a load in it hangs still; both arms holding something in front reach forward.
+	const float Hold = bRiding ? PestiPerson::SeatHoldPitch : PestiPerson::HoldPitch;
+	const float LeftArm = bHoldingInFront ? Hold : -Swing;
+	const float RightArm = bHoldingInFront ? Hold : bCarrying ? 0.f : Swing;
+	const float Swings[NumLimbs] = { Swing, -Swing, LeftArm, RightArm };  // left leg, right leg, left arm, right arm
 	for (int32 i = 0; i < NumLimbs && i < Pieces.Num(); ++i)
 	{
 		if (Pieces[i])

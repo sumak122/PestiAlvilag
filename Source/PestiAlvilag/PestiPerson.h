@@ -65,6 +65,13 @@ public:
 	bool IsCarrying() const { return bCarrying; }
 
 	/**
+	 * Something held out in front in both hands (a parcel; a mission
+	 * attaches the thing itself): both arms reach forward and don't swing.
+	 */
+	void SetHoldingInFront(bool bInHolding) { bHoldingInFront = bInHolding; }
+	bool IsHoldingInFront() const { return bHoldingInFront; }
+
+	/**
 	 * Riding along on something (a tram): he sits at SeatAt (where his
 	 * middle goes, on the vehicle, facing SeatYaw) and goes where it goes;
 	 * only looking around works, and C swaps the camera between close
@@ -110,6 +117,7 @@ private:
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
 	bool bCarrying = false;
+	bool bHoldingInFront = false;
 	bool bRiding = false;
 	/** Riding with the camera out where the whole vehicle shows. */
 	bool bRideOutside = false;

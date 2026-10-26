@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "GoalMarkerComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -18,8 +19,7 @@
 
 namespace Mission
 {
-	constexpr float BeaconHeight = 1500.f;
-	// Closer than this the light alone is enough; no arrows.
+	// Closer than this the marker alone is enough; no arrows.
 	constexpr double RouteMinDistance = 4000.0;
 }
 
@@ -32,18 +32,8 @@ AMission::AMission()
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
 
-	// The light over the target; it moves from step to step on its own.
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	Beacon = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Beacon"));
-	Beacon->SetupAttachment(Root);
-	Beacon->SetUsingAbsoluteLocation(true);
-	Beacon->SetUsingAbsoluteRotation(true);
-	Beacon->SetUsingAbsoluteScale(true);
-	Beacon->SetStaticMesh(CylinderMesh.Object);
-	Beacon->SetWorldScale3D(FVector(0.4f, 0.4f, 30.f));
-	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Beacon->SetCastShadow(false);
-	Beacon->SetVisibility(false);
+	Marker = CreateDefaultSubobject<UGoalMarkerComponent>(TEXT("Marker"));
+	Marker->SetupAttachment(Root);
 
 	Guide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("Guide"));
 	Guide->SetupAttachment(Root);
@@ -52,13 +42,6 @@ AMission::AMission()
 void AMission::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (BaseMaterial)
-	{
-		UMaterialInstanceDynamic* Light = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-		Light->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.f, 0.85f, 0.3f));
-		Beacon->SetMaterial(0, Light);
-	}
 
 	SetUpMission();
 	if (Steps.Num() > 0)
@@ -122,8 +105,7 @@ void AMission::StartStep(int32 Step)
 	CurrentStep = Step;
 	Guide->Stop();
 	const FMissionStep& Next = Steps[Step];
-	Beacon->SetWorldLocation(FVector(Next.Target.X, Next.Target.Y, Next.Target.Z + Mission::BeaconHeight));
-	Beacon->SetVisibility(true);
+	Marker->ShowAt(Next.Target);
 	OnStepStarted(Step);
 }
 
@@ -200,7 +182,7 @@ void AMission::Tick(float DeltaSeconds)
 void AMission::Pass()
 {
 	CurrentStep = INDEX_NONE;
-	Beacon->SetVisibility(false);
+	Marker->Hide();
 	Guide->Stop();
 	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
