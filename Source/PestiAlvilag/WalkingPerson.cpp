@@ -2,6 +2,7 @@
 
 #include "WalkingPerson.h"
 
+#include "PersonModel.h"
 #include "Engine/World.h"
 
 namespace WalkingPerson
@@ -53,9 +54,10 @@ void AWalkingPerson::StandFacing(double Yaw)
 
 void AWalkingPerson::Rest()
 {
-	for (int32 i = 0; i < 4; ++i)
+	PersonModel::PoseLegs(Pieces, 0.f, 0.f);
+	for (const int32 Arm : { PersonKit::ArmLeft, PersonKit::ArmRight })
 	{
-		if (USceneComponent* Part = Limb(i))
+		if (USceneComponent* Part = Limb(Arm))
 		{
 			Part->SetRelativeRotation(FRotator::ZeroRotator);
 		}

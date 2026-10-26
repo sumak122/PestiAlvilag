@@ -48,6 +48,8 @@ public:
 	void ClearGoal();
 	/** Someone speaks: their name over the line, Hungarian with the English under it. */
 	void Say(const FString& Who, const FString& Hu, const FString& En, float Seconds);
+	/** True while someone's line is on the screen. */
+	bool IsSaying() const { return Speech.Until >= Now(); }
 	/** A big line across the middle of the screen. */
 	void Announce(const FString& Hu, const FString& En, float Seconds);
 	/** The lighter collection cabinet over everything, or null to put it away. */

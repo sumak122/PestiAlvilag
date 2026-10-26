@@ -24,13 +24,29 @@ namespace PersonModel
 
 	/**
 	 * Dresses a person under Parent, whose origin is MiddleHeight above the
-	 * feet: the legs, arms and body, each placed at its hip or shoulder so it
-	 * swings from there (pitch forward). Any pieces already in InOutPieces are
-	 * removed first. The pieces come in PersonKit::EPiece order: left leg,
-	 * right leg, left arm, right arm, body.
+	 * feet: the thighs, arms, body and the halves of the skirts, each placed
+	 * at its hip or shoulder so it swings from there (pitch forward), and the
+	 * shins under the thighs at the knees. Any pieces already in InOutPieces
+	 * are removed first. The pieces come in PersonKit::EPiece order: left
+	 * thigh, right thigh, left arm, right arm, body, left shin, right shin,
+	 * left skirt, right skirt.
 	 */
 	void Dress(AActor* Owner, USceneComponent* Parent, UMaterialInterface* BaseMaterial, const PersonKit::FOutfit& Outfit,
 		TArray<TObjectPtr<UProceduralMeshComponent>>& InOutPieces);
+
+	/**
+	 * Swings the legs of a dressed person: each thigh to its pitch (forward
+	 * is positive), each knee bent by its own (negative takes the foot back),
+	 * and the skirts after the thighs (PersonKit::SkirtFollow).
+	 */
+	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee = 0.f, float RightKnee = 0.f);
+
+	/**
+	 * Walking legs at this point of the stride: the left thigh at
+	 * Sin(Phase) * Swing, the right against it, and the knees bending with
+	 * the stride by KneeAmount (0 standing, 1 walking, more running).
+	 */
+	void StrideLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Phase, float Swing, float KneeAmount);
 
 	/** Someone out on the streets of Pest in the autumn of 1932. */
 	PersonKit::FOutfit RandomOutfit(FRandomStream& Random);

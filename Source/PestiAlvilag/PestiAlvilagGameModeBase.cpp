@@ -11,6 +11,7 @@
 #include "HomeDoor.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
+#include "Knockables.h"
 #include "Lighters.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -18,6 +19,7 @@
 #include "MissionUzenet.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
+#include "Pigeons.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
@@ -138,6 +140,18 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<APedestrians>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<APedestrians>();
+	}
+
+	// Crates, barrels, churns and dustbins to knock over.
+	if (!TActorIterator<AKnockables>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AKnockables>();
+	}
+
+	// Pigeons on the squares.
+	if (!TActorIterator<APigeons>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<APigeons>();
 	}
 
 	// Taxis to ride in as a paying passenger.

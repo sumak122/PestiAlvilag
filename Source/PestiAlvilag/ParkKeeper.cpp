@@ -2,6 +2,7 @@
 
 #include "ParkKeeper.h"
 
+#include "PersonModel.h"
 #include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -107,12 +108,13 @@ void AParkKeeper::SetWorkSpots(const TArray<FVector>& InSpots)
 
 void AParkKeeper::PoseLimbs(float Legs, float Arms)
 {
-	const float Pitches[] = { Legs, -Legs, Arms, Arms };  // left leg, right leg, left arm, right arm
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Pitches)); ++i)
+	// The leg out in front bends a little at the knee.
+	PersonModel::PoseLegs(Pieces, Legs, -Legs, -0.5f * FMath::Max(Legs, 0.f), -0.5f * FMath::Max(-Legs, 0.f));
+	for (const int32 Arm : { PersonKit::ArmLeft, PersonKit::ArmRight })
 	{
-		if (USceneComponent* Part = Limb(i))
+		if (USceneComponent* Part = Limb(Arm))
 		{
-			Part->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+			Part->SetRelativeRotation(FRotator(Arms, 0.f, 0.f));
 		}
 	}
 }
