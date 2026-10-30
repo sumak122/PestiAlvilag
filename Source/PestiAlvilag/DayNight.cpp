@@ -67,13 +67,14 @@ namespace DayNight
 	constexpr float NightSky = 0.5f;
 	constexpr float NightFog = 0.04f;
 
-	// Street lamps: the nearest few light the ground; each makes the pavement
-	// under it about twice as bright as a lit grey wall.
-	constexpr int32 LampLightCount = 16;
+	// Street lamps: the nearest light the ground, out to 90 m round the
+	// camera, fading out over the last 30 m so none pops on; each makes the
+	// pavement under it about twice as bright as a lit grey wall.
+	constexpr int32 LampLightCount = 40;
 	constexpr float LampReach = 1800.f;
 	constexpr float LampStrength = 56.f;
-	constexpr double LampRange = 5000.0;
-	constexpr double LampFade = 3500.0;
+	constexpr double LampRange = 9000.0;
+	constexpr double LampFade = 6000.0;
 	const FLinearColor GasLight(1.f, 0.72f, 0.42f);
 
 	// The sun is only turned when it has moved this far (degrees), as
@@ -96,7 +97,8 @@ ADayNight::ADayNight()
 ADayNight* ADayNight::Get(UWorld* World)
 {
 	static TWeakObjectPtr<ADayNight> Found;
-	if (!World)
+	// Only in the game: not for things built in the editor.
+	if (!World || !World->IsGameWorld())
 	{
 		return nullptr;
 	}
@@ -138,6 +140,7 @@ void ADayNight::BeginPlay()
 
 	UpdateSun(true);
 	UpdateGlows(true);
+	UpdateSeeThrough(true);
 }
 
 void ADayNight::FindSky()
@@ -245,6 +248,7 @@ void ADayNight::SkipHour()
 	Hour = FMath::Fmod(Hour + 1.f, 24.f);
 	UpdateSun(true);
 	UpdateGlows(true);
+	UpdateSeeThrough(true);
 }
 
 void ADayNight::Tick(float DeltaSeconds)
@@ -258,6 +262,7 @@ void ADayNight::Tick(float DeltaSeconds)
 	{
 		GlowTimer = 0.5f;
 		UpdateGlows(false);
+		UpdateSeeThrough(false);
 	}
 	LampTimer -= DeltaSeconds;
 	if (LampTimer <= 0.f)
@@ -390,6 +395,48 @@ void ADayNight::UpdateGlows(bool bForce)
 		{
 			Mesh->SetMaterial(Glow.Slot, bLampsLit ? Glow.Glow.Get() : Glow.Day.Get());
 		}
+	}
+}
+
+void ADayNight::AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint)
+{
+	if (!Material)
+	{
+		return;
+	}
+	FSeeThrough& Glass = SeeThroughs.AddDefaulted_GetRef();
+	Glass.Material = Material;
+	Glass.Tint = Tint;
+	ShadeSeeThrough(Glass);
+}
+
+void ADayNight::ShadeSeeThrough(const FSeeThrough& Glass) const
+{
+	if (UMaterialInstanceDynamic* Material = Glass.Material.Get())
+	{
+		// As much darker than by day as a lit grey wall looks now.
+		const float Shade = GreyLuminance() / (DayNight::DayGrey * DaySunIntensity);
+		FLinearColor Tint = Glass.Tint * Shade;
+		Tint.A = Glass.Tint.A;
+		Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tint);
+	}
+}
+
+void ADayNight::UpdateSeeThrough(bool bForce)
+{
+	if (!bForce && FMath::Abs(Darkness - LastShadeDarkness) < 0.01f)
+	{
+		return;
+	}
+	LastShadeDarkness = Darkness;
+	for (int32 i = SeeThroughs.Num() - 1; i >= 0; --i)
+	{
+		if (!SeeThroughs[i].Material.IsValid())
+		{
+			SeeThroughs.RemoveAtSwap(i);
+			continue;
+		}
+		ShadeSeeThrough(SeeThroughs[i]);
 	}
 }
 
