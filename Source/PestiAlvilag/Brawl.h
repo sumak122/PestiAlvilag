@@ -272,15 +272,15 @@ namespace Brawl
 	/** Reaching for his collar at T: both hands out. */
 	inline FPose GrabReach(float T)
 	{
-		FPose Reach = Stance();
-		Reach.Yaw = 0.f;
-		Reach.Pitch = -14.f;
-		Reach.ArmL = 92.f;
-		Reach.ArmR = 92.f;
-		Reach.ArmOutL = -12.f;
-		Reach.ArmOutR = -12.f;
-		Reach.LegL = 26.f;
-		return Mix(Stance(), Reach, Smooth(0.f, 0.8f, T));
+		FPose Out = Stance();
+		Out.Yaw = 0.f;
+		Out.Pitch = -14.f;
+		Out.ArmL = 92.f;
+		Out.ArmR = 92.f;
+		Out.ArmOutL = -12.f;
+		Out.ArmOutR = -12.f;
+		Out.LegL = 26.f;
+		return Mix(Stance(), Out, Smooth(0.f, 0.8f, T));
 	}
 
 	/** Holding him by the collar: both fists in it, leaning in. */

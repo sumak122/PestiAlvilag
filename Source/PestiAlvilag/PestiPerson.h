@@ -206,6 +206,12 @@ protected:
 	TWeakObjectPtr<APestiPerson> Foe;
 	float Stamina = Brawl::MaxStamina;
 
+	/** Over or under the thing ahead, as FreeRun found it. */
+	void StartMove(const FreeRun::FChance& Chance);
+	void TickMove(float DeltaSeconds);
+	void FinishMove();
+	void ApplyPose(const FreeRun::FPose& Pose);
+
 private:
 	void Look(APlayerController* PC, float DeltaSeconds);
 	void Walk(const APlayerController* PC);
@@ -213,11 +219,6 @@ private:
 	void TryEnterCar(APlayerController* PC);
 	void SetInWorld(bool bInWorld);
 	void SetRideView(bool bOutside, APlayerController* PC);
-	/** Over or under the thing ahead, as FreeRun found it. */
-	void StartMove(const FreeRun::FChance& Chance);
-	void TickMove(float DeltaSeconds);
-	void FinishMove();
-	void ApplyPose(const FreeRun::FPose& Pose);
 
 	float StridePhase = 0.f;
 	bool bCameraAimed = false;
