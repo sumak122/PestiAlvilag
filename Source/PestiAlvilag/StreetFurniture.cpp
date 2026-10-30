@@ -748,14 +748,18 @@ void AStreetFurniture::BuildFoodVendors(const FJsonObject& Root)
 
 void AStreetFurniture::BuildMarket(const FJsonObject& Root)
 {
-	const TSharedPtr<FJsonObject>* Market = nullptr;
-	if (!Root.TryGetObjectField(TEXT("market"), Market))
+	// The Teleki tér market, and the market women on the square in front of the market hall.
+	for (const TCHAR* Field : { TEXT("market"), TEXT("hall_market") })
 	{
-		return;
-	}
-	if (AFleaMarket* Teleki = GetWorld()->SpawnActor<AFleaMarket>(AFleaMarket::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator))
-	{
-		Teleki->Setup(**Market);
+		const TSharedPtr<FJsonObject>* Market = nullptr;
+		if (!Root.TryGetObjectField(Field, Market))
+		{
+			continue;
+		}
+		if (AFleaMarket* Made = GetWorld()->SpawnActor<AFleaMarket>(AFleaMarket::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Made->Setup(**Market);
+		}
 	}
 }
 
