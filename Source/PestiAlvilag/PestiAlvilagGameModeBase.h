@@ -53,6 +53,19 @@ public:
 	void NotifySeenByPolice();
 	void NotifyPoliceNear();
 
+	/**
+	 * A constable has telephoned the station from a police box: for a while
+	 * the police cars of the whole district come after the player, not just
+	 * the ones nearby, and he is wanted a step more.
+	 */
+	void CallInPolice();
+	/** True while the cars called by telephone are out. */
+	bool IsPoliceCalledIn() const;
+
+	/** How long the cars called by telephone keep coming (s). */
+	UPROPERTY(EditAnywhere, Category = "Police")
+	float CalledInTime = 60.f;
+
 	/** The player's money in fillér (100 fillér = 1 pengő). */
 	int32 GetMoney() const { return Money; }
 	void AddMoney(int32 Filler);
@@ -136,4 +149,6 @@ private:
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
 	double LastPoliceNearTime = -1.0;
+	/** Until when the cars called by telephone are out, or below 0. */
+	double PoliceCalledUntil = -1.0;
 };

@@ -42,6 +42,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float ResponseRange = 40000.f;
 
+	/** The same once a constable has telephoned for help (cm). */
+	UPROPERTY(EditAnywhere, Category = "Police")
+	float CalledInRange = 200000.f;
+
 	/** How far a patrol can see the player (cm). */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float SightRange = 8000.f;

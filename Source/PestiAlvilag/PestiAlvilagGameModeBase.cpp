@@ -23,6 +23,7 @@
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
+#include "PolicePatrols.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
@@ -189,6 +190,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<ATrafficManager>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ATrafficManager>();
+	}
+
+	// Constables on the beat round their telephone boxes (after the traffic: they find their way along its streets).
+	if (!TActorIterator<APolicePatrols>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<APolicePatrols>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first
@@ -366,6 +373,7 @@ void APestiAlvilagGameModeBase::UpdateFaint()
 			PC->PlayerCameraManager->StartCameraFade(0.f, 1.f, PestiStart::FaintFade, FLinearColor::Black, false, true);
 		}
 		WantedLevel = 0;
+		PoliceCalledUntil = -1.0;
 		TimeUnseen = 0.f;
 		ArrestProgress = 0.f;
 		return;
@@ -428,6 +436,27 @@ void APestiAlvilagGameModeBase::NotifyPoliceNear()
 	LastPoliceNearTime = GetWorld()->GetTimeSeconds();
 }
 
+void APestiAlvilagGameModeBase::CallInPolice()
+{
+	if (WantedLevel == 0)
+	{
+		return;
+	}
+	const bool bAlready = IsPoliceCalledIn();
+	PoliceCalledUntil = GetWorld()->GetTimeSeconds() + CalledInTime;
+	TimeUnseen = 0.f;
+	if (!bAlready)
+	{
+		WantedLevel = FMath::Min(WantedLevel + 1, PestiStart::MaxWantedLevel);
+		APestiHUD::Show(this, 3, 5.f, FColor::Red, TEXT("A constable telephoned the station: police cars are coming!"));
+	}
+}
+
+bool APestiAlvilagGameModeBase::IsPoliceCalledIn() const
+{
+	return WantedLevel > 0 && PoliceCalledUntil >= 0.0 && GetWorld()->GetTimeSeconds() < PoliceCalledUntil;
+}
+
 void APestiAlvilagGameModeBase::UpdateWanted(float DeltaSeconds)
 {
 	if (WantedLevel == 0)
@@ -465,6 +494,7 @@ void APestiAlvilagGameModeBase::UpdateWanted(float DeltaSeconds)
 void APestiAlvilagGameModeBase::ClearWanted(const TCHAR* Message)
 {
 	WantedLevel = 0;
+	PoliceCalledUntil = -1.0;
 	TimeUnseen = 0.f;
 	ArrestProgress = 0.f;
 	APestiHUD::Show(this, 3, 4.f, FColor::Yellow, Message);

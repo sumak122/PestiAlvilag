@@ -24,6 +24,9 @@ that the AStreetFurniture actor reads:
   share it), {"name", "at": [x, y, yaw] on the track facing the way the
   tram runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
   "wait": [x, y] where passengers wait and get off};
+- police_boxes: the police telephone boxes the constables on the beat ring
+  the station from, one at each beat, {"name", "at": [x, y, yaw]} a step
+  off the pavement walking line, the door facing it;
 - shops, gates: the shop fronts and tenement gates on the ground floors of
   Népszínház utca, each shop {"at": [x, y, yaw] at the middle of its front
   on the wall foot, facing out, "width", "trade", "fascia" (the big
@@ -716,6 +719,71 @@ def place_food_vendors(space, sidewalks):
             continue
         _, x, y, side = best
         out.append({"kind": kind, "at": [round(x), round(y), yaw_of(dy * side, -dx * side)]})
+    return out
+
+
+# Police telephone boxes, one for each pair of constables on the beat: the
+# beat's name and a point near where it starts. Each box stands a step off
+# the nearest walking line, on the side away from the traffic, its door
+# towards the passers-by.
+POLICE_BOXES = [
+    ("Blaha Lujza t\u00e9r", (-5500, -2500)),
+    ("R\u00e1k\u00f3czi t\u00e9r", (8000, 38000)),
+    ("N\u00e9psz\u00ednh\u00e1z utca", (36000, 12500)),
+    ("Tisza K\u00e1lm\u00e1n t\u00e9r", (50000, -6000)),
+    ("Teleki t\u00e9r", (98000, 28000)),
+    ("Baross t\u00e9r", (88000, -46000)),
+    ("R\u00e1k\u00f3czi \u00fat", (25000, -12000)),
+    ("Doh\u00e1ny utca", (-10000, -40000)),
+    ("M\u00e1ty\u00e1s t\u00e9r", (70000, 50000)),
+    ("Fiumei \u00fat", (125000, 5000)),
+    ("R\u00f3zs\u00e1k tere", (43000, -52000)),
+    ("J\u00f3zsef k\u00f6r\u00fat", (4000, 60000)),
+]
+POLICE_BOX_OFF_WALK = 160
+POLICE_BOX_CLEAR = 95       # from the box's middle to the nearest wall
+POLICE_BOX_CLEAR_OF_LANES = 260
+POLICE_BOX_SPACE = 160      # from lamps, columns, benches and the like
+POLICE_BOX_SEARCH = 2500    # how far along the walk from the nearest point
+
+
+def place_police_boxes(space, sidewalks, spots):
+    lines = [LineString(ring_points(w)) for w in sidewalks]
+    tree = STRtree(lines)
+    taken = STRtree([Point(x, y) for x, y in spots]) if spots else None
+    out = []
+    for name, anchor in POLICE_BOXES:
+        near = Point(anchor)
+        best = None
+        for i in sorted(tree.query(near.buffer(4000)), key=lambda i: lines[i].distance(near))[:6]:
+            line = lines[i]
+            middle = line.project(near)
+            along = max(middle - POLICE_BOX_SEARCH, 0.0)
+            while along <= min(middle + POLICE_BOX_SEARCH, line.length):
+                p = line.interpolate(along)
+                a = line.interpolate(max(along - 50, 0))
+                b = line.interpolate(min(along + 50, line.length))
+                dx, dy = unit(b.x - a.x, b.y - a.y)
+                for side in (1, -1):
+                    x, y = p.x - dy * POLICE_BOX_OFF_WALK * side, p.y + dx * POLICE_BOX_OFF_WALK * side
+                    spot = Point(x, y)
+                    if space.near_building(spot, POLICE_BOX_CLEAR) or space.near_lane(spot, POLICE_BOX_CLEAR_OF_LANES):
+                        continue
+                    if space.roads.contains(spot) or (space.trams is not None and space.trams.distance(spot) < POLICE_BOX_CLEAR):
+                        continue
+                    if taken is not None and any(taken.geometries[j].distance(spot) < POLICE_BOX_SPACE for j in taken.query(spot.buffer(POLICE_BOX_SPACE))):
+                        continue
+                    if any(math.hypot(x - o["at"][0], y - o["at"][1]) < 3000 for o in out):
+                        continue
+                    score = spot.distance(near)
+                    if best is None or score < best[0]:
+                        best = (score, x, y, yaw_of(dy * side, -dx * side))
+                along += 100
+        if best is None:
+            print(f"No room for a police box near {name}")
+            continue
+        _, x, y, yaw = best
+        out.append({"name": name, "at": [round(x), round(y), yaw]})
     return out
 
 
@@ -1876,6 +1944,8 @@ def main():
         quarter_shops += len(more_shops)
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
+    spots += [tuple(v["at"][:2]) for v in shops + gates]
+    police_boxes = place_police_boxes(space, sidewalks, spots)
 
     out = {
         "version": 1,
@@ -1895,6 +1965,7 @@ def main():
         "tisza": park,
         "baross": baross,
         "rakoczi": rakoczi,
+        "police_boxes": police_boxes,
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -1905,7 +1976,7 @@ def main():
           f"{len(park['leaf_piles'])} leaf piles, {len(park['keepers'])} keepers, "
           f"playground {len(park['playground']['items'])} things, {len(park['playground']['people'])} people; "
           f"Baross tér: {len(baross['trees'])} trees, {len(baross['twin_lamps'])} lamps, {len(baross['trams'])} trams; "
-          f"Rákóczi tér: {len(rakoczi['paths'])} paths, {len(rakoczi['trees'])} trees, {len(rakoczi['benches'])} benches, {len(rakoczi['lamps'])} lamps")
+          f"Rákóczi tér: {len(rakoczi['paths'])} paths, {len(rakoczi['trees'])} trees, {len(rakoczi['benches'])} benches, {len(rakoczi['lamps'])} lamps; {len(police_boxes)} police boxes")
 
 
 if __name__ == "__main__":
