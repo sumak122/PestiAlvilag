@@ -982,11 +982,11 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 	}
 
 	// The one he holds stays in front of him, facing him.
-	APestiPerson* Held = Holding.Get();
-	if (Held && (Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Shove))
+	APestiPerson* Victim = Holding.Get();
+	if (Victim && (Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Shove))
 	{
 		const FVector Ahead = GetActorForwardVector().GetSafeNormal2D();
-		Held->SetActorLocationAndRotation(GetActorLocation() + Ahead * HoldGap, FRotator(0.0, (-Ahead).Rotation().Yaw, 0.0),
+		Victim->SetActorLocationAndRotation(GetActorLocation() + Ahead * HoldGap, FRotator(0.0, (-Ahead).Rotation().Yaw, 0.0),
 			false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
