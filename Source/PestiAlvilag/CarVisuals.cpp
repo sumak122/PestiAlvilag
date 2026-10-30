@@ -323,6 +323,11 @@ void UCarVisuals::Fill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder&
 			}
 			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
 			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Color);
+			// Unlit, so it is darkened with the night instead of shining.
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddSeeThrough(Material, Color);
+			}
 			Mesh->SetMaterial(i, Material);
 			continue;
 		}

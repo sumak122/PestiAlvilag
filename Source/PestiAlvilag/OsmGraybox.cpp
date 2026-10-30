@@ -3,6 +3,7 @@
 #include "OsmGraybox.h"
 
 #include "DayNight.h"
+#include "GroundSurfaces.h"
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
@@ -31,6 +32,7 @@ namespace OsmGraybox
 		TramEdge,
 		TramGroove,
 		TramRail,
+		Kerbs,
 		Roofs,
 		FirstWalls
 	};
@@ -56,6 +58,9 @@ namespace OsmGraybox
 	constexpr double ParkZ = 4.0;
 	constexpr double PlazaZ = 6.0;
 	constexpr double RoadZ = 8.0;
+	// Kerbs sit on the pavement just above the road, under the tram tracks.
+	constexpr double KerbZ = 9.0;
+	constexpr double KerbWidth = 18.0;
 	constexpr double RailZ = 10.0;
 	constexpr double TramZ = 12.0;
 	// The tram tracks' edge stones and rail grooves, then the rail heads on top.
@@ -171,6 +176,32 @@ namespace OsmGraybox
 				const int32 D = Section.AddVertex(FVector(P0.X, P0.Y, Height), Outward);
 				Section.AddTriangle(A, B, C, Outward, bFlip);
 				Section.AddTriangle(A, C, D, Outward, bFlip);
+			}
+		}
+	}
+
+	// Light granite kerbstones along the edge of the road, on the pavement
+	// side (the outside of the road's rings).
+	void AddKerbs(FSection& Section, const TArray<TArray<FVector2D>>& Rings, bool bFlip)
+	{
+		for (const TArray<FVector2D>& Ring : Rings)
+		{
+			for (int32 i = 0; i < Ring.Num(); ++i)
+			{
+				const FVector2D& P0 = Ring[i];
+				const FVector2D& P1 = Ring[(i + 1) % Ring.Num()];
+				const FVector2D Edge = P1 - P0;
+				if (Edge.SizeSquared() < 1.0)
+				{
+					continue;
+				}
+				const FVector2D Out = FVector2D(Edge.Y, -Edge.X).GetSafeNormal() * KerbWidth;
+				const int32 A = Section.AddVertex(FVector(P0, KerbZ), FVector::UpVector);
+				const int32 B = Section.AddVertex(FVector(P1, KerbZ), FVector::UpVector);
+				const int32 C = Section.AddVertex(FVector(P1 + Out, KerbZ), FVector::UpVector);
+				const int32 D = Section.AddVertex(FVector(P0 + Out, KerbZ), FVector::UpVector);
+				Section.AddTriangle(A, B, C, FVector::UpVector, bFlip);
+				Section.AddTriangle(A, C, D, FVector::UpVector, bFlip);
 			}
 		}
 	}
@@ -532,6 +563,10 @@ bool AOsmGraybox::Build()
 				if (Polygon.IsValid() && ReadPolygon(*Polygon, Rings, Triangles))
 				{
 					AddFlatPolygon(Sections[MatchedLayer->Section], Rings, Triangles, MatchedLayer->Z, bFlipFaces);
+					if (MatchedLayer->Section == Road)
+					{
+						AddKerbs(Sections[Kerbs], Rings, bFlipFaces);
+					}
 				}
 			}
 		}
@@ -565,7 +600,7 @@ bool AOsmGraybox::Build()
 	}
 
 	TArray<FLinearColor> Colors = { GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor,
-		TrackEdgeColor, RailGrooveColor, RailHeadColor, RoofColor };
+		TrackEdgeColor, RailGrooveColor, RailHeadColor, KerbColor, RoofColor };
 	for (int32 i = 0; i < NumWallColors; ++i)
 	{
 		Colors.Add(WallColors.IsValidIndex(i) ? WallColors[i] : FLinearColor(0.62f, 0.55f, 0.45f));
@@ -577,13 +612,31 @@ bool AOsmGraybox::Build()
 		{
 			continue;
 		}
+		// Kerbs are only a picture; walking and driving over them stays smooth.
 		Mesh->CreateMeshSection_LinearColor(i, Section.Vertices, Section.Triangles, Section.Normals,
-			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), bCreateCollision);
+			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), bCreateCollision && i != Kerbs);
 
-		if (BaseMaterial)
+		// Stone, slabs and grass where there's a picture for it, plain colour otherwise.
+		UMaterialInstanceDynamic* Material = nullptr;
+		if (bGroundPictures)
 		{
-			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			switch (i)
+			{
+			case Ground: Material = GroundSurfaces::Make(SurfaceModel::EKind::Slabs, this); break;
+			case Road: Material = GroundSurfaces::Make(SurfaceModel::EKind::Setts, this); break;
+			case Plaza:
+			case Tram: Material = GroundSurfaces::Make(SurfaceModel::EKind::BigSetts, this); break;
+			case Park: Material = GroundSurfaces::Make(SurfaceModel::EKind::Grass, this); break;
+			default: break;
+			}
+		}
+		if (!Material && BaseMaterial)
+		{
+			Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			Material->SetVectorParameterValue(TEXT("Color"), Colors[i]);
+		}
+		if (Material)
+		{
 			Mesh->SetMaterial(i, Material);
 		}
 	}

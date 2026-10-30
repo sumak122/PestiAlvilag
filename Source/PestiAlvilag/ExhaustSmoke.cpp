@@ -2,6 +2,7 @@
 
 #include "ExhaustSmoke.h"
 
+#include "DayNight.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -130,6 +131,11 @@ void AExhaustSmoke::BeginPlay()
 			}
 			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
 			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), ExhaustSmoke::Colors[Section]);
+			// Unlit, so it is darkened with the night instead of shining.
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddSeeThrough(Material, ExhaustSmoke::Colors[Section]);
+			}
 			Mesh->SetMaterial(Section, Material);
 		}
 		else
