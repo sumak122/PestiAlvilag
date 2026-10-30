@@ -68,7 +68,11 @@ public:
 
 	/** How many people are about at one time. */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")
-	int32 Crowd = 60;
+	int32 Crowd = 90;
+
+	/** Nobody new appears closer than this to someone already about (cm), so they spread out. */
+	UPROPERTY(EditAnywhere, Category = "Pedestrians")
+	float Spacing = 600.f;
 
 	/** People further than this from the camera are moved to somewhere nearer (cm). */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")
@@ -165,6 +169,8 @@ private:
 	/** Line ends on a coarse grid: cell -> (line, end: 0 start, 1 end). */
 	TMultiMap<FIntPoint, FIntPoint> Ends;
 	TArray<int32> NearLines;
+	/** The longest of the near lines (people are spread along the lines by their length). */
+	double NearLongest = 1.0;
 	FVector NearLinesFrom = FVector(1e9);
 	TArray<FWalker> Walkers;
 	FRandomStream Random;

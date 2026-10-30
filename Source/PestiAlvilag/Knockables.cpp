@@ -375,6 +375,7 @@ void AKnockables::Push(FItem& Item, const FVector& Direction, float Speed, float
 	const FVector Tumble = FVector::CrossProduct(FVector::UpVector, Direction) * Spin + FVector(0.0, 0.0, Random.FRandRange(-0.3f, 0.3f) * Spin);
 	Mesh->SetPhysicsAngularVelocityInDegrees(Mesh->GetPhysicsAngularVelocityInDegrees() + Tumble);
 	Item.bMoved = true;
+	Item.MovedAt = GetWorld()->GetTimeSeconds();
 	if (Speed > Knockables::SpillSpeed)
 	{
 		Spill(Item);
@@ -548,7 +549,7 @@ void AKnockables::Tick(float DeltaSeconds)
 	{
 		ResetNext = (ResetNext + 1) % Items.Num();
 		FItem& Item = Items[ResetNext];
-		if (!Item.bMoved)
+		if (!Item.bMoved || GetWorld()->GetTimeSeconds() - Item.MovedAt < ResetAfter)
 		{
 			continue;
 		}

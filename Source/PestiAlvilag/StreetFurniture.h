@@ -10,6 +10,7 @@ class FJsonObject;
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UStaticMesh;
+class UStaticMeshComponent;
 struct FFurniturePart;
 
 /**
@@ -28,7 +29,10 @@ struct FFurniturePart;
  * and trams waiting on the side track. It also starts the leaves blowing about (AFallingLeaves).
  *
  * Everything is drawn as instances of a few engine shapes, one batch per
- * shape and colour, so thousands of them cost little.
+ * shape and colour, so thousands of them cost little. A car driven fast into
+ * a bench or a litter bin smashes it: its pieces fly (Wreck.h), and it
+ * stands again a minute later at the earliest, once the camera is far away
+ * and nobody sees.
  */
 UCLASS()
 class PESTIALVILAG_API AStreetFurniture : public AActor
@@ -54,8 +58,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Furniture")
 	float TreeCullDistance = 35000.f;
 
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	virtual void BeginPlay() override;
+
+	/** The pieces of smashed benches and bins. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> Wreckage;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
@@ -64,10 +74,10 @@ protected:
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
 
 private:
-	/** The instances waiting for the batch of this shape, colour, collision and draw distance. */
-	TArray<FTransform>& Batch(int32 Shape, const FLinearColor& Color, bool bCollide, float Cull);
-	/** Puts one object made of Parts on the ground at At, turned to Yaw. */
-	void AddObject(const TArray<FFurniturePart>& Parts, const FVector& At, double Yaw, double Scale, float Cull);
+	/** The instances waiting for the batch of this shape, colour, collision and draw distance (and which batch it is). */
+	TArray<FTransform>& Batch(int32 Shape, const FLinearColor& Color, bool bCollide, float Cull, int32* OutBatch = nullptr);
+	/** Puts one object made of Parts on the ground at At, turned to Yaw; a car can smash it if bBreakable. */
+	void AddObject(const TArray<FFurniturePart>& Parts, const FVector& At, double Yaw, double Scale, float Cull, bool bBreakable = false);
 	/** A flat piece lying on the ground from A to B. */
 	void AddStrip(const FVector2D& A, const FVector2D& B, double Width, double Thickness, double Lift, const FLinearColor& Color);
 	void AddRailing(const FVector2D& A, const FVector2D& B);
@@ -107,4 +117,47 @@ private:
 
 	/** Trees that still have leaves to lose: ground point and size. */
 	TArray<FVector4> LeafyTrees;
+
+	/** One shape of a breakable object: its batch, its instance there, and where it stands. */
+	struct FBreakPart
+	{
+		int32 Batch = 0;
+		int32 Instance = 0;
+		int32 Shape = 0;
+		FTransform Transform;
+	};
+
+	/** A bench or a litter bin a car can smash. */
+	struct FBreakable
+	{
+		FVector At = FVector::ZeroVector;
+		double Yaw = 0.0;
+		/** Half its size along its own X and Y (cm). */
+		FVector2D Half = FVector2D::ZeroVector;
+		TArray<FBreakPart> Parts;
+		/** Someone sits on it (a nanny at the playground): it stays whole. */
+		bool bSturdy = false;
+		bool bBroken = false;
+		bool bSettled = false;
+		double BrokenAt = 0.0;
+		TArray<UStaticMeshComponent*> Pieces;
+	};
+
+	void Smash(int32 Index, double Now);
+	void PutBack(FBreakable& Thing);
+
+	TArray<FBreakable> Breakables;
+	/** Breakables on a coarse grid, to find the ones near the car quickly. */
+	TMultiMap<FIntPoint, int32> BreakableCells;
+	/** The ones lying smashed. */
+	TArray<int32> Smashed;
+	/** Where the playground's grown-ups and children sit. */
+	TArray<FVector> SeatedAt;
+	FRandomStream WreckRandom;
+	int32 NextReset = 0;
+
+	/** The player (or the car he drives) and how fast it goes, worked out each frame. */
+	TWeakObjectPtr<AActor> LastPlayer;
+	FVector LastPlayerAt = FVector::ZeroVector;
+	FVector PlayerVelocity = FVector::ZeroVector;
 };

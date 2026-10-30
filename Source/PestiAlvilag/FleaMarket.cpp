@@ -16,7 +16,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
-#include "LighterModel.h"
+#include "Lighters.h"
 #include "MarketModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
@@ -28,6 +28,7 @@
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "PestiHud.h"
+#include "Wreck.h"
 
 namespace MarketBuild
 {
@@ -152,11 +153,10 @@ namespace MarketLife
 	constexpr double ScareNear = 800.0;
 	constexpr double SettleAfter = 8.0;
 	constexpr int32 MaxWreckage = 700;
-	constexpr double WoodPerCubicCm = 0.0006;
-	constexpr float MinMass = 0.2f;
-	constexpr float MaxMass = 25.f;
-	// Smashed stalls stand again once the camera is this far away (cm) and nobody sees.
-	constexpr double ResetDistance = 6000.0;
+	// Smashed stalls stand again only a minute later at the earliest, once
+	// the camera is this far away (cm) and nobody sees.
+	constexpr double ResetDistance = 15000.0;
+	constexpr double ResetAfter = 60.0;
 	constexpr int32 ResetChecksPerFrame = 4;
 
 	const TCHAR* const Seller = TEXT("\u00c1rus");
@@ -539,18 +539,6 @@ void AFleaMarket::Setup(const FJsonObject& Market)
 				Box->RegisterComponent();
 				Stall.Blocker = Blockers.Add(Box);
 			}
-			// A lighter lying on a table: that stall does not break.
-			for (const LighterModel::FSpot& Spot : LighterModel::Spots())
-			{
-				const FVector2D Offset = FVector2D(Spot.X, Spot.Y) - FVector2D(Stall.Middle);
-				if (Spot.Where == LighterModel::EWhere::Market
-					&& FMath::Abs(FVector2D::DotProduct(Offset, Forward)) < Stall.Half.X + 20.0
-					&& FMath::Abs(FVector2D::DotProduct(Offset, Right)) < Stall.Half.Y + 20.0)
-				{
-					Stall.bSturdy = true;
-				}
-			}
-
 			FString Keeper;
 			StallObject->TryGetStringField(TEXT("keeper"), Keeper);
 			if (StallObject->GetBoolField(TEXT("seller")) || !Keeper.IsEmpty())
@@ -1415,7 +1403,7 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 		for (int32 i = 0; i < StallList.Num(); ++i)
 		{
 			const FStall& Stall = StallList[i];
-			if (Stall.bBroken || Stall.bSturdy || FVector2D::DistSquared(FVector2D(Stall.Middle), Car) > FMath::Square(SmashReach))
+			if (Stall.bBroken || FVector2D::DistSquared(FVector2D(Stall.Middle), Car) > FMath::Square(SmashReach))
 			{
 				continue;
 			}
@@ -1443,11 +1431,7 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 			Stall.bSettled = true;
 			for (UStaticMeshComponent* Piece : Stall.Pieces)
 			{
-				if (IsValid(Piece))
-				{
-					Piece->SetSimulatePhysics(false);
-					Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				}
+				Wreck::Settle(Piece);
 			}
 		}
 	}
@@ -1455,7 +1439,7 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 	{
 		NextReset = (NextReset + 1) % StallList.Num();
 		FStall& Stall = StallList[NextReset];
-		if (!Stall.bBroken || Now - Stall.BrokenAt < 3.0)
+		if (!Stall.bBroken || Now - Stall.BrokenAt < ResetAfter)
 		{
 			continue;
 		}
@@ -1515,10 +1499,6 @@ void AFleaMarket::Smash(int32 Index, double Now)
 
 	// Each piece of it flies off with the car, some way to either side and
 	// up into the air, tumbling; the faster the car, the further.
-	const double Speed = PlayerVelocity.Size2D();
-	const float Force = static_cast<float>(FMath::Min(Speed / 900.0, 1.3));
-	const FVector Going = FVector(FVector2D(PlayerVelocity), 0.0);
-	const FVector Across = FVector(-PlayerForward.Y, PlayerForward.X, 0.0);
 	TSet<int32> Touched;
 	for (const FPart& Part : Stall.Parts)
 	{
@@ -1532,34 +1512,11 @@ void AFleaMarket::Smash(int32 Index, double Now)
 		Batch->UpdateInstanceTransform(Part.Instance, Gone, true, false, true);
 		Touched.Add(Part.Batch);
 
-		UStaticMeshComponent* Piece = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
-		Piece->SetMobility(EComponentMobility::Movable);
-		Piece->SetStaticMesh(Shapes[Part.Shape]);
-		Piece->SetMaterial(0, Batch->GetMaterial(0));
-		Piece->SetWorldTransform(Part.Transform);
-		const FVector Size = Part.Transform.GetScale3D() * 100.0;
-		Piece->SetCastShadow(Size.GetMax() > 40.0);
-		Piece->SetCachedMaxDrawDistance(MarketBuild::GoodsDrawDistance);
-		Piece->SetCanEverAffectNavigation(false);
-		// They bounce off the ground and each other, never off the player or his car.
-		Piece->SetCollisionObjectType(ECC_PhysicsBody);
-		Piece->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		Piece->SetCollisionResponseToAllChannels(ECR_Block);
-		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		Piece->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
-		Piece->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-		Piece->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-		Piece->RegisterComponent();
-		Piece->SetSimulatePhysics(true);
-		const float Mass = FMath::Clamp(static_cast<float>(Size.X * Size.Y * Size.Z * WoodPerCubicCm), MinMass, MaxMass);
-		Piece->SetMassOverrideInKg(NAME_None, Mass, true);
-		Piece->SetLinearDamping(0.2f);
-		Piece->SetAngularDamping(0.5f);
-		const FVector Velocity = Going * CrowdRandom.FRandRange(0.45f, 0.95f)
-			+ Across * (Speed * CrowdRandom.FRandRange(-0.35f, 0.35f))
-			+ FVector(0.0, 0.0, CrowdRandom.FRandRange(120.f, 420.f) * Force);
-		Piece->SetPhysicsLinearVelocity(Velocity);
-		Piece->SetPhysicsAngularVelocityInDegrees(FVector(CrowdRandom.FRandRange(-1.f, 1.f), CrowdRandom.FRandRange(-1.f, 1.f), CrowdRandom.FRandRange(-1.f, 1.f)) * (400.f * Force));
+		FVector Velocity;
+		FVector Spin;
+		Wreck::Fling(PlayerVelocity, CrowdRandom, Velocity, Spin);
+		UStaticMeshComponent* Piece = Wreck::Throw(this, Shapes[Part.Shape], Batch->GetMaterial(0), Part.Transform, Velocity, Spin,
+			MarketBuild::GoodsDrawDistance);
 		Stall.Pieces.Add(Piece);
 		Wreckage.Add(Piece);
 	}
@@ -1572,6 +1529,8 @@ void AFleaMarket::Smash(int32 Index, double Now)
 	{
 		Car->ForwardSpeed *= CarSlowOnSmash;
 	}
+	// A lighter lying on the table falls to the ground, still there to be found.
+	ALighters::DropNear(GetWorld(), FVector2D(Stall.Middle), Stall.Half.GetMax() + 30.0, GroundZ);
 
 	// The seller curses the driver; the shoppers close by run.
 	const FVector2D Where(Stall.Middle);

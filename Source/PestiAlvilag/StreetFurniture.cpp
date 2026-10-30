@@ -12,6 +12,10 @@
 #include "FallingLeaves.h"
 #include "FleaMarket.h"
 #include "FoodVendor.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Lighters.h"
 #include "Math/RotationMatrix.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
@@ -26,6 +30,8 @@
 #include "ShopModel.h"
 #include "StoryPerson.h"
 #include "Tram.h"
+#include "PestiCar.h"
+#include "Wreck.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFurniture, Log, All);
@@ -360,11 +366,37 @@ namespace Furniture
 	constexpr double LetterWidth = 0.62;
 	// Shopkeepers are not drawn beyond this distance (cm).
 	constexpr float ShopkeeperDistance = 9000.f;
+
+	// Benches and bins: a car faster than this smashes one it drives into
+	// (cm/s). The pieces lie still after a while, and no more than so many
+	// lie about. A smashed one stands again a minute later at the earliest,
+	// once the camera is this far away (cm) and nobody sees it.
+	constexpr double SmashSpeed = 250.0;
+	constexpr double CarHalfLength = 215.0;
+	constexpr double CarHalfWidth = 95.0;
+	constexpr float CarSlowOnSmash = 0.9f;
+	constexpr double SettleAfter = 8.0;
+	constexpr int32 MaxWreckage = 600;
+	constexpr double ResetDistance = 15000.0;
+	constexpr double ResetAfter = 60.0;
+	constexpr float SeenWithin = 1.f;
+	constexpr int32 ResetChecksPerFrame = 4;
+	// A bench this close to someone sitting stays whole.
+	constexpr double SeatedNear = 150.0;
+	// What a lighter lay on, within this far (cm).
+	constexpr double LighterNear = 150.0;
+
+	constexpr double BreakCellSize = 1000.0;
+	FIntPoint BreakCell(const FVector2D& At)
+	{
+		return FIntPoint(FMath::FloorToInt(At.X / BreakCellSize), FMath::FloorToInt(At.Y / BreakCellSize));
+	}
 }
 
 AStreetFurniture::AStreetFurniture()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Ticks to let a car smash the benches and bins.
+	PrimaryActorTick.bCanEverTick = true;
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
@@ -377,11 +409,15 @@ AStreetFurniture::AStreetFurniture()
 	ShapeMeshes = { CubeMesh.Object, CylinderMesh.Object, SphereMesh.Object, ConeMesh.Object };
 }
 
-TArray<FTransform>& AStreetFurniture::Batch(int32 Shape, const FLinearColor& Color, bool bCollide, float Cull)
+TArray<FTransform>& AStreetFurniture::Batch(int32 Shape, const FLinearColor& Color, bool bCollide, float Cull, int32* OutBatch)
 {
 	const FString Key = FString::Printf(TEXT("%d %s %d %.0f"), Shape, *Color.ToString(), bCollide ? 1 : 0, Cull);
 	if (const int32* Found = BatchIndex.Find(Key))
 	{
+		if (OutBatch)
+		{
+			*OutBatch = *Found;
+		}
 		return Pending[*Found];
 	}
 
@@ -408,7 +444,12 @@ TArray<FTransform>& AStreetFurniture::Batch(int32 Shape, const FLinearColor& Col
 		}
 	}
 
-	BatchIndex.Add(Key, Batches.Add(Instances));
+	const int32 Made = Batches.Add(Instances);
+	BatchIndex.Add(Key, Made);
+	if (OutBatch)
+	{
+		*OutBatch = Made;
+	}
 	return Pending.AddDefaulted_GetRef();
 }
 
@@ -429,13 +470,29 @@ bool AStreetFurniture::GroundAt(const FVector2D& At, FVector& OutGround) const
 	return true;
 }
 
-void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVector& At, double Yaw, double Scale, float Cull)
+void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVector& At, double Yaw, double Scale, float Cull, bool bBreakable)
 {
 	const FTransform Place(FRotator(0.0, Yaw, 0.0), At, FVector(Scale));
+	FBreakable* Thing = nullptr;
+	if (bBreakable)
+	{
+		Thing = &Breakables.AddDefaulted_GetRef();
+		Thing->At = At;
+		Thing->Yaw = Yaw;
+		BreakableCells.Add(Furniture::BreakCell(FVector2D(At)), Breakables.Num() - 1);
+	}
 	for (const FFurniturePart& Part : Parts)
 	{
 		const FTransform Local(Part.Rotation, Part.Location, Part.Scale);
-		Batch(Part.Shape, Part.Color, Part.bCollide, Cull).Add(Local * Place);
+		int32 BatchNumber = INDEX_NONE;
+		TArray<FTransform>& Instances = Batch(Part.Shape, Part.Color, Part.bCollide, Cull, &BatchNumber);
+		Instances.Add(Local * Place);
+		if (Thing)
+		{
+			Thing->Parts.Add({ BatchNumber, Instances.Num() - 1, Part.Shape, Local * Place });
+			const FVector Reach = (Part.Location.GetAbs() + Part.Scale * 50.0) * Scale;
+			Thing->Half = FVector2D(FMath::Max(Thing->Half.X, Reach.X), FMath::Max(Thing->Half.Y, Reach.Y));
+		}
 		if (Part.Color.Equals(Furniture::Lantern))
 		{
 			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
@@ -603,6 +660,16 @@ void AStreetFurniture::BeginPlay()
 	Pending.Empty();
 	UE_LOG(LogFurniture, Log, TEXT("Street furniture: %d shapes in %d batches"), Count, Batches.Num());
 
+	// A bench someone sits on stays whole.
+	for (FBreakable& Thing : Breakables)
+	{
+		for (const FVector& Seat : SeatedAt)
+		{
+			Thing.bSturdy = Thing.bSturdy || FVector2D::Distance(FVector2D(Seat), FVector2D(Thing.At)) < Furniture::SeatedNear;
+		}
+	}
+	WreckRandom.Initialize(1932);
+
 	// Leaves blowing about, most of them off the trees that still have some.
 	if (AFallingLeaves* Blowing = GetWorld()->SpawnActor<AFallingLeaves>())
 	{
@@ -631,14 +698,14 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance);
+			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance, true);
 		}
 	});
 	Furniture::ForEachRow(Root, TEXT("bins"), [&](const TArray<double>& Row)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance);
+			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance, true);
 		}
 	});
 	BuildTaxiStands(Root);
@@ -982,14 +1049,14 @@ void AStreetFurniture::BuildPark(const FJsonObject& Park)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance);
+			AddObject(Furniture::Bench, Ground, Row[2], 1.0, SmallCullDistance, true);
 		}
 	});
 	Furniture::ForEachRow(Park, TEXT("bins"), [&](const TArray<double>& Row)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance);
+			AddObject(Furniture::Bin, Ground, Row[2], 1.0, SmallCullDistance, true);
 		}
 	});
 	Furniture::ForEachRow(Park, TEXT("lamps"), [&](const TArray<double>& Row)
@@ -1177,10 +1244,215 @@ void AStreetFurniture::BuildPlayground(const FJsonObject& Playground)
 		Person->SetOutfit(Clothes);
 		Person->FinishSpawning(Spawn);
 		Person->SetActorTickEnabled(false);
+		if (bSeated)
+		{
+			SeatedAt.Add(Spawn.GetLocation());
+		}
 		TInlineComponentArray<UPrimitiveComponent*> Shapes(Person);
 		for (UPrimitiveComponent* Shape : Shapes)
 		{
 			Shape->SetCachedMaxDrawDistance(Furniture::PlaygroundPeopleDistance);
 		}
 	});
+}
+
+void AStreetFurniture::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+
+	// How fast the player's car goes (it moves itself, without physics, so from how far it went).
+	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const bool bDriving = Player && Player->IsA<APestiCar>() && !Player->IsHidden();
+	if (Player)
+	{
+		const FVector Here = Player->GetActorLocation();
+		if (LastPlayer.Get() != Player)
+		{
+			LastPlayer = Player;
+			LastPlayerAt = Here;
+		}
+		PlayerVelocity = FMath::Lerp(PlayerVelocity, (Here - LastPlayerAt) / DeltaSeconds, 0.5);
+		LastPlayerAt = Here;
+	}
+
+	// Driven fast into a bench or a bin: it goes to pieces, just before the car touches it.
+	const double Speed = PlayerVelocity.Size2D();
+	if (bDriving && Speed > Furniture::SmashSpeed)
+	{
+		const FVector2D Car(Player->GetActorLocation());
+		const FVector2D Going = FVector2D(PlayerVelocity).GetSafeNormal();
+		const FVector2D Points[] = { Car, Car + Going * (Furniture::CarHalfLength * 0.9) };
+		const double Margin = Furniture::CarHalfWidth * 0.6 + Speed * DeltaSeconds * 2.0 + 20.0;
+		const FIntPoint Cell = Furniture::BreakCell(Car);
+		TArray<int32> Near;
+		for (int32 dx = -1; dx <= 1; ++dx)
+		{
+			for (int32 dy = -1; dy <= 1; ++dy)
+			{
+				BreakableCells.MultiFind(Cell + FIntPoint(dx, dy), Near);
+			}
+		}
+		for (const int32 Index : Near)
+		{
+			const FBreakable& Thing = Breakables[Index];
+			if (Thing.bBroken || Thing.bSturdy || FMath::Abs(Thing.At.Z - Player->GetActorLocation().Z) > 300.0)
+			{
+				continue;
+			}
+			const double A = FMath::DegreesToRadians(Thing.Yaw);
+			const FVector2D Forward(FMath::Cos(A), FMath::Sin(A));
+			const FVector2D Right(-Forward.Y, Forward.X);
+			for (const FVector2D& Point : Points)
+			{
+				const FVector2D Offset = Point - FVector2D(Thing.At);
+				if (FMath::Abs(FVector2D::DotProduct(Offset, Forward)) < Thing.Half.X + Margin
+					&& FMath::Abs(FVector2D::DotProduct(Offset, Right)) < Thing.Half.Y + Margin)
+				{
+					Smash(Index, Now);
+					break;
+				}
+			}
+		}
+	}
+
+	if (Smashed.Num() == 0)
+	{
+		return;
+	}
+	// The pieces come to rest; a few smashed ones a frame are checked to stand again.
+	for (const int32 Index : Smashed)
+	{
+		FBreakable& Thing = Breakables[Index];
+		if (!Thing.bSettled && Now - Thing.BrokenAt > Furniture::SettleAfter)
+		{
+			Thing.bSettled = true;
+			for (UStaticMeshComponent* Piece : Thing.Pieces)
+			{
+				Wreck::Settle(Piece);
+			}
+		}
+	}
+	const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!CameraManager)
+	{
+		return;
+	}
+	const FVector2D Camera(CameraManager->GetCameraLocation());
+	for (int32 n = 0; n < Furniture::ResetChecksPerFrame && Smashed.Num() > 0; ++n)
+	{
+		NextReset = (NextReset + 1) % Smashed.Num();
+		FBreakable& Thing = Breakables[Smashed[NextReset]];
+		if (Now - Thing.BrokenAt < Furniture::ResetAfter)
+		{
+			continue;
+		}
+		bool bSeen = FVector2D::Distance(FVector2D(Thing.At), Camera) < Furniture::ResetDistance;
+		for (int32 p = 0; p < Thing.Pieces.Num() && !bSeen; ++p)
+		{
+			bSeen = IsValid(Thing.Pieces[p]) && Thing.Pieces[p]->WasRecentlyRendered(Furniture::SeenWithin);
+		}
+		if (!bSeen)
+		{
+			PutBack(Thing);
+			Smashed.RemoveAtSwap(NextReset);
+		}
+	}
+}
+
+void AStreetFurniture::Smash(int32 Index, double Now)
+{
+	FBreakable& Thing = Breakables[Index];
+
+	// Too much wreckage about already: the oldest that nobody sees is cleared first.
+	while (Wreckage.Num() + Thing.Parts.Num() > Furniture::MaxWreckage)
+	{
+		int32 Oldest = INDEX_NONE;
+		for (int32 i = 0; i < Smashed.Num(); ++i)
+		{
+			const FBreakable& Other = Breakables[Smashed[i]];
+			bool bSeen = false;
+			for (int32 p = 0; p < Other.Pieces.Num() && !bSeen; ++p)
+			{
+				bSeen = IsValid(Other.Pieces[p]) && Other.Pieces[p]->WasRecentlyRendered(Furniture::SeenWithin);
+			}
+			if (!bSeen && (Oldest == INDEX_NONE || Other.BrokenAt < Breakables[Smashed[Oldest]].BrokenAt))
+			{
+				Oldest = i;
+			}
+		}
+		if (Oldest == INDEX_NONE)
+		{
+			return;
+		}
+		PutBack(Breakables[Smashed[Oldest]]);
+		Smashed.RemoveAtSwap(Oldest);
+	}
+
+	Thing.bBroken = true;
+	Thing.bSettled = false;
+	Thing.BrokenAt = Now;
+	Smashed.Add(Index);
+	TSet<int32> Touched;
+	for (const FBreakPart& Part : Thing.Parts)
+	{
+		if (!Batches.IsValidIndex(Part.Batch) || !Batches[Part.Batch] || !ShapeMeshes.IsValidIndex(Part.Shape))
+		{
+			continue;
+		}
+		UHierarchicalInstancedStaticMeshComponent* Instances = Batches[Part.Batch];
+		FTransform Gone = Part.Transform;
+		Gone.SetScale3D(FVector(0.001));
+		Instances->UpdateInstanceTransform(Part.Instance, Gone, true, false, true);
+		Touched.Add(Part.Batch);
+
+		FVector Velocity;
+		FVector Spin;
+		Wreck::Fling(PlayerVelocity, WreckRandom, Velocity, Spin);
+		UStaticMeshComponent* Piece = Wreck::Throw(this, ShapeMeshes[Part.Shape], Instances->GetMaterial(0), Part.Transform, Velocity, Spin, SmallCullDistance);
+		Thing.Pieces.Add(Piece);
+		Wreckage.Add(Piece);
+	}
+	for (const int32 Touch : Touched)
+	{
+		Batches[Touch]->MarkRenderStateDirty();
+	}
+	if (APestiCar* Car = Cast<APestiCar>(LastPlayer.Get()))
+	{
+		Car->ForwardSpeed *= Furniture::CarSlowOnSmash;
+	}
+	// A lighter left on the bench falls to the ground, still there to be found.
+	ALighters::DropNear(GetWorld(), FVector2D(Thing.At), Furniture::LighterNear, Thing.At.Z);
+}
+
+void AStreetFurniture::PutBack(FBreakable& Thing)
+{
+	for (UStaticMeshComponent* Piece : Thing.Pieces)
+	{
+		if (IsValid(Piece))
+		{
+			Wreckage.RemoveSwap(Piece);
+			Piece->DestroyComponent();
+		}
+	}
+	Thing.Pieces.Reset();
+	TSet<int32> Touched;
+	for (const FBreakPart& Part : Thing.Parts)
+	{
+		if (Batches.IsValidIndex(Part.Batch) && Batches[Part.Batch])
+		{
+			Batches[Part.Batch]->UpdateInstanceTransform(Part.Instance, Part.Transform, true, false, true);
+			Touched.Add(Part.Batch);
+		}
+	}
+	for (const int32 Touch : Touched)
+	{
+		Batches[Touch]->MarkRenderStateDirty();
+	}
+	Thing.bBroken = false;
+	Thing.bSettled = false;
 }
