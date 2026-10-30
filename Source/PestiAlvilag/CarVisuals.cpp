@@ -4,6 +4,8 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/SceneComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "DayNight.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "EngineSound.h"
@@ -48,6 +50,33 @@ namespace CarVisuals
 	constexpr float EngineVolume = 0.6f;
 	// Traffic at this speed is flat out (cm/s).
 	constexpr float StreetTopSpeed = 1400.f;
+
+	// Lamps glow this many times as bright as a lit grey wall, by day and by night.
+	const FLinearColor HeadlampLight(1.f, 0.88f, 0.62f);
+	constexpr float HeadlampDay = 6.f;
+	constexpr float HeadlampNight = 40.f;
+	const FLinearColor TailLight(1.f, 0.03f, 0.02f);
+	constexpr float TailDay = 2.f;
+	constexpr float TailNight = 4.f;
+	constexpr float BrakeDay = 8.f;
+	constexpr float BrakeNight = 14.f;
+	// Slowing down this hard (cm/s each second) shows on the brake lights,
+	// which stay on this long after (s); a car that braked to a stop keeps
+	// its foot on the brake until it pulls away.
+	constexpr float BrakeDeceleration = 150.f;
+	constexpr float BrakeHoldTime = 0.35f;
+	constexpr float StandingSpeed = 15.f;
+	constexpr float PullAway = 80.f;
+	// The headlights light the road for the cars within this distance of the
+	// camera (cm), the nearest few only: ten metres ahead the road is lit
+	// four times as bright as a lit grey wall.
+	constexpr double BeamRange = 4000.0;
+	constexpr double BeamForget = 4500.0;
+	constexpr int32 MaxBeamCars = 8;
+	int32 BeamCars = 0;
+	constexpr float BeamStrength = 400.f;
+	constexpr float BeamReach = 3500.f;
+	constexpr float BeamDip = 6.f;
 
 	// A driver further than this isn't drawn (cm).
 	constexpr float DriverRange = 6000.f;
@@ -165,7 +194,27 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 		}
 	}
 
-	Fill(Body, CarVisuals::BodyShape(Style));
+	const CarModel::FBuilder& Shape = CarVisuals::BodyShape(Style);
+	Fill(Body, Shape);
+	// The headlamp lenses: the middle of the lamp glass on each side of the front.
+	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
+	FVector Sum[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	int32 Count[2] = { 0, 0 };
+	for (const FVector& V : Shape.Parts[CarModel::Lamp].Vertices)
+	{
+		if (V.X > Layout.FrontAxle)
+		{
+			const int32 Side = V.Y < 0.0 ? 0 : 1;
+			Sum[Side] += V;
+			++Count[Side];
+		}
+	}
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		LampAt[Side] = Count[Side] > 0 ? Sum[Side] / Count[Side] : FVector(Layout.Nose, Side ? 50.0 : -50.0, 10.0);
+	}
+	LampState = -1;
+	TailState = -1;
 	for (int32 i = 0; i < Wheels.Num(); ++i)
 	{
 		Wheels[i]->SetRelativeLocationAndRotation(CarModel::WheelHub(Style.Body, i), FRotator::ZeroRotator);
@@ -284,6 +333,14 @@ void UCarVisuals::Fill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder&
 			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			Material->SetVectorParameterValue(TEXT("Color"), Color);
 			Mesh->SetMaterial(i, Material);
+			if (Mesh == Body && i == CarModel::Lamp)
+			{
+				LampPaint = Material;
+			}
+			else if (Mesh == Body && i == CarModel::TailLamp)
+			{
+				TailPaint = Material;
+			}
 		}
 	}
 }
@@ -340,6 +397,7 @@ void UCarVisuals::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 
 	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
 	const double Distance = Camera ? FVector::Dist(Camera->GetCameraLocation(), Location) : 0.0;
+	UpdateLights(DeltaTime, Speed, Pickup, Camera ? Distance : CarVisuals::BeamForget + 1.0);
 	if (Distance < CarVisuals::WheelRange && Owner->WasRecentlyRendered(0.2f))
 	{
 		for (int32 i = 0; i < Wheels.Num(); ++i)
@@ -419,8 +477,138 @@ void UCarVisuals::StopStreetEngine()
 	CarVisuals::HeardEngines = FMath::Max(0, CarVisuals::HeardEngines - 1);
 }
 
+void UCarVisuals::UpdateLights(float DeltaTime, float Speed, float Pickup, double Distance)
+{
+	using namespace CarVisuals;
+	ADayNight* Clock = ADayNight::Get(GetWorld());
+	if (!Clock || !Body)
+	{
+		return;
+	}
+
+	bHeadlights = bHeadlightsByHand ? bHeadlightsWanted : bEngineRunning && Clock->AreLampsLit();
+
+	bool bBraking = false;
+	if (DriverBrake >= 0)
+	{
+		bBraking = DriverBrake > 0 && bEngineRunning;
+	}
+	else
+	{
+		if (Pickup < -BrakeDeceleration && Speed > StandingSpeed)
+		{
+			BrakeHold = BrakeHoldTime;
+			bHeldOnBrake = true;
+		}
+		else if (Pickup > PullAway)
+		{
+			bHeldOnBrake = false;
+		}
+		BrakeHold -= DeltaTime;
+		bBraking = bEngineRunning && (BrakeHold > 0.f || (bHeldOnBrake && FMath::Abs(Speed) < StandingSpeed));
+	}
+
+	const int32 WantedLamp = bHeadlights ? 1 : 0;
+	const int32 WantedTail = bBraking ? 2 : bHeadlights ? 1 : 0;
+	const float Darkness = Clock->GetDarkness();
+	const bool bRetint = FMath::Abs(Darkness - TintDarkness) > 0.02f;
+	if (WantedLamp != LampState || (WantedLamp && bRetint))
+	{
+		if (WantedLamp)
+		{
+			if (!LampGlow)
+			{
+				LampGlow = Clock->MakeGlowMaterial(this);
+			}
+			Clock->SetGlow(LampGlow, HeadlampLight, FMath::Lerp(HeadlampDay, HeadlampNight, Darkness));
+		}
+		if (WantedLamp != LampState)
+		{
+			Body->SetMaterial(CarModel::Lamp, WantedLamp && LampGlow ? LampGlow.Get() : LampPaint.Get());
+		}
+		LampState = WantedLamp;
+	}
+	if (WantedTail != TailState || (WantedTail && bRetint))
+	{
+		if (WantedTail)
+		{
+			if (!TailGlow)
+			{
+				TailGlow = Clock->MakeGlowMaterial(this);
+			}
+			const float Strength = WantedTail == 2 ? FMath::Lerp(BrakeDay, BrakeNight, Darkness) : FMath::Lerp(TailDay, TailNight, Darkness);
+			Clock->SetGlow(TailGlow, TailLight, Strength);
+		}
+		if ((WantedTail != 0) != (TailState > 0))
+		{
+			Body->SetMaterial(CarModel::TailLamp, WantedTail && TailGlow ? TailGlow.Get() : TailPaint.Get());
+		}
+		TailState = WantedTail;
+	}
+	if (bRetint)
+	{
+		TintDarkness = Darkness;
+	}
+
+	// The beams on the road, for the nearest cars only, and only in the dark.
+	const bool bWantBeams = bHeadlights && Clock->AreLampsLit()
+		&& (bBeamsShown ? Distance < BeamForget : Distance < BeamRange && BeamCars < MaxBeamCars);
+	if (bWantBeams != bBeamsShown)
+	{
+		ShowBeams(bWantBeams);
+	}
+	if (bBeamsShown && bRetint)
+	{
+		for (USpotLightComponent* Beam : Beams)
+		{
+			Beam->SetIntensity(Clock->LampCandela(BeamStrength));
+		}
+	}
+}
+
+void UCarVisuals::ShowBeams(bool bShow)
+{
+	using namespace CarVisuals;
+	AActor* Owner = GetOwner();
+	// Not asked for when switching off: the clock may be gone as the game ends.
+	ADayNight* Clock = bShow ? ADayNight::Get(GetWorld()) : nullptr;
+	if (bShow && Beams.Num() == 0 && Owner && Body && Clock)
+	{
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			USpotLightComponent* Beam = NewObject<USpotLightComponent>(Owner);
+			Beam->SetupAttachment(Body);
+			Beam->SetRelativeLocationAndRotation(LampAt[Side] + FVector(4.0, 0.0, 0.0), FRotator(-BeamDip, 0.f, 0.f));
+			Beam->SetMobility(EComponentMobility::Movable);
+			Beam->SetCastShadows(false);
+			Beam->SetIntensityUnits(ELightUnits::Candelas);
+			Beam->SetAttenuationRadius(BeamReach);
+			Beam->SetInnerConeAngle(10.f);
+			Beam->SetOuterConeAngle(26.f);
+			Beam->SetLightColor(HeadlampLight);
+			Beam->RegisterComponent();
+			Owner->AddInstanceComponent(Beam);
+			Beams.Add(Beam);
+		}
+	}
+	for (USpotLightComponent* Beam : Beams)
+	{
+		if (bShow && Clock)
+		{
+			Beam->SetIntensity(Clock->LampCandela(BeamStrength));
+		}
+		Beam->SetVisibility(bShow);
+	}
+	if (bShow != bBeamsShown)
+	{
+		BeamCars = FMath::Max(0, BeamCars + (bShow ? 1 : -1));
+		bBeamsShown = bShow;
+	}
+}
+
 void UCarVisuals::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ShowBeams(false);
 	StopStreetEngine();
 	Super::EndPlay(EndPlayReason);
 }

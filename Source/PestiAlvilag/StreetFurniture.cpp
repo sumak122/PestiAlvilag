@@ -7,6 +7,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
+#include "DayNight.h"
 #include "Engine/World.h"
 #include "FallingLeaves.h"
 #include "FleaMarket.h"
@@ -46,6 +47,12 @@ namespace Furniture
 
 	const FLinearColor Iron(0.035f, 0.05f, 0.04f);
 	const FLinearColor Lantern(0.95f, 0.85f, 0.55f);
+	// At night the lanterns burn with a warm gas flame, and the shops behind
+	// their windows are lit (as bright as this many lit grey walls).
+	const FLinearColor GasFlame(1.f, 0.74f, 0.40f);
+	constexpr float LanternGlow = 25.f;
+	const FLinearColor ShopLight(1.f, 0.70f, 0.38f);
+	constexpr float ShopGlow = 5.f;
 	const FLinearColor Wood(0.30f, 0.17f, 0.08f);
 	const FLinearColor Stone(0.42f, 0.40f, 0.36f);
 	const FLinearColor Gravel(0.55f, 0.50f, 0.40f);
@@ -391,6 +398,16 @@ TArray<FTransform>& AStreetFurniture::Batch(int32 Shape, const FLinearColor& Col
 	Instances->SetCullDistances(0, static_cast<int32>(Cull));
 	Instances->RegisterComponent();
 
+	// Lanterns and the insides of the shops light up at dusk.
+	if (Color.Equals(Furniture::Lantern) || Color.Equals(ShopModel::Colors::Inside))
+	{
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			const bool bLantern = Color.Equals(Furniture::Lantern);
+			Clock->AddNightGlow(Instances, 0, bLantern ? Furniture::GasFlame : Furniture::ShopLight, bLantern ? Furniture::LanternGlow : Furniture::ShopGlow);
+		}
+	}
+
 	BatchIndex.Add(Key, Batches.Add(Instances));
 	return Pending.AddDefaulted_GetRef();
 }
@@ -419,6 +436,13 @@ void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVec
 	{
 		const FTransform Local(Part.Rotation, Part.Location, Part.Scale);
 		Batch(Part.Shape, Part.Color, Part.bCollide, Cull).Add(Local * Place);
+		if (Part.Color.Equals(Furniture::Lantern))
+		{
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddLamp((Local * Place).GetLocation());
+			}
+		}
 	}
 }
 

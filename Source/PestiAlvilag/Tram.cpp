@@ -4,7 +4,9 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "CarBody.h"
+#include "DayNight.h"
 #include "Components/BoxComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
@@ -54,6 +56,14 @@ namespace Tram
 	constexpr float SquealFrom = 4.f;
 	constexpr float SquealFull = 14.f;
 	// The driver rings at someone on the rails this far ahead (cm), at most every few seconds.
+	// At night the saloon is lit: its lamps glow (as bright as this many lit
+	// grey walls) and, near the camera, light the benches.
+	const FLinearColor LampLight(1.f, 0.78f, 0.48f);
+	constexpr float LampGlow = 12.f;
+	constexpr float InsideStrength = 5.f;
+	constexpr float InsideReach = 700.f;
+	constexpr double InsideLightRange = 5000.0;
+
 	constexpr double WarnReach = 1500.0;
 	constexpr float BellPause = 4.f;
 	// The colour of each TramModel part. Budapest trams were yellow.
@@ -275,6 +285,15 @@ void ATram::StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float I
 	Distance = InDistance;
 	CurrentSpeed = 0.f;
 
+	if (!bNightGlowAdded)
+	{
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			Clock->AddNightGlow(Body, TramModel::Lamp, Tram::LampLight, Tram::LampGlow);
+			bNightGlowAdded = true;
+		}
+	}
+
 	const FTramRoute& Route = Manager->GetTramRoute(RouteIndex);
 	NextStop = 0;
 	while (Route.Stops.IsValidIndex(NextStop) && Route.Stops[NextStop] <= Distance)
@@ -304,6 +323,7 @@ void ATram::Tick(float DeltaSeconds)
 	}
 	const FTramRoute& Route = Manager->GetTramRoute(RouteIndex);
 	UpdateSound();
+	UpdateInsideLight();
 
 	// Off the map: wait, then come back in at the start when there is room.
 	if (OutOfServiceLeft > 0.f)
@@ -496,4 +516,32 @@ bool ATram::IsStartClear() const
 {
 	const FVector Start = Manager->GetTramRoute(RouteIndex).LocationAt(0.f);
 	return Manager->IsAreaClear(Start, Tram::StartRoom, this);
+}
+
+void ATram::UpdateInsideLight()
+{
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	const bool bOn = Clock && Clock->AreLampsLit() && Camera && IsInService()
+		&& FVector::Dist(Camera->GetCameraLocation(), GetActorLocation()) < Tram::InsideLightRange;
+	if (bOn && !InsideLight)
+	{
+		InsideLight = NewObject<UPointLightComponent>(this);
+		InsideLight->SetupAttachment(Body);
+		InsideLight->SetRelativeLocation(FVector(0.0, 0.0, TramModel::RoofBottom - 25.0));
+		InsideLight->SetMobility(EComponentMobility::Movable);
+		InsideLight->SetCastShadows(false);
+		InsideLight->SetIntensityUnits(ELightUnits::Candelas);
+		InsideLight->SetAttenuationRadius(Tram::InsideReach);
+		InsideLight->SetLightColor(Tram::LampLight);
+		InsideLight->RegisterComponent();
+	}
+	if (InsideLight)
+	{
+		InsideLight->SetVisibility(bOn);
+		if (bOn)
+		{
+			InsideLight->SetIntensity(Clock->LampCandela(Tram::InsideStrength));
+		}
+	}
 }
