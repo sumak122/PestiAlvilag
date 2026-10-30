@@ -12,6 +12,7 @@
 #include "FallingLeaves.h"
 #include "FleaMarket.h"
 #include "FoodVendor.h"
+#include "GroundSurfaces.h"
 #include "Math/RotationMatrix.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
@@ -388,10 +389,15 @@ TArray<FTransform>& AStreetFurniture::Batch(int32 Shape, const FLinearColor& Col
 	UHierarchicalInstancedStaticMeshComponent* Instances = NewObject<UHierarchicalInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
 	Instances->SetupAttachment(RootComponent);
 	Instances->SetStaticMesh(ShapeMeshes[Shape]);
-	if (BaseMaterial)
+	// The park paths get real gravel where it can be drawn.
+	UMaterialInstanceDynamic* Paintwork = Color.Equals(Furniture::Gravel) ? GroundSurfaces::Make(SurfaceModel::EKind::Gravel, this) : nullptr;
+	if (!Paintwork && BaseMaterial)
 	{
-		UMaterialInstanceDynamic* Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		Paintwork = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 		Paintwork->SetVectorParameterValue(TEXT("Color"), Color);
+	}
+	if (Paintwork)
+	{
 		Instances->SetMaterial(0, Paintwork);
 	}
 	Instances->SetCollisionProfileName(bCollide ? TEXT("BlockAll") : TEXT("NoCollision"));

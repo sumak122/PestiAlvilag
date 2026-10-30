@@ -152,6 +152,11 @@ void ATram::BuildBody()
 			}
 			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
 			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tram::Colors[i]);
+			// Unlit, so it is darkened with the night instead of shining.
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddSeeThrough(Material, Tram::Colors[i]);
+			}
 			Body->SetMaterial(i, Material);
 		}
 		else if (BaseMaterial)
