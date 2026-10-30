@@ -4,7 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Brawl.h"
 #include "FreeRun.h"
+#include "PersonKit.h"
 #include "PestiPerson.generated.h"
 
 class UCameraComponent;
@@ -23,6 +25,13 @@ class USpringArmComponent;
  * stick to look around,
  * F or gamepad B to get into the car next to you, or to pull the driver out
  * of a car in the traffic and take it.
+ *
+ * In a fist fight (Brawl, StartFight) he faces the other man and the keys
+ * change: click or gamepad X to jab, held for a heavy swing; right click or
+ * the right shoulder button held to guard, or pressed when the gold sign
+ * lights up to counter; E or gamepad B to grab him by the collar, then click
+ * to knee him and E to shove him off, into whatever is behind him. The
+ * other man (AChaseThief) fights by the same rules from his own head.
  */
 UCLASS()
 class PESTIALVILAG_API APestiPerson : public ACharacter
@@ -94,6 +103,53 @@ public:
 
 	virtual void Landed(const FHitResult& Hit) override;
 
+	virtual void NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved,
+		FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
+
+	/** Squares up to InFoe: fists up and facing him (see Brawl). */
+	void StartFight(APestiPerson* InFoe);
+	/** Fists down: back to walking about. */
+	void EndFight();
+	bool IsFighting() const { return Act != Brawl::EAct::None && Act != Brawl::EAct::Beaten; }
+	APestiPerson* GetFoe() const { return Foe.Get(); }
+	Brawl::EAct GetAct() const { return Act; }
+	float GetStamina() const { return Stamina; }
+	/** In the middle of a vault or a slide. */
+	bool IsFreeRunning() const { return FreeMove != FreeRun::EMove::None; }
+
+	/**
+	 * The seconds until his heavy swing or his grab lands, while one is
+	 * coming (the moment for the other man to counter); below 0 otherwise.
+	 */
+	float GetWindUpLeft() const;
+
+	// The moves, for the player's keys and for the other man's head alike:
+	// false when he can't now (busy, or out of breath).
+	bool Jab();
+	bool HeavySwing();
+	/** Under his swing and back with a hook, if it is coming; false otherwise. */
+	bool Counter();
+	/** Reaching for his collar; slowly, it can be seen coming. */
+	bool Grab(bool bSlowly = false);
+	/** A knee, while holding him. */
+	bool Knee();
+	/** Throws him off along Direction, while holding him. */
+	bool Shove(const FVector& Direction);
+	void SetGuard(bool bUp);
+	/** Held by the collar: a tug to get free. */
+	void TugFree();
+
+	/** Brings Runner down from behind with a dive; both get up to fight. */
+	void TackleDown(APestiPerson* Runner);
+	/** A blow from From lands on him. */
+	void TakeBlow(Brawl::EBlow Blow, APestiPerson* From);
+	/** Sits down beaten, both hands up: his fight is over. */
+	void GiveIn();
+
+	/** What the fight shows over his head and his health (the foe's bar on the screen). */
+	virtual FString GetFightName() const { return FString(); }
+	virtual float GetHealthShare() const { return 1.f; }
+
 protected:
 	/** Legs, arms and body (PersonKit::EPiece order), made when play begins. */
 	UPROPERTY(Transient)
@@ -113,6 +169,42 @@ protected:
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
 	virtual void BeginPlay() override;
+
+	/** The clothes he wears. */
+	virtual PersonKit::FOutfit GetDress() const;
+	/** Health lost in a fight: the player's from the game's, anyone else's from their own. */
+	virtual void LoseHealth(float Amount);
+
+	/** The player's keys in a fight, and what the screen shows of it. */
+	void PlayerFight(APlayerController* PC);
+	/** The way the movement keys point, flat (zero when none are held). */
+	FVector InputDirection(const APlayerController* PC) const;
+	/** The blow lands if the foe is within reach in front. */
+	void LandBlow(Brawl::EBlow Blow);
+	void FaceFoe(float DeltaSeconds);
+	/** Takes Cost from his breath; false when he has none left. */
+	bool SpendStamina(float Cost);
+	/** Held by Grabber, or thrown off by him. */
+	void BeHeld(APestiPerson* Grabber);
+	void BeThrown(const FVector& Direction, APestiPerson* Thrower);
+
+	/** Into a new act of the fight, for Seconds (0 for one that lasts). */
+	void BeginAct(Brawl::EAct NewAct, float Seconds);
+	void TickBrawl(float DeltaSeconds);
+	/** Lets go of whoever he holds, or gets let go of. */
+	void LetGo();
+
+	/** The vault or slide under way, and how far into it (s). */
+	FreeRun::EMove FreeMove = FreeRun::EMove::None;
+	double BoostUntil = -1.0;
+	double StumbleUntil = -1.0;
+
+	/** The fight: what he does, how far into it (s), and how long it lasts. */
+	Brawl::EAct Act = Brawl::EAct::None;
+	float ActClock = 0.f;
+	float ActLength = 0.f;
+	TWeakObjectPtr<APestiPerson> Foe;
+	float Stamina = Brawl::MaxStamina;
 
 private:
 	void Look(APlayerController* PC, float DeltaSeconds);
@@ -142,8 +234,6 @@ private:
 	/** The fastest he has been falling since he left the ground (cm/s). */
 	float FallSpeed = 0.f;
 
-	/** The vault or slide under way, and how far into it (s). */
-	FreeRun::EMove FreeMove = FreeRun::EMove::None;
 	FreeRun::FChance MoveChance;
 	FVector MoveFrom = FVector::ZeroVector;
 	FVector MoveDir = FVector::ForwardVector;
@@ -152,6 +242,22 @@ private:
 	/** Pressed at the right moment: out of it faster. Pressed nearly on it: a stumble after. */
 	bool bMoveClean = false;
 	bool bMoveLate = false;
-	double BoostUntil = -1.0;
-	double StumbleUntil = -1.0;
+
+	/** The blow of the act under way has landed (or missed). */
+	bool bBlowDone = false;
+	/** When his breath starts coming back. */
+	double RestFrom = 0.0;
+	/** While holding someone: until when, and the knees given. */
+	double HoldUntil = 0.0;
+	int32 KneesGiven = 0;
+	/** Held: who holds him, and the tugs to get free. */
+	TWeakObjectPtr<APestiPerson> HeldBy;
+	TWeakObjectPtr<APestiPerson> Holding;
+	int32 Tugs = 0;
+	/** Thrown off: by whom, and which way his head snaps when hit. */
+	TWeakObjectPtr<APestiPerson> ThrownBy;
+	float HurtSide = 1.f;
+	/** The punch key: when it went down, and whether holding it made a heavy swing. */
+	double PunchDownAt = -1.0;
+	bool bPunchHeld = false;
 };

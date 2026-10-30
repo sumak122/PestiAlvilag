@@ -18,6 +18,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "MissionPrologue.h"
 #include "MissionUzenet.h"
+#include "MissionZsebtolvaj.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
@@ -50,6 +51,7 @@ namespace PestiStart
 	constexpr float HomeDoorYaw = 108.6f;
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
+	const FName Zsebtolvaj(TEXT("Zsebtolvaj"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -191,9 +193,9 @@ void APestiAlvilagGameModeBase::StartPlay()
 	SpawnNextMission();
 }
 
-void APestiAlvilagGameModeBase::StartNextMission()
+void APestiAlvilagGameModeBase::StartNextMission(float Delay)
 {
-	NextMissionAt = GetWorld()->GetTimeSeconds() + PestiStart::NextMissionDelay;
+	NextMissionAt = GetWorld()->GetTimeSeconds() + (Delay >= 0.f ? Delay : PestiStart::NextMissionDelay);
 }
 
 void APestiAlvilagGameModeBase::SpawnNextMission()
@@ -205,6 +207,10 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	else if (!IsMissionDone(PestiStart::Uzenet))
 	{
 		GetWorld()->SpawnActor<AMissionUzenet>();
+	}
+	else if (!IsMissionDone(PestiStart::Zsebtolvaj))
+	{
+		GetWorld()->SpawnActor<AMissionZsebtolvaj>();
 	}
 }
 

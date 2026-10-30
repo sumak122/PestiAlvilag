@@ -184,17 +184,62 @@ namespace ChaseModel
 
 	/**
 	 * Deliveries in front of the market hall's gateway, in the hall's frame
-	 * (+X into the hall, so these lie out on the square): the way out of
-	 * the gate towards the garden, over and under them in turn.
+	 * (+X into the hall, so these lie out on the square): a line of them
+	 * from the gate towards the garden's east path, over and under in turn.
 	 */
 	inline TArray<FSpot> HallYard()
 	{
 		return {
-			{ EObstacle::Handcart, FVector(-450.0, 250.0, 0.0), 0.0 },
-			{ EObstacle::CarpetRack, FVector(-850.0, -60.0, 0.0), 0.0 },
-			{ EObstacle::Crates, FVector(-1250.0, 180.0, 0.0), 0.0 },
-			{ EObstacle::Trestles, FVector(-1620.0, -100.0, 0.0), 0.0 },
-			{ EObstacle::Barrels, FVector(-1960.0, 120.0, 0.0), 0.0 },
+			{ EObstacle::Handcart, FVector(-625.0, -67.0, 0.0), -168.0 },
+			{ EObstacle::CarpetRack, FVector(-950.0, -134.0, 0.0), -168.0 },
+			{ EObstacle::Crates, FVector(-1276.0, -201.0, 0.0), -168.0 },
+			{ EObstacle::Trestles, FVector(-1601.0, -269.0, 0.0), -168.0 },
+			{ EObstacle::Barrels, FVector(-1890.0, -328.0, 0.0), -168.0 },
+		};
+	}
+
+	/**
+	 * The pickpocket's way out, in the hall's frame (cm): from the stalls
+	 * where he snatches the purse, down the nave and out of the side door on
+	 * Vásár utca, along its pavement and round the corner onto Rákóczi tér,
+	 * past the front over the deliveries (HallYard), into the garden by its
+	 * east path, round the promenade's north side and the fountain, and out
+	 * onto József körút, where he is gone if not caught.
+	 */
+	inline TArray<FVector2D> ThiefRoute()
+	{
+		return {
+			FVector2D(1300.0, 560.0), FVector2D(1700.0, 250.0), FVector2D(2300.0, 0.0), FVector2D(3000.0, 0.0),
+			FVector2D(3555.0, -350.0), FVector2D(3555.0, -1500.0), FVector2D(3555.0, -2600.0), FVector2D(3555.0, -3400.0),
+			FVector2D(3555.0, -3900.0), FVector2D(3300.0, -4150.0), FVector2D(1800.0, -4150.0), FVector2D(300.0, -4150.0),
+			FVector2D(-450.0, -3950.0), FVector2D(-650.0, -3300.0), FVector2D(-450.0, -1200.0), FVector2D(-300.0, 0.0),
+			FVector2D(-2107.0, -373.0), FVector2D(-3721.0, -696.0), FVector2D(-3879.0, -1514.0), FVector2D(-4601.0, -2228.0),
+			FVector2D(-5693.0, -2646.0), FVector2D(-6861.0, -2655.0), FVector2D(-7794.0, -2254.0), FVector2D(-8179.0, -1758.0),
+			FVector2D(-8610.0, -2347.0), FVector2D(-8827.0, -2805.0), FVector2D(-9317.0, -2934.0), FVector2D(-9672.0, -2727.0),
+			FVector2D(-10150.0, -2828.0), FVector2D(-10792.0, -3111.0), FVector2D(-10949.0, -3858.0), FVector2D(-10592.0, -5004.0),
+		};
+	}
+
+	/**
+	 * Things in his way along it, in the hall's frame, each standing across
+	 * the way: crates in the nave, barrels and a porters' plank in the
+	 * cross hall, a handcart and a carpet being beaten on the pavement of
+	 * Vásár utca, crates by the front, and in the garden a mended path, a
+	 * gardener's cart, a flower seller's crates and barrels at the west gate.
+	 */
+	inline TArray<FSpot> RouteSpots()
+	{
+		return {
+			{ EObstacle::Crates, FVector(2685.0, 0.0, 0.0), 0.0 },
+			{ EObstacle::Barrels, FVector(3555.0, -2050.0, 0.0), -90.0 },
+			{ EObstacle::Trestles, FVector(3555.0, -3080.0, 0.0), -90.0 },
+			{ EObstacle::Handcart, FVector(2700.0, -4150.0, 0.0), 180.0 },
+			{ EObstacle::CarpetRack, FVector(1200.0, -4150.0, 0.0), 180.0 },
+			{ EObstacle::Crates, FVector(-550.0, -2250.0, 0.0), 85.0 },
+			{ EObstacle::Trestles, FVector(-4240.0, -1871.0, 0.0), -135.0 },
+			{ EObstacle::Handcart, FVector(-6277.0, -2651.0, 0.0), -180.0 },
+			{ EObstacle::Crates, FVector(-9072.0, -2870.0, 0.0), -165.0 },
+			{ EObstacle::Barrels, FVector(-10471.0, -2969.0, 0.0), -156.0 },
 		};
 	}
 }

@@ -26,6 +26,8 @@ namespace MarketHallFill
 	constexpr float SellerChance = 0.75f;
 	constexpr float ShopperChance = 0.3f;
 	constexpr double ShopperOut = 150.0;
+	// Looking for the ground under the things in the pickpocket's way, this far up and down (cm).
+	constexpr double GroundLook = 300.0;
 }
 
 AMarketHall::AMarketHall()
@@ -201,12 +203,26 @@ void AMarketHall::Fill()
 				Stall.Yaw + 180.0 + PeopleRandom.FRandRange(-25.f, 25.f), PeopleRandom, false);
 		}
 	}
-	// Deliveries out on the square in front of the gateway: things to run over and under.
-	const TArray<ChaseModel::FSpot> Yard = ChaseModel::HallYard();
-	for (int32 k = 0; k < Yard.Num(); ++k)
+	// Deliveries out on the square in front of the gateway, and things in
+	// the pickpocket's way: to run over and under. Out on the streets and in
+	// the garden each stands on the ground there, which may lie a little
+	// higher or lower than the hall.
+	TArray<ChaseModel::FSpot> Spots = ChaseModel::HallYard();
+	Spots.Append(ChaseModel::RouteSpots());
+	const FTransform& Frame = GetActorTransform();
+	FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(MarketHallGround), false);
+	for (int32 k = 0; k < Spots.Num(); ++k)
 	{
+		FVector At = Spots[k].At;
+		const FVector InCity = Frame.TransformPosition(At);
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, InCity + FVector(0.0, 0.0, MarketHallFill::GroundLook), InCity - FVector(0.0, 0.0, MarketHallFill::GroundLook),
+				ECC_WorldStatic, GroundParams))
+		{
+			At.Z = Hit.ImpactPoint.Z - Frame.GetLocation().Z;
+		}
 		MarketModel::FRandom Random(static_cast<uint32>(k * 13 + 5));
-		ChaseModel::Build(Pieces, Yard[k].At, Yard[k].Yaw, Yard[k].Kind, Random);
+		ChaseModel::Build(Pieces, At, Spots[k].Yaw, Spots[k].Kind, Random);
 	}
 	for (const MarketModel::FShape& Piece : Pieces)
 	{

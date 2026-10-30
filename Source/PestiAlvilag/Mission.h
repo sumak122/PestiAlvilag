@@ -26,6 +26,11 @@ struct FMissionStep
 	bool bPressE = false;
 	/** Arrows over the street turns on the way while the target is far off. */
 	bool bGuide = true;
+	/**
+	 * The mission itself says when the step is done (FinishStep), not
+	 * getting there; its target may move (SetStepTarget), say a man running.
+	 */
+	bool bManual = false;
 };
 
 /**
@@ -33,6 +38,9 @@ struct FMissionStep
  * art deco marker over the target and see-through arrows over the turns on the way. A
  * mission sets itself up in SetUpMission (people, things, the steps), reacts
  * as steps begin and end, and pays its reward when the last step is done.
+ *
+ * A mission can fail (Fail): it says why, and offers E to try again from
+ * its start (GetRetrySpot); otherwise it starts over by itself a little later.
  *
  * On-screen lines: 7 the goal, 8 what people say, 9 big announcements.
  */
@@ -104,12 +112,29 @@ protected:
 	/** Keep an actor the mission spawned after it ends (for example a car). */
 	void KeepAfterMission(AActor* Actor);
 
+	/** Ends the current step, for one the mission decides (bManual). */
+	void FinishStep();
+	/** Moves the current step's target and its marker. */
+	void SetStepTarget(const FVector& At);
+	/** The mission is lost: says why, then offers to try again. */
+	void Fail(const FString& WhyHu, const FString& WhyEn);
+	bool HasFailed() const { return bFailed; }
+	/** Where trying again puts the player (on foot), facing Yaw; false to leave him where he is. */
+	virtual bool GetRetrySpot(FVector& OutAt, double& OutYaw) const { return false; }
+	/** The mission has just failed: stop what it set going. */
+	virtual void OnFailed() {}
+
 private:
 	void StartStep(int32 Step);
 	void Pass();
+	/** After failing: the offer to try again, and starting over. */
+	void TickFailed();
+	void Retry(bool bPutBack);
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> MissionActors;
 
 	int32 CurrentStep = INDEX_NONE;
+	bool bFailed = false;
+	double FailedAt = 0.0;
 };
