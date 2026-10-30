@@ -16,10 +16,13 @@
 #include "Engine/SkyLight.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "GroundSurfaces.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "OsmGraybox.h"
+#include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace DayNight
@@ -67,14 +70,22 @@ namespace DayNight
 	constexpr float NightSky = 0.5f;
 	constexpr float NightFog = 0.04f;
 
-	// Street lamps: the nearest light the ground, out to 90 m round the
-	// camera, fading out over the last 30 m so none pops on; each makes the
-	// pavement under it about twice as bright as a lit grey wall.
-	constexpr int32 LampLightCount = 40;
+	// Street lamps: the nearest light the ground, out to 110 m round the
+	// camera, fading out over the last 30 m; each makes the pavement under it
+	// about twice as bright as a lit grey wall. Beyond that a glow on the
+	// ground under each lamp fades in over the same 30 m, so no lamp ever
+	// pops on, however far away.
+	constexpr int32 LampLightCount = 56;
 	constexpr float LampReach = 1800.f;
 	constexpr float LampStrength = 56.f;
-	constexpr double LampRange = 9000.0;
-	constexpr double LampFade = 6000.0;
+	constexpr double LampRange = 11000.0;
+	constexpr double LampFade = 8000.0;
+	// The glow sits this far above the ground (over the kerbs and rails)...
+	constexpr double LightPoolLift = 20.0;
+	// ...under lanterns about this high (m)...
+	constexpr float LanternHeight = 4.f;
+	// ...on ground that sends back this much of the light.
+	constexpr float LitGroundShare = 0.25f;
 	const FLinearColor GasLight(1.f, 0.72f, 0.42f);
 
 	// The sun is only turned when it has moved this far (degrees), as
@@ -92,6 +103,8 @@ ADayNight::ADayNight()
 	GlowBase = Unlit.Object;
 	static ConstructorHelpers::FObjectFinder<UTexture> White(TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
 	WhiteTexture = White.Object;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
+	SeeThroughBase = Translucent.Object;
 }
 
 ADayNight* ADayNight::Get(UWorld* World)
@@ -138,9 +151,37 @@ void ADayNight::BeginPlay()
 		LampLights.Add(Light);
 	}
 
+	FindSeeThroughs();
 	UpdateSun(true);
 	UpdateGlows(true);
 	UpdateSeeThrough(true);
+}
+
+void ADayNight::FindSeeThroughs()
+{
+	// Things built in the editor (a station placed in the level) made their
+	// glass before there was a clock to tell, so look for it now.
+	if (!SeeThroughBase)
+	{
+		return;
+	}
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		TInlineComponentArray<UProceduralMeshComponent*> Meshes(*It);
+		for (UProceduralMeshComponent* Mesh : Meshes)
+		{
+			for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
+			{
+				UMaterialInstanceDynamic* Material = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(Slot));
+				FLinearColor Tint;
+				if (Material && Material->Parent == SeeThroughBase
+					&& Material->GetVectorParameterValue(FMaterialParameterInfo(FName(TEXT("TintColorAndOpacity"))), Tint))
+				{
+					AddSeeThrough(Material, Tint);
+				}
+			}
+		}
+	}
 }
 
 void ADayNight::FindSky()
@@ -404,6 +445,13 @@ void ADayNight::AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearC
 	{
 		return;
 	}
+	for (const FSeeThrough& Known : SeeThroughs)
+	{
+		if (Known.Material == Material)
+		{
+			return;
+		}
+	}
 	FSeeThrough& Glass = SeeThroughs.AddDefaulted_GetRef();
 	Glass.Material = Material;
 	Glass.Tint = Tint;
@@ -450,6 +498,10 @@ void ADayNight::UpdateLampLights()
 		{
 			Light->SetVisibility(false);
 		}
+		if (LightPools)
+		{
+			LightPools->SetVisibility(false);
+		}
 		return;
 	}
 
@@ -467,6 +519,16 @@ void ADayNight::UpdateLampLights()
 	Near.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
 
 	const float Candela = LampCandela(LampStrength) * FMath::Clamp((Darkness - LampsOff) / (1.f - LampsOff), 0.2f, 1.f);
+
+	// The far lamps' glow: as bright in the middle as a real lamp makes the
+	// ground straight under it.
+	BuildLightPools();
+	if (LightPools && LightPoolMaterial)
+	{
+		const float Middle = Candela / FMath::Square(LanternHeight) * LitGroundShare / UE_PI;
+		LightPoolMaterial->SetVectorParameterValue(TEXT("Light"), GasLight * Middle);
+		LightPools->SetVisibility(true);
+	}
 	for (int32 i = 0; i < LampLights.Num(); ++i)
 	{
 		UPointLightComponent* Light = LampLights[i];
@@ -481,4 +543,75 @@ void ADayNight::UpdateLampLights()
 		Light->SetIntensity(Candela * Fade);
 		Light->SetVisibility(true);
 	}
+}
+
+void ADayNight::BuildLightPools()
+{
+	using namespace DayNight;
+	if (bLightPoolsBuilt)
+	{
+		return;
+	}
+	bLightPoolsBuilt = true;
+	LightPoolMaterial = GroundSurfaces::MakeLightPool(this);
+	if (!LightPoolMaterial)
+	{
+		return;
+	}
+	LightPoolMaterial->SetScalarParameterValue(TEXT("FadeFrom"), static_cast<float>(LampFade));
+	LightPoolMaterial->SetScalarParameterValue(TEXT("FadeLength"), static_cast<float>(LampRange - LampFade));
+
+	// The ground under each lamp, from the city's own ground (a plain trace
+	// would hit the lamp post).
+	TArray<UPrimitiveComponent*> Grounds;
+	for (TActorIterator<AOsmGraybox> It(GetWorld()); It; ++It)
+	{
+		TInlineComponentArray<UPrimitiveComponent*> Parts(*It);
+		Grounds.Append(Parts);
+	}
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> Corners;
+	const double R = GroundSurfaces::LightPoolRadius;
+	const FCollisionQueryParams Params(SCENE_QUERY_STAT(LightPoolGround), false, this);
+	for (const FVector& Lamp : Lamps)
+	{
+		double GroundZ = Lamp.Z - LanternHeight * 100.0;
+		for (UPrimitiveComponent* Ground : Grounds)
+		{
+			FHitResult Hit;
+			if (Ground->LineTraceComponent(Hit, Lamp, Lamp - FVector(0.0, 0.0, 2000.0), Params))
+			{
+				GroundZ = Hit.ImpactPoint.Z;
+				break;
+			}
+		}
+		const FVector Middle(Lamp.X, Lamp.Y, GroundZ + LightPoolLift);
+		const int32 First = Vertices.Num();
+		Vertices.Add(Middle + FVector(-R, -R, 0.0));
+		Vertices.Add(Middle + FVector(R, -R, 0.0));
+		Vertices.Add(Middle + FVector(R, R, 0.0));
+		Vertices.Add(Middle + FVector(-R, R, 0.0));
+		Corners.Add(FVector2D(0.0, 0.0));
+		Corners.Add(FVector2D(1.0, 0.0));
+		Corners.Add(FVector2D(1.0, 1.0));
+		Corners.Add(FVector2D(0.0, 1.0));
+		for (int32 i = 0; i < 4; ++i)
+		{
+			Normals.Add(FVector::UpVector);
+		}
+		// Facing up: Unreal faces a triangle along (C - A) x (B - A).
+		Triangles.Append({ First, First + 2, First + 1, First, First + 3, First + 2 });
+	}
+
+	LightPools = NewObject<UProceduralMeshComponent>(this);
+	LightPools->SetupAttachment(RootComponent);
+	LightPools->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LightPools->SetCastShadow(false);
+	LightPools->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Corners, TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+	LightPools->SetMaterial(0, LightPoolMaterial);
+	LightPools->SetVisibility(false);
+	LightPools->RegisterComponent();
 }

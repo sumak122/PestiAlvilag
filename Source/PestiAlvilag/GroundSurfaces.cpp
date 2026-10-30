@@ -9,12 +9,17 @@
 
 #if WITH_EDITOR
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionCameraPositionWS.h"
 #include "Materials/MaterialExpressionComponentMask.h"
+#include "Materials/MaterialExpressionDistance.h"
 #include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionNoise.h"
+#include "Materials/MaterialExpressionSaturate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSubtract.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
+#include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionWorldPosition.h"
@@ -46,9 +51,16 @@ namespace GroundSurfaces::Private
 	// Made once and kept for the whole session (they never change).
 	FPictures Pictures[static_cast<int32>(EKind::Count)];
 	TWeakObjectPtr<UMaterial> SharedMaterial;
+	TWeakObjectPtr<UMaterial> PoolMaterial;
+
+	// The pool of light under a street lamp: a disc this wide (cm) for a
+	// lantern this high above the ground (cm).
+	constexpr double PoolRadius = LightPoolRadius;
+	constexpr double PoolLampHeight = 400.0;
+	constexpr int32 PoolPictureSize = 128;
 
 	/** A texture from R, G, B, A rows, with its smaller copies for far away. */
-	UTexture2D* MakeTexture(const TArray<uint8>& Pixels, int32 Size, bool bColour)
+	UTexture2D* MakeTexture(const TArray<uint8>& Pixels, int32 Size, bool bColour, bool bRepeat = true)
 	{
 		UTexture2D* Texture = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
 		if (!Texture)
@@ -57,8 +69,8 @@ namespace GroundSurfaces::Private
 		}
 		Texture->SRGB = bColour;
 		Texture->LODGroup = TEXTUREGROUP_World;
-		Texture->AddressX = TA_Wrap;
-		Texture->AddressY = TA_Wrap;
+		Texture->AddressX = bRepeat ? TA_Wrap : TA_Clamp;
+		Texture->AddressY = bRepeat ? TA_Wrap : TA_Clamp;
 		Texture->NeverStream = true;
 
 		// The texture wants blue, green, red, alpha.
@@ -222,6 +234,97 @@ namespace GroundSurfaces::Private
 		Material->AddToRoot();
 		return Material;
 	}
+
+	/**
+	 * How the light of a lamp spreads over the ground below it, from the
+	 * middle of the picture (1) to its round edge (0): a lamp PoolLampHeight
+	 * up lights the ground less the further out it is, and the last stretch
+	 * is eased to nothing so the disc has no edge.
+	 */
+	UTexture2D* MakePoolPicture()
+	{
+		const int32 Size = PoolPictureSize;
+		TArray<uint8> Pixels;
+		Pixels.SetNumZeroed(Size * Size * 4);
+		for (int32 Y = 0; Y < Size; ++Y)
+		{
+			for (int32 X = 0; X < Size; ++X)
+			{
+				const double DX = (X + 0.5) / Size * 2.0 - 1.0;
+				const double DY = (Y + 0.5) / Size * 2.0 - 1.0;
+				const double Out = FMath::Min(FMath::Sqrt(DX * DX + DY * DY), 1.0);
+				const double Slant = Out * PoolRadius / PoolLampHeight;
+				const double Light = FMath::Pow(1.0 + Slant * Slant, -1.5) * FMath::Square(1.0 - Out * Out);
+				const uint8 Value = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Light * 255.0), 0, 255));
+				const int32 At = (Y * Size + X) * 4;
+				Pixels[At + 0] = Value;
+				Pixels[At + 1] = Value;
+				Pixels[At + 2] = Value;
+				Pixels[At + 3] = 255;
+			}
+		}
+		return MakeTexture(Pixels, Size, false, false);
+	}
+
+	/**
+	 * Glowing light added onto whatever is under the disc: the picture from
+	 * MakePoolPicture times Light, faded in from FadeFrom cm away from the
+	 * camera over FadeLength cm (nearer, the lamps' real lights take over).
+	 */
+	UMaterial* MakePoolMaterial(UTexture2D* Picture)
+	{
+		UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+		Material->BlendMode = BLEND_Additive;
+		Material->SetShadingModel(MSM_Unlit);
+
+		auto* Corners = AddExpression<UMaterialExpressionTextureCoordinate>(Material);
+		auto* Spread = AddExpression<UMaterialExpressionTextureSample>(Material);
+		Spread->Texture = Picture;
+		Spread->SamplerType = SAMPLERTYPE_LinearColor;
+		Spread->Coordinates.Connect(0, Corners);
+
+		auto* Light = AddExpression<UMaterialExpressionVectorParameter>(Material);
+		Light->ParameterName = TEXT("Light");
+		Light->DefaultValue = FLinearColor::Black;
+		Light->UpdateParameterGuid(true, false);
+
+		auto* FadeFrom = AddExpression<UMaterialExpressionScalarParameter>(Material);
+		FadeFrom->ParameterName = TEXT("FadeFrom");
+		FadeFrom->DefaultValue = 8000.f;
+		FadeFrom->UpdateParameterGuid(true, false);
+		auto* FadeLength = AddExpression<UMaterialExpressionScalarParameter>(Material);
+		FadeLength->ParameterName = TEXT("FadeLength");
+		FadeLength->DefaultValue = 3000.f;
+		FadeLength->UpdateParameterGuid(true, false);
+
+		auto* Where = AddExpression<UMaterialExpressionWorldPosition>(Material);
+		auto* Eye = AddExpression<UMaterialExpressionCameraPositionWS>(Material);
+		auto* Away = AddExpression<UMaterialExpressionDistance>(Material);
+		Away->A.Connect(0, Where);
+		Away->B.Connect(0, Eye);
+		auto* Beyond = AddExpression<UMaterialExpressionSubtract>(Material);
+		Beyond->A.Connect(0, Away);
+		Beyond->B.Connect(0, FadeFrom);
+		auto* Share = AddExpression<UMaterialExpressionDivide>(Material);
+		Share->A.Connect(0, Beyond);
+		Share->B.Connect(0, FadeLength);
+		auto* Fade = AddExpression<UMaterialExpressionSaturate>(Material);
+		Fade->Input.Connect(0, Share);
+
+		auto* Lit = AddExpression<UMaterialExpressionMultiply>(Material);
+		Lit->A.Connect(1, Spread);
+		Lit->B.Connect(0, Light);
+		auto* Faded = AddExpression<UMaterialExpressionMultiply>(Material);
+		Faded->A.Connect(0, Lit);
+		Faded->B.Connect(0, Fade);
+
+		Material->GetEditorOnlyData()->EmissiveColor.Connect(0, Faded);
+
+		Material->PreEditChange(nullptr);
+		Material->PostEditChange();
+		Material->AddToRoot();
+		return Material;
+	}
 }
 
 #endif
@@ -247,6 +350,26 @@ UMaterialInstanceDynamic* GroundSurfaces::Make(SurfaceModel::EKind Kind, UObject
 	Material->SetTextureParameterValue(TEXT("Bumps"), Found.Bumps.Get());
 	Material->SetScalarParameterValue(TEXT("TileSize"), static_cast<float>(SurfaceModel::TileCm(Kind)));
 	return Material;
+#else
+	return nullptr;
+#endif
+}
+
+UMaterialInstanceDynamic* GroundSurfaces::MakeLightPool(UObject* Outer)
+{
+#if WITH_EDITOR
+	using namespace GroundSurfaces::Private;
+
+	if (!PoolMaterial.IsValid())
+	{
+		UTexture2D* Picture = MakePoolPicture();
+		if (!Picture)
+		{
+			return nullptr;
+		}
+		PoolMaterial = MakePoolMaterial(Picture);
+	}
+	return UMaterialInstanceDynamic::Create(PoolMaterial.Get(), Outer);
 #else
 	return nullptr;
 #endif

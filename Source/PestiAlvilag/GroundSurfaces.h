@@ -22,4 +22,16 @@ namespace GroundSurfaces
 {
 	/** A material showing Kind, or nullptr if it can't be made here. */
 	UMaterialInstanceDynamic* Make(SurfaceModel::EKind Kind, UObject* Outer);
+
+	/**
+	 * The glow a street lamp throws on the ground, for a flat square
+	 * LightPoolRadius cm from its middle to each side, with texture
+	 * coordinates 0..1 across it. Set the vector "Light" to the brightness
+	 * in its middle, and "FadeFrom" / "FadeLength" (cm) to where it fades
+	 * in with the distance from the camera. nullptr where it can't be made.
+	 */
+	UMaterialInstanceDynamic* MakeLightPool(UObject* Outer);
+
+	/** Half the width of a light pool's square (cm). */
+	constexpr double LightPoolRadius = 1500.0;
 }
