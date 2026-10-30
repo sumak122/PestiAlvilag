@@ -1043,17 +1043,17 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		break;
 	case EAct::Holding:
 		// He wriggles free in the end.
-		if (!Held || Now >= HoldUntil)
+		if (!Victim || Now >= HoldUntil)
 		{
 			LetGo();
 			BeginAct(EAct::Stance, 0.f);
 		}
 		break;
 	case EAct::Knee:
-		if (!bBlowDone && T >= KneeLands && Held)
+		if (!bBlowDone && T >= KneeLands && Victim)
 		{
 			bBlowDone = true;
-			Held->TakeBlow(EBlow::Knee, this);
+			Victim->TakeBlow(EBlow::Knee, this);
 		}
 		if (bOver)
 		{
@@ -1066,9 +1066,9 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		{
 			bBlowDone = true;
 			Holding = nullptr;
-			if (Held)
+			if (Victim)
 			{
-				Held->BeThrown(GetActorForwardVector(), this);
+				Victim->BeThrown(GetActorForwardVector(), this);
 			}
 		}
 		break;
