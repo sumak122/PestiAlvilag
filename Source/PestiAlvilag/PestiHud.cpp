@@ -54,6 +54,10 @@ namespace PestiHud
 	constexpr float AnnounceY = 330.f;
 	// The key sign for a move: this far down the screen (share of its height).
 	constexpr float PromptDown = 0.68f;
+	// A fist fight: the other man's plaque across the top; the breath bar
+	// turns red below this share.
+	constexpr float FoeWidth = 520.f;
+	constexpr float LowBreath = 0.25f;
 
 	// The lighter cabinet: six niches across, five down, the chosen one large
 	// on the right, the rewards along the bottom.
@@ -145,6 +149,10 @@ public:
 		}
 		PaintNotes(Paint, *Hud, Now, NotesTop);
 		PaintStatus(Paint, Wide);
+		if (Hud->Fight.Until >= Now)
+		{
+			PaintFight(Paint, Hud->Fight, Wide);
+		}
 		if (Hud->Speech.Until >= Now)
 		{
 			PaintSpeech(Paint, Hud->Speech, Wide * 0.5f, High - PestiHud::SpeechFromBottom);
@@ -464,6 +472,43 @@ private:
 		Paint.Text(Label, Paint.Bold(15.f, 3.f), X + W - 124.f, Y + H + 33.f, PestiHud::RedHi, 1.f);
 	}
 
+	void PaintFight(const FPainter& Paint, const APestiHUD::FFight& Fight, float Wide) const
+	{
+		// The other man: his name over a long red bar, top middle.
+		const float W = PestiHud::FoeWidth;
+		const float X = (Wide - W) * 0.5f;
+		const float Y = PestiHud::Top;
+		Paint.Panel(X, Y, W, 78.f);
+		if (!Fight.Name.IsEmpty())
+		{
+			Paint.Tab(Fight.Name, Wide * 0.5f, Y);
+		}
+		const float BX = X + 36.f;
+		const float BW = W - 72.f;
+		const float BY = Y + 34.f;
+		Paint.Box(BX, BY, BW, 16.f, PestiHud::RedEmpty, 1);
+		const float Health = FMath::Clamp(Fight.Health, 0.f, 1.f);
+		if (Health > 0.f)
+		{
+			Paint.Box(BX, BY, BW * Health, 16.f, PestiHud::Red, 2);
+			Paint.Box(BX, BY, BW * Health, 7.f, PestiHud::RedHi, 2);
+		}
+		Paint.Diamond(BX - 14.f, BY + 8.f, 8.f, PestiHud::Gold, 2);
+		Paint.Diamond(BX + BW + 14.f, BY + 8.f, 8.f, PestiHud::Gold, 2);
+
+		// His own breath: a plaque under the money and health, below the wanted one if that shows.
+		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Paint.Hud);
+		const float SW = PestiHud::StatusWidth;
+		const float SX = Wide - PestiHud::Margin - SW;
+		const float SY = PestiHud::Top + PestiHud::StatusHeight + 4.f + (Game && Game->GetWantedLevel() > 0 ? 50.f : 0.f);
+		Paint.Panel(SX, SY, SW, 56.f);
+		Paint.Text(TEXT("ER\u0150"), Paint.Bold(15.f, 3.f), SX + 28.f, SY + 24.f, PestiHud::Grey);
+		Paint.Text(TEXT("breath"), Paint.Plain(15.f, 1.f), SX + SW - 28.f, SY + 24.f, PestiHud::Brass, 1.f);
+		const float Breath = FMath::Clamp(Fight.Breath, 0.f, 1.f);
+		Paint.Box(SX + 28.f, SY + 34.f, SW - 56.f, 9.f, PestiHud::Dim, 1);
+		Paint.Box(SX + 28.f, SY + 34.f, (SW - 56.f) * Breath, 9.f, Breath < PestiHud::LowBreath ? PestiHud::RedHi : PestiHud::Gold, 2);
+	}
+
 	void PaintSpeech(const FPainter& Paint, const APestiHUD::FSpeech& Speech, float CentreX, float CentreY) const
 	{
 		const float W = PestiHud::SpeechWidth;
@@ -746,4 +791,9 @@ void APestiHUD::Announce(const FString& Hu, const FString& En, float Seconds)
 void APestiHUD::Prompt(const FString& Key, const FString& Hu, const FString& En, bool bNow)
 {
 	KeySign = FPrompt{ Key, Hu, En, bNow, Now() + PestiHud::OneFrame };
+}
+
+void APestiHUD::ShowFight(const FString& FoeName, float FoeHealth, float Breath)
+{
+	Fight = FFight{ FoeName, FoeHealth, Breath, Now() + PestiHud::OneFrame };
 }

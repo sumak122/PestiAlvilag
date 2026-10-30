@@ -20,7 +20,8 @@ class SPestiHud;
  * right the money and the health bars, and red diamonds when the police want
  * you. At the bottom who is talking and what they say, and in the middle the
  * big announcements, and under the middle the key to press for a move
- * (a vault, a slide). Over everything, while it is open, the cabinet of
+ * (a vault, a slide, a counter). In a fist fight, the other man's health
+ * at the top and the player's breath under his health. Over everything, while it is open, the cabinet of
  * lighters found (ALighters).
  *
  * Everything on screen goes through Show (by key, like the engine's debug
@@ -61,6 +62,12 @@ public:
 	 * the key up: this is the moment to press it.
 	 */
 	void Prompt(const FString& Key, const FString& Hu, const FString& En, bool bNow);
+	/**
+	 * For this frame, a fist fight: the other man's name and health on a
+	 * plaque at the top of the screen, and the player's breath under his
+	 * health (shares, 0 to 1).
+	 */
+	void ShowFight(const FString& FoeName, float FoeHealth, float Breath);
 
 protected:
 	virtual void BeginPlay() override;
@@ -81,6 +88,13 @@ private:
 		FString Hu;
 		FString En;
 		bool bNow = false;
+		double Until = -1.0;
+	};
+	struct FFight
+	{
+		FString Name;
+		float Health = 1.f;
+		float Breath = 1.f;
 		double Until = -1.0;
 	};
 	struct FSpeech
@@ -107,5 +121,6 @@ private:
 	FSpeech Speech;
 	FSpeech Big;
 	FPrompt KeySign;
+	FFight Fight;
 	TWeakObjectPtr<const ALighters> Cabinet;
 };

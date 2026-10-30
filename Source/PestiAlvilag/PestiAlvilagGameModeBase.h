@@ -82,8 +82,8 @@ public:
 	void AddFoundLighter(int32 Index) { FoundLighters.AddUnique(Index); }
 
 	void MarkMissionDone(FName MissionId);
-	/** Starts the first story mission not yet passed, after a short pause. */
-	void StartNextMission();
+	/** Starts the first story mission not yet passed, after a short pause (Delay seconds, or the usual below 0). */
+	void StartNextMission(float Delay = -1.f);
 
 	/**
 	 * The player's health. Cars and trams hurt him when they hit him, and so
@@ -91,6 +91,8 @@ public:
 	 * again. At nothing he faints and comes round at home.
 	 */
 	float GetHealth() const { return Health; }
+	/** True from fainting until he comes round. */
+	bool IsFainted() const { return FaintUntil >= 0.0; }
 	float GetMaxHealth() const { return MaxHealth; }
 	void HurtPlayer(float Amount);
 	void HealPlayer(float Amount);

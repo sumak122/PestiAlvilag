@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GoalMarkerComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -21,6 +22,14 @@ namespace Mission
 {
 	// Closer than this the marker alone is enough; no arrows.
 	constexpr double RouteMinDistance = 4000.0;
+
+	// After failing: the offer to try again comes after this long and
+	// stays this long; trying again starts the mission this soon, the
+	// picture coming back over this long (s).
+	constexpr double RetryAfter = 3.0;
+	constexpr double RetryOffer = 20.0;
+	constexpr float RetryStart = 0.5f;
+	constexpr float RetryFade = 1.0f;
 }
 
 AMission::AMission()
@@ -113,6 +122,11 @@ void AMission::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (bFailed)
+	{
+		TickFailed();
+		return;
+	}
 	if (!Steps.IsValidIndex(CurrentStep))
 	{
 		return;
@@ -164,19 +178,105 @@ void AMission::Tick(float DeltaSeconds)
 	}
 
 	const APlayerController* PC = Cast<APlayerController>(Player->GetController());
-	if (bThere && (!Step.bPressE || (PC && PC->WasInputKeyJustPressed(EKeys::E))))
+	if (!Step.bManual && bThere && (!Step.bPressE || (PC && PC->WasInputKeyJustPressed(EKeys::E))))
 	{
-		const int32 Done = CurrentStep;
-		OnStepDone(Done);
-		if (Done + 1 < Steps.Num())
+		FinishStep();
+	}
+}
+
+void AMission::FinishStep()
+{
+	if (!Steps.IsValidIndex(CurrentStep) || bFailed)
+	{
+		return;
+	}
+	const int32 Done = CurrentStep;
+	OnStepDone(Done);
+	if (Done + 1 < Steps.Num())
+	{
+		StartStep(Done + 1);
+	}
+	else
+	{
+		Pass();
+	}
+}
+
+void AMission::SetStepTarget(const FVector& At)
+{
+	if (Steps.IsValidIndex(CurrentStep))
+	{
+		Steps[CurrentStep].Target = At;
+		Marker->ShowAt(At);
+	}
+}
+
+void AMission::Fail(const FString& WhyHu, const FString& WhyEn)
+{
+	if (bFailed)
+	{
+		return;
+	}
+	bFailed = true;
+	FailedAt = GetWorld()->GetTimeSeconds();
+	Marker->Hide();
+	Guide->Stop();
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->ClearGoal();
+	}
+	Announce(TEXT("K\u00dcLDET\u00c9S SIKERTELEN"), FString::Printf(TEXT("Mission failed  \u00b7  %s  \u00b7  %s"), *WhyHu, *WhyEn), 6.f);
+	OnFailed();
+}
+
+void AMission::TickFailed()
+{
+	const double Since = GetWorld()->GetTimeSeconds() - FailedAt;
+	if (Since < Mission::RetryAfter)
+	{
+		return;
+	}
+	if (Since > Mission::RetryAfter + Mission::RetryOffer)
+	{
+		Retry(false);
+		return;
+	}
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->Prompt(TEXT("E"), TEXT("\u00daj pr\u00f3ba"), TEXT("Try again"), false);
+	}
+	const APawn* Player = GetPlayer();
+	const APlayerController* PC = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
+	if (PC && PC->WasInputKeyJustPressed(EKeys::E))
+	{
+		Retry(true);
+	}
+}
+
+void AMission::Retry(bool bPutBack)
+{
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	FVector At;
+	double Yaw = 0.0;
+	APestiPerson* Person = Cast<APestiPerson>(GetPlayer());
+	if (bPutBack && Person && GetRetrySpot(At, Yaw))
+	{
+		// A moment of black, and he is back at the start.
+		Person->SetActorLocationAndRotation(At, FRotator(0.0, Yaw, 0.0), false, nullptr, ETeleportType::TeleportPhysics);
+		if (APlayerController* PC = Cast<APlayerController>(Person->GetController()))
 		{
-			StartStep(Done + 1);
-		}
-		else
-		{
-			Pass();
+			PC->SetControlRotation(FRotator(-10.0, Yaw, 0.0));
+			if (PC->PlayerCameraManager)
+			{
+				PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, Mission::RetryFade, FLinearColor::Black);
+			}
 		}
 	}
+	if (Game)
+	{
+		Game->StartNextMission(bPutBack ? Mission::RetryStart : -1.f);
+	}
+	Destroy();
 }
 
 void AMission::Pass()
