@@ -108,10 +108,12 @@ void APestiCar::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	// Nobody at the wheel: the engine is off.
+	// Nobody at the wheel: the engine is off, and so are the lights.
 	Visuals->SetEngineRunning(PC != nullptr);
 	if (!PC)
 	{
+		Visuals->SetHeadlights(false);
+		Visuals->SetBraking(false);
 		if (EngineNoise->IsPlaying())
 		{
 			EngineNoise->Stop();
@@ -148,6 +150,17 @@ void APestiCar::Tick(float DeltaSeconds)
 		LetDriverOut(PC);
 		return;
 	}
+
+	// H switches the headlights on and off.
+	if (PC->WasInputKeyJustPressed(EKeys::H) || PC->WasInputKeyJustPressed(EKeys::Gamepad_DPad_Up))
+	{
+		bHeadlightsOn = !bHeadlightsOn;
+	}
+	Visuals->SetHeadlights(bHeadlightsOn);
+	// The brake lights: the handbrake, or the pedal against the way the car is going.
+	const bool bBraking = (bHandbrake || (Throttle < -0.05f && ForwardSpeed > 20.f) || (Throttle > 0.05f && ForwardSpeed < -20.f))
+		&& FMath::Abs(ForwardSpeed) > 20.f;
+	Visuals->SetBraking(bBraking);
 
 	UpdateFreeLook(PC, DeltaSeconds);
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);

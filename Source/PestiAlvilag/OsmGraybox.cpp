@@ -2,6 +2,7 @@
 
 #include "OsmGraybox.h"
 
+#include "DayNight.h"
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
@@ -41,6 +42,8 @@ namespace OsmGraybox
 		Glass,
 		Wood,
 		Sign,
+		/** Windows with someone at home: glass by day, lit at night. */
+		LitGlass,
 		FacadeSectionCount
 	};
 
@@ -185,6 +188,10 @@ namespace OsmGraybox
 		constexpr double FrameBorder = 14.0;
 		constexpr double FrameDepth = 8.0;
 		constexpr double GlassDepth = 1.0;
+		constexpr uint32 LitWindowPercent = 26;
+		// A lit window's lamplight, as bright as this many lit grey walls.
+		const FLinearColor Lamplight(1.f, 0.66f, 0.34f);
+		constexpr float LamplightGlow = 3.f;
 		constexpr double ShopWidth = 240.0;
 		constexpr double GateWidth = 280.0;
 		constexpr double GateHeight = 400.0;
@@ -269,6 +276,7 @@ namespace OsmGraybox
 		FSection& GlassS = Sections[Glass];
 		FSection& WoodS = Sections[Wood];
 		FSection& SignS = Sections[Sign];
+		FSection& LitS = Sections[LitGlass];
 
 		const int32 Storeys = Levels > 0 ? Levels : FMath::Clamp(FMath::RoundToInt(Height / StoreyHeight), 1, 8);
 		const double GroundTop = FMath::Min(GroundFloorHeight, Height - CorniceZone);
@@ -306,7 +314,7 @@ namespace OsmGraybox
 			else if (bShops)
 			{
 				const double Half = FMath::Min(ShopWidth, Bay - 40.0) / 2.0;
-				Wall.Opening(WoodS, GlassS, Mid - Half, Mid + Half, 50.0, GroundTop - 120.0, 18.0, 8.0);
+				Wall.Opening(WoodS, LitS, Mid - Half, Mid + Half, 50.0, GroundTop - 120.0, 18.0, 8.0);
 				Wall.Block(SignS, Mid - Half - 10.0, Mid + Half + 10.0, GroundTop - 105.0, GroundTop - 45.0, 8.0);
 			}
 			else
@@ -323,7 +331,9 @@ namespace OsmGraybox
 				const double Z1 = Z0 + FMath::Min(230.0, UpperHeight * 0.6);
 				const double S0 = Mid - WindowWidth / 2.0;
 				const double S1 = Mid + WindowWidth / 2.0;
-				Wall.Opening(StoneS, GlassS, S0, S1, Z0, Z1, FrameBorder, FrameDepth);
+				// About one window in four has its lamp lit in the evening.
+				const uint32 Home = (Seed ^ (static_cast<uint32>(k) * 2654435761u) ^ (static_cast<uint32>(Floor) * 40503u)) >> 7;
+				Wall.Opening(StoneS, Home % 100 < LitWindowPercent ? LitS : GlassS, S0, S1, Z0, Z1, FrameBorder, FrameDepth);
 				Wall.Block(StoneS, S0 - 15.0, S1 + 15.0, Z0 - 12.0, Z0, 16.0);
 				if (Floor == 1)
 				{
@@ -671,7 +681,8 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 	}
 
 	// Facade tiles share one material per part.
-	const FLinearColor FacadeColors[FacadeSectionCount] = { StoneColor, GlassColor, WoodColor, SignColor };
+	const FLinearColor FacadeColors[FacadeSectionCount] = { StoneColor, GlassColor, WoodColor, SignColor, GlassColor };
+	ADayNight* Clock = ADayNight::Get(GetWorld());
 	UMaterialInstanceDynamic* FacadeMaterials[FacadeSectionCount] = {};
 	if (BaseMaterial)
 	{
@@ -701,6 +712,10 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 			Tile->CreateMeshSection_LinearColor(j, Section.Vertices, Section.Triangles, Section.Normals,
 				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
 			Tile->SetMaterial(j, FacadeMaterials[j]);
+			if (j == LitGlass && Clock)
+			{
+				Clock->AddNightGlow(Tile, j, Facade::Lamplight, Facade::LamplightGlow);
+			}
 			FacadeTriangles += Section.Triangles.Num() / 3;
 		}
 	}

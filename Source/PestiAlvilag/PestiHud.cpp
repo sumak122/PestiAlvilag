@@ -3,6 +3,7 @@
 #include "PestiHud.h"
 
 #include "Brushes/SlateColorBrush.h"
+#include "DayNight.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -423,6 +424,11 @@ private:
 		const int32 Money = Game->GetMoney();
 		Paint.Text(FString::Printf(TEXT("%d,%02d"), Money / 100, Money % 100), Paint.Deco(36.f, 1.f), X + W - 112.f, Y + 58.f, PestiHud::Gold, 1.f);
 		Paint.Text(TEXT("peng\u0151"), Paint.Plain(20.f), X + W - 104.f, Y + 58.f, PestiHud::Grey);
+		// The time of day, left of the money.
+		if (const ADayNight* Clock = ADayNight::Get(Paint.Hud.GetWorld()))
+		{
+			Paint.Text(Clock->GetClockText(), Paint.Deco(20.f, 1.f), X + 28.f, Y + 56.f, PestiHud::Cream);
+		}
 		Paint.Line(X + 28.f, Y + 76.f, X + W - 28.f, Y + 76.f, PestiHud::Dim, 1.f);
 		Paint.Diamond(X + W * 0.5f, Y + 76.f, 6.f, PestiHud::Gold, 2);
 

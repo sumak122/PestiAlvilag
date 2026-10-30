@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Cafe.h"
+#include "DayNight.h"
 #include "HomeDoor.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
@@ -101,6 +102,9 @@ APestiAlvilagGameModeBase* APestiAlvilagGameModeBase::Get(const UObject* WorldCo
 void APestiAlvilagGameModeBase::StartPlay()
 {
 	Super::StartPlay();
+
+	// The clock, the sun and the moon, before anything that lights up at night.
+	ADayNight::Get(GetWorld());
 
 	SpawnLandmarks();
 
@@ -303,6 +307,15 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 		else
 		{
 			ReportCrime(1);
+		}
+	}
+
+	// K moves the clock on an hour, to see the evening without waiting for it.
+	if (PC && PC->WasInputKeyJustPressed(EKeys::K))
+	{
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			Clock->SkipHour();
 		}
 	}
 

@@ -11,6 +11,7 @@
 class ATrafficManager;
 class UBoxComponent;
 class UMaterialInterface;
+class UPointLightComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class UTexture;
@@ -112,6 +113,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
 
+	/** The saloon's lamplight at night; made when first needed. */
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> InsideLight;
+
 	/** Motors, wheels and bell; made when the camera first comes near. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTramSound> Sound;
@@ -131,6 +136,8 @@ private:
 	bool IsStartClear() const;
 	/** Plays the tram's sound while the camera is near enough to hear it. */
 	void UpdateSound();
+	/** At night, near the camera: a lamp lighting the saloon. */
+	void UpdateInsideLight();
 	void StopSound();
 	/** Rings the bell at someone standing on the rails ahead. */
 	void WarnPlayerAhead(float DeltaSeconds);
@@ -154,6 +161,7 @@ private:
 	float SoundBrake = 0.f;
 	float BendDegrees = 0.f;
 	bool bSoundHeard = false;
+	bool bNightGlowAdded = false;
 	/** Seconds before the bell may be rung at the player again. */
 	float BellWait = 0.f;
 };
