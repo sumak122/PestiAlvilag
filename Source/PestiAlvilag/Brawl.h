@@ -158,12 +158,13 @@ namespace Brawl
 	{
 		auto L = [W](float X, float Y) { return X + (Y - X) * W; };
 		return { L(A.Lift, B.Lift), L(A.Pitch, B.Pitch), L(A.Yaw, B.Yaw), L(A.Roll, B.Roll), L(A.LegL, B.LegL), L(A.LegR, B.LegR),
-			L(A.KneeL, B.KneeL), L(A.KneeR, B.KneeR), L(A.ArmL, B.ArmL), L(A.ArmR, B.ArmR), L(A.ArmOutL, B.ArmOutL), L(A.ArmOutR, B.ArmOutR) };
+			L(A.KneeL, B.KneeL), L(A.KneeR, B.KneeR), L(A.ArmL, B.ArmL), L(A.ArmR, B.ArmR), L(A.ArmOutL, B.ArmOutL), L(A.ArmOutR, B.ArmOutR),
+			L(A.ElbowL, B.ElbowL), L(A.ElbowR, B.ElbowR) };
 	}
 
 	/**
-	 * Fists up: the left shoulder leading, knees soft, the left fist out in
-	 * front of the chin and the right one tucked in by it.
+	 * Fists up: the left shoulder leading, knees soft, elbows in, the left
+	 * fist out in front of the chin and the right one tucked in by it.
 	 */
 	inline FPose Stance()
 	{
@@ -175,10 +176,13 @@ namespace Brawl
 		P.LegR = -8.f;
 		P.KneeL = -14.f;
 		P.KneeR = -18.f;
-		P.ArmL = 115.f;
-		P.ArmOutL = -25.f;
-		P.ArmR = 125.f;
-		P.ArmOutR = -38.f;
+		// Upper arms down and forward, elbows bent so the fists are up by the chin.
+		P.ArmL = 56.f;
+		P.ArmOutL = -18.f;
+		P.ElbowL = 104.f;
+		P.ArmR = 46.f;
+		P.ArmOutR = -26.f;
+		P.ElbowR = 128.f;
 		return P;
 	}
 
@@ -193,10 +197,12 @@ namespace Brawl
 		P.LegR = 4.f;
 		P.KneeL = -22.f;
 		P.KneeR = -26.f;
-		P.ArmL = 148.f;
-		P.ArmOutL = -20.f;
-		P.ArmR = 142.f;
-		P.ArmOutR = -26.f;
+		P.ArmL = 62.f;
+		P.ArmOutL = -30.f;
+		P.ElbowL = 128.f;
+		P.ArmR = 58.f;
+		P.ArmOutR = -32.f;
+		P.ElbowR = 132.f;
 		return P;
 	}
 
@@ -206,8 +212,9 @@ namespace Brawl
 		FPose Out = Stance();
 		Out.Yaw = 34.f;
 		Out.Pitch = -10.f;
-		Out.ArmL = 100.f;
+		Out.ArmL = 94.f;
 		Out.ArmOutL = -8.f;
+		Out.ElbowL = 6.f;
 		Out.LegL = 22.f;
 		return Mix(Stance(), Out, Bell(T, 0.35f, 0.6f));
 	}
@@ -218,10 +225,13 @@ namespace Brawl
 		FPose Back = Stance();
 		Back.Yaw = -32.f;
 		Back.Pitch = 6.f;
-		Back.ArmR = -30.f;
-		Back.ArmOutR = 46.f;
-		Back.ArmL = 60.f;
-		Back.ArmOutL = 10.f;
+		// The right fist drawn back behind the shoulder, the left out in front measuring him.
+		Back.ArmR = -45.f;
+		Back.ArmOutR = 60.f;
+		Back.ElbowR = 100.f;
+		Back.ArmL = 75.f;
+		Back.ArmOutL = -10.f;
+		Back.ElbowL = 40.f;
 		Back.LegL = 20.f;
 		Back.KneeR = -28.f;
 		return Mix(Stance(), Back, Smooth(0.f, 0.7f, T));
@@ -235,10 +245,14 @@ namespace Brawl
 		Through.Yaw = 48.f;
 		Through.Pitch = -18.f;
 		Through.Lift = -10.f;
-		Through.ArmR = 100.f;
-		Through.ArmOutR = -20.f;
+		// A big right hook: the upper arm out level to the side, the forearm
+		// bent round in front, the turning body bringing it across.
+		Through.ArmR = 10.f;
+		Through.ArmOutR = 80.f;
+		Through.ElbowR = 95.f;
 		Through.ArmL = 40.f;
-		Through.ArmOutL = 20.f;
+		Through.ArmOutL = -10.f;
+		Through.ElbowL = 110.f;
 		Through.LegL = 30.f;
 		Through.KneeL = -26.f;
 		Through.LegR = -22.f;
@@ -261,8 +275,9 @@ namespace Brawl
 		Hook.Lift = -8.f;
 		Hook.Pitch = -10.f;
 		Hook.Yaw = 44.f;
-		Hook.ArmL = 98.f;
-		Hook.ArmOutL = -15.f;
+		Hook.ArmL = 10.f;
+		Hook.ArmOutL = 80.f;
+		Hook.ElbowL = 95.f;
 		Hook.LegL = 18.f;
 		const FPose Low = Mix(Stance(), Duck, Smooth(0.f, 0.3f, T));
 		const FPose Up = Mix(Low, Hook, Smooth(0.38f, 0.6f, T));
@@ -275,10 +290,12 @@ namespace Brawl
 		FPose Out = Stance();
 		Out.Yaw = 0.f;
 		Out.Pitch = -14.f;
-		Out.ArmL = 92.f;
-		Out.ArmR = 92.f;
-		Out.ArmOutL = -12.f;
-		Out.ArmOutR = -12.f;
+		Out.ArmL = 78.f;
+		Out.ArmR = 78.f;
+		Out.ArmOutL = -14.f;
+		Out.ArmOutR = -14.f;
+		Out.ElbowL = 32.f;
+		Out.ElbowR = 32.f;
 		Out.LegL = 26.f;
 		return Mix(Stance(), Out, Smooth(0.f, 0.8f, T));
 	}
@@ -298,8 +315,11 @@ namespace Brawl
 		Up.LegR = 92.f;
 		Up.KneeR = -105.f;
 		Up.LegL = -4.f;
-		Up.ArmL = 72.f;
-		Up.ArmR = 72.f;
+		// Pulling him down onto it.
+		Up.ArmL = 58.f;
+		Up.ArmR = 58.f;
+		Up.ElbowL = 62.f;
+		Up.ElbowR = 62.f;
 		return Mix(Holding(), Up, Bell(T, 0.45f, 0.6f));
 	}
 
@@ -308,10 +328,12 @@ namespace Brawl
 	{
 		FPose Out = Holding();
 		Out.Pitch = -20.f;
-		Out.ArmL = 100.f;
-		Out.ArmR = 100.f;
+		Out.ArmL = 96.f;
+		Out.ArmR = 96.f;
 		Out.ArmOutL = -4.f;
 		Out.ArmOutR = -4.f;
+		Out.ElbowL = 4.f;
+		Out.ElbowR = 4.f;
 		Out.LegL = 34.f;
 		Out.KneeL = -20.f;
 		Out.LegR = -18.f;
@@ -330,10 +352,12 @@ namespace Brawl
 		P.LegR = 10.f;
 		P.KneeL = -10.f;
 		P.KneeR = -16.f;
-		P.ArmL = 78.f + 10.f * Claw;
-		P.ArmR = 78.f - 10.f * Claw;
+		P.ArmL = 56.f + 10.f * Claw;
+		P.ArmR = 56.f - 10.f * Claw;
 		P.ArmOutL = -24.f;
 		P.ArmOutR = -24.f;
+		P.ElbowL = 85.f - 15.f * Claw;
+		P.ElbowR = 85.f + 15.f * Claw;
 		return P;
 	}
 
@@ -348,6 +372,8 @@ namespace Brawl
 		Hit.ArmR = 30.f;
 		Hit.ArmOutL = 14.f;
 		Hit.ArmOutR = 14.f;
+		Hit.ElbowL = 40.f;
+		Hit.ElbowR = 35.f;
 		return Mix(Stance(), Hit, Bell(T, 0.2f, 0.55f));
 	}
 
@@ -366,6 +392,8 @@ namespace Brawl
 		Reel.ArmR = 46.f;
 		Reel.ArmOutL = 52.f;
 		Reel.ArmOutR = 44.f;
+		Reel.ElbowL = 30.f;
+		Reel.ElbowR = 25.f;
 		return Mix(Mix(Stance(), Reel, Smooth(0.f, 0.25f, T)), Stance(), Smooth(0.75f, 1.f, T));
 	}
 
@@ -396,6 +424,8 @@ namespace Brawl
 		P.ArmOutL = 50.f;
 		P.ArmR = 12.f;
 		P.ArmOutR = 30.f;
+		P.ElbowL = 35.f;
+		P.ElbowR = 15.f;
 		return P;
 	}
 
@@ -426,6 +456,8 @@ namespace Brawl
 		Kneel.ArmL = 40.f;
 		Kneel.ArmR = 22.f;
 		Kneel.ArmOutR = 16.f;
+		Kneel.ElbowL = 30.f;
+		Kneel.ElbowR = 20.f;
 		const FPose First = Mix(Lying(), Kneel, Smooth(0.f, 0.5f, T));
 		return Mix(First, Stance(), Smooth(0.5f, 1.f, T));
 	}
@@ -446,6 +478,8 @@ namespace Brawl
 		P.ArmR = 18.f;
 		P.ArmOutL = -8.f;
 		P.ArmOutR = -8.f;
+		P.ElbowL = 8.f;
+		P.ElbowR = 8.f;
 		return P;
 	}
 
@@ -465,8 +499,10 @@ namespace Brawl
 		Dive.ArmOutR = -10.f;
 		FPose Kneel = GetUp(0.5f);
 		Kneel.Pitch = -20.f;
-		Kneel.ArmL = 70.f;
-		Kneel.ArmR = 70.f;
+		Kneel.ArmL = 60.f;
+		Kneel.ArmR = 60.f;
+		Kneel.ElbowL = 50.f;
+		Kneel.ElbowR = 50.f;
 		const FPose Going = Mix(Stance(), Dive, Smooth(0.f, 0.25f, T));
 		const FPose Kneeling = Mix(Going, Kneel, Smooth(0.4f, 0.6f, T));
 		return Mix(Kneeling, Stance(), Smooth(0.8f, 1.f, T));
@@ -507,10 +543,13 @@ namespace Brawl
 		P.LegR = 70.f;
 		P.KneeL = -26.f;
 		P.KneeR = -54.f;
-		P.ArmL = 150.f + 6.f * Shake;
-		P.ArmR = 146.f - 6.f * Shake;
-		P.ArmOutL = 30.f;
-		P.ArmOutR = 30.f;
+		// Upper arms out, forearms up, palms to him.
+		P.ArmL = 80.f + 6.f * Shake;
+		P.ArmR = 76.f - 6.f * Shake;
+		P.ArmOutL = 40.f;
+		P.ArmOutR = 40.f;
+		P.ElbowL = 85.f;
+		P.ElbowR = 85.f;
 		return P;
 	}
 

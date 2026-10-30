@@ -12,8 +12,10 @@
  * and their colours; Build turns it into meshes, so every walker can be
  * dressed differently without anyone modelling him by hand.
  *
- * The person comes in nine pieces that move: the body (with the head and
- * everything worn on it), each arm, which hangs from the shoulder, each leg
+ * The person comes in eleven pieces that move: the body (with the head and
+ * everything worn on it), each arm in two: the upper arm, which hangs from
+ * the shoulder, and the forearm and hand, which hang from the elbow
+ * (ForearmOf) so the elbow can bend; each leg
  * in two: the thigh, which hangs from the hip, and the shin and foot, which
  * hang from the knee (ShinOf, KneeBend) so the knee can bend; and the two
  * halves of a coat's or dress's skirts, which hang from the hips and follow
@@ -72,7 +74,7 @@ namespace PersonKit
 	/** How far a seated person's feet are above the standing person's ground (cm). */
 	constexpr double SeatDrop = 44.0;
 
-	enum EPiece : int32 { LegLeft, LegRight, ArmLeft, ArmRight, Body, ShinLeft, ShinRight, SkirtLeft, SkirtRight, NumPieces };
+	enum EPiece : int32 { LegLeft, LegRight, ArmLeft, ArmRight, Body, ShinLeft, ShinRight, SkirtLeft, SkirtRight, ForearmLeft, ForearmRight, NumPieces };
 
 	/**
 	 * Below the hips, a long coat's or dress's skirts hang in two flaps,
@@ -82,11 +84,21 @@ namespace PersonKit
 	 */
 	constexpr float SkirtFollow = 0.5f;
 
-	/** The piece a piece hangs from: a shin from its thigh, anything else from the body (NumPieces). */
+	/** The piece a piece hangs from: a shin from its thigh, a forearm from its upper arm, anything else from the body (NumPieces). */
 	inline EPiece ParentOf(int32 Piece)
 	{
-		return Piece == ShinLeft ? LegLeft : Piece == ShinRight ? LegRight : NumPieces;
+		return Piece == ShinLeft ? LegLeft : Piece == ShinRight ? LegRight
+			: Piece == ForearmLeft ? ArmLeft : Piece == ForearmRight ? ArmRight : NumPieces;
 	}
+
+	/** The forearm under an upper arm (ArmLeft or ArmRight). */
+	inline EPiece ForearmOf(int32 Arm)
+	{
+		return Arm == ArmLeft ? ForearmLeft : ForearmRight;
+	}
+
+	/** How far below the shoulder the elbow is, for a man of 178 cm (cm). */
+	constexpr double ElbowDrop = 29.0;
 
 	/** The shin under a thigh (LegLeft or LegRight). */
 	inline EPiece ShinOf(int32 Leg)
@@ -633,27 +645,38 @@ namespace PersonKit
 			}
 		}
 
-		// Arms: sleeves of the coat (or shirt) and hands, from the shoulder.
+		// Arms: sleeves of the coat (or shirt) and hands, from the shoulder,
+		// in two at the elbow; a round elbow in both halves keeps the joint
+		// closed when it bends.
 		for (const EPiece Arm : { ArmLeft, ArmRight })
 		{
 			FPiece& A = Out.Pieces[Arm];
+			FPiece& F = Out.Pieces[ForearmOf(Arm)];
 			const FVector S = A.Pivot;
 			const double Side = Arm == ArmLeft ? -1.0 : 1.0;
 			const double Ag = (W ? 0.85 : 1.0) * (O.Top == ETop::Overcoat ? 1.12 : 1.0);
 			const FLinearColor& Sleeve = bCoat || O.Top == ETop::Dress ? O.Coat : O.Shirt;
-			// The arm hangs a little out from the body, past the hips.
+			const FVector Elbow(S.X + 1.1, S.Y + 2.7 * Side, S.Z - ElbowDrop * H);
+			F.Pivot = Elbow;
 			// A rounded shoulder, and a sleeve hanging a little out from the body, past the hips.
 			Blob(A, Sleeve, FVector(S.X, S.Y, S.Z), FVector(6.2 * Ag * G, 5.8 * Ag * G, 4.0), 10, 3, 0.0);
 			Loft(A, Sleeve, {
 				Flat(S.X, S.Z, 6.2 * Ag * G, 5.8 * Ag * G, S.Y),
 				Flat(S.X + 0.5, S.Z - 6.0, 5.6 * Ag * G, 5.2 * Ag * G, S.Y + 0.5 * Side),
 				Flat(S.X + 1.0, S.Z - 26.0 * H, 4.6 * Ag, 4.4 * Ag, S.Y + 2.5 * Side),
-				Flat(S.X + 2.0, S.Z - 52.0 * H, 4.2 * Ag, 4.0 * Ag, S.Y + 4.5 * Side),
+				Flat(Elbow.X, Elbow.Z, 4.5 * Ag, 4.3 * Ag, Elbow.Y),
 			}, 10, false, true);
+			Blob(A, Sleeve, Elbow, FVector(4.5, 4.3, 4.5) * Ag, 10, 5);
+			Blob(F, Sleeve, Elbow, FVector(4.4, 4.2, 4.4) * Ag, 10, 5);
+			Loft(F, Sleeve, {
+				Flat(Elbow.X, Elbow.Z, 4.5 * Ag, 4.3 * Ag, Elbow.Y),
+				Flat(S.X + 2.0, S.Z - 52.0 * H, 4.2 * Ag, 4.0 * Ag, S.Y + 4.5 * Side),
+			}, 10, true, true);
 			const double Hs = W ? 0.85 : 1.0;
 			const FVector Hand = FVector(S.X + 2.5, S.Y + 5.0 * Side, S.Z - 56.5 * H);
-			Blob(A, O.Skin, Hand, FVector(3.6, 2.4, 5.6) * Hs, 8, 5);
-			Blob(A, O.Skin, Hand + FVector(2.8, -1.4 * Side, 1.5) * Hs, FVector(1.2, 1.2, 2.6) * Hs, 6, 3);
+			// A loosely closed hand, which reads as a fist when he raises it.
+			Blob(F, O.Skin, Hand, FVector(3.8, 3.0, 4.8) * Hs, 8, 5);
+			Blob(F, O.Skin, Hand + FVector(2.6, -1.6 * Side, 1.0) * Hs, FVector(1.3, 1.3, 2.4) * Hs, 6, 3);
 
 			// Something in the right hand.
 			if (Arm == ArmRight)
@@ -661,20 +684,20 @@ namespace PersonKit
 				switch (O.Held)
 				{
 				case EHeld::Briefcase:
-					Block(A, O.HeldColor, Hand + FVector(0.0, 0.0, -18.0), FVector(18.0, 4.5, 13.0));
-					Rod(A, FLinearColor(0.15f, 0.08f, 0.03f), Hand + FVector(-4.0, 0.0, -4.0), Hand + FVector(4.0, 0.0, -4.0), 1.0);
+					Block(F, O.HeldColor, Hand + FVector(0.0, 0.0, -18.0), FVector(18.0, 4.5, 13.0));
+					Rod(F, FLinearColor(0.15f, 0.08f, 0.03f), Hand + FVector(-4.0, 0.0, -4.0), Hand + FVector(4.0, 0.0, -4.0), 1.0);
 					break;
 				case EHeld::Umbrella:
-					Rod(A, FLinearColor(0.02f, 0.02f, 0.02f), Hand + FVector(6.0, 0.0, -3.0), Hand + FVector(22.0, 0.0, -72.0), 1.8, 8);
-					Rod(A, O.HeldColor, Hand + FVector(0.0, 0.0, 2.0), Hand + FVector(6.0, 0.0, -3.0), 1.0);
+					Rod(F, FLinearColor(0.02f, 0.02f, 0.02f), Hand + FVector(6.0, 0.0, -3.0), Hand + FVector(22.0, 0.0, -72.0), 1.8, 8);
+					Rod(F, O.HeldColor, Hand + FVector(0.0, 0.0, 2.0), Hand + FVector(6.0, 0.0, -3.0), 1.0);
 					break;
 				case EHeld::Newspaper:
-					Block(A, FLinearColor(0.75f, 0.73f, 0.66f), Hand + FVector(2.0, 3.0, -8.0), FVector(8.0, 0.8, 14.0));
+					Block(F, FLinearColor(0.75f, 0.73f, 0.66f), Hand + FVector(2.0, 3.0, -8.0), FVector(8.0, 0.8, 14.0));
 					break;
 				case EHeld::Basket:
-					Blob(A, O.HeldColor, Hand + FVector(0.0, 0.0, -24.0), FVector(16.0, 11.0, 10.0), 12, 4, -0.3);
-					Rod(A, O.HeldColor, Hand + FVector(-10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);
-					Rod(A, O.HeldColor, Hand + FVector(10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);
+					Blob(F, O.HeldColor, Hand + FVector(0.0, 0.0, -24.0), FVector(16.0, 11.0, 10.0), 12, 4, -0.3);
+					Rod(F, O.HeldColor, Hand + FVector(-10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);
+					Rod(F, O.HeldColor, Hand + FVector(10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);
 					break;
 				default:
 					break;
