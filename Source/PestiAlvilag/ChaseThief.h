@@ -57,6 +57,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual PersonKit::FOutfit GetDress() const override;
 	virtual void LoseHealth(float Amount) override;
+	/** A younger man's voice, higher than the player's. */
+	virtual float GetVoicePitch() const override { return 135.f; }
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
