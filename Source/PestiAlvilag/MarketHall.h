@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "MarketHall.generated.h"
 
-class AStoryPerson;
+class AFleaMarket;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
@@ -19,7 +19,9 @@ class UTexture;
  * the brick hall of 1897 with its four corner pavilions, the great gateway
  * on Rákóczi tér and the raised square over the crossing. Open to walk in:
  * iron columns, glazed roofs and rows of booths heaped with vegetables and
- * fruit, sellers behind most of them and shoppers in the aisles.
+ * fruit, more stalls standing free in the naves, sellers behind most of
+ * them and shoppers going from stall to stall, and lamps hanging from the
+ * roof that light it at night.
  *
  * The actor's origin is the middle of the main front at pavement level;
  * its +X runs from the front into the hall, +Y along the front towards
@@ -80,15 +82,15 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Batches;
 
+	/** The market inside: its stalls, sellers and shoppers. */
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<AStoryPerson>> People;
+	TObjectPtr<AFleaMarket> Market;
 
 private:
 	void Build();
-	/** The goods on every stall, and the sellers and shoppers. */
+	/** The market inside (HallMarketModel.h: stalls, sellers, shoppers, as an AFleaMarket), the hanging lamps, and the things in the pickpocket's way. */
 	void Fill();
 	void AddShape(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide);
-	AStoryPerson* SpawnPerson(const FVector& LocalFeet, double LocalYaw, FRandomStream& Random, bool bSeller);
 
 	TMap<FString, int32> BatchIndex;
 };

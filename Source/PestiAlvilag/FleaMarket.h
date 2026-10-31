@@ -8,6 +8,7 @@
 #include "Pedestrians.h"
 #include "FleaMarket.generated.h"
 
+class AChaseThief;
 class AStoryPerson;
 class FJsonObject;
 class UBoxComponent;
@@ -195,6 +196,9 @@ private:
 	/** Moves and poses everyone near the camera, and has them react to the player. */
 	void TickCrowd(float DeltaSeconds, const FVector& Camera, double Now);
 	void React(int32 Index, double Now);
+	/** Someone on foot (the player, or the pickpocket) at From going at Velocity: he steps aside, or stumbles if run into. */
+	void ReactOnFoot(int32 Index, const FVector2D& From, const FVector2D& Velocity);
+	void ReactToThief(int32 Index);
 	void StartAct(FCrowd& Who, EAct Act, float Seconds, const FVector2D& Shove = FVector2D::ZeroVector);
 	void RunOver(int32 Index, double Speed);
 	/** Has him run off, away from From, without running into a stall if he can help it. */
@@ -228,6 +232,14 @@ private:
 	FVector2D PlayerForward = FVector2D(1.0, 0.0);
 	bool bPlayerDriving = false;
 	bool bPlayerAbout = false;
+
+	/** The pickpocket (mission 3), found when he is about, and how he runs. */
+	TWeakObjectPtr<AChaseThief> Thief;
+	double NextThiefLook = 0.0;
+	FVector LastThiefAt = FVector::ZeroVector;
+	FVector ThiefAt = FVector::ZeroVector;
+	FVector ThiefVelocity = FVector::ZeroVector;
+	bool bThiefRunning = false;
 
 	/** One shape, in world cm (Size is the whole size), batched by shape and colour: its batch and instance. */
 	FIntPoint Add(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size,
