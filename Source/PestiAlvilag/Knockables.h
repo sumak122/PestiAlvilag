@@ -44,9 +44,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Knockables")
 	FString DataFile = TEXT("Data/OsmGraybox/street_furniture.json");
 
-	/** Things moved from their places go back once the camera is this far away (cm). */
+	/** Things moved from their places go back once the camera is this far away (cm)... */
 	UPROPERTY(EditAnywhere, Category = "Knockables")
-	float ResetDistance = 6000.f;
+	float ResetDistance = 15000.f;
+
+	/** ...and at least this long after they were last moved (s). */
+	UPROPERTY(EditAnywhere, Category = "Knockables")
+	float ResetAfter = 60.f;
 
 	/** They are not drawn beyond this distance (cm). */
 	UPROPERTY(EditAnywhere, Category = "Knockables")
@@ -72,6 +76,8 @@ private:
 		int32 Loads = 0;
 		bool bSpilled = false;
 		bool bMoved = false;
+		/** When it was last knocked (game seconds). */
+		double MovedAt = 0.0;
 		/** The car slows down once for each thing it hits, not every frame it touches it. */
 		float LastHit = -10.f;
 		TArray<UStaticMeshComponent*> Lumps;
