@@ -45,12 +45,15 @@ namespace FreeRun
 		float ArmR = 0.f;
 		float ArmOutL = 0.f;
 		float ArmOutR = 0.f;
+		/** Elbows bent (degrees, positive brings the forearm forward and up). */
+		float ElbowL = 0.f;
+		float ElbowR = 0.f;
 	};
 
 	inline FPose Scaled(const FPose& P, float W)
 	{
 		return { P.Lift * W, P.Pitch * W, P.Yaw * W, P.Roll * W, P.LegL * W, P.LegR * W, P.KneeL * W, P.KneeR * W,
-			P.ArmL * W, P.ArmR * W, P.ArmOutL * W, P.ArmOutR * W };
+			P.ArmL * W, P.ArmR * W, P.ArmOutL * W, P.ArmOutR * W, P.ElbowL * W, P.ElbowR * W };
 	}
 
 	inline float Smooth(float From, float To, float T)

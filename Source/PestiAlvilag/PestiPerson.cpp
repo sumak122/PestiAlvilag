@@ -38,6 +38,9 @@ namespace PestiPerson
 	// and sitting (degrees).
 	constexpr float HoldPitch = 50.f;
 	constexpr float SeatHoldPitch = 40.f;
+	// Elbows: a little bent standing, more the faster he goes, as a runner pumps his arms (degrees).
+	constexpr float RestElbow = 10.f;
+	constexpr float RunElbow = 75.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
 
@@ -310,6 +313,8 @@ void APestiPerson::SwingLimbs(float DeltaSeconds)
 			Pieces[Arm]->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
 		}
 	}
+	const float Elbow = FMath::Lerp(PestiPerson::RestElbow, PestiPerson::RunElbow, FMath::Clamp(Speed / RunSpeed, 0.f, 1.f));
+	PersonModel::PoseElbows(Pieces, bHoldingInFront ? 0.f : Elbow, bHoldingInFront || bCarrying ? 0.f : Elbow);
 
 	// Just after a bad landing: a lurch over the stride.
 	const double Now = GetWorld()->GetTimeSeconds();
@@ -400,6 +405,7 @@ void APestiPerson::ApplyPose(const FreeRun::FPose& Pose)
 			Pieces[Arm]->SetRelativeRotation(Arms[i]);
 		}
 	}
+	PersonModel::PoseElbows(Pieces, Pose.ElbowL, Pose.ElbowR);
 }
 
 void APestiPerson::TryEnterCar(APlayerController* PC)

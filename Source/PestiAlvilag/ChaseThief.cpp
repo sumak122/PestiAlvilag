@@ -56,10 +56,10 @@ namespace ChaseThief
 	constexpr double SecondJabAfter = 0.42;
 	constexpr float LowBreath = 25.f;
 
-	// The purse: a small brown leather bag with a brass clasp, in his right hand (cm, from the shoulder).
-	const FVector PurseAt(2.0, 0.0, -70.0);
+	// The purse: a small brown leather bag with a brass clasp, in his right hand (cm, from the elbow).
+	const FVector PurseAt(1.0, -2.5, -42.0);
 	const FVector PurseSize(14.0, 5.0, 10.0);
-	const FVector ClaspAt(2.0, 0.0, -64.5);
+	const FVector ClaspAt(1.0, -2.5, -36.5);
 	const FVector ClaspSize(12.0, 5.6, 1.5);
 	const FLinearColor Leather(0.24f, 0.11f, 0.05f);
 	const FLinearColor Brass(0.62f, 0.48f, 0.20f);
@@ -199,14 +199,14 @@ void AChaseThief::ShowPurse(bool bShow)
 		}
 	}
 	Purse.Reset();
-	if (!bShow || !CubeMesh || !Pieces.IsValidIndex(PersonKit::ArmRight) || !Pieces[PersonKit::ArmRight])
+	if (!bShow || !CubeMesh || !Pieces.IsValidIndex(PersonKit::ForearmRight) || !Pieces[PersonKit::ForearmRight])
 	{
 		return;
 	}
 	auto Add = [this](const FVector& At, const FVector& Size, const FLinearColor& Color)
 	{
 		UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
-		Part->SetupAttachment(Pieces[PersonKit::ArmRight]);
+		Part->SetupAttachment(Pieces[PersonKit::ForearmRight]);
 		Part->SetStaticMesh(CubeMesh);
 		Part->SetRelativeLocation(At);
 		Part->SetRelativeScale3D(Size / 100.0);

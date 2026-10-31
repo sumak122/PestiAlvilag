@@ -11,7 +11,7 @@ class UProceduralMeshComponent;
 class USceneComponent;
 
 /**
- * Puts a person from the dress-up kit (PersonKit) into the game: five mesh
+ * Puts a person from the dress-up kit (PersonKit) into the game: eleven mesh
  * pieces made while the game runs, each painted in its outfit's colours.
  */
 namespace PersonModel
@@ -24,12 +24,13 @@ namespace PersonModel
 
 	/**
 	 * Dresses a person under Parent, whose origin is MiddleHeight above the
-	 * feet: the thighs, arms, body and the halves of the skirts, each placed
+	 * feet: the thighs, upper arms, body and the halves of the skirts, each placed
 	 * at its hip or shoulder so it swings from there (pitch forward), and the
-	 * shins under the thighs at the knees. Any pieces already in InOutPieces
+	 * shins under the thighs at the knees and the forearms under the upper
+	 * arms at the elbows. Any pieces already in InOutPieces
 	 * are removed first. The pieces come in PersonKit::EPiece order: left
 	 * thigh, right thigh, left arm, right arm, body, left shin, right shin,
-	 * left skirt, right skirt.
+	 * left skirt, right skirt, left forearm, right forearm.
 	 */
 	void Dress(AActor* Owner, USceneComponent* Parent, UMaterialInterface* BaseMaterial, const PersonKit::FOutfit& Outfit,
 		TArray<TObjectPtr<UProceduralMeshComponent>>& InOutPieces);
@@ -47,6 +48,9 @@ namespace PersonModel
 	 * the stride by KneeAmount (0 standing, 1 walking, more running).
 	 */
 	void StrideLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Phase, float Swing, float KneeAmount);
+
+	/** Bends the elbows of a dressed person (degrees, positive brings the forearm forward and up). */
+	void PoseElbows(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right);
 
 	/** Someone out on the streets of Pest in the autumn of 1932. */
 	PersonKit::FOutfit RandomOutfit(FRandomStream& Random);

@@ -113,7 +113,7 @@ namespace PersonModel
 		{
 			const FPiece& Piece = Person.Pieces[p];
 			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Owner);
-			// A shin hangs from its thigh's knee; everything else from the middle.
+			// A shin hangs from its thigh's knee, a forearm from its elbow; everything else from the middle.
 			const EPiece Hangs = ParentOf(p);
 			if (Hangs != NumPieces && InOutPieces.IsValidIndex(Hangs) && InOutPieces[Hangs])
 			{
@@ -163,6 +163,19 @@ namespace PersonModel
 		const float Thigh = FMath::Sin(Phase) * Swing;
 		// The leg swinging forward bends most; the knee comes straight as the foot lands.
 		PoseLegs(Pieces, Thigh, -Thigh, KneeBend(Phase, KneeAmount), KneeBend(Phase + PI, KneeAmount));
+	}
+
+	void PoseElbows(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right)
+	{
+		const float Bends[] = { Left, Right };
+		const EPiece Parts[] = { ForearmLeft, ForearmRight };
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (Pieces.IsValidIndex(Parts[i]) && Pieces[Parts[i]])
+			{
+				Pieces[Parts[i]]->SetRelativeRotation(FRotator(Bends[i], 0.f, 0.f));
+			}
+		}
 	}
 
 	FOutfit RandomOutfit(FRandomStream& Random)
