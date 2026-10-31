@@ -14,6 +14,7 @@ class AExponentialHeightFog;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UPointLightComponent;
+class UProceduralMeshComponent;
 class UTexture;
 
 /** Something that lights up at night: one material slot of a mesh, and how it glows. */
@@ -56,7 +57,8 @@ struct FSeeThrough
  * 48 minutes of play: the sun climbs from the east, sets in the west, the
  * sky turns orange and then dark, and the moon takes over. At dusk the gas
  * lamps, house windows, shop windows and trams light up (see AddNightGlow
- * and AddLamp); the nearest lamps also light the pavement around them.
+ * and AddLamp); the nearest lamps also light the pavement around them, and
+ * the ones further off show a glow on the ground below them.
  *
  * It works with whatever sun, sky light and fog the level has, and adds a
  * sky if there is none. Brightness is worked out from the level's own sun,
@@ -95,7 +97,7 @@ public:
 	 */
 	void AddNightGlow(UMeshComponent* Mesh, int32 Slot, const FLinearColor& Color, float Strength);
 
-	/** A street lamp's lantern: the nearest ones light the ground at night. */
+	/** A street lamp's lantern: at night the nearest ones light the ground, the rest show a glow under them. */
 	void AddLamp(const FVector& At) { Lamps.Add(At); }
 
 	/**
@@ -124,6 +126,8 @@ private:
 	void UpdateSun(bool bForce);
 	void UpdateGlows(bool bForce);
 	void UpdateLampLights();
+	void BuildLightPools();
+	void FindSeeThroughs();
 	void UpdateSeeThrough(bool bForce);
 	void ShadeSeeThrough(const FSeeThrough& Glass) const;
 	float SunElevation(float AtHour) const;
@@ -157,6 +161,19 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
+
+	/** The engine's unlit see-through material, which glass and smoke are made from. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> SeeThroughBase;
+
+	/** The glow on the ground under every lamp, for the lamps too far off to have a real light. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> LightPools;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> LightPoolMaterial;
+
+	bool bLightPoolsBuilt = false;
 
 	TArray<FVector> Lamps;
 
