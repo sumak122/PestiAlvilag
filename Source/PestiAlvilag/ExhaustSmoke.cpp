@@ -134,7 +134,7 @@ void AExhaustSmoke::BeginPlay()
 			// Unlit, so it is darkened with the night instead of shining.
 			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
 			{
-				Clock->AddSeeThrough(Material, ExhaustSmoke::Colors[Section]);
+				Clock->AddSeeThrough(Material, ExhaustSmoke::Colors[Section], false);
 			}
 			Mesh->SetMaterial(Section, Material);
 		}

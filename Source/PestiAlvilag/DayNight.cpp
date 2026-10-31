@@ -66,6 +66,10 @@ namespace DayNight
 	constexpr float DayGrey = 0.12f;
 	const float NightGrey = 0.125f * FMath::Pow(2.f, -NightStopsMin);
 
+	// How much of what's behind it a window hides at night (it shows only a
+	// faint, dark view through, like real glass after dark).
+	constexpr float GlassAtNight = 0.88f;
+
 	// The sky light and fog by night, as a share of the day.
 	constexpr float NightSky = 0.5f;
 	constexpr float NightFog = 0.04f;
@@ -439,7 +443,7 @@ void ADayNight::UpdateGlows(bool bForce)
 	}
 }
 
-void ADayNight::AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint)
+void ADayNight::AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint, bool bGlass)
 {
 	if (!Material)
 	{
@@ -455,6 +459,7 @@ void ADayNight::AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearC
 	FSeeThrough& Glass = SeeThroughs.AddDefaulted_GetRef();
 	Glass.Material = Material;
 	Glass.Tint = Tint;
+	Glass.bGlass = bGlass;
 	ShadeSeeThrough(Glass);
 }
 
@@ -466,6 +471,10 @@ void ADayNight::ShadeSeeThrough(const FSeeThrough& Glass) const
 		const float Shade = GreyLuminance() / (DayNight::DayGrey * DaySunIntensity);
 		FLinearColor Tint = Glass.Tint * Shade;
 		Tint.A = Glass.Tint.A;
+		if (Glass.bGlass)
+		{
+			Tint.A = FMath::Lerp(Tint.A, FMath::Max(Tint.A, DayNight::GlassAtNight), Darkness);
+		}
 		Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tint);
 	}
 }
