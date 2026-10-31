@@ -157,8 +157,6 @@ private:
 		int32 Blocker = INDEX_NONE;
 		/** Its seller, in People, or none. */
 		int32 Seller = INDEX_NONE;
-		/** A lighter lies on it: it is sturdy, so the lighter is not lost. */
-		bool bSturdy = false;
 		bool bBroken = false;
 		double BrokenAt = 0.0;
 		bool bSettled = false;

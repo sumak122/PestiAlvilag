@@ -5,6 +5,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "DayNight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
@@ -157,6 +158,11 @@ void AMarketHall::Build()
 			}
 			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
 			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), PartColor(i));
+			// Unlit, so it is darkened with the night instead of shining.
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddSeeThrough(Material, PartColor(i));
+			}
 			Target->SetMaterial(Section, Material);
 		}
 		else if (i >= FirstSeeThroughPart)

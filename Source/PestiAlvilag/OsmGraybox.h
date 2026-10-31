@@ -47,6 +47,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Graybox")
 	bool bCreateCollision = true;
 
+	/** Cobbles, slabs and grass on the ground instead of plain colours (only when playing from the editor). */
+	UPROPERTY(EditAnywhere, Category = "Graybox")
+	bool bGroundPictures = true;
+
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor GroundColor = FLinearColor(0.30f, 0.29f, 0.27f);
 
@@ -74,6 +78,10 @@ public:
 	/** Tram rail heads, polished by the wheels. */
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor RailHeadColor = FLinearColor(0.50f, 0.50f, 0.52f);
+
+	/** The kerbstones along the road edges. */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
+	FLinearColor KerbColor = FLinearColor(0.50f, 0.48f, 0.45f);
 
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor RailColor = FLinearColor(0.22f, 0.15f, 0.10f);

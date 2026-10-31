@@ -39,6 +39,18 @@ struct FNightGlow
 	float Strength = 1.f;
 };
 
+/** An unlit see-through material (glass, smoke) and its daytime tint. */
+USTRUCT()
+struct FSeeThrough
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TWeakObjectPtr<UMaterialInstanceDynamic> Material;
+
+	FLinearColor Tint = FLinearColor::White;
+};
+
 /**
  * The clock, and the sun and moon that go with it. A whole day goes by in
  * 48 minutes of play: the sun climbs from the east, sets in the west, the
@@ -86,6 +98,13 @@ public:
 	/** A street lamp's lantern: the nearest ones light the ground at night. */
 	void AddLamp(const FVector& At) { Lamps.Add(At); }
 
+	/**
+	 * An unlit see-through material (window glass, smoke): it gives off its
+	 * own colour, so at night it would shine white. This darkens its Tint
+	 * (the daytime colour and opacity) with the night, as if lit like the rest.
+	 */
+	void AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint);
+
 	/** A glowing material (see AddNightGlow) for someone who switches it on and off themselves, like a car's lamps. */
 	UMaterialInstanceDynamic* MakeGlowMaterial(UObject* Outer) const;
 
@@ -105,6 +124,8 @@ private:
 	void UpdateSun(bool bForce);
 	void UpdateGlows(bool bForce);
 	void UpdateLampLights();
+	void UpdateSeeThrough(bool bForce);
+	void ShadeSeeThrough(const FSeeThrough& Glass) const;
 	float SunElevation(float AtHour) const;
 
 	/** How bright a lit grey wall looks now (the scale of SetGlow). */
@@ -124,6 +145,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<FNightGlow> Glows;
+
+	UPROPERTY(Transient)
+	TArray<FSeeThrough> SeeThroughs;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPointLightComponent>> LampLights;
@@ -148,6 +172,7 @@ private:
 
 	FRotator LastSunRotation = FRotator::ZeroRotator;
 	float LastGlowDarkness = -1.f;
+	float LastShadeDarkness = -1.f;
 	float LampTimer = 0.f;
 	float GlowTimer = 0.f;
 };

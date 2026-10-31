@@ -43,7 +43,7 @@ namespace Pedestrians
 	constexpr double RefindLines = 2000.0;
 	constexpr float GroundEvery = 0.3f;
 	constexpr int32 SpawnPerFrame = 4;
-	constexpr int32 PickTries = 24;
+	constexpr int32 PickTries = 48;
 	constexpr double FillNear = 500.0;
 	// Later arrivals only appear where the camera is not looking (more than
 	// about 80 degrees off its view) or behind a building, so nobody pops up
@@ -276,6 +276,7 @@ bool APedestrians::PickSpot(const FVector& Camera, const FVector2D& Looking, boo
 	{
 		NearLinesFrom = Camera;
 		NearLines.Reset();
+		NearLongest = 1.0;
 		for (int32 i = 0; i < Lines.Num(); ++i)
 		{
 			for (const FVector2D& Point : Lines[i].Points)
@@ -283,6 +284,7 @@ bool APedestrians::PickSpot(const FVector& Camera, const FVector2D& Looking, boo
 				if (FVector2D::Distance(Point, FVector2D(Camera)) < Range + Lines[i].Length)
 				{
 					NearLines.Add(i);
+					NearLongest = FMath::Max(NearLongest, Lines[i].Length);
 					break;
 				}
 			}
@@ -294,13 +296,33 @@ bool APedestrians::PickSpot(const FVector& Camera, const FVector2D& Looking, boo
 	}
 	for (int32 Try = 0; Try < Pedestrians::PickTries; ++Try)
 	{
+		// A long line gets more people than a short one, so that they spread
+		// evenly along the pavements rather than crowd the short bits.
 		const int32 Index = NearLines[Random.RandRange(0, NearLines.Num() - 1)];
+		if (Random.FRand() > Lines[Index].Length / NearLongest)
+		{
+			continue;
+		}
 		const double Along = Random.FRandRange(0.f, 1.f) * Lines[Index].Length;
 		FVector2D Tangent;
 		const FVector2D At = PointOn(Lines[Index], Along, Tangent);
 		const FVector2D Away = At - FVector2D(Camera);
 		const double Distance = Away.Size();
 		if (Distance < MinDistance || Distance >= Range)
+		{
+			continue;
+		}
+		// Not on top of someone already walking there.
+		bool bCrowded = false;
+		for (const FWalker& Other : Walkers)
+		{
+			if (Other.bPlaced && FVector2D::DistSquared(Other.Shown, At) < FMath::Square(Spacing))
+			{
+				bCrowded = true;
+				break;
+			}
+		}
+		if (bCrowded)
 		{
 			continue;
 		}

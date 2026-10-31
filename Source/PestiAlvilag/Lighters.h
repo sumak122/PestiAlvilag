@@ -48,6 +48,13 @@ public:
 	/** A lighter's picture for the cabinet (30 is the golden one); null if its file is missing. */
 	const FSlateBrush* GetPicture(int32 Index) const;
 
+	/**
+	 * What a lighter lay on (a bench, a market table) was smashed: the ones
+	 * still to be found within Radius of Middle fall to the ground at GroundZ,
+	 * and can be picked up there.
+	 */
+	static void DropNear(const UWorld* World, const FVector2D& Middle, double Radius, double GroundZ);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

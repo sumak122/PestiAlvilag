@@ -3,6 +3,7 @@
 #include "KeletiStation.h"
 
 #include "Components/TextRenderComponent.h"
+#include "DayNight.h"
 #include "Engine/Texture.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
@@ -1354,6 +1355,11 @@ void AKeletiStation::Build()
 			}
 			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
 			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Colors[i]);
+			// Unlit, so it is darkened with the night instead of shining.
+			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+			{
+				Clock->AddSeeThrough(Material, Colors[i]);
+			}
 			Target->SetMaterial(Section, Material);
 		}
 		else if (i >= FirstSeeThroughPart)

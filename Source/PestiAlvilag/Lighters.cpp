@@ -405,6 +405,31 @@ void ALighters::Build(int32 Index, const FVector& At)
 	}
 }
 
+void ALighters::DropNear(const UWorld* World, const FVector2D& Middle, double Radius, double GroundZ)
+{
+	for (TActorIterator<ALighters> It(World); It; ++It)
+	{
+		for (int32 i = 0; i < It->Holders.Num(); ++i)
+		{
+			USceneComponent* Holder = It->Holders[i];
+			if (!Holder)
+			{
+				continue;
+			}
+			const FVector At = Holder->GetComponentLocation();
+			if (At.Z > GroundZ + 2.0 && FVector2D::Distance(FVector2D(At), Middle) < Radius)
+			{
+				const FVector Fallen(At.X, At.Y, GroundZ + 1.0);
+				Holder->SetWorldLocation(Fallen);
+				if (It->Glints.IsValidIndex(i) && It->Glints[i])
+				{
+					It->Glints[i]->SetWorldLocation(Fallen + FVector(0.0, 0.0, Lighters::GlintOver));
+				}
+			}
+		}
+	}
+}
+
 void ALighters::Glint(float DeltaSeconds, const FVector& PlayerAt)
 {
 	GlintTime += DeltaSeconds;

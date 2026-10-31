@@ -954,6 +954,112 @@ def place_market(space):
     }
 
 
+# Market women and stalls on the square in front of the Rákóczi tér market
+# hall, as on market days in the 1930s: rows of tables and baskets spread
+# on blankets, most of them vegetables and fruit, on both sides of the
+# delivery yard in front of the gateway, which stays clear (the thief runs
+# through it). The hall's frame is as in MarketHall.cpp: origin the middle
+# of the main front, +X into the hall, +Y along the front to Déri Miksa utca.
+HALL_FRONT = (18109, 40941)
+HALL_X = (0.942, -0.336)
+HALL_ROWS = [-550, -1450, -2350, -3250]   # rows in front of the hall (local x, cm)
+HALL_ROW_FROM = (-3600, 3700)             # how far along the front they run (local y)
+HALL_PITCH = 330
+HALL_KEEP = 0.8
+HALL_ROUTE_CLEAR = 520     # stalls keep this far from the thief's way and the yard
+HALL_EDGE_IN = 250         # and this far inside the square
+HALL_GOODS = [("produce", 9), ("pots", 2), ("crockery", 2), ("clothes", 1), ("shoes", 1)]
+HALL_SELLER = 0.6
+HALL_SHOPPERS = 24
+HALL_CROWD = 16
+# The pickpocket's way out (ChaseModel::ThiefRoute, hall frame), kept clear.
+THIEF_ROUTE = [
+    (1300, 560), (1700, 250), (2300, 0), (3000, 0), (3555, -350), (3555, -1500), (3555, -2600), (3555, -3400),
+    (3555, -3900), (3300, -4150), (1800, -4150), (300, -4150), (-450, -3950), (-650, -3300), (-450, -1200), (-300, 0),
+    (-2107, -373), (-3721, -696), (-3879, -1514), (-4601, -2228), (-5693, -2646), (-6861, -2655), (-7794, -2254),
+    (-8179, -1758), (-8610, -2347), (-8827, -2805), (-9317, -2934), (-9672, -2727), (-10150, -2828), (-10792, -3111),
+    (-10949, -3858), (-10592, -5004),
+]
+
+
+def place_hall_market(space, data, route):
+    """Stalls and people on the square in front of the market hall."""
+    xx, xy = HALL_X
+    yx, yy = -xy, xx
+    ox, oy = HALL_FRONT
+
+    def world(u, v):
+        return ox + xx * u + yx * v, oy + xy * u + yy * v
+
+    near = Point(world(-1500, 0))
+    plaza = None
+    for area in data["areas"]:
+        if area["layer"] != "plaza":
+            continue
+        for poly in area["polygons"]:
+            shape = Polygon(ring_points(poly["rings"][0])).buffer(0)
+            if shape.contains(near):
+                plaza = shape
+    if plaza is None:
+        return {"stalls": [], "shoppers": []}
+    room = plaza.buffer(-HALL_EDGE_IN)
+    for park in space.parks:
+        room = room.difference(park.buffer(HALL_EDGE_IN))
+    way = LineString([world(*p) for p in route]).buffer(HALL_ROUTE_CLEAR)
+
+    def clear(x, y, radius):
+        point = Point(x, y)
+        return room.contains(point) and not way.intersects(point.buffer(radius)) and not space.near_building(point, 150 + radius) \
+            and not space.near_lane(point, 250 + radius)
+
+    stalls = []
+    for row, u in enumerate(HALL_ROWS):
+        # Rows face each other in pairs across an aisle; the first has its back to the hall's wall.
+        side = -1 if row % 2 == 0 else 1
+        v = HALL_ROW_FROM[0]
+        while v < HALL_ROW_FROM[1]:
+            v += HALL_PITCH
+            key = ("hall", row, round(v))
+            if chance(*key) > HALL_KEEP:
+                continue
+            ju = (chance("hall jog u", *key) - 0.5) * 100
+            jv = (chance("hall jog v", *key) - 0.5) * 120
+            x, y = world(u + ju, v + jv)
+            fx, fy = world(u + ju + side * 250, v + jv)
+            if not (clear(x, y, 130) and room.contains(Point(fx, fy))):
+                continue
+            goods = pick_goods(HALL_GOODS, *key)
+            build = "blanket" if chance("hall blanket", *key) < 0.4 and goods != "clothes" else "table"
+            stalls.append({"at": [round(x), round(y), yaw_of(xx * side, xy * side)], "goods": goods, "build": build,
+                           "seller": chance("hall seller", *key) < HALL_SELLER})
+
+    shoppers = []
+    order = sorted(range(len(stalls)), key=lambda i: chance("hall shopper", i))
+    for i in order[:HALL_SHOPPERS]:
+        x, y, yaw = stalls[i]["at"]
+        a = math.radians(yaw)
+        off = (chance("hall off", i) - 0.5) * 160
+        reach = MARKET_STALL_DEPTH * 0.5 + 110
+        sx = x + math.cos(a) * reach - math.sin(a) * off
+        sy = y + math.sin(a) * reach + math.cos(a) * off
+        if room.contains(Point(sx, sy)):
+            shoppers.append([round(sx), round(sy), round((yaw + 360.0) % 360.0 - 180.0, 1)])
+    # A few more about the aisles, between the rows.
+    for k in range(HALL_CROWD * 6):
+        if len(shoppers) >= HALL_SHOPPERS + HALL_CROWD:
+            break
+        u = HALL_ROWS[0] - 450 - 1800 * chance("hall crowd u", k)
+        v = HALL_ROW_FROM[0] + (HALL_ROW_FROM[1] - HALL_ROW_FROM[0]) * chance("hall crowd v", k)
+        x, y = world(u, v)
+        if not clear(x, y, 30) or any(math.hypot(x - s["at"][0], y - s["at"][1]) < 180 for s in stalls) \
+                or any(math.hypot(x - p[0], y - p[1]) < 120 for p in shoppers):
+            continue
+        shoppers.append([round(x), round(y), round(360 * chance("hall crowd yaw", k) - 180, 1)])
+
+    print(f"Market hall square: {len(stalls)} stalls, {len(shoppers)} shoppers")
+    return {"stalls": stalls, "shoppers": shoppers}
+
+
 def place_lamp_bins(lamps, space, tisza):
     """Bins on a share of the street lamps, a step along the pavement."""
     bins = []
@@ -1931,6 +2037,7 @@ def main():
     tram_stops = place_tram_stops(data, space, sidewalks)
     food_vendors = place_food_vendors(space, sidewalks)
     market = place_market(space)
+    hall_market = place_hall_market(space, data, THIEF_ROUTE)
     spots = [(l[0], l[1]) for l in lamps + columns + bins + benches]
     spots += [tuple(t["sign"][:2]) for t in tram_stops] + [tuple(v["at"][:2]) for v in food_vendors]
     spots += [tuple(t["sign"][:2]) for t in taxi_stands] + [tuple(p[:2]) for t in taxi_stands for p in t["taxis"]]
@@ -1960,6 +2067,7 @@ def main():
         "tram_stops": tram_stops,
         "food_vendors": food_vendors,
         "market": market,
+        "hall_market": hall_market,
         "shops": shops,
         "gates": gates,
         "tisza": park,
