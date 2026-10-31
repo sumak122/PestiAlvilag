@@ -3,6 +3,7 @@
 #include "FleaMarket.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "ChaseThief.h"
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
@@ -339,6 +340,27 @@ void AFleaMarket::Tick(float DeltaSeconds)
 		bPlayerDriving = Player->IsA<APestiCar>();
 	}
 
+	// The pickpocket, when he runs through: people get out of his way too.
+	if (!Thief.IsValid() && Now >= NextThiefLook)
+	{
+		NextThiefLook = Now + 1.0;
+		TActorIterator<AChaseThief> Found(GetWorld());
+		if (Found)
+		{
+			Thief = *Found;
+			LastThiefAt = Found->GetActorLocation();
+		}
+	}
+	bThiefRunning = false;
+	if (const AChaseThief* Runner = Thief.Get())
+	{
+		const FVector Here = Runner->GetActorLocation();
+		ThiefVelocity = FMath::Lerp(ThiefVelocity, (Here - LastThiefAt) / DeltaSeconds, 0.5);
+		LastThiefAt = Here;
+		ThiefAt = Here;
+		bThiefRunning = Runner->IsRunning() && !Runner->IsHidden();
+	}
+
 	if (!TickCarpetSeller())
 	{
 		TickTalk(Now);
@@ -410,10 +432,11 @@ FIntPoint AFleaMarket::Add(int32 Shape, const FLinearColor& Color, const FVector
 
 void AFleaMarket::Setup(const FJsonObject& Market)
 {
-	// The square is flat: find its height once, under the first stall.
+	// The square is flat: find its height once, under the first stall,
+	// unless it is given (a market under a roof).
 	const TArray<TSharedPtr<FJsonValue>>* Stalls = nullptr;
 	Market.TryGetArrayField(TEXT("stalls"), Stalls);
-	if (Stalls && Stalls->Num() > 0)
+	if (!Market.TryGetNumberField(TEXT("ground_z"), GroundZ) && Stalls && Stalls->Num() > 0)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& At = (*Stalls)[0]->AsObject()->GetArrayField(TEXT("at"));
 		const FVector Probe(At[0]->AsNumber(), At[1]->AsNumber(), 0.0);
@@ -901,7 +924,6 @@ void AFleaMarket::React(int32 Index, double Now)
 		return;
 	}
 	const double Speed = PlayerVelocity.Size2D();
-	const FVector2D Going = FVector2D(PlayerVelocity).GetSafeNormal();
 	const TCHAR* Name = Who.bSeller ? MarketLife::Seller : MarketLife::Shopper;
 
 	if (bPlayerDriving)
@@ -962,7 +984,19 @@ void AFleaMarket::React(int32 Index, double Now)
 		return;
 	}
 
-	// On foot: walked into, he stumbles away and tells you off.
+	ReactOnFoot(Index, FVector2D(PlayerAt), FVector2D(PlayerVelocity));
+}
+
+void AFleaMarket::ReactOnFoot(int32 Index, const FVector2D& From, const FVector2D& Velocity)
+{
+	using namespace MarketLife;
+	FCrowd& Who = Crowd[Index];
+	const FVector2D Offset = Who.At - From;
+	const double Speed = Velocity.Size();
+	const FVector2D Going = Velocity.GetSafeNormal();
+	const TCHAR* Name = Who.bSeller ? MarketLife::Seller : MarketLife::Shopper;
+
+	// Walked into, he stumbles away and tells you off.
 	const double Distance = Offset.Size();
 	if (Speed > BumpSpeed && Distance < BumpDistance
 		&& (Who.Act == EAct::Stand || Who.Act == EAct::Walk || Who.Act == EAct::Aside))
@@ -981,6 +1015,17 @@ void AFleaMarket::React(int32 Index, double Now)
 		const double Side = FVector2D::DotProduct(Offset, Right) >= 0.0 ? 1.0 : -1.0;
 		StartAct(Who, EAct::Aside, 0.8f, Right * (Side * 170.0));
 	}
+}
+
+void AFleaMarket::ReactToThief(int32 Index)
+{
+	FCrowd& Who = Crowd[Index];
+	if (!bThiefRunning || Who.Act == EAct::Down || Who.Act == EAct::GetUp || Who.Act == EAct::Dead
+		|| FMath::Abs(GroundZ - ThiefAt.Z) > 400.0 || FVector2D::DistSquared(Who.At, FVector2D(ThiefAt)) > FMath::Square(MarketLife::ReactRange))
+	{
+		return;
+	}
+	ReactOnFoot(Index, FVector2D(ThiefAt), FVector2D(ThiefVelocity));
 }
 
 void AFleaMarket::RunOver(int32 Index, double Speed)
@@ -1060,6 +1105,7 @@ void AFleaMarket::TickCrowd(float DeltaSeconds, const FVector& Camera, double No
 		}
 
 		React(i, Now);
+		ReactToThief(i);
 		Who.Time += DeltaSeconds;
 		Who.Phase += DeltaSeconds;
 		const double Standing = GroundZ + Middle;

@@ -6,27 +6,43 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "DayNight.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "FleaMarket.h"
+#include "HallMarketModel.h"
 #include "ChaseModel.h"
 #include "MarketHallModel.h"
 #include "MarketModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
-#include "PersonModel.h"
 #include "ProceduralMeshComponent.h"
-#include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace MarketHallFill
 {
-	// People are drawn up to this far away, the goods further (cm).
-	constexpr float PeopleDrawDistance = 9000.f;
+	// The goods are drawn up to this far away (cm).
 	constexpr int32 GoodsDrawDistance = 12000;
-	// Most stalls have their seller behind them; some have a shopper in front.
-	constexpr float SellerChance = 0.75f;
-	constexpr float ShopperChance = 0.3f;
-	constexpr double ShopperOut = 150.0;
+	// The stalls' goods stand this far above the floor (cm).
+	constexpr double FloorUp = 3.0;
+	// The hanging lamps.
+	const FLinearColor LampIron(0.05f, 0.05f, 0.05f);
+	const FLinearColor LampShade(0.08f, 0.18f, 0.12f);
+	const FLinearColor LampGlobe(0.95f, 0.88f, 0.70f);
+	constexpr float LampGlow = 25.f;
+
+	const TCHAR* GoodsName(MarketModel::EGoods Goods)
+	{
+		switch (Goods)
+		{
+		case MarketModel::EGoods::Clothes: return TEXT("clothes");
+		case MarketModel::EGoods::Shoes: return TEXT("shoes");
+		case MarketModel::EGoods::Pots: return TEXT("pots");
+		case MarketModel::EGoods::Produce: return TEXT("produce");
+		default: return TEXT("crockery");
+		}
+	}
 	// Looking for the ground under the things in the pickpocket's way, this far up and down (cm).
 	constexpr double GroundLook = 300.0;
 }
@@ -110,14 +126,11 @@ void AMarketHall::BeginPlay()
 
 void AMarketHall::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	for (AStoryPerson* Person : People)
+	if (Market)
 	{
-		if (Person)
-		{
-			Person->Destroy();
-		}
+		Market->Destroy();
+		Market = nullptr;
 	}
-	People.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -183,39 +196,71 @@ void AMarketHall::Build()
 
 void AMarketHall::Fill()
 {
-	TArray<MarketHall::FStall> Stalls;
-	MarketHall::StallSpots(Stalls);
-	TArray<MarketModel::FShape> Pieces;
-	FRandomStream PeopleRandom(1897);
-	for (int32 k = 0; k < Stalls.Num(); ++k)
+	// The market inside: the stalls, sellers and shoppers, brought to life
+	// by a flea market of their own (as at Teleki tér) on the hall's floor.
+	TArray<HallMarket::FStall> Stalls;
+	TArray<HallMarket::FShopper> Shoppers;
+	TArray<HallMarket::FLamp> Lamps;
+	HallMarket::Layout(Stalls, Shoppers, Lamps);
+	const FTransform& Frame = GetActorTransform();
+	const double HallYaw = GetActorRotation().Yaw;
+	const TSharedRef<FJsonObject> Inside = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> StallValues;
+	for (const HallMarket::FStall& Stall : Stalls)
 	{
-		const MarketHall::FStall& Stall = Stalls[k];
-		MarketModel::FRandom Random(static_cast<uint32>(k * 7 + 3));
-		// Mostly vegetables and fruit; here and there pots and pans or crockery.
-		const double Kind = Random.Unit();
-		const MarketModel::EGoods Goods = Kind < 0.75 ? MarketModel::EGoods::Produce : Kind < 0.88 ? MarketModel::EGoods::Crockery : MarketModel::EGoods::Pots;
-		const FVector Middle = Stall.At + FVector(0.0, 0.0, 3.0);
-		const double Back = MarketModel::BuildStall(Pieces, Middle, Stall.Yaw, MarketModel::EBuild::Table, Goods, Random);
-		const double A = FMath::DegreesToRadians(Stall.Yaw);
-		const FVector Forward(FMath::Cos(A), FMath::Sin(A), 0.0);
-		const FVector Side(-Forward.Y, Forward.X, 0.0);
-		if (PeopleRandom.FRand() < MarketHallFill::SellerChance)
+		const FVector At = Frame.TransformPosition(Stall.At);
+		const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> Place;
+		Place.Add(MakeShared<FJsonValueNumber>(At.X));
+		Place.Add(MakeShared<FJsonValueNumber>(At.Y));
+		Place.Add(MakeShared<FJsonValueNumber>(Stall.Yaw + HallYaw));
+		Object->SetArrayField(TEXT("at"), Place);
+		Object->SetStringField(TEXT("build"), Stall.Build == MarketModel::EBuild::Blanket ? TEXT("blanket") : TEXT("table"));
+		Object->SetStringField(TEXT("goods"), MarketHallFill::GoodsName(Stall.Goods));
+		Object->SetBoolField(TEXT("seller"), Stall.bSeller);
+		StallValues.Add(MakeShared<FJsonValueObject>(Object));
+	}
+	TArray<TSharedPtr<FJsonValue>> ShopperValues;
+	for (const HallMarket::FShopper& Shopper : Shoppers)
+	{
+		const FVector At = Frame.TransformPosition(Shopper.At);
+		TArray<TSharedPtr<FJsonValue>> Place;
+		Place.Add(MakeShared<FJsonValueNumber>(At.X));
+		Place.Add(MakeShared<FJsonValueNumber>(At.Y));
+		Place.Add(MakeShared<FJsonValueNumber>(Shopper.Yaw + HallYaw));
+		ShopperValues.Add(MakeShared<FJsonValueArray>(Place));
+	}
+	Inside->SetArrayField(TEXT("stalls"), StallValues);
+	Inside->SetArrayField(TEXT("shoppers"), ShopperValues);
+	Inside->SetNumberField(TEXT("ground_z"), Frame.GetLocation().Z + MarketHallFill::FloorUp);
+	Market = GetWorld()->SpawnActor<AFleaMarket>(AFleaMarket::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	if (Market)
+	{
+		Market->Setup(*Inside);
+	}
+
+	// The lamps hanging from the roof: a rod, a green enamel shade and a
+	// globe that glows at night, when the nearest of them light the hall.
+	TArray<MarketModel::FShape> Pieces;
+	ADayNight* Clock = ADayNight::Get(GetWorld());
+	for (const HallMarket::FLamp& Lamp : Lamps)
+	{
+		const double Rod = Lamp.Top - Lamp.At.Z;
+		Pieces.Add({ 1, MarketHallFill::LampIron, Lamp.At + FVector(0.0, 0.0, Rod / 2.0), FVector(3.0, 3.0, Rod), 0.0, 0.0, 0.0, false });
+		Pieces.Add({ 3, MarketHallFill::LampShade, Lamp.At + FVector(0.0, 0.0, 28.0), FVector(70.0, 70.0, 30.0), 0.0, 0.0, 0.0, false });
+		Pieces.Add({ 2, MarketHallFill::LampGlobe, Lamp.At, FVector(34.0, 34.0, 34.0), 0.0, 0.0, 0.0, false });
+		if (Clock)
 		{
-			SpawnPerson(Middle - Forward * Back + Side * PeopleRandom.FRandRange(-60.f, 60.f), Stall.Yaw, PeopleRandom, true);
-		}
-		if (PeopleRandom.FRand() < MarketHallFill::ShopperChance)
-		{
-			SpawnPerson(Middle + Forward * MarketHallFill::ShopperOut + Side * PeopleRandom.FRandRange(-80.f, 80.f),
-				Stall.Yaw + 180.0 + PeopleRandom.FRandRange(-25.f, 25.f), PeopleRandom, false);
+			Clock->AddLamp(Frame.TransformPosition(Lamp.At));
 		}
 	}
+
 	// Deliveries out on the square in front of the gateway, and things in
 	// the pickpocket's way: to run over and under. Out on the streets and in
 	// the garden each stands on the ground there, which may lie a little
 	// higher or lower than the hall.
 	TArray<ChaseModel::FSpot> Spots = ChaseModel::HallYard();
 	Spots.Append(ChaseModel::RouteSpots());
-	const FTransform& Frame = GetActorTransform();
 	FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(MarketHallGround), false);
 	for (int32 k = 0; k < Spots.Num(); ++k)
 	{
@@ -233,6 +278,11 @@ void AMarketHall::Fill()
 	for (const MarketModel::FShape& Piece : Pieces)
 	{
 		AddShape(Piece.Shape, Piece.Color, Piece.At, Piece.Size, FRotator(Piece.Pitch, Piece.Yaw, Piece.Roll), Piece.bCollide);
+	}
+	const FString GlobeKey = FString::Printf(TEXT("%d %s %d"), 2, *MarketHallFill::LampGlobe.ToString(), 0);
+	if (const int32* Globes = BatchIndex.Find(GlobeKey); Globes && Clock)
+	{
+		Clock->AddNightGlow(Batches[*Globes], 0, MarketHallFill::LampGlobe, MarketHallFill::LampGlow);
 	}
 }
 
@@ -267,45 +317,4 @@ void AMarketHall::AddShape(int32 Shape, const FLinearColor& Color, const FVector
 		BatchIndex.Add(Key, Batches.Add(Instances));
 	}
 	Instances->AddInstance(FTransform(Turn, At, Size / 100.0), false);
-}
-
-AStoryPerson* AMarketHall::SpawnPerson(const FVector& LocalFeet, double LocalYaw, FRandomStream& Random, bool bSeller)
-{
-	PersonKit::FOutfit Outfit = PersonModel::RandomOutfit(Random);
-	if (bSeller)
-	{
-		// Sellers in working clothes: aprons, caps or headscarves, nothing in hand.
-		Outfit.Held = PersonKit::EHeld::None;
-		Outfit.bApron = Random.FRand() < 0.6;
-		if (!Outfit.bWoman && Random.FRand() < 0.6)
-		{
-			Outfit.Hat = PersonKit::EHat::FlatCap;
-		}
-	}
-	else if (Random.FRand() < 0.5)
-	{
-		Outfit.Held = PersonKit::EHeld::Basket;
-	}
-
-	const FTransform& Hall = GetActorTransform();
-	const FVector Feet = Hall.TransformPosition(LocalFeet);
-	const FTransform Spawn(FRotator(0.0, LocalYaw + GetActorRotation().Yaw, 0.0), Feet + FVector(0.0, 0.0, PersonModel::MiddleHeight));
-	AStoryPerson* Person = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!Person)
-	{
-		return nullptr;
-	}
-	Person->SetOutfit(Outfit);
-	Person->FinishSpawning(Spawn);
-	// They stand at the stalls: no need to think every frame, nor to be
-	// drawn from the other end of the district.
-	Person->SetActorTickEnabled(false);
-	TInlineComponentArray<UPrimitiveComponent*> Parts(Person);
-	for (UPrimitiveComponent* Part : Parts)
-	{
-		Part->SetCachedMaxDrawDistance(MarketHallFill::PeopleDrawDistance);
-	}
-	People.Add(Person);
-	return Person;
 }
