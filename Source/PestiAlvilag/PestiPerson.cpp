@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "CarBody.h"
+#include "FightSound.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
@@ -98,6 +99,13 @@ namespace PestiPerson
 	constexpr float SlamLookAfter = 0.05f;
 	// Both slide on a little after a tackle (cm/s).
 	constexpr float TackleSlide = 250.f;
+	// Fight sounds: heard this far (cm), and this loud.
+	constexpr float FightSoundFalloff = 3000.f;
+	constexpr float FightSoundVolume = 1.f;
+	// Short of breath below this much stamina, panting at most this hard
+	// (winded, he pants as hard as he can).
+	constexpr float PantBelow = 30.f;
+	constexpr float LowPant = 0.6f;
 }
 
 APestiPerson::APestiPerson()
@@ -637,6 +645,10 @@ void APestiPerson::StartFight(APestiPerson* InFoe)
 
 void APestiPerson::EndFight()
 {
+	if (FightNoise)
+	{
+		FightNoise->SetBreathless(0.f);
+	}
 	LetGo();
 	Act = Brawl::EAct::None;
 	Foe = nullptr;
@@ -656,6 +668,77 @@ void APestiPerson::BeginAct(Brawl::EAct NewAct, float Seconds)
 	ActClock = 0.f;
 	ActLength = Seconds;
 	bBlowDone = false;
+
+	// What he sounds like doing it (the blows landing sound in TakeBlow).
+	using FightSynth::EKind;
+	switch (NewAct)
+	{
+	case Brawl::EAct::Jab:
+		PlayFightSound(EKind::Swish, 0.55f, 0.04f);
+		break;
+	case Brawl::EAct::HeavySwing:
+		PlayFightSound(EKind::Swish, 1.f);
+		PlayFightSound(EKind::Effort, 0.9f);
+		break;
+	case Brawl::EAct::Counter:
+		PlayFightSound(EKind::Swish, 0.8f, 0.12f);
+		PlayFightSound(EKind::Effort, 0.6f, 0.1f);
+		break;
+	case Brawl::EAct::GrabReach:
+		PlayFightSound(EKind::Grab, 0.6f, Seconds * 0.85f);
+		break;
+	case Brawl::EAct::Knee:
+		PlayFightSound(EKind::Effort, 0.6f);
+		break;
+	case Brawl::EAct::Shove:
+		PlayFightSound(EKind::Effort, 1.f);
+		break;
+	case Brawl::EAct::Tackle:
+		PlayFightSound(EKind::Effort, 1.f);
+		PlayFightSound(EKind::Thud, 0.8f, 0.35f);
+		break;
+	case Brawl::EAct::Tackled:
+		PlayFightSound(EKind::Pain, 0.6f, 0.15f);
+		PlayFightSound(EKind::Thud, 1.f, 0.3f);
+		break;
+	case Brawl::EAct::Down:
+		PlayFightSound(EKind::Thud, 1.f, Seconds * Brawl::FallShare);
+		break;
+	case Brawl::EAct::GetUp:
+		PlayFightSound(EKind::Effort, 0.35f);
+		break;
+	case Brawl::EAct::Winded:
+		PlayFightSound(EKind::Pain, 0.35f);
+		break;
+	case Brawl::EAct::Beaten:
+		PlayFightSound(EKind::Pain, 0.5f);
+		break;
+	default:
+		break;
+	}
+}
+
+void APestiPerson::PlayFightSound(FightSynth::EKind Kind, float Strength, float Delay)
+{
+	if (!FightNoise)
+	{
+		FightNoise = NewObject<UFightSound>(this);
+		FightNoise->SetupAttachment(GetRootComponent());
+		FightNoise->bAllowSpatialization = true;
+		FightNoise->bOverrideAttenuation = true;
+		FightNoise->AttenuationOverrides.bAttenuate = true;
+		FightNoise->AttenuationOverrides.bSpatialize = true;
+		FightNoise->AttenuationOverrides.FalloffDistance = PestiPerson::FightSoundFalloff;
+		FightNoise->RegisterComponent();
+		AddInstanceComponent(FightNoise);
+		FightNoise->SetVolumeMultiplier(PestiPerson::FightSoundVolume);
+		FightNoise->SetPitch(GetVoicePitch());
+	}
+	if (!FightNoise->IsPlaying())
+	{
+		FightNoise->Start();
+	}
+	FightNoise->Queue(Kind, Strength, Delay);
 }
 
 float APestiPerson::GetWindUpLeft() const
@@ -887,6 +970,7 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	// A guard stops jabs and knees, at a cost in breath; a heavy swing breaks through it.
 	if (Act == EAct::Guard && bFacing && (Blow == EBlow::Jab || Blow == EBlow::Knee))
 	{
+		PlayFightSound(FightSynth::EKind::Block, Blow == EBlow::Jab ? 0.8f : 0.6f);
 		Stamina -= BlockCost;
 		RestFrom = GetWorld()->GetTimeSeconds() + RestBefore;
 		if (Stamina <= 0.f)
@@ -897,6 +981,7 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	}
 	if (Act == EAct::Guard && bFacing && Blow == EBlow::Heavy)
 	{
+		PlayFightSound(FightSynth::EKind::Block, 1.f);
 		Lost *= GuardBreakShare;
 		Stamina -= HeavyCost;
 	}
@@ -906,6 +991,35 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	if (!bStayHeld)
 	{
 		LetGo();
+	}
+	// The blow landing, and him crying out (not at every jab).
+	switch (Blow)
+	{
+	case EBlow::Jab:
+		PlayFightSound(FightSynth::EKind::Smack, 0.6f);
+		if (FMath::RandBool())
+		{
+			PlayFightSound(FightSynth::EKind::Pain, 0.5f, 0.03f);
+		}
+		break;
+	case EBlow::Heavy:
+		PlayFightSound(FightSynth::EKind::Smack, Lost < Damage(Blow) ? 0.5f : 1.f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.9f, 0.03f);
+		break;
+	case EBlow::Counter:
+		PlayFightSound(FightSynth::EKind::Smack, 0.95f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.8f, 0.03f);
+		break;
+	case EBlow::Knee:
+		PlayFightSound(FightSynth::EKind::Smack, 0.75f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.7f, 0.03f);
+		break;
+	case EBlow::Slam:
+		PlayFightSound(FightSynth::EKind::Slam, 1.f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.9f, 0.05f);
+		break;
+	default:
+		break;
 	}
 	LoseHealth(Lost);
 	if (Act == EAct::Beaten)
@@ -985,6 +1099,11 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 	else if (Act != EAct::Winded && Now >= RestFrom)
 	{
 		Stamina = FMath::Min(MaxStamina, Stamina + StaminaBack * DeltaSeconds);
+	}
+	if (FightNoise)
+	{
+		const float Short = FMath::Clamp((PestiPerson::PantBelow - Stamina) / PestiPerson::PantBelow, 0.f, 1.f);
+		FightNoise->SetBreathless(Act == EAct::Winded ? 1.f : Short * PestiPerson::LowPant);
 	}
 
 	// The one he holds stays in front of him, facing him.
@@ -1108,6 +1227,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		{
 			if (!bBlowDone)
 			{
+				PlayFightSound(FightSynth::EKind::Thud, 0.7f);
 				LoseHealth(Damage(EBlow::Throw));
 			}
 			BeginAct(Act == EAct::Beaten ? EAct::Beaten : EAct::Stagger, Act == EAct::Beaten ? 0.f : StaggerSeconds * 0.6f);

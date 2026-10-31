@@ -5,11 +5,13 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Brawl.h"
+#include "FightSynth.h"
 #include "FreeRun.h"
 #include "PersonKit.h"
 #include "PestiPerson.generated.h"
 
 class UCameraComponent;
+class UFightSound;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
@@ -168,6 +170,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+	/** His fight sounds: made the first time he fights. */
+	UPROPERTY(Transient)
+	TObjectPtr<UFightSound> FightNoise;
+
 	virtual void BeginPlay() override;
 
 	/** The clothes he wears. */
@@ -193,6 +199,10 @@ protected:
 	void TickBrawl(float DeltaSeconds);
 	/** Lets go of whoever he holds, or gets let go of. */
 	void LetGo();
+	/** A fight sound from him, Strength 0..1, after Delay seconds. */
+	void PlayFightSound(FightSynth::EKind Kind, float Strength, float Delay = 0.f);
+	/** His voice for grunts and panting (Hz). */
+	virtual float GetVoicePitch() const { return 105.f; }
 
 	/** The vault or slide under way, and how far into it (s). */
 	FreeRun::EMove FreeMove = FreeRun::EMove::None;
