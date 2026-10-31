@@ -50,6 +50,9 @@ struct FSeeThrough
 	TWeakObjectPtr<UMaterialInstanceDynamic> Material;
 
 	FLinearColor Tint = FLinearColor::White;
+
+	/** Glass (rather than smoke): at night it also hides more of what's behind it. */
+	bool bGlass = true;
 };
 
 /**
@@ -104,8 +107,10 @@ public:
 	 * An unlit see-through material (window glass, smoke): it gives off its
 	 * own colour, so at night it would shine white. This darkens its Tint
 	 * (the daytime colour and opacity) with the night, as if lit like the rest.
+	 * Glass also turns less see-through at night, a dark pane like real
+	 * windows after dark, so the lit street behind it doesn't shine through.
 	 */
-	void AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint);
+	void AddSeeThrough(UMaterialInstanceDynamic* Material, const FLinearColor& Tint, bool bGlass = true);
 
 	/** A glowing material (see AddNightGlow) for someone who switches it on and off themselves, like a car's lamps. */
 	UMaterialInstanceDynamic* MakeGlowMaterial(UObject* Outer) const;
