@@ -22,6 +22,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
 #include "PoliceCar.h"
+#include "PolicePatrols.h"
 #include "Tram.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
@@ -170,16 +171,12 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 		Driver->RunFrom(Danger);
 	}
 
-	// A policeman close by sees it.
-	for (const ATrafficCar* Other : Cars)
+	// A police car or a constable close by sees it.
+	if (APolicePatrols::Witnessed(this, Location, Traffic::PoliceSeeTheft))
 	{
-		if (Cast<APoliceCar>(Other) && FVector::Dist2D(Other->GetActorLocation(), Location) < Traffic::PoliceSeeTheft)
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
-			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
-			{
-				Game->ReportCrime(1);
-			}
-			break;
+			Game->ReportCrime(1);
 		}
 	}
 	return Stolen;

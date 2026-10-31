@@ -22,7 +22,7 @@
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
-#include "PoliceCar.h"
+#include "PolicePatrols.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/ConstructorHelpers.h"
@@ -543,16 +543,12 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 		Car->ForwardSpeed *= Pedestrians::CarSlowOnHit;
 	}
 
-	// A policeman close by sees it.
-	for (TActorIterator<APoliceCar> It(GetWorld()); It; ++It)
+	// A police car or a constable close by sees it.
+	if (APolicePatrols::Witnessed(this, PlayerAt, Pedestrians::PoliceSee))
 	{
-		if (FVector::Dist2D(It->GetActorLocation(), PlayerAt) < Pedestrians::PoliceSee)
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
-			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
-			{
-				Game->ReportCrime(bKilled ? 2 : 1);
-			}
-			break;
+			Game->ReportCrime(bKilled ? 2 : 1);
 		}
 	}
 

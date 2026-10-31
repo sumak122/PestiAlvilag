@@ -61,7 +61,7 @@ public:
 
 	/** How many of the cars are police patrols. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
-	int32 NumPolice = 6;
+	int32 NumPolice = 10;
 
 	/** How many of the cars are taxis. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")

@@ -24,6 +24,7 @@
 #include "PestiCar.h"
 #include "PestiPerson.h"
 #include "PoliceCar.h"
+#include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
@@ -1001,16 +1002,12 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 		Car->ForwardSpeed *= CarSlowOnHit;
 	}
 
-	// A policeman close by sees it.
-	for (TActorIterator<APoliceCar> It(GetWorld()); It; ++It)
+	// A police car or a constable close by sees it.
+	if (APolicePatrols::Witnessed(this, PlayerAt, PoliceSee))
 	{
-		if (FVector::Dist2D(It->GetActorLocation(), PlayerAt) < PoliceSee)
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
-			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
-			{
-				Game->ReportCrime(bKilled ? 2 : 1);
-			}
-			break;
+			Game->ReportCrime(bKilled ? 2 : 1);
 		}
 	}
 
@@ -1416,6 +1413,14 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 					&& FMath::Abs(FVector2D::DotProduct(Offset, Right)) < Stall.Half.Y + Margin)
 				{
 					Smash(i, Now);
+					// Wrecking a stall in front of the police is a crime too.
+					if (APolicePatrols::Witnessed(this, FVector(Stall.Middle), PoliceSee))
+					{
+						if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+						{
+							Game->ReportCrime(1);
+						}
+					}
 					break;
 				}
 			}

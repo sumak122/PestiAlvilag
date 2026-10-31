@@ -100,7 +100,9 @@ void APoliceCar::Tick(float DeltaSeconds)
 	}
 
 	const bool bWanted = Game->GetWantedLevel() > 0;
-	if (!bChasing && bWanted && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < ResponseRange)
+	// Called by telephone from a police box, every car in the district comes.
+	const float Range = Game->IsPoliceCalledIn() ? CalledInRange : ResponseRange;
+	if (!bChasing && bWanted && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < Range)
 	{
 		StartChase();
 	}
