@@ -241,6 +241,8 @@ private:
 
 	bool LoadData();
 	void SpawnPatrols();
+	/** The height of the pavement under a box standing at At, facing Yaw. */
+	double BoxGround(const FVector2D& At, double Yaw) const;
 	FVector2D PointOn(const FLine& Line, double Along, FVector2D& OutTangent) const;
 	/** The nearest point on any walking line to At. */
 	bool NearestOnLines(const FVector2D& At, int32& OutLine, double& OutAlong) const;
