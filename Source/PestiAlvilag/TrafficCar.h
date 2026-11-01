@@ -47,6 +47,9 @@ public:
 	/** Stops and waits where it is for this long (s), e.g. for someone hailing a taxi. */
 	void HoldStill(float Seconds) { HoldTime = FMath::Max(HoldTime, Seconds); }
 
+	/** Someone sits in the back for this long (s), then is gone (set down out of sight). */
+	void CarryPassenger(const PersonKit::FOutfit& Outfit, float Seconds);
+
 	/** Degrees per second the car can turn at cruising speed. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float TurnRate = 110.f;
@@ -110,6 +113,8 @@ private:
 	static float CornerFraction(float TurnDegrees);
 
 	float JunctionWaitTime = 0.f;
+	/** Seconds the passenger in the back still rides. */
+	float PassengerTime = 0.f;
 	TArray<int32> HeldNodes;
 	FLinearColor PaintColor = FLinearColor::Black;
 	CarModel::FStyle Style;

@@ -50,6 +50,8 @@ namespace Traffic
 	constexpr float TramSpawnRoom = 2000.f;
 	// Height of the car's centre above the road surface (hover + half height).
 	constexpr float RideHeight = 90.f;
+	// A taxi pulling out from the kerb heads for a lane point at least this far ahead (cm).
+	constexpr double PullOutAhead = 800.0;
 
 	// Stealing a car: the player's car is set down a little above the AI
 	// car's place and settles, the driver gets out this far to the side, and
@@ -123,6 +125,40 @@ void ATrafficManager::Tick(float DeltaSeconds)
 	{
 		ReplaceCars();
 	}
+}
+
+ATrafficCar* ATrafficManager::PullOutTaxi(const FVector& At, double Yaw)
+{
+	const FVector Forward = FRotator(0.0, Yaw, 0.0).Vector();
+	int32 LaneIdx = INDEX_NONE;
+	int32 PointIdx = INDEX_NONE;
+	if (!FindLanePointNear(At, Forward, LaneIdx, PointIdx))
+	{
+		return nullptr;
+	}
+	// Head for a lane point ahead of the taxi, not one beside or behind it.
+	const TArray<FVector>& Points = Lanes[LaneIdx].Points;
+	while (PointIdx + 1 < Points.Num() && FVector::DotProduct(Points[PointIdx] - At, Forward) < Traffic::PullOutAhead)
+	{
+		++PointIdx;
+	}
+
+	FVector Location = At;
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByChannel(Hit, At + FVector(0.f, 0.f, 200.f), At - FVector(0.f, 0.f, 1000.f), ECC_Visibility))
+	{
+		Location.Z = Hit.ImpactPoint.Z + Traffic::RideHeight;
+	}
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATrafficCar* Taxi = GetWorld()->SpawnActor<ATrafficCar>(ATrafficTaxi::StaticClass(), Location, FRotator(0.0, Yaw, 0.0), SpawnParams);
+	if (!Taxi)
+	{
+		return nullptr;
+	}
+	Taxi->StartOnLane(this, LaneIdx, PointIdx, Traffic::TaxiPaint);
+	Cars.Add(Taxi);
+	return Taxi;
 }
 
 APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)

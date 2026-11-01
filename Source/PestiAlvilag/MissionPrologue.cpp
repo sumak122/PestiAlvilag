@@ -15,6 +15,8 @@
 #include "PestiPerson.h"
 #include "PestiTaxi.h"
 #include "StoryPerson.h"
+#include "TrafficCar.h"
+#include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "PestiHud.h"
 
@@ -31,9 +33,15 @@ namespace Prologue
 	const FVector2D GentlemanAt = AKeletiStation::ToCity(FVector2D(4400.0, 1720.0));
 	const FLinearColor GentlemanCoat(0.30f, 0.22f, 0.12f);
 
-	// His taxi stands at the kerb on Baross tér, about 60 m away.
-	const FVector2D TaxiAt(85836.f, -42980.f);
+	// His taxi stands at the kerb on Baross tér, about 70 m away, well
+	// clear of the tram tracks curving in from Thököly út.
+	const FVector2D TaxiAt(84687.f, -42016.f);
 	constexpr double TaxiYaw = 140.0;
+	// After he gets in: the driver gets in, then the taxi pulls away (s).
+	constexpr float DriverGetsIn = 1.5f;
+	constexpr float TaxiPullsAway = 2.5f;
+	// He rides in the back this long, then the taxi drives on empty (s).
+	constexpr float RideTime = 90.f;
 	constexpr float DriverBeside = 180.f;
 	const FLinearColor DriverCoat(0.04f, 0.04f, 0.05f);
 
@@ -165,6 +173,53 @@ void AMissionPrologue::OnStepStarted(int32 Step)
 	}
 }
 
+void AMissionPrologue::TickStep(int32 Step, float DeltaSeconds)
+{
+	TickTaxiLeaving(DeltaSeconds);
+}
+
+void AMissionPrologue::TickTaxiLeaving(float DeltaSeconds)
+{
+	if (TaxiLeavingTime < 0.f)
+	{
+		return;
+	}
+	const float Before = TaxiLeavingTime;
+	TaxiLeavingTime += DeltaSeconds;
+	if (Before < Prologue::DriverGetsIn && TaxiLeavingTime >= Prologue::DriverGetsIn && Driver)
+	{
+		Driver->SetInWorld(false);
+	}
+	if (TaxiLeavingTime < Prologue::TaxiPullsAway)
+	{
+		return;
+	}
+	TaxiLeavingTime = -1.f;
+	// Someone took it for a drive (the player): it stays theirs.
+	if (!Taxi || Taxi->IsPlayerControlled())
+	{
+		return;
+	}
+	// The parked taxi joins the traffic: a traffic taxi takes its place and
+	// drives off with him in the back. If there is no traffic it just stays.
+	TActorIterator<ATrafficManager> Streets(GetWorld());
+	if (!Streets)
+	{
+		return;
+	}
+	const FVector At = Taxi->GetActorLocation();
+	const double Yaw = Taxi->GetActorRotation().Yaw;
+	Taxi->Destroy();
+	Taxi = nullptr;
+	if (ATrafficCar* Leaving = Streets->PullOutTaxi(At, Yaw))
+	{
+		if (Gentleman)
+		{
+			Leaving->CarryPassenger(Gentleman->GetOutfit(), Prologue::RideTime);
+		}
+	}
+}
+
 void AMissionPrologue::OnStepDone(int32 Step)
 {
 	APestiPerson* Person = Cast<APestiPerson>(GetPlayer());
@@ -197,7 +252,16 @@ void AMissionPrologue::OnStepDone(int32 Step)
 		{
 			Gentleman->Follow(nullptr);
 			Gentleman->SetInWorld(false);
+			if (Taxi)
+			{
+				Taxi->ShowBackSeatPassenger(Gentleman->GetOutfit());
+			}
 		}
+		if (Driver && Taxi)
+		{
+			Driver->FaceTowards(Taxi->GetActorLocation());
+		}
+		TaxiLeavingTime = 0.f;
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
 			Game->AddMoney(Prologue::Tip);
