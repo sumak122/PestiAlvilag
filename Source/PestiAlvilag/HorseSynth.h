@@ -22,7 +22,7 @@ namespace HorseSynth
 	constexpr int32 MaxClops = 6;
 	constexpr float ClopLasts = 0.12f;
 	constexpr float SnortLasts = 0.55f;
-	constexpr float Volume = 0.7f;
+	constexpr float Volume = 0.22f;
 
 	struct FClop
 	{
