@@ -7,8 +7,8 @@
 /**
  * The pictures laid over the ground: small granite setts in arcs on the
  * roads, big setts in rows on the squares and along the tram tracks, square
- * paving slabs on the pavements, gravel on the park paths and autumn grass
- * in the parks. Each is a square that repeats without a seam, drawn from a
+ * paving slabs on the pavements, gravel on the park paths, autumn grass
+ * in the parks and trodden earth on the market square. Each is a square that repeats without a seam, drawn from a
  * list of stones: every stone is a rounded box with its own colour and a
  * domed top, laid on sand. Header-only and free of engine objects, so the
  * offline preview draws the same pictures.
@@ -19,7 +19,7 @@
  */
 namespace SurfaceModel
 {
-	enum class EKind : uint8 { Setts, BigSetts, Slabs, Gravel, Grass, Count };
+	enum class EKind : uint8 { Setts, BigSetts, Slabs, Gravel, Grass, MarketEarth, Count };
 
 	struct FImage
 	{
@@ -257,6 +257,78 @@ namespace SurfaceModel
 		Bed.GrainCells = 64;
 	}
 
+	/**
+	 * Trodden earth on the market square (Teleki ter): a few loose stones
+	 * pressed in, straw, cabbage leaves and paper scraps dropped by the
+	 * stalls; the damp patches are drawn in Build.
+	 */
+	inline void LayMarketEarth(TArray<FStone>& Stones, FBed& Bed, double Tile)
+	{
+		FDice Dice(17);
+		auto Add = [&Stones, &Dice, Tile](double Long, double WidthShare, double Height, const FLinearColor& Colour, float Roughness)
+		{
+			FStone S;
+			S.X = Dice.Range(0.0, Tile);
+			S.Y = Dice.Range(0.0, Tile);
+			S.Angle = Dice.Range(0.0, 3.14159);
+			S.HalfLength = Long;
+			S.HalfWidth = FMath::Max(Long * WidthShare, 0.35);
+			S.Corner = S.HalfWidth;
+			S.Height = Height;
+			S.Colour = Colour;
+			S.Roughness = Roughness;
+			Stones.Add(S);
+		};
+		// Pebbles and broken cobbles pressed into the earth.
+		for (int32 i = 0, Count = static_cast<int32>(Tile * Tile / 70.0); i < Count; ++i)
+		{
+			const double Light = Dice.Range(0.10, 0.22);
+			Add(Dice.Range(0.5, 1.8), Dice.Range(0.6, 1.0), Dice.Range(0.2, 0.5),
+				FLinearColor(static_cast<float>(Light), static_cast<float>(Light * 0.93), static_cast<float>(Light * 0.82)), 0.7f);
+		}
+		// Straw from the crates and carts: thin over the whole square, thick
+		// in a few heaps where something was unpacked.
+		FVector2D Heaps[5];
+		for (FVector2D& Heap : Heaps)
+		{
+			Heap = FVector2D(Dice.Range(0.0, Tile), Dice.Range(0.0, Tile));
+		}
+		for (int32 i = 0, Count = static_cast<int32>(Tile * Tile / 160.0); i < Count; ++i)
+		{
+			const double Light = Dice.Range(0.28, 0.48);
+			Add(Dice.Range(1.5, 4.5), 0.08, 0.12,
+				FLinearColor(static_cast<float>(Light), static_cast<float>(Light * 0.82), static_cast<float>(Light * 0.38)), 0.8f);
+			if (i % 3 != 0)
+			{
+				// Two in three go to a heap, scattered round it.
+				const FVector2D& Heap = Heaps[i % 5];
+				const double Spread = Dice.Range(0.0, 1.0) * Dice.Range(0.0, 1.0) * 45.0;
+				const double Turn = Dice.Range(0.0, 6.28318);
+				Stones.Last().X = FMath::Fmod(Heap.X + FMath::Cos(Turn) * Spread + Tile, Tile);
+				Stones.Last().Y = FMath::Fmod(Heap.Y + FMath::Sin(Turn) * Spread + Tile, Tile);
+			}
+		}
+		// Cabbage and lettuce leaves, trodden flat.
+		for (int32 i = 0, Count = static_cast<int32>(Tile * Tile / 9000.0); i < Count; ++i)
+		{
+			const double Light = Dice.Range(0.7, 1.1);
+			Add(Dice.Range(4.0, 8.0), Dice.Range(0.6, 0.9), 0.1,
+				FLinearColor(static_cast<float>(0.14 * Light), static_cast<float>(0.19 * Light), static_cast<float>(0.06 * Light)), 0.6f);
+		}
+		// Scraps of newspaper and wrapping paper.
+		for (int32 i = 0, Count = static_cast<int32>(Tile * Tile / 30000.0); i < Count; ++i)
+		{
+			const double Light = Dice.Range(0.26, 0.38);
+			Add(Dice.Range(3.5, 7.0), Dice.Range(0.5, 0.8), 0.06,
+				FLinearColor(static_cast<float>(Light), static_cast<float>(Light * 0.97), static_cast<float>(Light * 0.88)), 0.9f);
+			// Torn paper has sharp corners.
+			Stones.Last().Corner = 0.3;
+		}
+		Bed.Sand = FLinearColor(0.15f, 0.115f, 0.075f);
+		Bed.Grain = 0.4;
+		Bed.GrainCells = 24;
+	}
+
 	/** How wide one picture is in the world (cm). */
 	inline double TileCm(EKind Kind)
 	{
@@ -266,6 +338,7 @@ namespace SurfaceModel
 		case EKind::BigSetts: return 176.0;
 		case EKind::Slabs: return 240.0;
 		case EKind::Gravel: return 90.0;
+		case EKind::MarketEarth: return 400.0;
 		default: return 150.0;
 		}
 	}
@@ -282,6 +355,7 @@ namespace SurfaceModel
 		case EKind::BigSetts: LayBigSetts(Stones, Bed, Tile); break;
 		case EKind::Slabs: LaySlabs(Stones, Bed, Tile); break;
 		case EKind::Gravel: LayGravel(Stones, Bed, Tile); break;
+		case EKind::MarketEarth: LayMarketEarth(Stones, Bed, Tile); break;
 		default: LayLeaves(Stones, Bed, Tile); break;
 		}
 
@@ -377,6 +451,21 @@ namespace SurfaceModel
 				else if (Kind != EKind::Grass)
 				{
 					H = Grain * 0.3;
+				}
+				if (Kind == EKind::MarketEarth)
+				{
+					// Lumpy, trodden earth, a little darker and smoother where it
+					// is damp (kept faint, so the repeat of the picture doesn't
+					// show; the material adds big patches on top).
+					if (Best < 0)
+					{
+						H = Grain * 0.8 + (Speckle(PX, PY, Size, 20, 606u) - 0.5) * 0.8;
+					}
+					const double Wet = Speckle(PX, PY, Size, 4, 505u);
+					const double T = FMath::Clamp((Wet - 0.56) * 5.0, 0.0, 1.0);
+					Shade *= FMath::Lerp(1.0, 0.82, T);
+					Rough = static_cast<float>(FMath::Lerp(static_cast<double>(Rough), 0.5, T));
+					H *= 1.0 - 0.5 * T;
 				}
 				const int32 At = (PY * Size + PX) * 4;
 				Colour[At + 0] = static_cast<float>(Here.R * Shade);
