@@ -390,6 +390,34 @@ namespace Furniture
 	constexpr double ResetAfter = 60.0;
 	constexpr float SeenWithin = 1.f;
 	constexpr int32 ResetChecksPerFrame = 4;
+	// Street lamps: a car faster than this knocks one over (cm/s); a slower
+	// one stops against the post. The car loses this much of its speed.
+	constexpr double LampSmashSpeed = 700.0;
+	constexpr float CarSlowOnLamp = 0.7f;
+	// The lantern, its shade and hanger hang below this height and this far
+	// out on the crook (cm): they fly off, the post and crook fall whole.
+	constexpr double LanternBelow = 600.0;
+	constexpr double LanternOut = 30.0;
+	// The post tips over its foot's edge (cm from the middle), pulled down
+	// like a 6 m pole (1.5 g / length, per second squared), kicked off by the
+	// car (radians a second, plus more the faster it went), and comes to lie
+	// at this angle, bouncing back a little.
+	constexpr double PostFoot = 14.0;
+	constexpr double TipPull = 1.5 * 980.0 / 600.0;
+	constexpr double TipKick = 0.4;
+	constexpr double TipKickPerSpeed = 1.0 / 2500.0;
+	constexpr double LyingAngle = UE_DOUBLE_HALF_PI - 0.03;
+	constexpr double FallBounce = 0.25;
+	constexpr double FallRest = 0.3;
+	// A wall or a house in the way, felt for this high up (cm): the post
+	// (this long) comes to lean on it instead of lying down.
+	constexpr double LeanFeelHeight = 300.0;
+	constexpr double PostLength = 650.0;
+	// The glass breaks into so many shards of about this size (cm).
+	constexpr int32 GlassShards = 8;
+	constexpr float ShardSize = 6.f;
+	const FLinearColor Glass(0.80f, 0.82f, 0.72f);
+
 	// A bench this close to someone sitting stays whole.
 	constexpr double SeatedNear = 150.0;
 	// What a lighter lay on, within this far (cm).
@@ -495,6 +523,8 @@ void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVec
 		Thing->Yaw = Yaw;
 		BreakableCells.Add(Furniture::BreakCell(FVector2D(At)), Breakables.Num() - 1);
 	}
+	// A breakable lamp (it has a lantern) is hit only at its post.
+	const bool bLampPost = Thing && Parts.ContainsByPredicate([](const FFurniturePart& Each) { return Each.Color.Equals(Furniture::Lantern); });
 	for (const FFurniturePart& Part : Parts)
 	{
 		const FTransform Local(Part.Rotation, Part.Location, Part.Scale);
@@ -503,15 +533,24 @@ void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVec
 		Instances.Add(Local * Place);
 		if (Thing)
 		{
-			Thing->Parts.Add({ BatchNumber, Instances.Num() - 1, Part.Shape, Local * Place });
-			const FVector Reach = (Part.Location.GetAbs() + Part.Scale * 50.0) * Scale;
-			Thing->Half = FVector2D(FMath::Max(Thing->Half.X, Reach.X), FMath::Max(Thing->Half.Y, Reach.Y));
+			FBreakPart& Piece = Thing->Parts.Add_GetRef({ BatchNumber, Instances.Num() - 1, Part.Shape, Local * Place });
+			Piece.bGlass = bLampPost && Part.Color.Equals(Furniture::Lantern);
+			Piece.bFalls = bLampPost && !(Part.Location.Z < Furniture::LanternBelow && FMath::Abs(Part.Location.X) > Furniture::LanternOut);
+			if (!bLampPost || Part.bCollide)
+			{
+				const FVector Reach = (Part.Location.GetAbs() + Part.Scale * 50.0) * Scale;
+				Thing->Half = FVector2D(FMath::Max(Thing->Half.X, Reach.X), FMath::Max(Thing->Half.Y, Reach.Y));
+			}
 		}
 		if (Part.Color.Equals(Furniture::Lantern))
 		{
 			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
 			{
-				Clock->AddLamp((Local * Place).GetLocation());
+				const int32 LampId = Clock->AddLamp((Local * Place).GetLocation());
+				if (bLampPost)
+				{
+					Thing->LampIds.Add(LampId);
+				}
 			}
 		}
 	}
@@ -698,7 +737,7 @@ void AStreetFurniture::BuildStreets(const FJsonObject& Root)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Lamp, Ground, Row[2], 1.0, CullDistance);
+			AddObject(Furniture::Lamp, Ground, Row[2], 1.0, CullDistance, true);
 		}
 	});
 	Furniture::ForEachRow(Root, TEXT("columns"), [&](const TArray<double>& Row)
@@ -1091,14 +1130,14 @@ void AStreetFurniture::BuildPark(const FJsonObject& Park)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::Lamp, Ground, Row[2], 1.0, CullDistance);
+			AddObject(Furniture::Lamp, Ground, Row[2], 1.0, CullDistance, true);
 		}
 	});
 	Furniture::ForEachRow(Park, TEXT("twin_lamps"), [&](const TArray<double>& Row)
 	{
 		if (Row.Num() >= 3 && GroundAt(FVector2D(Row[0], Row[1]), Ground))
 		{
-			AddObject(Furniture::TwinLamp, Ground, Row[2], 1.0, CullDistance);
+			AddObject(Furniture::TwinLamp, Ground, Row[2], 1.0, CullDistance, true);
 		}
 	});
 	// Trams waiting on a side track: no route, so they stand still.
@@ -1328,7 +1367,8 @@ void AStreetFurniture::Tick(float DeltaSeconds)
 		for (const int32 Index : Near)
 		{
 			const FBreakable& Thing = Breakables[Index];
-			if (Thing.bBroken || Thing.bSturdy || FMath::Abs(Thing.At.Z - Player->GetActorLocation().Z) > 300.0)
+			if (Thing.bBroken || Thing.bSturdy || FMath::Abs(Thing.At.Z - Player->GetActorLocation().Z) > 300.0
+				|| (Thing.LampIds.Num() > 0 && Speed < Furniture::LampSmashSpeed))
 			{
 				continue;
 			}
@@ -1352,10 +1392,27 @@ void AStreetFurniture::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	// The pieces come to rest; a few smashed ones a frame are checked to stand again.
+	// Knocked lamps tip over, land and bounce; the pieces come to rest; a few smashed ones a frame are checked to stand again.
+	const double Step = FMath::Min(static_cast<double>(DeltaSeconds), 0.05);
 	for (const int32 Index : Smashed)
 	{
 		FBreakable& Thing = Breakables[Index];
+		if (Thing.bFalling)
+		{
+			Thing.FallSpeed += Furniture::TipPull * FMath::Sin(Thing.FallAngle) * Step;
+			Thing.FallAngle += Thing.FallSpeed * Step;
+			if (Thing.FallAngle >= Thing.LieAngle)
+			{
+				Thing.FallAngle = Thing.LieAngle;
+				Thing.FallSpeed = -Thing.FallSpeed * Furniture::FallBounce;
+				if (FMath::Abs(Thing.FallSpeed) < Furniture::FallRest)
+				{
+					Thing.FallSpeed = 0.0;
+					Thing.bFalling = false;
+				}
+			}
+			PoseFall(Thing);
+		}
 		if (!Thing.bSettled && Now - Thing.BrokenAt > Furniture::SettleAfter)
 		{
 			Thing.bSettled = true;
@@ -1397,7 +1454,8 @@ void AStreetFurniture::Smash(int32 Index, double Now)
 	FBreakable& Thing = Breakables[Index];
 
 	// Too much wreckage about already: the oldest that nobody sees is cleared first.
-	while (Wreckage.Num() + Thing.Parts.Num() > Furniture::MaxWreckage)
+	const int32 Shards = Thing.LampIds.Num() > 0 ? Furniture::GlassShards * Thing.LampIds.Num() : 0;
+	while (Wreckage.Num() + Thing.Parts.Num() + Shards > Furniture::MaxWreckage)
 	{
 		int32 Oldest = INDEX_NONE;
 		for (int32 i = 0; i < Smashed.Num(); ++i)
@@ -1425,6 +1483,11 @@ void AStreetFurniture::Smash(int32 Index, double Now)
 	Thing.bSettled = false;
 	Thing.BrokenAt = Now;
 	Smashed.Add(Index);
+	if (Thing.LampIds.Num() > 0)
+	{
+		KnockLamp(Thing);
+		return;
+	}
 	TSet<int32> Touched;
 	for (const FBreakPart& Part : Thing.Parts)
 	{
@@ -1483,4 +1546,153 @@ void AStreetFurniture::PutBack(FBreakable& Thing)
 	}
 	Thing.bBroken = false;
 	Thing.bSettled = false;
+	Thing.bFalling = false;
+	Thing.FallFrom.Reset();
+	if (Thing.LampIds.Num() > 0)
+	{
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			for (const int32 LampId : Thing.LampIds)
+			{
+				Clock->SetLampOut(LampId, false);
+			}
+		}
+	}
+}
+
+void AStreetFurniture::KnockLamp(FBreakable& Thing)
+{
+	// It falls the way the car was going, and turns about itself as it goes
+	// so its crook comes to lie flat on the road, not stuck into it.
+	FVector Going(PlayerVelocity.X, PlayerVelocity.Y, 0.0);
+	if (!Going.Normalize())
+	{
+		Going = FVector(FVector2D(Thing.At) - FVector2D(LastPlayerAt), 0.0).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+	}
+	const double Yaw = FMath::DegreesToRadians(Thing.Yaw);
+	const FVector2D Crook(FMath::Cos(Yaw), FMath::Sin(Yaw));
+	FVector2D Flat(-Going.Y, Going.X);
+	if (FVector2D::DotProduct(Crook, Flat) < 0.0)
+	{
+		Flat = -Flat;
+	}
+	Thing.FallDir = Going;
+	Thing.FallTwist = FMath::Atan2(FVector2D::CrossProduct(Crook, Flat), FVector2D::DotProduct(Crook, Flat));
+	Thing.FallAngle = 0.0;
+	Thing.FallSpeed = Furniture::TipKick + PlayerVelocity.Size2D() * Furniture::TipKickPerSpeed;
+	Thing.bFalling = true;
+	Thing.FallFrom.Reset();
+	Thing.LieAngle = Furniture::LyingAngle;
+	FCollisionQueryParams LeanParams(SCENE_QUERY_STAT(LampLean), false, this);
+	if (AActor* Driven = LastPlayer.Get())
+	{
+		LeanParams.AddIgnoredActor(Driven);
+	}
+	FHitResult LeanHit;
+	const FVector LeanStart = Thing.At + FVector(0.0, 0.0, Furniture::LeanFeelHeight);
+	if (GetWorld()->LineTraceSingleByChannel(LeanHit, LeanStart, LeanStart + Going * Furniture::PostLength, ECC_Visibility, LeanParams))
+	{
+		const double Lean = FMath::Asin(FMath::Clamp(static_cast<double>(LeanHit.Distance) / Furniture::PostLength, 0.0, 1.0));
+		Thing.LieAngle = FMath::Clamp(Lean, 0.15, Furniture::LyingAngle);
+	}
+
+	if (!GlassMaterial && BaseMaterial)
+	{
+		GlassMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		GlassMaterial->SetVectorParameterValue(TEXT("Color"), Furniture::Glass);
+	}
+
+	TSet<int32> Touched;
+	for (const FBreakPart& Part : Thing.Parts)
+	{
+		if (!Batches.IsValidIndex(Part.Batch) || !Batches[Part.Batch] || !ShapeMeshes.IsValidIndex(Part.Shape))
+		{
+			continue;
+		}
+		UHierarchicalInstancedStaticMeshComponent* Instances = Batches[Part.Batch];
+		FTransform Gone = Part.Transform;
+		Gone.SetScale3D(FVector(0.001));
+		Instances->UpdateInstanceTransform(Part.Instance, Gone, true, false, true);
+		Touched.Add(Part.Batch);
+
+		if (Part.bFalls)
+		{
+			// The post and crook: a still copy of each shape, moved by PoseFall.
+			UStaticMeshComponent* Post = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
+			Post->SetMobility(EComponentMobility::Movable);
+			Post->SetStaticMesh(ShapeMeshes[Part.Shape]);
+			Post->SetMaterial(0, Instances->GetMaterial(0));
+			Post->SetWorldTransform(Part.Transform);
+			Post->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Post->SetCanEverAffectNavigation(false);
+			Post->SetCachedMaxDrawDistance(CullDistance);
+			Post->RegisterComponent();
+			FTransform From = Part.Transform;
+			From.AddToTranslation(-Thing.At);
+			Thing.Pieces.Insert(Post, Thing.FallFrom.Num());
+			Thing.FallFrom.Add(From);
+			Wreckage.Add(Post);
+		}
+		else if (Part.bGlass && GlassMaterial)
+		{
+			// The glass: shards burst out of the lantern.
+			const FVector Middle = Part.Transform.GetLocation();
+			for (int32 k = 0; k < Furniture::GlassShards; ++k)
+			{
+				const FVector Out = WreckRandom.GetUnitVector();
+				const FRotator Turn(WreckRandom.FRandRange(0.f, 360.f), WreckRandom.FRandRange(0.f, 360.f), WreckRandom.FRandRange(0.f, 360.f));
+				const float Size = Furniture::ShardSize * WreckRandom.FRandRange(0.6f, 1.4f) / 100.f;
+				const FTransform Shard(Turn, Middle + Out * 8.0, FVector(Size, Size * WreckRandom.FRandRange(0.5f, 1.f), 0.004f));
+				FVector Velocity;
+				FVector Spin;
+				Wreck::Fling(PlayerVelocity * 0.6, WreckRandom, Velocity, Spin);
+				Velocity += Out * WreckRandom.FRandRange(150.f, 400.f);
+				UStaticMeshComponent* Piece = Wreck::Throw(this, ShapeMeshes[Furniture::Cube], GlassMaterial, Shard, Velocity, Spin, SmallCullDistance);
+				Thing.Pieces.Add(Piece);
+				Wreckage.Add(Piece);
+			}
+		}
+		else
+		{
+			// The shade and the hanger fly off.
+			FVector Velocity;
+			FVector Spin;
+			Wreck::Fling(PlayerVelocity, WreckRandom, Velocity, Spin);
+			UStaticMeshComponent* Piece = Wreck::Throw(this, ShapeMeshes[Part.Shape], Instances->GetMaterial(0), Part.Transform, Velocity, Spin, SmallCullDistance);
+			Thing.Pieces.Add(Piece);
+			Wreckage.Add(Piece);
+		}
+	}
+	for (const int32 Touch : Touched)
+	{
+		Batches[Touch]->MarkRenderStateDirty();
+	}
+	if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+	{
+		for (const int32 LampId : Thing.LampIds)
+		{
+			Clock->SetLampOut(LampId, true);
+		}
+	}
+	if (APestiCar* Car = Cast<APestiCar>(LastPlayer.Get()))
+	{
+		Car->ForwardSpeed *= Furniture::CarSlowOnLamp;
+	}
+}
+
+void AStreetFurniture::PoseFall(const FBreakable& Thing) const
+{
+	// Turned about its own post, then tipped over the edge of its foot.
+	const double Share = FMath::Clamp(Thing.FallAngle / Furniture::LyingAngle, 0.0, 1.0);
+	const FTransform Twist(FQuat(FVector::UpVector, Thing.FallTwist * Share));
+	const FVector Edge = Thing.FallDir * Furniture::PostFoot;
+	const FVector Axis = FVector::CrossProduct(FVector::UpVector, Thing.FallDir);
+	const FTransform Tip = FTransform(-Edge) * FTransform(FQuat(Axis, Thing.FallAngle)) * FTransform(Edge + Thing.At);
+	for (int32 i = 0; i < Thing.FallFrom.Num() && i < Thing.Pieces.Num(); ++i)
+	{
+		if (IsValid(Thing.Pieces[i]))
+		{
+			Thing.Pieces[i]->SetWorldTransform(Thing.FallFrom[i] * Twist * Tip);
+		}
+	}
 }
