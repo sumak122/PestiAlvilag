@@ -189,8 +189,8 @@ namespace PoliceModel
 	{
 		const double Hf = BoxHalf;
 		const double Post = 4.0;
-		// A stone step, the floor, and the four corner posts.
-		Block(P, FLinearColor(0.42f, 0.40f, 0.36f), FVector(0.0, 0.0, 5.0), FVector(Hf + 6.0, Hf + 6.0, 5.0));
+		// A stone step (reaching well down, into a sloping pavement), the floor, and the four corner posts.
+		Block(P, FLinearColor(0.42f, 0.40f, 0.36f), FVector(0.0, 0.0, -10.0), FVector(Hf + 6.0, Hf + 6.0, 20.0));
 		Block(P, BoxFloor, FVector(0.0, 0.0, 10.5), FVector(Hf, Hf, 0.5));
 		for (const double Sx : { -1.0, 1.0 })
 		{

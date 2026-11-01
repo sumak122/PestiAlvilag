@@ -127,6 +127,13 @@ public:
 	 */
 	APestiCar* StealCar(ATrafficCar* Car);
 
+	/**
+	 * A taxi standing at the kerb at At, facing Yaw, pulls out into the
+	 * traffic on the nearest lane heading its way and drives on with the
+	 * rest. Returns the new traffic taxi, or null.
+	 */
+	ATrafficCar* PullOutTaxi(const FVector& At, double Yaw);
+
 	/** True where streets meet, false where a street just bends or continues. */
 	bool IsJunction(int32 Node) const;
 	void ReleaseNode(int32 Node, const ATrafficCar* Car);

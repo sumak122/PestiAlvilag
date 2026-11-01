@@ -98,6 +98,12 @@ void ATrafficCar::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int
 	}
 }
 
+void ATrafficCar::CarryPassenger(const PersonKit::FOutfit& Outfit, float Seconds)
+{
+	Visuals->ShowPassenger(Outfit);
+	PassengerTime = Seconds;
+}
+
 void ATrafficCar::ResumeOnLane(int32 InLaneIndex, int32 InPointIndex)
 {
 	LaneIndex = InLaneIndex;
@@ -122,6 +128,15 @@ void ATrafficCar::ReleaseAllJunctions()
 void ATrafficCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (PassengerTime > 0.f)
+	{
+		PassengerTime -= DeltaSeconds;
+		if (PassengerTime <= 0.f)
+		{
+			Visuals->HidePassenger();
+		}
+	}
 
 	if (!Manager || LaneIndex == INDEX_NONE)
 	{
