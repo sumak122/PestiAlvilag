@@ -19,7 +19,7 @@ class USpringArmComponent;
  * A horse and its flat market cart (HorseCartModel), driven from the bench.
  *
  * The horse has four paces, and W and S move it up and down one at a time
- * (standing, walk, trot, canter); held at a stand, S backs it slowly. A and
+ * (standing, walk, trot, canter, gallop); held at a stand, S backs it slowly. A and
  * D turn it: the horse leads, swinging the shafts and the front wheels with
  * it about the turntable, and the cart follows. Space pulls it up ("Hó!"),
  * F gets down. The horse's legs step with its pace, its head nods, its
@@ -60,7 +60,7 @@ public:
 	 */
 	bool TakeFallenCrate(FVector& OutAt);
 
-	/** How fast it goes: 0 standing, 1 walk, 2 trot, 3 canter. */
+	/** How fast it goes: 0 standing, 1 walk, 2 trot, 3 canter, 4 gallop. */
 	int32 GetPace() const { return Pace; }
 	float GetSpeed() const { return Speed; }
 

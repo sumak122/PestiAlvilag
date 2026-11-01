@@ -22,9 +22,10 @@ namespace HorseCart
 	// The collision box floats this far above the road; the wheels and hooves reach down to it (cm).
 	constexpr float HoverHeight = 15.f;
 
-	// The paces: standing, walk, trot, canter (cm/s; a canter is about 20 km/h), and backing.
-	const float PaceSpeeds[] = { 0.f, 150.f, 330.f, 560.f };
-	constexpr int32 TopPace = 3;
+	// The paces: standing, walk, trot, canter (cm/s; a canter is about 20 km/h),
+	// a full gallop (about 30 km/h), and backing.
+	const float PaceSpeeds[] = { 0.f, 150.f, 330.f, 560.f, 840.f };
+	constexpr int32 TopPace = 4;
 	constexpr float BackSpeed = 70.f;
 	// Picking up and slowing down (cm/s each second), and pulling up hard with Space.
 	constexpr float SpeedUp = 170.f;
@@ -32,7 +33,7 @@ namespace HorseCart
 	constexpr float PullUp = 480.f;
 
 	// The shafts turn this far at most at each pace (degrees), this fast (degrees a second).
-	const float MaxSteer[] = { 32.f, 32.f, 24.f, 15.f };
+	const float MaxSteer[] = { 32.f, 32.f, 24.f, 15.f, 10.f };
 	constexpr float SteerRate = 70.f;
 	// From the rear axle to where the horse pulls: how tight it turns (cm).
 	constexpr double Wheelbase = 300.0;
@@ -41,9 +42,12 @@ namespace HorseCart
 	constexpr float WalkFrom = 12.f;
 	constexpr float TrotFrom = 240.f;
 	constexpr float CanterFrom = 450.f;
+	constexpr float GallopFrom = 700.f;
 	constexpr float WalkStride = 170.f;
 	constexpr float TrotStride = 260.f;
 	constexpr float CanterStride = 330.f;
+	// At a gallop the same leaps, longer and quicker.
+	constexpr float GallopStride = 430.f;
 
 	// He gets down only nearly stopped, and this far to the side of the bench (cm).
 	constexpr float MaxExitSpeed = 60.f;
@@ -304,7 +308,7 @@ void AHorseCart::Drive(APlayerController* PC, float DeltaSeconds)
 
 	const float Steer = FMath::Clamp(KeyAxis(EKeys::D, EKeys::A) + KeyAxis(EKeys::Right, EKeys::Left)
 		+ PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX), -1.f, 1.f);
-	const int32 Gait = FMath::Abs(Speed) >= CanterFrom ? 3 : FMath::Abs(Speed) >= TrotFrom ? 2 : 1;
+	const int32 Gait = FMath::Abs(Speed) >= GallopFrom ? 4 : FMath::Abs(Speed) >= CanterFrom ? 3 : FMath::Abs(Speed) >= TrotFrom ? 2 : 1;
 	SteerAngle = FMath::FInterpConstantTo(SteerAngle, Steer * MaxSteer[Gait], DeltaSeconds, SteerRate);
 
 	UpdateFreeLook(PC, DeltaSeconds);
@@ -314,6 +318,7 @@ void AHorseCart::Drive(APlayerController* PC, float DeltaSeconds)
 		TEXT("lépés / walk"),
 		TEXT("ügetés / trot"),
 		TEXT("vágta / canter"),
+		TEXT("teljes v\u00e1gta / gallop"),
 	};
 	APestiHUD::Show(this, 1, 0.f, FColor::White,
 		FString::Printf(TEXT("Lovaskocsi / horse cart: %s   (W faster, S slower or back up, A/D steer, Space stop, F get down)"),
@@ -374,7 +379,8 @@ void AHorseCart::Animate(float DeltaSeconds)
 	const EGait Gait = AbsSpeed < HorseCart::WalkFrom ? EGait::Stand
 		: AbsSpeed < HorseCart::TrotFrom ? EGait::Walk
 		: AbsSpeed < HorseCart::CanterFrom ? EGait::Trot : EGait::Canter;
-	const float StrideLength = Gait == EGait::Canter ? HorseCart::CanterStride : Gait == EGait::Trot ? HorseCart::TrotStride : HorseCart::WalkStride;
+	const float StrideLength = AbsSpeed >= HorseCart::GallopFrom ? HorseCart::GallopStride
+		: Gait == EGait::Canter ? HorseCart::CanterStride : Gait == EGait::Trot ? HorseCart::TrotStride : HorseCart::WalkStride;
 	Stride += Speed / StrideLength * DeltaSeconds;
 	Stride -= FMath::FloorToFloat(Stride);
 	Idle += DeltaSeconds;
@@ -398,7 +404,7 @@ void AHorseCart::Animate(float DeltaSeconds)
 		}
 		WasPlanted[l] = P.Planted[l];
 	}
-	Sound->SetRoll(FMath::Clamp(AbsSpeed / HorseCart::PaceSpeeds[HorseCart::TopPace], 0.f, 1.f));
+	Sound->SetRoll(FMath::Clamp(AbsSpeed / HorseCart::PaceSpeeds[3], 0.f, 1.f));
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (bStanding && Now >= NextSnort)
 	{

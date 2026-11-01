@@ -61,7 +61,9 @@ namespace PestiStart
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
 	const FName Zsebtolvaj(TEXT("Zsebtolvaj"));
-	const FName Zsibvasar(TEXT("Zsibvasar"));
+	// "Zsibvasar2": the first test build paid mission 4 at the crates, before the
+	// ruffians fight was in it; a new name has those saves play it again whole.
+	const FName Zsibvasar(TEXT("Zsibvasar2"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
