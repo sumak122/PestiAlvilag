@@ -26,6 +26,7 @@ from shapely.geometry.polygon import orient
 from shapely.ops import nearest_points, polygonize, unary_union
 from shapely.prepared import prep
 
+from buses_1932 import build_1932_bus_routes
 from trams_1932 import build_1932_tram_routes
 
 # Blaha Lujza tér, the heart of the prototype area.
@@ -917,6 +918,8 @@ def convert(osm_path, origin):
     for target, strips in zip((tram_edges, tram_grooves, tram_rails), track_detail(tram_tracks + siding)):
         add_area(target, strips, {})
 
+    lanes = build_lanes(ways, nodes, proj, clip, walls)
+
     gx0, gy0 = to_ue(x0, y1)  # north-west corner becomes min X, min Y
     gx1, gy1 = to_ue(x1, y0)
     return {
@@ -938,8 +941,9 @@ def convert(osm_path, origin):
         "buildings": out_buildings,
         "landmarks": out_landmarks,
         "centerlines": centerlines,
-        "lanes": build_lanes(ways, nodes, proj, clip, walls),
+        "lanes": lanes,
         "trams": tram_routes,
+        "buses": build_1932_bus_routes(lanes, centerlines),
     }
 
 
@@ -956,7 +960,7 @@ def main():
         f"{len(data['buildings'])} buildings, "
         + ", ".join(f"{a['layer']}: {len(a['polygons'])}" for a in data["areas"])
         + f", {len(data['centerlines'])} centerlines, {len(data['lanes'])} traffic lanes"
-        + f", {len(data['trams'])} tram routes"
+        + f", {len(data['trams'])} tram routes, {len(data['buses'])} bus routes"
     )
 
 

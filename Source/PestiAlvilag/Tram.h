@@ -25,6 +25,9 @@ class UTramSound;
  *
  * The body is TramModel's: open platforms at the ends and a saloon with
  * wooden benches, where a few passengers sit (and the player, riding).
+ *
+ * ABus is a tram on a bus route: it drives the lanes the same way, with its
+ * own body, seats, door and engine sound (the virtual functions below).
  */
 UCLASS()
 class PESTIALVILAG_API ATram : public AActor
@@ -39,7 +42,7 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Called by the manager right after spawning. */
-	void StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance);
+	virtual void StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance);
 
 	int32 GetRouteIndex() const { return RouteIndex; }
 	float GetDistance() const { return Distance; }
@@ -52,8 +55,17 @@ public:
 	/** Keeps the doors open at least this long more (s). */
 	void HoldAtStop(float Seconds) { if (IsAtStop()) { DwellLeft = FMath::Max(DwellLeft, Seconds); } }
 
-	/** A bench seat no passenger sits on (TramModel::Seat index), or INDEX_NONE. */
-	int32 GetFreeSeat() const;
+	/** A seat no passenger sits on (a GetSeat index), or INDEX_NONE. */
+	virtual int32 GetFreeSeat() const;
+
+	/** Where someone sitting on seat Index has their middle (relative to the tram) and which way they face. */
+	virtual void GetSeat(int32 Index, FVector& OutAt, double& OutYaw) const;
+
+	/** How far the road is below the tram's middle (cm, negative). */
+	virtual double GetGroundBelow() const { return TramModel::Ground; }
+
+	/** A bus, not a tram (for what the conductor and the signs say). */
+	virtual bool IsBus() const { return false; }
 
 	/** Keeps a seat for the player while they ride (INDEX_NONE frees it). */
 	void ReserveSeat(int32 Index) { ReservedSeat = Index; }
@@ -66,7 +78,7 @@ public:
 	bool TakeOffPassenger(PersonKit::FOutfit& OutOutfit);
 
 	/** The platform step nearest Point (on the ground beside the tram), where people get on and off. */
-	FVector GetDoorNear(const FVector& Point) const;
+	virtual FVector GetDoorNear(const FVector& Point) const;
 
 	/** Cruising speed (cm/s); 700 is about 25 km/h. */
 	UPROPERTY(EditAnywhere, Category = "Tram")
@@ -121,11 +133,39 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTramSound> Sound;
 
-private:
 	UPROPERTY(Transient)
 	TObjectPtr<ATrafficManager> Manager;
 
-	void BuildBody();
+	/** Half the size of the collision box (cm). */
+	FVector HalfSize;
+	/** The mesh section that glows at night (lamps), and how high the inside lamp hangs. */
+	int32 LampSection = TramModel::Lamp;
+	double InsideLightZ = TramModel::RoofBottom - 25.0;
+	/** Seconds held up by an AI car before pushing on regardless. */
+	float MaxHeldUpTime = 6.f;
+
+	virtual void BuildBody();
+	/** Gives Mesh's section Section a plain colour, or the see-through glass look. */
+	void PaintSection(UProceduralMeshComponent* Mesh, int32 Section, const FLinearColor& Color, bool bGlass);
+	/** True if no passenger sits on seat Index and it is not kept for the player. */
+	bool IsSeatFree(int32 Index) const { return !TakenSeats.Contains(Index) && Index != ReservedSeat; }
+	/** How many seats there are (GetSeat indices). */
+	virtual int32 GetNumSeats() const { return TramModel::NumSeats; }
+	/** Plays the tram's sound while the camera is near enough to hear it. */
+	virtual void UpdateSound();
+	virtual void StopSound();
+	/** Rings the bell if it is heard; false if not. */
+	virtual bool RingBell();
+	/** Pulling away from a stop. */
+	virtual void LeaveStop();
+
+	float CurrentSpeed = 0.f;
+	/** What the sound hears: speeding up or slowing down (0..1). */
+	float SoundPull = 0.f;
+	float SoundBrake = 0.f;
+	bool bSoundHeard = false;
+
+private:
 	void SeatPassengers();
 	void AddPassenger(int32 SeatIndex, const PersonKit::FOutfit& Outfit);
 	void RemovePassenger(int32 Which);
@@ -134,17 +174,13 @@ private:
 	void HitPlayerInTheWay();
 	void SetInService(bool bInService);
 	bool IsStartClear() const;
-	/** Plays the tram's sound while the camera is near enough to hear it. */
-	void UpdateSound();
 	/** At night, near the camera: a lamp lighting the saloon. */
 	void UpdateInsideLight();
-	void StopSound();
 	/** Rings the bell at someone standing on the rails ahead. */
 	void WarnPlayerAhead(float DeltaSeconds);
 
 	int32 RouteIndex = INDEX_NONE;
 	float Distance = 0.f;
-	float CurrentSpeed = 0.f;
 	int32 NextStop = 0;
 	float DwellLeft = 0.f;
 	/** Seconds held up by an AI car; after a while the tram goes anyway. */
@@ -156,11 +192,8 @@ private:
 	TArray<int32> TakenSeats;
 	TArray<PersonKit::FOutfit> PassengerOutfits;
 	int32 ReservedSeat = INDEX_NONE;
-	/** What the sound hears: speeding up or slowing down (0..1), and how much the track bends under it (degrees). */
-	float SoundPull = 0.f;
-	float SoundBrake = 0.f;
+	/** How much the track bends under it (degrees), for the wheels' squeal. */
 	float BendDegrees = 0.f;
-	bool bSoundHeard = false;
 	bool bNightGlowAdded = false;
 	/** Seconds before the bell may be rung at the player again. */
 	float BellWait = 0.f;

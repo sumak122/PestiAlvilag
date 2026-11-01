@@ -262,7 +262,7 @@ void ATramRides::UpdateStopCrowds()
 		const FVector2D Along(FMath::Cos(FMath::DegreesToRadians(Place->Yaw)), FMath::Sin(FMath::DegreesToRadians(Place->Yaw)));
 		const FVector2D ToTrack = (Place->At - Place->Wait).GetSafeNormal();
 		// A person's middle at the height of the road the tram runs on.
-		const double Z = Tram->GetActorLocation().Z + TramModel::Ground + TramRides::Middle;
+		const double Z = Tram->GetActorLocation().Z + Tram->GetGroundBelow() + TramRides::Middle;
 
 		// A few people wait at the stop for the tram coming.
 		if (!Crowd.bWaitingPlaced && !Tram->IsAtStop() && !bLast
@@ -423,7 +423,7 @@ void ATramRides::Tick(float DeltaSeconds)
 		if (GEngine)
 		{
 			APestiHUD::Show(this, TramRides::RideLine, 0.f, FColor::White,
-				FString::Printf(TEXT("On the tram (%s)   Next stop: %s   %s   C: change view"), *Line,
+				FString::Printf(TEXT("On the %s (%s)   Next stop: %s   %s   C: change view"), Tram->IsBus() ? TEXT("bus") : TEXT("tram"), *Line,
 					*StopName(Tram, Tram->IsAtStop() ? Next + 1 : Next),
 					Tram->IsAtStop() ? TEXT("T: get off here") : bWantOff ? TEXT("Getting off there (T: stay on)") : TEXT("T: ring the bell to get off there")));
 		}
@@ -443,7 +443,7 @@ void ATramRides::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		APestiHUD::Show(this, TramRides::HintLine, 0.f, TramRides::Yellow,
-			FString::Printf(TEXT("T: get on the tram towards %s   (fare %s)"), *LastStopName(Tram), *APestiAlvilagGameModeBase::FormatMoney(Fare)));
+			FString::Printf(TEXT("T: get on the %s towards %s   (fare %s)"), Tram->IsBus() ? TEXT("bus") : TEXT("tram"), *LastStopName(Tram), *APestiAlvilagGameModeBase::FormatMoney(Fare)));
 	}
 	if (!bT)
 	{
@@ -463,12 +463,14 @@ void ATramRides::Tick(float DeltaSeconds)
 	const int32 SeatIndex = Tram->GetFreeSeat();
 	if (SeatIndex == INDEX_NONE)
 	{
-		Say(TEXT("\u201eTele vagyunk!\u201d  (The tram is full.)"));
+		Say(TEXT("\u201eTele vagyunk!\u201d  (We are full.)"));
 		return;
 	}
 	Game->AddMoney(-Fare);
-	const TramModel::FSeat Place = TramModel::Seat(SeatIndex, PersonModel::SeatedMiddle);
-	Player->RideOn(Tram, Place.At, Place.Yaw);
+	FVector SeatAt;
+	double SeatYaw = 0.0;
+	Tram->GetSeat(SeatIndex, SeatAt, SeatYaw);
+	Player->RideOn(Tram, SeatAt, SeatYaw);
 	Tram->ReserveSeat(SeatIndex);
 	Riding = Tram;
 	bWantOff = false;

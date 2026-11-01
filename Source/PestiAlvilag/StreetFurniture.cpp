@@ -185,6 +185,14 @@ namespace Furniture
 		{ Cube, StopRed, FVector(0, 0, 245), FVector(0.03, 0.9, 0.5), false },
 		{ Cube, Enamel, FVector(0, 0, 245), FVector(0.036, 0.84, 0.44), false },
 	};
+	// A bus stop's plate is edged in the buses' dark blue and says "AUTÓBUSZ".
+	const FLinearColor BusBlue(0.012f, 0.025f, 0.10f);
+	const TArray<FFurniturePart> BusStopSign = {
+		{ Cylinder, Iron, FVector(0, 0, 110), FVector(0.07, 0.07, 2.2), true },
+		{ Cube, Iron, FVector(0, 0, 221), FVector(0.06, 0.3, 0.03), false },
+		{ Cube, BusBlue, FVector(0, 0, 245), FVector(0.03, 0.9, 0.5), false },
+		{ Cube, Enamel, FVector(0, 0, 245), FVector(0.036, 0.84, 0.44), false },
+	};
 	constexpr double TramStopWordZ = 256.0;
 	constexpr double TramStopNameZ = 234.0;
 	constexpr double TaxiLift = 150.0;
@@ -973,9 +981,12 @@ void AStreetFurniture::BuildTramStops(const FJsonObject& Root)
 		{
 			continue;
 		}
-		AddObject(Furniture::TramStopSign, Ground, Yaw, 1.0, CullDistance);
+		bool bBusStop = false;
+		(*Stop)->TryGetBoolField(TEXT("bus"), bBusStop);
+		AddObject(bBusStop ? Furniture::BusStopSign : Furniture::TramStopSign, Ground, Yaw, 1.0, CullDistance);
 		// The word and the name on both faces of the plate.
 		const FString Name = (*Stop)->GetStringField(TEXT("name"));
+		const FColor Ink = bBusStop ? FColor(8, 18, 70) : FColor(110, 10, 8);
 		for (const double Face : { 1.0, -1.0 })
 		{
 			auto Write = [&](const FString& Words, double Z, float Size)
@@ -988,12 +999,19 @@ void AStreetFurniture::BuildTramStops(const FJsonObject& Root)
 				Text->SetHorizontalAlignment(EHTA_Center);
 				Text->SetVerticalAlignment(EVRTA_TextCenter);
 				Text->SetWorldSize(Size);
-				Text->SetTextRenderColor(FColor(110, 10, 8));
+				Text->SetTextRenderColor(Ink);
 				Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Text->SetCullDistance(CullDistance);
 				Text->RegisterComponent();
 			};
-			Write(TEXT("MEG\u00c1LL\u00d3"), Furniture::TramStopWordZ, 14.f);
+			if (bBusStop)
+			{
+				Write(TEXT("AUT\u00d3BUSZ"), Furniture::TramStopWordZ, 12.f);
+			}
+			else
+			{
+				Write(TEXT("MEG\u00c1LL\u00d3"), Furniture::TramStopWordZ, 14.f);
+			}
 			Write(Name, Furniture::TramStopNameZ, Name.Len() > 16 ? 6.f : 8.f);
 		}
 	}

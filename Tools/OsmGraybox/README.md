@@ -56,6 +56,15 @@ Notes:
   (grooved rails, 1435 mm gauge, flush with the setts) add the track detail;
   lines sharing a track get one pair of rails.
   Karpfenstein utca (1932) is today's Dobozi utca.
+- `buses` are the 1932 bus lines inside the map, from the Székesfővárosi
+  Autóbusz Üzem map of 1932: 12 along the Nagykörút, 20 from Keleti up
+  Thököly út, 5 along Dohány utca (`buses_1932.py`). Each route is a chain
+  of the traffic `lanes` (so the buses keep left with the cars) following
+  the line's streets; one-way pieces of those streets get a lane back for
+  the bus. A line with both ends at the map edge runs both ways as two
+  routes; line 20 turns round by Keleti and goes back out as one route.
+  Stops are before crossings, main roads first, about 300 m apart, named
+  like the tram stops. Same format as `trams`, plus `speed` (cm/s).
 - Map data © OpenStreetMap contributors, ODbL 1.0. The game must credit it.
 
 ## Street furniture and Tisza Kálmán tér

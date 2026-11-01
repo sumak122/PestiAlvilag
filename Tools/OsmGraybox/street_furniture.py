@@ -21,8 +21,8 @@ that the AStreetFurniture actor reads:
 - food_vendors: street food sellers near story places, {"kind", "at":
   [x, y, yaw]} beside the pavement walking line, facing it;
 - tram_stops: one per stop place on the tram tracks (lines sharing a track
-  share it), {"name", "at": [x, y, yaw] on the track facing the way the
-  tram runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
+  share it) and on the bus routes (with "bus": true), {"name", "at": [x, y,
+  yaw] on the track or bus lane facing the way the tram or bus runs, "sign": [x, y, yaw] on the kerb beside it facing the track,
   "wait": [x, y] where passengers wait and get off};
 - police_boxes: the police telephone boxes the constables on the beat ring
   the station from, one at each beat, {"name", "at": [x, y, yaw]} a step
@@ -673,6 +673,75 @@ def place_tram_stops(data, space, sidewalks):
                 "name": stop.get("name", ""),
                 "at": [round(p.x), round(p.y), yaw_of(dx, dy)],
                 "sign": [round(p.x + nx * sign_out + dx * 150), round(p.y + ny * sign_out + dy * 150), yaw_of(-nx, -ny)],
+                "wait": [round(p.x + nx * wait_out), round(p.y + ny * wait_out)],
+            })
+    return stops
+
+
+BUS_STOP_SAME = 300
+BUS_SIGN_IN = 100
+BUS_NO_KERB_OUT = 300
+# A bus stop sign keeps this far from lamps, columns, benches and other signs (cm),
+# sliding along the kerb by up to BUS_SIGN_SLIDE to find room.
+BUS_SIGN_ROOM = 150
+BUS_SIGN_SLIDE = 400
+
+
+def place_bus_stops(data, sidewalks, spots):
+    """The stops of the bus routes ("bus": true), in the tram_stops format:
+    the bus pulls up on its lane by the kerb on its left (traffic kept
+    left), so the waiting spot and the sign are on the pavement to the
+    left of the way it runs."""
+    walks = [LineString(ring_points(w)) for w in sidewalks]
+    walk_tree = STRtree(walks)
+    stops = []
+    for route in data.get("buses", []):
+        line = LineString(ring_points(route["points"]))
+        for stop in route["stops"]:
+            p = line.interpolate(stop["at"])
+            if any(math.hypot(p.x - q["at"][0], p.y - q["at"][1]) < BUS_STOP_SAME for q in stops):
+                continue
+            a = line.interpolate(max(stop["at"] - 100, 0))
+            b = line.interpolate(min(stop["at"] + 100, line.length))
+            dx, dy = unit(b.x - a.x, b.y - a.y)
+            # Left of travel, with X east and Y south.
+            nx, ny = dy, -dx
+            ray = LineString([(p.x + nx * 100, p.y + ny * 100), (p.x + nx * TRAM_KERB_SEARCH, p.y + ny * TRAM_KERB_SEARCH)])
+            reach = None
+            for i in walk_tree.query(ray):
+                w = walks[i]
+                hit = w.intersection(ray)
+                for g in getattr(hit, "geoms", [hit]):
+                    if hit.is_empty or g.geom_type != "Point":
+                        continue
+                    at = w.project(g)
+                    u = w.interpolate(min(at + 50, w.length))
+                    v = w.interpolate(max(at - 50, 0))
+                    wx, wy = unit(u.x - v.x, u.y - v.y)
+                    if abs(wx * dx + wy * dy) > 0.85:
+                        d = math.hypot(g.x - p.x, g.y - p.y)
+                        reach = d if reach is None else min(reach, d)
+            if reach is None:
+                sign_out, wait_out = BUS_NO_KERB_OUT, BUS_NO_KERB_OUT
+            else:
+                sign_out, wait_out = reach - BUS_SIGN_IN, reach
+            # The sign by the bus's door (a little ahead of its middle), clear of other things.
+            sign = None
+            for slide in (150, 250, 50, 350, -50, 450, -150, 550):
+                if abs(slide - 150) > BUS_SIGN_SLIDE:
+                    continue
+                c = (p.x + nx * sign_out + dx * slide, p.y + ny * sign_out + dy * slide)
+                if all(math.hypot(c[0] - q[0], c[1] - q[1]) >= BUS_SIGN_ROOM for q in spots):
+                    sign = c
+                    break
+            if sign is None:
+                sign = (p.x + nx * sign_out + dx * 150, p.y + ny * sign_out + dy * 150)
+            spots.append(sign)
+            stops.append({
+                "name": stop.get("name", ""),
+                "bus": True,
+                "at": [round(p.x), round(p.y), yaw_of(dx, dy)],
+                "sign": [round(sign[0]), round(sign[1]), yaw_of(-nx, -ny)],
                 "wait": [round(p.x + nx * wait_out), round(p.y + ny * wait_out)],
             })
     return stops
@@ -2053,6 +2122,8 @@ def main():
     rakoczi = layout_rakoczi(space, garden)
     spots += [tuple(v["at"][:2]) for v in shops + gates]
     police_boxes = place_police_boxes(space, sidewalks, spots)
+    # After everything else, so nothing that was already placed moves.
+    bus_stops = place_bus_stops(data, sidewalks, spots + [tuple(b["at"][:2]) for b in police_boxes])
 
     out = {
         "version": 1,
@@ -2064,7 +2135,7 @@ def main():
         "sidewalks": sidewalks,
         "taxi_stands": taxi_stands,
         "taxi_destinations": taxi_destinations,
-        "tram_stops": tram_stops,
+        "tram_stops": tram_stops + bus_stops,
         "food_vendors": food_vendors,
         "market": market,
         "hall_market": hall_market,
@@ -2077,7 +2148,7 @@ def main():
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(market['stalls'])} market stalls, {len(shops) - quarter_shops} shops on {SHOP_STREET} and {quarter_shops} round Rákóczi tér, {len(gates)} gates; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(bus_stops)} bus stops, {len(market['stalls'])} market stalls, {len(shops) - quarter_shops} shops on {SHOP_STREET} and {quarter_shops} round Rákóczi tér, {len(gates)} gates; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "

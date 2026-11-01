@@ -5,7 +5,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 
 ## Where things start
 - `Source/PestiAlvilag/PestiAlvilagGameModeBase.cpp` spawns every system (world, traffic, people, missions, landmarks). Start here to find who owns what. `PestiStart` holds start spots and yaws.
-- Map data comes from `Tools/OsmGraybox/` (Python): `osm_to_graybox.py` (streets, blocks), `street_furniture.py` (lamps, benches, pavements, shops, walker lines), `trams_1932.py` (tram lines). Output JSON lives under `Data/` and is read by `OsmGraybox.cpp`, `StreetFurniture.cpp`, `Pedestrians.cpp`, `Knockables.cpp`.
+- Map data comes from `Tools/OsmGraybox/` (Python): `osm_to_graybox.py` (streets, blocks), `street_furniture.py` (lamps, benches, pavements, shops, walker lines), `trams_1932.py` (tram lines), `buses_1932.py` (bus lines). Output JSON lives under `Data/` and is read by `OsmGraybox.cpp`, `StreetFurniture.cpp`, `Pedestrians.cpp`, `Knockables.cpp`.
 
 ## Naming pattern
 - `*Model.h` (namespace, header only): builds the boxes/shapes of one thing (CarModel, PersonKit, TramModel, ShopModel, MarketHallModel...). Change looks here.
@@ -19,6 +19,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
 - Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`.
+- Bus: `BusModel.h` (MÁVAG Harcsa look) + `Bus` (ABus: a tram on a bus route, lines 12, 20, 5 from `buses_1932.py`; riding via `TramRides`).
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`.
 - World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
