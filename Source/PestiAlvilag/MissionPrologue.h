@@ -35,8 +35,12 @@ protected:
 	virtual void SetUpMission() override;
 	virtual void OnStepStarted(int32 Step) override;
 	virtual void OnStepDone(int32 Step) override;
+	virtual void TickStep(int32 Step, float DeltaSeconds) override;
 
 private:
+	/** The driver gets in, and the taxi pulls out into the traffic and is gone. */
+	void TickTaxiLeaving(float DeltaSeconds);
+
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Gentleman;
 
@@ -45,4 +49,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APestiTaxi> Taxi;
+
+	/** Seconds since the gentleman got in, or below zero while he hasn't. */
+	float TaxiLeavingTime = -1.f;
 };
