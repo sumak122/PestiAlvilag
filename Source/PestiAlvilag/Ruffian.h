@@ -16,6 +16,10 @@
  * turn (Circle), come in and fight him by the same rules as the player and
  * the pickpocket (Attack, Brawl), or turn tail and run (Flee). Beaten, he
  * sits on the ground with his hands up.
+ *
+ * Mission 5 ("A felmondás") borrows the same fighting for the people in
+ * Friedrich Hermann's shop on Garay utca: old Hermann, who goes down at
+ * the first blow, his son Géza and his two clerks.
  */
 UENUM()
 enum class ERuffian : uint8
@@ -23,7 +27,12 @@ enum class ERuffian : uint8
 	Bika,
 	Svihak,
 	Csontos,
-	Pottom
+	Pottom,
+	// Mission 5: Friedrich Hermann's shop.
+	Hermann,
+	Geza,
+	ClerkOne,
+	ClerkTwo
 };
 
 UCLASS()
