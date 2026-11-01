@@ -14,6 +14,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "CarBody.h"
 #include "FightSound.h"
+#include "HorseCart.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
@@ -247,7 +248,7 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		APestiHUD::Show(this, 1, 0.f, FColor::White,
-			TEXT("On foot   (F: get in or steal a car, Shift: sprint, Space: jump, or vault and slide running at things, N: traffic view, P: police test, F9: new game)"));
+			TEXT("On foot   (F: get in or steal a car, or climb onto a cart, Shift: sprint, Space: jump, or vault and slide running at things, N: traffic view, P: police test, F9: new game)"));
 	}
 }
 
@@ -422,6 +423,17 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 	if (GetWorld()->GetTimeSeconds() - OutOfCarTime < PestiPerson::MinTimeOnFoot)
 	{
 		return;
+	}
+	// A horse and cart: up onto the bench.
+	for (TActorIterator<AHorseCart> It(GetWorld()); It; ++It)
+	{
+		if (!It->GetController() && FVector::Dist2D(It->GetBenchLocation(), GetActorLocation()) < EnterCarRange)
+		{
+			SetInWorld(false);
+			It->TakeDriver(this);
+			PC->Possess(*It);
+			return;
+		}
 	}
 	APestiCar* Nearest = nullptr;
 	double NearestDist = EnterCarRange;
