@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Mission.h"
+#include "Ruffian.h"
 #include "MissionZsibvasar.generated.h"
 
 class AHorseCart;
@@ -54,6 +55,13 @@ private:
 	void StopCarrying();
 	/** The goal line and the marker: to the crate, to the cart, or on to where the step goes. */
 	void UpdateGoal(int32 Step);
+	/** The four ruffians, round Pista bácsi's stall. */
+	void SpawnRuffians();
+	ARuffian* GetRuffian(ERuffian Kind) const;
+	/** The fight with them: who goes for him, who waits, who he faces, and the end. */
+	void TickFight();
+	/** He was knocked out or walked off: back round the stall, healed, waiting for him. */
+	void ResetFight();
 
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Pista;
@@ -82,4 +90,14 @@ private:
 	FString DeliverHu;
 	FString DeliverEn;
 	bool bWarned = false;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ARuffian>> Ruffians;
+	/** Where each stands round the stall, and whether he has said his piece going down. */
+	TArray<FTransform> RuffianHomes;
+	TArray<bool> SaidDown;
+	bool bFightOn = false;
+	bool bFoughtBefore = false;
+	/** When the last of them was beaten (s), or below 0. */
+	double WonAt = -1.0;
 };

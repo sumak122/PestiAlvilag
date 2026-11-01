@@ -114,6 +114,8 @@ public:
 	void EndFight();
 	bool IsFighting() const { return Act != Brawl::EAct::None && Act != Brawl::EAct::Beaten; }
 	APestiPerson* GetFoe() const { return Foe.Get(); }
+	/** Turns on another man in the same fight (more than one at once), keeping his breath. */
+	void SetFoe(APestiPerson* InFoe) { Foe = InFoe; }
 	Brawl::EAct GetAct() const { return Act; }
 	float GetStamina() const { return Stamina; }
 	/** In the middle of a vault or a slide. */

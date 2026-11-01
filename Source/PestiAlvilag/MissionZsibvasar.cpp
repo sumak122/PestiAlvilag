@@ -13,9 +13,12 @@
 #include "MarketHall.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonKit.h"
+#include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
+#include "Ruffian.h"
 #include "StoryPerson.h"
 
 namespace Zsibvasar
@@ -56,6 +59,37 @@ namespace Zsibvasar
 
 	const TCHAR* const PistaName = TEXT("Pista b\u00e1csi");
 	const TCHAR* const PorterName = TEXT("Feri, a hord\u00e1r");
+
+	// The ruffians crowd round Pista bácsi (he stands behind his stall,
+	// facing it): round his back and sides, at these angles from the way he
+	// faces (degrees) and this far from him (cm), in ERuffian order; where
+	// a stall or another of them is in the way, a little further round.
+	const double RuffianAngles[] = { 180.0, 130.0, -130.0, 160.0 };
+	const double RuffianDistances[] = { 125.0, 165.0, 165.0, 245.0 };
+	constexpr double TryAround = 30.0;
+	constexpr int32 TriesAround = 12;
+	constexpr double FurtherOut = 80.0;
+	constexpr double KeepFromEachOther = 95.0;
+	constexpr float BodyRadius = 40.f;
+	constexpr float BodyHalfHeight = 88.f;
+	// They go for the player in this order, two at a time; Pöttöm, last, runs.
+	const ERuffian FightOrder[] = { ERuffian::Svihak, ERuffian::Csontos, ERuffian::Bika };
+	constexpr int32 AtOnce = 2;
+	// The second man in holds back this much (think slower, no grabbing).
+	constexpr float SecondEager = 0.6f;
+	// Those waiting their turn stand round him this far off (cm), at these
+	// angles from the way he faces (degrees).
+	constexpr double RingRadius = 380.0;
+	const double RingAngles[] = { 75.0, -75.0, 125.0, -125.0 };
+	// The fight starts with him on foot this close to Pista bácsi (cm);
+	// walking this far off leaves it, and they wait for him again.
+	constexpr double FightStarts = 700.0;
+	constexpr double FightLeft = 3500.0;
+	// Another man coming at him this much closer than the one he faces: he turns to him.
+	constexpr double TurnShare = 0.6;
+	constexpr float FightRadius = 600.f;
+	// Pista bácsi thanks him this long after the last one runs (s).
+	constexpr double ThanksAfter = 4.0;
 
 	/** A mesh of the mission's own from a model piece, painted. */
 	UProceduralMeshComponent* MakeMesh(AActor* InOwner, UMaterialInterface* Material, const PersonKit::FPiece& Piece)
@@ -190,10 +224,24 @@ void AMissionZsibvasar::SetUpMission()
 	Deliver.bOnFoot = false;
 	Deliver.bManual = true;
 	Steps.Add(Deliver);
+
+	FMissionStep Defend;
+	Defend.GoalHu = TEXT("V\u00e9dd meg Pista b\u00e1csit a jasszokt\u00f3l");
+	Defend.GoalEn = TEXT("Protect Pista b\u00e1csi from the ruffians");
+	Defend.Target = PistaAt;
+	Defend.Radius = Zsibvasar::FightRadius;
+	Defend.bGuide = false;
+	Defend.bManual = true;
+	Steps.Add(Defend);
 }
 
 void AMissionZsibvasar::OnStepStarted(int32 Step)
 {
+	// Out of sight while he fetches the crates, the ruffians come to Pista bácsi's stall.
+	if (Step == 4 && Ruffians.Num() == 0)
+	{
+		SpawnRuffians();
+	}
 	if (Step == 3)
 	{
 		if (Porter)
@@ -245,9 +293,23 @@ void AMissionZsibvasar::OnStepDone(int32 Step)
 		{
 			Pista->FaceTowards(Player->GetActorLocation());
 		}
+		Say(TEXT("Bika"),
+			TEXT("Na, \u00f6reg, hol a hetip\u00e9nz? Vagy sz\u00e9tszedj\u00fck a k\u00f3cer\u00e1jt?"),
+			TEXT("Well, old man, where's this week's money? Or shall we take your junk shop apart?"), 6.f);
+		SayLater(6.f, Zsibvasar::PistaName,
+			TEXT("Fiam, ezek a jasszok minden h\u00e9ten p\u00e9nzt szednek t\u0151lem. Nem tudn\u00e1l tenni valamit?"),
+			TEXT("Son, these ruffians take money off me every week. Couldn't you do something?"));
+	}
+	else if (Step == 5)
+	{
+		Lines.Reset();
+		if (Pista && Player)
+		{
+			Pista->FaceTowards(Player->GetActorLocation());
+		}
 		Say(Zsibvasar::PistaName,
-			TEXT("Mind a hat? Der\u00e9k fi\u00fa vagy! Itt a fuvard\u00edj."),
-			TEXT("All six? Good lad! Here's your fare."), 7.f);
+			TEXT("K\u00f6sz\u00f6n\u00f6m, fiam! Ezek t\u00f6bbet nem j\u00f6nnek ide. Itt a fuvard\u00edj, meg egy kis r\u00e1ad\u00e1s."),
+			TEXT("Thank you, son! They won't come round here again. Here's your fare, and a little extra."), 8.f);
 	}
 }
 
@@ -286,6 +348,11 @@ void AMissionZsibvasar::TickStep(int32 Step, float DeltaSeconds)
 		FinishStep();
 		return;
 	}
+	if (Step == 5)
+	{
+		TickFight();
+		return;
+	}
 	if (Step == 4 && Cart->GetCrates() >= HorseCartModel::MaxCrates
 		&& FVector::Dist2D(Cart->GetActorLocation(), PistaAt) < Zsibvasar::DeliverRadius)
 	{
@@ -298,6 +365,14 @@ void AMissionZsibvasar::TickStep(int32 Step, float DeltaSeconds)
 void AMissionZsibvasar::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopCarrying();
+	for (ARuffian* Tough : Ruffians)
+	{
+		if (IsValid(Tough))
+		{
+			Tough->Destroy();
+		}
+	}
+	Ruffians.Reset();
 	for (UProceduralMeshComponent* Crate : GroundCrates)
 	{
 		if (Crate)
@@ -521,5 +596,260 @@ void AMissionZsibvasar::UpdateGoal(int32 Step)
 	if (FVector::Dist(Want, Current.Target) > Zsibvasar::MarkerMoves)
 	{
 		SetStepTarget(Want);
+	}
+}
+
+void AMissionZsibvasar::SpawnRuffians()
+{
+	const double PistaYaw = Pista ? Pista->GetActorRotation().Yaw : 0.0;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RuffianSpot), false, this);
+	if (Pista)
+	{
+		Params.AddIgnoredActor(Pista);
+	}
+	const FCollisionShape Body = FCollisionShape::MakeCapsule(Zsibvasar::BodyRadius, Zsibvasar::BodyHalfHeight);
+	TArray<FVector2D> Taken;
+	for (int32 r = 0; r < static_cast<int32>(UE_ARRAY_COUNT(Zsibvasar::RuffianAngles)); ++r)
+	{
+		// The first free spot from the one he would like, trying either way round.
+		FVector2D Spot = FVector2D::ZeroVector;
+		double Z = PistaAt.Z;
+		bool bFound = false;
+		for (int32 Ring = 0; Ring < 2 && !bFound; ++Ring)
+		{
+			for (int32 t = 0; t <= Zsibvasar::TriesAround && !bFound; ++t)
+			{
+				const double Turn = (t % 2 == 0 ? 1.0 : -1.0) * ((t + 1) / 2) * Zsibvasar::TryAround;
+				const double Angle = PistaYaw + Zsibvasar::RuffianAngles[r] + Turn;
+				const double Distance = Zsibvasar::RuffianDistances[r] + Ring * Zsibvasar::FurtherOut;
+				const FVector2D Try = FVector2D(PistaAt) + FVector2D(FRotator(0.0, Angle, 0.0).RotateVector(FVector::ForwardVector)) * Distance;
+				bool bCrowded = false;
+				for (const FVector2D& Other : Taken)
+				{
+					bCrowded |= FVector2D::Distance(Other, Try) < Zsibvasar::KeepFromEachOther;
+				}
+				const double TryZ = GroundZ(Try, PistaAt.Z - PersonModel::MiddleHeight) + PersonModel::MiddleHeight + 10.0;
+				if (!bCrowded && !GetWorld()->OverlapBlockingTestByChannel(FVector(Try, TryZ), FQuat::Identity, ECC_Pawn, Body, Params))
+				{
+					Spot = Try;
+					Z = TryZ;
+					bFound = true;
+				}
+			}
+		}
+		if (!bFound)
+		{
+			// Nowhere clear: where he would like, and the spawn nudges him out.
+			Spot = FVector2D(PistaAt) + FVector2D(FRotator(0.0, PistaYaw + Zsibvasar::RuffianAngles[r], 0.0).RotateVector(FVector::ForwardVector)) * Zsibvasar::RuffianDistances[r];
+			Z = GroundZ(Spot, PistaAt.Z - PersonModel::MiddleHeight) + PersonModel::MiddleHeight + 10.0;
+		}
+		Taken.Add(Spot);
+		const FVector2D Look = FVector2D(PistaAt) - Spot;
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Look.Y, Look.X));
+		const FTransform Place(FRotator(0.0, Yaw, 0.0), FVector(Spot, Z));
+		ARuffian* Tough = GetWorld()->SpawnActorDeferred<ARuffian>(ARuffian::StaticClass(), Place, this, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+		if (!Tough)
+		{
+			continue;
+		}
+		Tough->Kind = static_cast<ERuffian>(r);
+		Tough->FinishSpawning(Place);
+		Ruffians.Add(Tough);
+		RuffianHomes.Add(Place);
+		SaidDown.Add(false);
+	}
+}
+
+ARuffian* AMissionZsibvasar::GetRuffian(ERuffian Kind) const
+{
+	for (ARuffian* Tough : Ruffians)
+	{
+		if (Tough && Tough->Kind == Kind)
+		{
+			return Tough;
+		}
+	}
+	return nullptr;
+}
+
+void AMissionZsibvasar::ResetFight()
+{
+	bFightOn = false;
+	if (APestiPerson* Person = Cast<APestiPerson>(GetPlayer()))
+	{
+		if (Person->GetAct() != Brawl::EAct::None)
+		{
+			Person->EndFight();
+		}
+	}
+	for (int32 r = 0; r < Ruffians.Num(); ++r)
+	{
+		if (Ruffians[r])
+		{
+			Ruffians[r]->StandAgain(RuffianHomes[r].GetLocation(), RuffianHomes[r].Rotator().Yaw);
+		}
+		SaidDown[r] = false;
+	}
+	Steps[5].GoalHu = TEXT("Menj vissza, \u00e9s v\u00e9dd meg Pista b\u00e1csit");
+	Steps[5].GoalEn = TEXT("Go back and protect Pista b\u00e1csi");
+	SetStepTarget(PistaAt);
+}
+
+void AMissionZsibvasar::TickFight()
+{
+	APestiPerson* Person = Cast<APestiPerson>(GetPlayer());
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	ARuffian* Boss = GetRuffian(ERuffian::Bika);
+	ARuffian* Little = GetRuffian(ERuffian::Pottom);
+
+	if (!bFightOn)
+	{
+		// They wait round the stall until he comes over on foot.
+		const bool bNear = Person && !Person->IsRiding() && FVector::Dist2D(Person->GetActorLocation(), PistaAt) < Zsibvasar::FightStarts;
+		if (!bNear || (Game && Game->IsFainted()))
+		{
+			return;
+		}
+		bFightOn = true;
+		Lines.Reset();
+		if (bFoughtBefore)
+		{
+			Say(TEXT("Bika"), TEXT("Visszaj\u00f6tt\u00e9l? H\u00e1t nem volt el\u00e9g?"), TEXT("Back again? Wasn't once enough?"), 5.f);
+		}
+		else
+		{
+			Say(TEXT("Bika"), TEXT("Ki ez a taknyos? Fi\u00fak, int\u00e9zz\u00e9tek el!"), TEXT("Who's this whelp? Lads, sort him out!"), 5.f);
+		}
+		bFoughtBefore = true;
+		for (ARuffian* Tough : Ruffians)
+		{
+			if (Tough)
+			{
+				Tough->Circle(Person, Tough->GetActorLocation());
+			}
+		}
+	}
+
+	// Knocked out (he comes round at home), or walked off: they wait for him again.
+	if (!Person || (Game && Game->IsFainted()) || FVector::Dist2D(Person->GetActorLocation(), PistaAt) > Zsibvasar::FightLeft)
+	{
+		if (Person && !(Game && Game->IsFainted()))
+		{
+			Say(TEXT("Bika"), TEXT("Na, ez is elszaladt!"), TEXT("Well, off he runs!"), 4.f);
+		}
+		ResetFight();
+		return;
+	}
+
+	// Who is still on his feet, in the order they go for him.
+	TArray<ARuffian*> Standing;
+	for (const ERuffian Kind : Zsibvasar::FightOrder)
+	{
+		ARuffian* Tough = GetRuffian(Kind);
+		if (Tough && !Tough->IsBeaten())
+		{
+			Standing.Add(Tough);
+		}
+	}
+	// A word from each as he goes down.
+	for (int32 r = 0; r < Ruffians.Num(); ++r)
+	{
+		if (Ruffians[r] && Ruffians[r]->IsBeaten() && !SaidDown[r])
+		{
+			SaidDown[r] = true;
+			if (Ruffians[r] == Boss)
+			{
+				Say(TEXT("Bika"), TEXT("El\u00e9g, el\u00e9g! Megadom magam!"), TEXT("Enough, enough! I give up!"), 4.f);
+			}
+		}
+	}
+
+	// All three down: the little one runs for it, and it's over.
+	if (Standing.Num() == 0)
+	{
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (WonAt < 0.0)
+		{
+			WonAt = Now;
+			if (Person->GetAct() != Brawl::EAct::None)
+			{
+				Person->EndFight();
+			}
+			if (Little)
+			{
+				Little->Flee(Person);
+				Say(TEXT("P\u00f6tt\u00f6m"), TEXT("Megemlegeted ezt! Sz\u00f3lok a nagyb\u00e1ty\u00e1mnak!"), TEXT("You'll pay for this! I'm telling my uncle!"), 4.f);
+			}
+			Steps[5].GoalHu = TEXT("Elverted a jasszokat");
+			Steps[5].GoalEn = TEXT("You beat the ruffians");
+		}
+		// Let him have his say before Pista bácsi has his.
+		else if (Now - WonAt >= Zsibvasar::ThanksAfter)
+		{
+			FinishStep();
+		}
+		return;
+	}
+
+	// Two go for him; the rest stand round him with their fists up, waiting.
+	const double PersonYaw = Person->GetActorRotation().Yaw;
+	const FVector Middle = Person->GetActorLocation();
+	int32 Ring = 0;
+	TArray<ARuffian*> Waiting;
+	for (int32 k = Zsibvasar::AtOnce; k < Standing.Num(); ++k)
+	{
+		Waiting.Add(Standing[k]);
+	}
+	if (Little)
+	{
+		Waiting.Add(Little);
+	}
+	for (ARuffian* Tough : Waiting)
+	{
+		const double Angle = PersonYaw + Zsibvasar::RingAngles[Ring % static_cast<int32>(UE_ARRAY_COUNT(Zsibvasar::RingAngles))];
+		const FVector Spot = Middle + FRotator(0.0, Angle, 0.0).RotateVector(FVector::ForwardVector) * Zsibvasar::RingRadius;
+		Tough->Circle(Person, Spot);
+		++Ring;
+	}
+	for (int32 k = 0; k < FMath::Min(Zsibvasar::AtOnce, Standing.Num()); ++k)
+	{
+		Standing[k]->Attack(Person, k == 0 ? 1.f : Zsibvasar::SecondEager);
+	}
+
+	// He faces the nearest man coming at him, and turns to another who gets much closer.
+	ARuffian* Nearest = nullptr;
+	double NearestApart = TNumericLimits<double>::Max();
+	for (int32 k = 0; k < FMath::Min(Zsibvasar::AtOnce, Standing.Num()); ++k)
+	{
+		const double Apart = FVector::Dist2D(Standing[k]->GetActorLocation(), Middle);
+		if (Apart < NearestApart)
+		{
+			NearestApart = Apart;
+			Nearest = Standing[k];
+		}
+	}
+	ARuffian* Facing = Cast<ARuffian>(Person->GetFoe());
+	const bool bFacingAttacker = Facing && Facing->IsAttacking() && !Facing->IsBeaten();
+	if (!Person->IsFighting())
+	{
+		Person->StartFight(Nearest);
+	}
+	else if (!bFacingAttacker
+		|| (Nearest != Facing && NearestApart < FVector::Dist2D(Facing->GetActorLocation(), Middle) * Zsibvasar::TurnShare))
+	{
+		const Brawl::EAct Doing = Person->GetAct();
+		// Not in the middle of holding someone.
+		if (Doing != Brawl::EAct::Holding && Doing != Brawl::EAct::Knee && Doing != Brawl::EAct::Held)
+		{
+			Person->SetFoe(Nearest);
+		}
+	}
+
+	Steps[5].GoalHu = FString::Printf(TEXT("Verd el a jasszokat (%d maradt)"), Standing.Num());
+	Steps[5].GoalEn = FString::Printf(TEXT("Beat the ruffians (%d left)"), Standing.Num());
+	if (Nearest)
+	{
+		SetStepTarget(Nearest->GetActorLocation());
 	}
 }
