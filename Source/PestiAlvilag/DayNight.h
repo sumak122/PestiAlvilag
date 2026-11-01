@@ -100,8 +100,11 @@ public:
 	 */
 	void AddNightGlow(UMeshComponent* Mesh, int32 Slot, const FLinearColor& Color, float Strength);
 
-	/** A street lamp's lantern: at night the nearest ones light the ground, the rest show a glow under them. */
-	void AddLamp(const FVector& At) { Lamps.Add(At); }
+	/** A street lamp's lantern: at night the nearest ones light the ground, the rest show a glow under them. Returns its number, for SetLampOut. */
+	int32 AddLamp(const FVector& At) { LampOut.Add(false); return Lamps.Add(At); }
+
+	/** A lamp knocked down (bOut) goes dark, its glow on the ground too; put up again, it lights again. */
+	void SetLampOut(int32 Lamp, bool bOut);
 
 	/**
 	 * An unlit see-through material (window glass, smoke): it gives off its
@@ -132,6 +135,8 @@ private:
 	void UpdateGlows(bool bForce);
 	void UpdateLampLights();
 	void BuildLightPools();
+	/** Lays the glow on the ground under each lamp that is not out. */
+	void MeshLightPools();
 	void FindSeeThroughs();
 	void UpdateSeeThrough(bool bForce);
 	void ShadeSeeThrough(const FSeeThrough& Glass) const;
@@ -181,6 +186,10 @@ private:
 	bool bLightPoolsBuilt = false;
 
 	TArray<FVector> Lamps;
+	/** Which lamps are knocked down, one for each in Lamps. */
+	TArray<bool> LampOut;
+	/** The ground height under each lamp, found when the glows are first laid. */
+	TArray<double> PoolGround;
 
 	float Hour = 16.f;
 	float Darkness = 0.f;
