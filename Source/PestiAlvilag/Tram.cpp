@@ -33,8 +33,6 @@ namespace Tram
 	constexpr float AxleSpread = 300.f;
 	// How far ahead the tram watches the rails (cm).
 	constexpr float LookAhead = 3000.f;
-	// Seconds held up by an AI car before pushing on regardless.
-	constexpr float MaxHeldUp = 6.f;
 	// Seconds out of sight between leaving the map and coming back in.
 	constexpr float MinTurnaround = 6.f;
 	constexpr float MaxTurnaround = 15.f;
@@ -101,7 +99,8 @@ ATram::ATram()
 	BaseMaterial = CarBody::LoadPaintMaterial();
 
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
-	CollisionBox->SetBoxExtent(Tram::BoxExtent);
+	HalfSize = Tram::BoxExtent;
+	CollisionBox->SetBoxExtent(HalfSize);
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
 
@@ -137,34 +136,39 @@ void ATram::BuildBody()
 		const TramModel::FPart& Part = B.Parts[i];
 		Body->CreateMeshSection_LinearColor(i, Part.Vertices, Part.Triangles, Part.Normals,
 			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
-		if (i == TramModel::Glass)
+		PaintSection(Body, i, Tram::Colors[i], i == TramModel::Glass);
+	}
+}
+
+void ATram::PaintSection(UProceduralMeshComponent* Mesh, int32 Section, const FLinearColor& Color, bool bGlass)
+{
+	if (bGlass)
+	{
+		if (!SeeThroughMaterial)
 		{
-			if (!SeeThroughMaterial)
-			{
-				// No see-through material: leave the panes out, as clear glass.
-				Body->ClearMeshSection(i);
-				continue;
-			}
-			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(SeeThroughMaterial, this);
-			if (WhiteTexture)
-			{
-				Material->SetTextureParameterValue(TEXT("SlateUI"), WhiteTexture);
-			}
-			Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
-			Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tram::Colors[i]);
-			// Unlit, so it is darkened with the night instead of shining.
-			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
-			{
-				Clock->AddSeeThrough(Material, Tram::Colors[i]);
-			}
-			Body->SetMaterial(i, Material);
+			// No see-through material: leave the panes out, as clear glass.
+			Mesh->ClearMeshSection(Section);
+			return;
 		}
-		else if (BaseMaterial)
+		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(SeeThroughMaterial, this);
+		if (WhiteTexture)
 		{
-			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-			Material->SetVectorParameterValue(TEXT("Color"), Tram::Colors[i]);
-			Body->SetMaterial(i, Material);
+			Material->SetTextureParameterValue(TEXT("SlateUI"), WhiteTexture);
 		}
+		Material->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
+		Material->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Color);
+		// Unlit, so it is darkened with the night instead of shining.
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			Clock->AddSeeThrough(Material, Color);
+		}
+		Mesh->SetMaterial(Section, Material);
+	}
+	else if (BaseMaterial)
+	{
+		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		Material->SetVectorParameterValue(TEXT("Color"), Color);
+		Mesh->SetMaterial(Section, Material);
 	}
 }
 
@@ -176,10 +180,10 @@ void ATram::SeatPassengers()
 	}
 
 	FRandomStream Random(FMath::Rand());
-	const int32 Count = Random.RandRange(Tram::MinPassengers, Tram::MaxPassengers);
+	const int32 Count = FMath::Min(Random.RandRange(Tram::MinPassengers, Tram::MaxPassengers), GetNumSeats() - 1);
 	while (TakenSeats.Num() < Count)
 	{
-		const int32 Index = Random.RandRange(0, TramModel::NumSeats - 1);
+		const int32 Index = Random.RandRange(0, GetNumSeats() - 1);
 		if (TakenSeats.Contains(Index) || Index == ReservedSeat)
 		{
 			continue;
@@ -190,10 +194,12 @@ void ATram::SeatPassengers()
 
 void ATram::AddPassenger(int32 SeatIndex, const PersonKit::FOutfit& Outfit)
 {
-	const TramModel::FSeat Place = TramModel::Seat(SeatIndex, PersonModel::SeatedMiddle);
+	FVector SeatAt;
+	double SeatYaw = 0.0;
+	GetSeat(SeatIndex, SeatAt, SeatYaw);
 	USceneComponent* Seat = NewObject<USceneComponent>(this);
 	Seat->SetupAttachment(CollisionBox);
-	Seat->SetRelativeLocationAndRotation(Place.At, FRotator(0.0, Place.Yaw, 0.0));
+	Seat->SetRelativeLocationAndRotation(SeatAt, FRotator(0.0, SeatYaw, 0.0));
 	Seat->RegisterComponent();
 	AddInstanceComponent(Seat);
 
@@ -267,6 +273,13 @@ FVector ATram::GetDoorNear(const FVector& Point) const
 	return GetActorTransform().TransformPosition(Step);
 }
 
+void ATram::GetSeat(int32 Index, FVector& OutAt, double& OutYaw) const
+{
+	const TramModel::FSeat Place = TramModel::Seat(Index, PersonModel::SeatedMiddle);
+	OutAt = Place.At;
+	OutYaw = Place.Yaw;
+}
+
 int32 ATram::GetFreeSeat() const
 {
 	// Nearest the middle of the car first, so the player sits in view.
@@ -294,7 +307,7 @@ void ATram::StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float I
 	{
 		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
 		{
-			Clock->AddNightGlow(Body, TramModel::Lamp, Tram::LampLight, Tram::LampGlow);
+			Clock->AddNightGlow(Body, LampSection, Tram::LampLight, Tram::LampGlow);
 			bNightGlowAdded = true;
 		}
 	}
@@ -361,12 +374,7 @@ void ATram::Tick(float DeltaSeconds)
 			return;
 		}
 		++NextStop;
-		// "Ding-ding": off we go.
-		if (Sound && bSoundHeard)
-		{
-			Sound->Ring();
-			BellWait = Tram::BellPause;
-		}
+		LeaveStop();
 	}
 
 	float WantedSpeed = FMath::Min(MaxSpeed, Route.Speed);
@@ -391,7 +399,7 @@ void ATram::Tick(float DeltaSeconds)
 	const float ClearAll = Manager->ClearDistanceAhead(this, Tram::LookAhead);
 	const bool bHeldUpByCar = ClearAll < StopGap + 200.f && Manager->ClearDistanceAhead(this, Tram::LookAhead, true) >= StopGap + 200.f;
 	HeldUpTime = bHeldUpByCar ? HeldUpTime + DeltaSeconds : 0.f;
-	const float Clear = HeldUpTime > Tram::MaxHeldUp ? Manager->ClearDistanceAhead(this, Tram::LookAhead, true) : ClearAll;
+	const float Clear = HeldUpTime > MaxHeldUpTime ? Manager->ClearDistanceAhead(this, Tram::LookAhead, true) : ClearAll;
 	WantedSpeed *= FMath::Clamp((Clear - StopGap) / (Tram::LookAhead - StopGap), 0.f, 1.f);
 
 	const float Rate = WantedSpeed < CurrentSpeed ? BrakeDeceleration : Acceleration;
@@ -416,15 +424,33 @@ void ATram::WarnPlayerAhead(float DeltaSeconds)
 {
 	BellWait -= DeltaSeconds;
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-	if (!Sound || !bSoundHeard || BellWait > 0.f || !Player || CurrentSpeed < Tram::HarmlessSpeed)
+	if (BellWait > 0.f || !Player || CurrentSpeed < Tram::HarmlessSpeed)
 	{
 		return;
 	}
 	// Someone (on foot or in a car) standing on the rails in front.
 	const FVector Local = GetActorTransform().InverseTransformPosition(Player->GetActorLocation());
-	if (Local.X > Tram::BoxExtent.X && Local.X < Tram::BoxExtent.X + Tram::WarnReach && FMath::Abs(Local.Y) < Tram::BoxExtent.Y + Tram::HitReach)
+	if (Local.X > HalfSize.X && Local.X < HalfSize.X + Tram::WarnReach && FMath::Abs(Local.Y) < HalfSize.Y + Tram::HitReach && RingBell())
 	{
-		Sound->Ring();
+		BellWait = Tram::BellPause;
+	}
+}
+
+bool ATram::RingBell()
+{
+	if (!Sound || !bSoundHeard)
+	{
+		return false;
+	}
+	Sound->Ring();
+	return true;
+}
+
+void ATram::LeaveStop()
+{
+	// "Ding-ding": off we go.
+	if (RingBell())
+	{
 		BellWait = Tram::BellPause;
 	}
 }
@@ -447,7 +473,7 @@ void ATram::UpdateSound()
 			Sound->bOverrideAttenuation = true;
 			Sound->AttenuationOverrides.bAttenuate = true;
 			Sound->AttenuationOverrides.bSpatialize = true;
-			Sound->AttenuationOverrides.AttenuationShapeExtents = FVector(Tram::BoxExtent.X, 0.0, 0.0);
+			Sound->AttenuationOverrides.AttenuationShapeExtents = FVector(HalfSize.X, 0.0, 0.0);
 			Sound->AttenuationOverrides.FalloffDistance = Tram::SoundFalloff;
 			Sound->RegisterComponent();
 			AddInstanceComponent(Sound);
@@ -487,8 +513,8 @@ void ATram::HitPlayerInTheWay()
 	}
 	// Only the front of the tram, where he would be in its way.
 	const FVector Local = GetActorTransform().InverseTransformPosition(Person->GetActorLocation());
-	if (Local.X < Tram::BoxExtent.X - Tram::FrontReach || Local.X > Tram::BoxExtent.X + Tram::HitReach
-		|| FMath::Abs(Local.Y) > Tram::BoxExtent.Y + Tram::HitReach || FMath::Abs(Local.Z) > Tram::BoxExtent.Z + Tram::HitReach)
+	if (Local.X < HalfSize.X - Tram::FrontReach || Local.X > HalfSize.X + Tram::HitReach
+		|| FMath::Abs(Local.Y) > HalfSize.Y + Tram::HitReach || FMath::Abs(Local.Z) > HalfSize.Z + Tram::HitReach)
 	{
 		return;
 	}
@@ -503,7 +529,7 @@ void ATram::PlaceOnTrack()
 	FVector Location = Route.LocationAt(Distance);
 	const FVector Ahead = Route.LocationAt(Distance + Tram::AxleSpread);
 	const FVector Behind = Route.LocationAt(Distance - Tram::AxleSpread);
-	Location.Z = GroundZ + Tram::BoxExtent.Z + 2.0;
+	Location.Z = GroundZ + HalfSize.Z + 2.0;
 	const FRotator Facing = (Ahead - Behind).GetSafeNormal2D().Rotation();
 	const FVector FrontHalf = (Ahead - Location).GetSafeNormal2D();
 	const FVector BackHalf = (Location - Behind).GetSafeNormal2D();
@@ -533,7 +559,7 @@ void ATram::UpdateInsideLight()
 	{
 		InsideLight = NewObject<UPointLightComponent>(this);
 		InsideLight->SetupAttachment(Body);
-		InsideLight->SetRelativeLocation(FVector(0.0, 0.0, TramModel::RoofBottom - 25.0));
+		InsideLight->SetRelativeLocation(FVector(0.0, 0.0, InsideLightZ));
 		InsideLight->SetMobility(EComponentMobility::Movable);
 		InsideLight->SetCastShadows(false);
 		InsideLight->SetIntensityUnits(ELightUnits::Candelas);

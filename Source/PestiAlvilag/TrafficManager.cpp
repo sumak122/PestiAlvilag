@@ -23,6 +23,7 @@
 #include "TrafficCar.h"
 #include "PoliceCar.h"
 #include "PolicePatrols.h"
+#include "Bus.h"
 #include "Tram.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
@@ -48,6 +49,11 @@ namespace Traffic
 	constexpr float CorridorHalfWidth = 220.f;
 	// Free track a tram needs around it to be placed at the start (cm).
 	constexpr float TramSpawnRoom = 2000.f;
+	// A bus needs this much room among the cars to be placed, and tries this
+	// many places this far apart along its route (cm).
+	constexpr float BusSpawnRoom = 1200.f;
+	constexpr int32 BusSpawnTries = 8;
+	constexpr float BusSpawnStep = 1500.f;
 	// Height of the car's centre above the road surface (hover + half height).
 	constexpr float RideHeight = 90.f;
 	// A taxi pulling out from the kerb heads for a lane point at least this far ahead (cm).
@@ -450,10 +456,17 @@ FVector FTramRoute::LocationAt(float Distance) const
 
 void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
 {
+	LoadRoutes(Root, TEXT("trams"), false);
+	LoadRoutes(Root, TEXT("buses"), true);
+	UE_LOG(LogTraffic, Log, TEXT("Loaded %d tram and bus routes"), TramRoutes.Num());
+}
+
+void ATrafficManager::LoadRoutes(const FJsonObject& Root, const TCHAR* Field, bool bBuses)
+{
 	const TArray<TSharedPtr<FJsonValue>>* RouteValues = nullptr;
-	if (!Root.TryGetArrayField(TEXT("trams"), RouteValues))
+	if (!Root.TryGetArrayField(Field, RouteValues))
 	{
-		UE_LOG(LogTraffic, Warning, TEXT("%s has no tram routes; rerun osm_to_graybox.py"), *DataFile);
+		UE_LOG(LogTraffic, Warning, TEXT("%s has no %s routes; rerun osm_to_graybox.py"), *DataFile, Field);
 		return;
 	}
 
@@ -467,8 +480,14 @@ void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
 		}
 
 		FTramRoute& Route = TramRoutes.AddDefaulted_GetRef();
+		Route.bBus = bBuses;
 		Route.Ref = RouteObject->GetStringField(TEXT("ref"));
 		RouteObject->TryGetStringField(TEXT("name"), Route.Name);
+		double RouteSpeed = 0.0;
+		if (RouteObject->TryGetNumberField(TEXT("speed"), RouteSpeed) && RouteSpeed > 0.0)
+		{
+			Route.Speed = static_cast<float>(RouteSpeed);
+		}
 		for (int32 i = 0; i + 1 < Coords->Num(); i += 2)
 		{
 			const FVector Point((*Coords)[i]->AsNumber(), (*Coords)[i + 1]->AsNumber(), 0.0);
@@ -502,7 +521,6 @@ void ATrafficManager::LoadTramRoutes(const FJsonObject& Root)
 			}
 		}
 	}
-	UE_LOG(LogTraffic, Log, TEXT("Loaded %d tram routes"), TramRoutes.Num());
 }
 
 void ATrafficManager::SpawnTrams()
@@ -515,31 +533,38 @@ void ATrafficManager::SpawnTrams()
 	for (int32 RouteIdx = 0; RouteIdx < TramRoutes.Num(); ++RouteIdx)
 	{
 		const FTramRoute& Route = TramRoutes[RouteIdx];
-		const int32 Count = FMath::Max(1, FMath::RoundToInt(Route.Length / TramSpacing));
+		const int32 Count = FMath::Max(1, FMath::RoundToInt(Route.Length / (Route.bBus ? BusSpacing : TramSpacing)));
 		const float Spacing = Route.Length / Count;
 		const float Offset = FMath::FRandRange(0.f, Spacing);
 		for (int32 n = 0; n < Count; ++n)
 		{
-			const float Distance = Offset + n * Spacing;
-			const FVector Location = Route.LocationAt(Distance);
-			if (Player && FVector::Dist2D(Location, Player->GetActorLocation()) < 3000.f)
+			// A bus starts among the cars: if its place is taken, it tries a little further along.
+			const int32 Tries = Route.bBus ? Traffic::BusSpawnTries : 1;
+			for (int32 Try = 0; Try < Tries; ++Try)
 			{
-				continue;
-			}
-			// Lines share tracks: don't start a tram on top of another line's.
-			if (!IsAreaClear(Location, Traffic::TramSpawnRoom, nullptr))
-			{
-				continue;
-			}
-			ATram* NewTram = World->SpawnActor<ATram>(ATram::StaticClass(), Location, FRotator::ZeroRotator, SpawnParams);
-			if (NewTram)
-			{
-				NewTram->StartOnRoute(this, RouteIdx, Distance);
-				Trams.Add(NewTram);
+				const float Distance = FMath::Fmod(Offset + n * Spacing + Try * Traffic::BusSpawnStep, Route.Length);
+				const FVector Location = Route.LocationAt(Distance);
+				if (Player && FVector::Dist2D(Location, Player->GetActorLocation()) < 3000.f)
+				{
+					continue;
+				}
+				// Lines share tracks: don't start a tram on top of another line's.
+				if (!IsAreaClear(Location, Route.bBus ? Traffic::BusSpawnRoom : Traffic::TramSpawnRoom, nullptr))
+				{
+					continue;
+				}
+				UClass* Kind = Route.bBus ? ABus::StaticClass() : ATram::StaticClass();
+				ATram* NewTram = World->SpawnActor<ATram>(Kind, Location, FRotator::ZeroRotator, SpawnParams);
+				if (NewTram)
+				{
+					NewTram->StartOnRoute(this, RouteIdx, Distance);
+					Trams.Add(NewTram);
+				}
+				break;
 			}
 		}
 	}
-	UE_LOG(LogTraffic, Log, TEXT("Spawned %d trams"), Trams.Num());
+	UE_LOG(LogTraffic, Log, TEXT("Spawned %d trams and buses"), Trams.Num());
 }
 
 void ATrafficManager::SpawnCars()

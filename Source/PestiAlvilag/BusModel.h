@@ -16,8 +16,8 @@
  * Inside: a driver's seat on the right, and pairs of seats each side of an
  * aisle, so you can see people sitting.
  *
- * Header-only (like TramModel) so it can be built and looked at outside the
- * engine. Frame: X forward, Y right, Z up; the ground is 150 cm below the
+ * ABus drives it in the game. Header-only (like TramModel) so it can be
+ * built and looked at outside the engine. Frame: X forward, Y right, Z up; the ground is 150 cm below the
  * origin (the middle of the bus's collision box). The wheels are built
  * separately (BuildWheel), so the game can turn them.
  */
@@ -623,6 +623,37 @@ namespace BusModel
 		B.Box(Dark, FVector(NoseTip + 2.0, -17.0, -91.5), FVector(NoseTip + 2.5, 17.0, -86.5));
 	}
 
+	/** The passengers' seats: rows of pairs each side of the aisle, all facing forward. */
+	constexpr int32 SeatRows = 7;
+	constexpr int32 SeatsPerRow = 4;
+	constexpr int32 NumSeats = SeatRows * SeatsPerRow;
+	constexpr double FirstRow = SaloonFrom + 15.0;   // the back of the rearmost seat
+	constexpr double SeatPitch = 78.0;
+	constexpr double SeatAisle = 25.0;                // the seats' inner edge, from the middle
+	constexpr double SeatHeight = 46.0;               // the cushion's top above the floor
+
+	struct FSeat
+	{
+		FVector At;
+		double Yaw;
+	};
+
+	/**
+	 * Seat Index (row by row from the back; in each row right aisle, right
+	 * window, left aisle, left window): where a seated person's middle goes,
+	 * SeatedMiddle above the floor, and which way they face (forward).
+	 */
+	inline FSeat Seat(int32 Index, double SeatedMiddle)
+	{
+		const int32 SeatRow = Index / SeatsPerRow;
+		const int32 InRow = Index % SeatsPerRow;
+		const double Sign = InRow < 2 ? 1.0 : -1.0;
+		const double Inner = SeatAisle;
+		const double Outer = HalfWidth - Wall - 2.0;
+		const double Y = Sign * (InRow % 2 == 0 ? Inner + (Outer - Inner) * 0.25 : Inner + (Outer - Inner) * 0.75);
+		return { FVector(FirstRow + SeatPitch * SeatRow + 25.0, Y, FloorTop + SeatedMiddle), 0.0 };
+	}
+
 	/** The driver's place (right) and the seats in pairs each side of the aisle. */
 	inline void BuildInside(FBuilder& B)
 	{
@@ -635,15 +666,16 @@ namespace BusModel
 		// A rail behind the driver.
 		B.Box(Chrome, FVector(Front - 112.0, 10.0, FloorTop), FVector(Front - 108.0, 14.0, WindowTop));
 
-		for (double X = SaloonFrom + 15.0; X < DoorFrom - 40.0; X += 78.0)
+		for (int32 SeatRow = 0; SeatRow < SeatRows; ++SeatRow)
 		{
+			const double X = FirstRow + SeatPitch * SeatRow;
 			for (const double Sign : { -1.0, 1.0 })
 			{
-				const double Y0 = Sign > 0 ? 25.0 : -W + Wall + 2.0;
-				const double Y1 = Sign > 0 ? W - Wall - 2.0 : -25.0;
-				B.Box(Leather, FVector(X + 5.0, Y0, FloorTop + 38.0), FVector(X + 45.0, Y1, FloorTop + 46.0));
-				B.Box(Dark, FVector(X + 15.0, Y0 + 10.0, FloorTop), FVector(X + 35.0, Y1 - 10.0, FloorTop + 38.0));
-				B.Box(Leather, FVector(X, Y0, FloorTop + 46.0), FVector(X + 6.0, Y1, FloorTop + 100.0));
+				const double Y0 = Sign > 0 ? SeatAisle : -W + Wall + 2.0;
+				const double Y1 = Sign > 0 ? W - Wall - 2.0 : -SeatAisle;
+				B.Box(Leather, FVector(X + 5.0, Y0, FloorTop + SeatHeight - 8.0), FVector(X + 45.0, Y1, FloorTop + SeatHeight));
+				B.Box(Dark, FVector(X + 15.0, Y0 + 10.0, FloorTop), FVector(X + 35.0, Y1 - 10.0, FloorTop + SeatHeight - 8.0));
+				B.Box(Leather, FVector(X, Y0, FloorTop + SeatHeight), FVector(X + 6.0, Y1, FloorTop + 100.0));
 				B.Box(Chrome, FVector(X - 1.0, Sign > 0 ? Y0 - 1.0 : Y1 - 3.0, FloorTop + 98.0), FVector(X + 5.0, Sign > 0 ? Y0 + 3.0 : Y1 + 1.0, FloorTop + 104.0));
 			}
 		}

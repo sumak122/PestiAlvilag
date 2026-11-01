@@ -100,7 +100,7 @@ private:
 	void BuildPlayground(const FJsonObject& Playground);
 	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */
 	void BuildTaxiStands(const FJsonObject& Root);
-	/** A stop sign by each tram stop (tram_stops). */
+	/** A stop sign by each tram and bus stop (tram_stops). */
 	void BuildTramStops(const FJsonObject& Root);
 	/** Street food sellers with their carts (food_vendors). */
 	void BuildFoodVendors(const FJsonObject& Root);
