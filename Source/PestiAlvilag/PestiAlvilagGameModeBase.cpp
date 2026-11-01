@@ -52,9 +52,10 @@ namespace PestiStart
 	// Kun utca and Teleki tér, facing the street.
 	const FVector2D HomeDoorAt(58392.f, 21268.f);
 	// Pista bácsi's horse and cart, waiting at the kerb by Tisza Kálmán tér
-	// (II. János Pál pápa tér), a minute's walk from home.
-	const FVector2D HorseCartAt(58708.f, 15060.f);
-	constexpr float HorseCartYaw = -20.8f;
+	// (II. János Pál pápa tér), round the corner from home: along Népszínház
+	// utca to Nagy Fuvaros utca and down it to the park.
+	const FVector2D HorseCartAt(53292.f, 17629.f);
+	constexpr float HorseCartYaw = 159.2f;
 	constexpr float HomeDoorYaw = 108.6f;
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
