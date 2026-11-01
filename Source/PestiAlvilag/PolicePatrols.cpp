@@ -470,6 +470,33 @@ bool APolicePatrols::LoadData()
 	return Lines.Num() > 0 && BoxPlaces.Num() > 0;
 }
 
+double APolicePatrols::BoxGround(const FVector2D& At, double Yaw) const
+{
+	// The pavement itself (the map's ground), not a bench, a lamp or a tram
+	// island in the way, under the middle and the four corners of the step;
+	// the box stands on the lowest so that no corner hangs in the air (the
+	// step reaches down into the higher side).
+	const FVector2D Forward(FMath::Cos(FMath::DegreesToRadians(Yaw)), FMath::Sin(FMath::DegreesToRadians(Yaw)));
+	const FVector2D Side(-Forward.Y, Forward.X);
+	const double Reach = PoliceModel::BoxHalf + 6.0;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PoliceBoxGround), true, this);
+	double Lowest = TNumericLimits<double>::Max();
+	for (const FVector2D& Offset : { FVector2D::ZeroVector, (Forward + Side) * Reach, (Forward - Side) * Reach, (-Forward + Side) * Reach, (-Forward - Side) * Reach })
+	{
+		TArray<FHitResult> Hits;
+		GetWorld()->LineTraceMultiByObjectType(Hits, FVector(At + Offset, 10000.0), FVector(At + Offset, -10000.0), FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+		for (const FHitResult& Hit : Hits)
+		{
+			if (Cast<AOsmGraybox>(Hit.GetActor()))
+			{
+				Lowest = FMath::Min(Lowest, Hit.ImpactPoint.Z);
+				break;
+			}
+		}
+	}
+	return Lowest < TNumericLimits<double>::Max() ? Lowest : 0.0;
+}
+
 void APolicePatrols::SpawnPatrols()
 {
 	UWorld* World = GetWorld();
@@ -478,9 +505,7 @@ void APolicePatrols::SpawnPatrols()
 	for (int32 b = 0; b < BoxPlaces.Num(); ++b)
 	{
 		const FVector2D BoxAt(BoxPlaces[b]);
-		FHitResult Hit;
-		const bool bGround = World->LineTraceSingleByChannel(Hit, FVector(BoxAt, 10000.0), FVector(BoxAt, -10000.0), ECC_Visibility);
-		const double Z = bGround ? Hit.ImpactPoint.Z : 0.0;
+		const double Z = BoxGround(BoxAt, BoxPlaces[b].Z);
 		APoliceBox* NewBox = World->SpawnActor<APoliceBox>(APoliceBox::StaticClass(),
 			FVector(BoxAt, Z + PoliceModel::BoxEaves * 0.5), FRotator(0.0, BoxPlaces[b].Z, 0.0), Params);
 		Boxes.Add(NewBox);
