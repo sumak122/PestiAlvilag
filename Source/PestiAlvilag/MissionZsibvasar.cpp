@@ -115,7 +115,8 @@ namespace Zsibvasar
 
 AMissionZsibvasar::AMissionZsibvasar()
 {
-	MissionId = TEXT("Zsibvasar");
+	// Must match PestiStart::Zsibvasar in the game mode.
+	MissionId = TEXT("Zsibvasar2");
 	Reward = 760;
 	TitleHu = TEXT("A zsibv\u00e1s\u00e1r");
 	TitleEn = TEXT("The flea market");
