@@ -19,6 +19,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
 - Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`.
+- Bus: `BusModel.h` (MÁVAG Harcsa look; model only, not in the game yet).
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`.
 - World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
