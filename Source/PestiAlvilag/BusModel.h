@@ -504,6 +504,10 @@ namespace BusModel
 		return Front;
 	}
 
+	/** How many chrome whiskers the grille has on each side, and how many pieces each is made of. */
+	constexpr int32 Whiskers = 9;
+	constexpr int32 WhiskerSteps = 12;
+
 	/** The bonnet and its catfish nose, the mudguards, lamps and bumper. */
 	inline void BuildNose(FBuilder& B)
 	{
@@ -528,43 +532,37 @@ namespace BusModel
 		const double BadgeX = NoseSurfaceX(0.0, BadgeZ);
 		B.Box(White, FVector(BadgeX - 4.0, -6.0, BadgeZ - 5.0), FVector(BadgeX + 1.5, 6.0, BadgeZ + 5.0));
 
-		// The whiskers: chrome bars from the bottom of the nose up and out,
-		// curving round its face like a fan, meeting in a V at the badge.
-		constexpr int32 Whiskers = 6;
+		// The whiskers: thin chrome bars standing close together low in the
+		// middle of the nose and fanning out like a fountain as they rise,
+		// the outer ones bending out and down beside the lamps. Between them
+		// the dark grille shows, laid on the nose's skin strip by strip.
+		const auto WhiskerPoint = [](int32 k, double Sign, int32 s, double Lift)
+		{
+			const double Spread = (k + 0.5) / Whiskers;
+			const double T = static_cast<double>(s) / WhiskerSteps;
+			const double Z = -86.0 + 54.0 * T * (1.0 - 0.45 * Spread * Spread * Spread) - 14.0 * Spread * Spread * T * T * T;
+			const double Y = Sign * (2.5 + 30.0 * Spread + 25.0 * Spread * T * T);
+			return FVector(NoseSurfaceX(Y, Z) + Lift, Y, Z);
+		};
 		for (int32 k = 0; k < Whiskers; ++k)
 		{
 			for (const double Sign : { -1.0, 1.0 })
 			{
-				const double Spread = (k + 0.7) / Whiskers;
-				constexpr int32 Steps = 10;
-				FVector Prev;
-				for (int32 s = 0; s <= Steps; ++s)
+				for (int32 s = 1; s <= WhiskerSteps; ++s)
 				{
-					const double T = static_cast<double>(s) / Steps;
-					// Up from low in the middle, fanning out, the outer ones bending over at the top.
-					const double Z = -84.0 + 56.0 * T - 34.0 * Spread * Spread * T * T * T * T;
-					const double Y = Sign * (4.0 + 12.0 * Spread + 46.0 * Spread * T * T * T);
-					const FVector P(NoseSurfaceX(Y, Z) + 1.2, Y, Z);
-					if (s > 0)
-					{
-						B.Bar(Chrome, Prev, P, 3.2, FVector(1.0, 0.0, 0.0));
-					}
-					Prev = P;
+					B.Bar(Chrome, WhiskerPoint(k, Sign, s - 1, 1.0), WhiskerPoint(k, Sign, s, 1.0), 2.2, FVector(1.0, 0.0, 0.0));
+					// The grille between this whisker and the next one in (or the other side's first).
+					const int32 Inner = k == 0 ? 0 : k - 1;
+					const double InnerSign = k == 0 ? -Sign : Sign;
+					B.Quad(Dark, WhiskerPoint(Inner, InnerSign, s - 1, 0.4), WhiskerPoint(k, Sign, s - 1, 0.4), WhiskerPoint(k, Sign, s, 0.4), WhiskerPoint(Inner, InnerSign, s, 0.4), FVector(1.0, 0.0, 0.0));
 				}
 			}
 		}
-		// The V at the top where the whiskers meet.
-		for (const double Sign : { -1.0, 1.0 })
-		{
-			const FVector Tip(NoseSurfaceX(0.0, BadgeZ - 8.0) + 1.2, 0.0, BadgeZ - 8.0);
-			const FVector Arm(NoseSurfaceX(Sign * 30.0, BadgeZ - 2.0) + 1.2, Sign * 30.0, BadgeZ - 2.0);
-			B.Bar(Chrome, Tip, Arm, 3.2, FVector(1.0, 0.0, 0.0));
-		}
-		// The dark grille behind the whiskers.
-		B.Box(Dark, FVector(NoseSurfaceX(0.0, -60.0) - 3.0, -26.0, -82.0), FVector(NoseSurfaceX(0.0, -60.0) + 0.5, 26.0, -46.0));
+		// A straight bar up the middle to the badge.
+		B.Bar(Chrome, FVector(NoseSurfaceX(0.0, -86.0) + 1.0, 0.0, -86.0), FVector(NoseSurfaceX(0.0, BadgeZ - 5.0) + 1.0, 0.0, BadgeZ - 5.0), 2.6, FVector(1.0, 0.0, 0.0));
 
 		// Headlamps in chrome rims either side of the nose.
-		for (const double Y : { -64.0, 64.0 })
+		for (const double Y : { -70.0, 70.0 })
 		{
 			const double LampX = NoseSurfaceX(Y * 0.9, -48.0);
 			B.Cylinder(Chrome, FVector(LampX - 2.0, Y, -48.0), 13.0, 14.0, 0, 14);
