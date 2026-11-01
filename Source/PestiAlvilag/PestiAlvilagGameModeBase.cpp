@@ -10,6 +10,7 @@
 #include "Cafe.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
+#include "HorseCart.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
 #include "Knockables.h"
@@ -50,6 +51,10 @@ namespace PestiStart
 	// Bözsi néni's street door on the north side of Népszínház utca, between
 	// Kun utca and Teleki tér, facing the street.
 	const FVector2D HomeDoorAt(58392.f, 21268.f);
+	// Pista bácsi's horse and cart, waiting at the kerb by Tisza Kálmán tér
+	// (II. János Pál pápa tér), a minute's walk from home.
+	const FVector2D HorseCartAt(58708.f, 15060.f);
+	constexpr float HorseCartYaw = -20.8f;
 	constexpr float HomeDoorYaw = 108.6f;
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
@@ -248,6 +253,12 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 	CarParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	const FVector CarLocation(PestiStart::CarAt, GroundZ(PestiStart::CarAt) + 150.0);
 	GetWorld()->SpawnActor<APestiCar>(APestiCar::StaticClass(), CarLocation, Facing, CarParams);
+
+	if (!TActorIterator<AHorseCart>(GetWorld()))
+	{
+		const FVector CartLocation(PestiStart::HorseCartAt, GroundZ(PestiStart::HorseCartAt) + 150.0);
+		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.f, PestiStart::HorseCartYaw, 0.f), CarParams);
+	}
 
 	return Pawn;
 }

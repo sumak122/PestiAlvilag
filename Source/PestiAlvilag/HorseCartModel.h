@@ -118,6 +118,10 @@ namespace HorseCartModel
 	/** Where the bit is, for the reins (in the horse's frame, with the head still). */
 	inline FVector Bit(double Side) { return FVector(134.0, 8.5 * Side, 165.0); }
 
+	/** The middle of the whole rig, cart and horse (the actor's origin over it), and its half sizes. */
+	constexpr double RigMiddleX = 128.0;
+	inline FVector RigHalf() { return FVector(282.0, 88.0, 112.0); }
+
 	/** Six crates on the bed, three by two (the middle of each crate's bottom). */
 	constexpr int32 MaxCrates = 6;
 	constexpr double CrateLength = 58.0;
@@ -562,6 +566,8 @@ namespace HorseCartModel
 	{
 		float Upper[4] = { 0.f, 0.f, 0.f, 0.f };
 		float Lower[4] = { 0.f, 0.f, 0.f, 0.f };
+		/** Each hoof on the ground (for the clop as it lands). */
+		bool Planted[4] = { true, true, true, true };
 		float Lift = 0.f;
 		float Pitch = 0.f;
 		float NeckPitch = 0.f;
@@ -593,6 +599,7 @@ namespace HorseCartModel
 			float T = Phase - Start[l];
 			T -= FMath::FloorToFloat(T);
 			const bool bFront = l < 2;
+			P.Planted[l] = T < Ground;
 			if (T < Ground)
 			{
 				// On the ground: the body passes over the hoof.
