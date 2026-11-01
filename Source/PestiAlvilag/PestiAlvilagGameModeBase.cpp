@@ -21,6 +21,7 @@
 #include "MissionPrologue.h"
 #include "MissionUzenet.h"
 #include "MissionZsebtolvaj.h"
+#include "MissionZsibvasar.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
@@ -60,6 +61,7 @@ namespace PestiStart
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
 	const FName Zsebtolvaj(TEXT("Zsebtolvaj"));
+	const FName Zsibvasar(TEXT("Zsibvasar"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -228,6 +230,10 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	else if (!IsMissionDone(PestiStart::Zsebtolvaj))
 	{
 		GetWorld()->SpawnActor<AMissionZsebtolvaj>();
+	}
+	else if (!IsMissionDone(PestiStart::Zsibvasar))
+	{
+		GetWorld()->SpawnActor<AMissionZsibvasar>();
 	}
 }
 

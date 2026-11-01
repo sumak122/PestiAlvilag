@@ -49,6 +49,17 @@ public:
 	/** Where crate Index stands on the bed, in the world. */
 	FVector GetCrateSpot(int32 Index) const;
 
+	/** Someone standing at At is close enough to the bed to lift a crate onto it. */
+	bool IsByBed(const FVector& At) const;
+	/** Behind the tailboard, on the ground: where to bring a crate. */
+	FVector GetTailLocation() const;
+	/**
+	 * A crate that fell off since the last call: where it landed (on the
+	 * ground beside the cart). Driving into things at a trot or faster, or
+	 * turning hard at a canter, throws one off.
+	 */
+	bool TakeFallenCrate(FVector& OutAt);
+
 	/** How fast it goes: 0 standing, 1 walk, 2 trot, 3 canter. */
 	int32 GetPace() const { return Pace; }
 	float GetSpeed() const { return Speed; }
@@ -108,6 +119,8 @@ private:
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void LetDriverOut(APlayerController* PC);
 	void SnapToGround();
+	/** One crate off the bed and onto the road beside it. */
+	void DropCrate();
 
 	/** The pace asked for, and the speed (cm/s, below 0 backing). */
 	int32 Pace = 0;
@@ -121,6 +134,10 @@ private:
 	double NextSnort = 0.0;
 	float WheelTurn = 0.f;
 	int32 Crates = 0;
+	/** How much the load has been thrown about by hard turns at a canter. */
+	float Sway = 0.f;
+	double LastSpill = -10.0;
+	TArray<FVector> Fallen;
 
 	float LookYaw = 0.f;
 	float LookPitch = 0.f;
