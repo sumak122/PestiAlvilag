@@ -67,6 +67,19 @@ namespace HorseCart
 	const FVector HandsAt(40.0, 12.0, 16.0);
 	constexpr double ReinRadius = 0.7;
 
+	// A crate falls off when the cart runs into something faster than this
+	// (cm/s), or when the load has swayed enough in hard turns at a canter:
+	// each second turned past SwayFrom degrees adds its share of a shake.
+	constexpr float SpillSpeed = 220.f;
+	constexpr double SpillGap = 1.0;
+	constexpr float SwayFrom = 8.f;
+	constexpr float SwayPerDegree = 0.05f;
+	constexpr float SwaySettle = 0.5f;
+	// A fallen crate lands this far out from the side of the bed (cm).
+	constexpr double FallOut = 70.0;
+	// Near enough to the bed to lift a crate onto it (cm past its edges).
+	constexpr double LoadReach = 140.0;
+
 	// The sound: heard this far (cm); standing, he snorts every so often (s).
 	constexpr float SoundFalloff = 3500.f;
 	constexpr float MinSnortWait = 7.f;
@@ -229,6 +242,20 @@ void AHorseCart::Tick(float DeltaSeconds)
 		SteerAngle = FMath::FInterpConstantTo(SteerAngle, 0.f, DeltaSeconds, HorseCart::SteerRate);
 		Speed = FMath::FInterpConstantTo(Speed, 0.f, DeltaSeconds, HorseCart::SlowDown);
 	}
+	// Hard turns at a canter sway the load until a crate goes over the side.
+	if (FMath::Abs(Speed) >= HorseCart::CanterFrom && FMath::Abs(SteerAngle) > HorseCart::SwayFrom)
+	{
+		Sway += (FMath::Abs(SteerAngle) - HorseCart::SwayFrom) * HorseCart::SwayPerDegree * DeltaSeconds;
+		if (Sway >= 1.f)
+		{
+			Sway = 0.f;
+			DropCrate();
+		}
+	}
+	else
+	{
+		Sway = FMath::Max(0.f, Sway - HorseCart::SwaySettle * DeltaSeconds);
+	}
 	Move(DeltaSeconds);
 	Animate(DeltaSeconds);
 	UpdateReins();
@@ -316,6 +343,13 @@ void AHorseCart::Move(float DeltaSeconds)
 	}
 	else if (Hit.bBlockingHit)
 	{
+		// One knock spills one crate, however long it scrapes along.
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (FMath::Abs(Speed) > HorseCart::SpillSpeed && Now - LastSpill > HorseCart::SpillGap)
+		{
+			LastSpill = Now;
+			DropCrate();
+		}
 		// Up against something: the horse stops rather than push into it, or scrapes along a glancing one.
 		const FVector WallNormal = FVector(Hit.Normal.X, Hit.Normal.Y, 0.f).GetSafeNormal();
 		const float Impact = static_cast<float>(FMath::Abs(FVector::DotProduct(GetActorForwardVector(), WallNormal)));
@@ -524,4 +558,48 @@ void AHorseCart::SnapToGround()
 		Location.Z = Hit.ImpactPoint.Z + HorseCart::HoverHeight + CollisionBox->GetScaledBoxExtent().Z;
 		SetActorLocation(Location, false);
 	}
+}
+
+void AHorseCart::DropCrate()
+{
+	if (Crates <= 0)
+	{
+		return;
+	}
+	SetCrates(Crates - 1);
+	// It goes over the side it stood on, onto the road.
+	const FVector Spot = HorseCartModel::CrateSpot(Crates);
+	const double Side = Spot.Y < 0.0 ? -1.0 : 1.0;
+	const FVector Out(Spot.X, Side * (HorseCartModel::BedHalfWidth + HorseCart::FallOut), 0.0);
+	FVector At = Rig->GetComponentTransform().TransformPosition(Out);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HorseCartSpill), false, this);
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 200.0), At - FVector(0.0, 0.0, 500.0), ECC_Visibility, Params))
+	{
+		At = Hit.ImpactPoint;
+	}
+	Fallen.Add(At);
+}
+
+bool AHorseCart::TakeFallenCrate(FVector& OutAt)
+{
+	if (Fallen.Num() == 0)
+	{
+		return false;
+	}
+	OutAt = Fallen[0];
+	Fallen.RemoveAt(0);
+	return true;
+}
+
+bool AHorseCart::IsByBed(const FVector& At) const
+{
+	const FVector Local = Rig->GetComponentTransform().InverseTransformPosition(At);
+	return Local.X > HorseCartModel::BedBack - HorseCart::LoadReach && Local.X < HorseCartModel::BedFront
+		&& FMath::Abs(Local.Y) < HorseCartModel::BedHalfWidth + HorseCart::LoadReach;
+}
+
+FVector AHorseCart::GetTailLocation() const
+{
+	return Rig->GetComponentTransform().TransformPosition(FVector(HorseCartModel::BedBack - 70.0, 0.0, 0.0));
 }
