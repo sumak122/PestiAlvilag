@@ -44,6 +44,8 @@ public:
 
 	/** 0 = not wanted; higher means more trouble. */
 	int32 GetWantedLevel() const { return WantedLevel; }
+	/** How many times the police have caught him (missions tell a getaway from an arrest). */
+	int32 GetArrests() const { return Arrests; }
 	void ReportCrime(int32 CrimeLevel);
 	/** Seconds still to stay out of police sight to lose them. */
 	float GetEscapeSecondsLeft() const { return FMath::Max(0.f, EscapeTime - TimeUnseen); }
@@ -135,6 +137,7 @@ private:
 	void StartNewGame();
 
 	int32 WantedLevel = 0;
+	int32 Arrests = 0;
 	float Health = 100.f;
 	float MaxHealth = 100.f;
 	/** While fainted: when he comes round; otherwise below 0. */

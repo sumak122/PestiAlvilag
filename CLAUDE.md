@@ -22,7 +22,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`.
 - World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
-- Missions and saving: `Mission` (base), `MissionPrologue`, `MissionUzenet`, `MissionZsebtolvaj`, `MissionZsibvasar`, `GarayModel.h` (Garay utca 13 yard, shop and people for the planned mission "A felmondás"), `PestiSaveGame`, `Lighters`/`LighterModel.h` (collectibles), `GoalMarkerComponent`, `RouteGuideComponent`.
+- Missions and saving: `Mission` (base), `MissionPrologue`, `MissionUzenet`, `MissionZsebtolvaj`, `MissionZsibvasar`, `MissionFelmondas` (mission 5, from a real news story) + `GarayYard`/`GarayModel.h` (Garay utca 13: Hermann's shop, Schwimmer's timber yard, their people), `PestiSaveGame`, `Lighters`/`LighterModel.h` (collectibles), `GoalMarkerComponent`, `RouteGuideComponent`.
 - Screen text: `PestiHud` (art deco HUD, menus), `PestiText.h` (Hungarian/English strings).
 
 ## Rules for changes

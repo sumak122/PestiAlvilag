@@ -2,6 +2,8 @@
 
 #include "Ruffian.h"
 
+#include "GarayModel.h"
+
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -61,6 +63,14 @@ FString ARuffian::GetSpeakerName() const
 		return TEXT("Csontos");
 	case ERuffian::Pottom:
 		return TEXT("P\u00f6tt\u00f6m");
+	case ERuffian::Hermann:
+		return TEXT("Friedrich Hermann");
+	case ERuffian::Geza:
+		return TEXT("Friedrich G\u00e9za");
+	case ERuffian::ClerkOne:
+		return TEXT("Lajos, a seg\u00e9d");
+	case ERuffian::ClerkTwo:
+		return TEXT("Bandi, a seg\u00e9d");
 	default:
 		return TEXT("Bika");
 	}
@@ -79,6 +89,14 @@ float ARuffian::GetMaxHealth() const
 	case ERuffian::Bika:
 		return 90.f;
 	case ERuffian::Pottom:
+		return 45.f;
+	case ERuffian::Hermann:
+		// The old man goes down at the first blow.
+		return 1.f;
+	case ERuffian::Geza:
+		return 70.f;
+	case ERuffian::ClerkOne:
+	case ERuffian::ClerkTwo:
 		return 45.f;
 	default:
 		return 60.f;
@@ -100,6 +118,14 @@ float ARuffian::GetVoicePitch() const
 		return 118.f;
 	case ERuffian::Csontos:
 		return 108.f;
+	case ERuffian::Hermann:
+		return 84.f;
+	case ERuffian::Geza:
+		return 104.f;
+	case ERuffian::ClerkOne:
+		return 112.f;
+	case ERuffian::ClerkTwo:
+		return 126.f;
 	default:
 		return 142.f;
 	}
@@ -107,6 +133,20 @@ float ARuffian::GetVoicePitch() const
 
 PersonKit::FOutfit ARuffian::GetDress() const
 {
+	// The people of Hermann's shop dress as GarayModel has them.
+	switch (Kind)
+	{
+	case ERuffian::Hermann:
+		return GarayModel::Hermann();
+	case ERuffian::Geza:
+		return GarayModel::Geza();
+	case ERuffian::ClerkOne:
+		return GarayModel::Clerk(0);
+	case ERuffian::ClerkTwo:
+		return GarayModel::Clerk(1);
+	default:
+		break;
+	}
 	PersonKit::FOutfit O;
 	O.bTie = false;
 	switch (Kind)

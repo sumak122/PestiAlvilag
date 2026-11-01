@@ -72,13 +72,31 @@ namespace GarayModel
 		const FVector ShopDoorOutside(-180.0, -700.0, 0.0);
 		/** Just inside the shop door. */
 		const FVector ShopDoorInside(80.0, -700.0, 0.0);
-		/** Behind the counter, where old Hermann stands. */
-		const FVector Hermann(330.0, -1000.0, 0.0);
-		/** At the office desk, where Géza works. */
-		const FVector Geza(690.0, -1050.0, 0.0);
+		/** In front of his counter, where old Hermann stands. */
+		const FVector Hermann(300.0, -1030.0, 0.0);
+		/** By the office door, where Géza looks over the books. */
+		const FVector Geza(470.0, -640.0, 0.0);
+		/** The two clerks: one by the window, one by the sacks at the back. */
+		const FVector ClerkOne(150.0, -860.0, 0.0);
+		const FVector ClerkTwo(350.0, -330.0, 0.0);
+		/** The middle of the shop floor. */
+		const FVector Floor(280.0, -650.0, 0.0);
 		/** In the timber yard, by Schwimmer's hut, where the mission starts. */
-		const FVector Schwimmer(1500.0, 1250.0, 0.0);
+		const FVector Schwimmer(1150.0, 1600.0, 0.0);
 	}
+
+	/** The yard's far side along the street, and its back wall (cm, in its frame). */
+	constexpr double YardEnd = 3200.0;
+	constexpr double YardBack = 2400.0;
+
+	/**
+	 * Where the game puts the yard: on the north-west side of Garay utca,
+	 * on an open lot (none of the map's buildings stand there); the street
+	 * front stands a little behind the pavement where people walk (cm, X
+	 * east, Y south), and its +X points away from the street.
+	 */
+	const FVector2D CityAt(74888.0, -51702.0);
+	constexpr double CityYaw = -124.03;
 
 	inline void Add(TArray<FShape>& Out, int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size,
 		double Yaw = 0.0, bool bCollide = true, double Pitch = 0.0, double Roll = 0.0)
@@ -179,7 +197,7 @@ namespace GarayModel
 		// Floor.
 		Span(Out, Colors::Floor, FVector(0, Y0, 0), FVector(Depth, Y1, 4));
 		// Street front: piers between a door and two shop windows.
-		const double DoorA = -760.0, DoorB = -640.0, DoorH = 235.0, SillZ = 55.0, HeadZ = 250.0;
+		const double DoorA = -780.0, DoorB = -620.0, DoorH = 235.0, SillZ = 55.0, HeadZ = 250.0;
 		const double WinA[2] = { -1220.0, -560.0 }, WinB[2] = { -840.0, -180.0 };
 		Span(Out, Colors::Plaster, FVector(0, Y0, 0), FVector(T, WinA[0], H));
 		Span(Out, Colors::Plaster, FVector(0, WinB[0], 0), FVector(T, DoorA, H));
@@ -196,8 +214,8 @@ namespace GarayModel
 			Span(Out, Colors::Frame, FVector(-2, Mid - 3, SillZ), FVector(T - 6, Mid + 3, HeadZ));
 			Span(Out, Colors::Glass, FVector(10, WinA[i], SillZ + 6), FVector(12, WinB[i], HeadZ - 6), true);
 		}
-		// The door, half open into the shop, glass in its top half.
-		Add(Out, MarketModel::Cube, Colors::Frame, FVector(T + 50, DoorB - 15, DoorH * 0.5), FVector(110, 5, DoorH - 5), 80.0);
+		// The door stands open, folded back against the wall inside.
+		Span(Out, Colors::Frame, FVector(T, DoorB, 4), FVector(T + 5, DoorB + 155, DoorH - 5), false);
 		// Plinth and the green fascia board (the lettering is a sign).
 		Span(Out, Colors::PlasterDark, FVector(-6, Y0, 0), FVector(0, WinA[0], 40), false);
 		Span(Out, Colors::Fascia, FVector(-10, Y0 + 60, 268), FVector(0, Y1 - 60, 336));
@@ -209,10 +227,10 @@ namespace GarayModel
 		Span(Out, Colors::Plaster, FVector(Depth - T, Y0, 0), FVector(Depth, -470.0, H));
 		Span(Out, Colors::Plaster, FVector(Depth - T, -360.0, 0), FVector(Depth, Y1, H));
 		Span(Out, Colors::Plaster, FVector(Depth - T, -470.0, 225), FVector(Depth, -360.0, H));
-		// Inside: cream walls, a long counter, shelves of goods along the side.
+		// Inside: cream walls, shelves of goods along the side and a long counter in front of them.
 		Span(Out, Colors::InsideWall, FVector(T, Y0, 4), FVector(Depth - T, Y0 + 3, H - 10), false);
-		Span(Out, Colors::Desk, FVector(260, -1180, 4), FVector(300, -560, 100));
-		Span(Out, Colors::Desk, FVector(255, -1185, 100), FVector(305, -555, 104));
+		Span(Out, Colors::Desk, FVector(110, -1150, 4), FVector(480, -1110, 100));
+		Span(Out, Colors::Desk, FVector(105, -1155, 100), FVector(485, -1105, 104));
 		for (int32 Shelf = 0; Shelf < 4; ++Shelf)
 		{
 			const double Z = 30.0 + Shelf * 55.0;
@@ -234,8 +252,8 @@ namespace GarayModel
 		{
 			Add(Out, MarketModel::Cylinder, Colors::Sack, FVector(560 + (i % 2) * 65, -260 - (i / 2) * 65, 36), FVector(52, 48, 66), i * 30.0);
 		}
-		Span(Out, Colors::Crate, FVector(380, -300, 4), FVector(460, -200, 70));
-		Span(Out, Colors::Crate, FVector(390, -290, 70), FVector(450, -210, 120));
+		Span(Out, Colors::Crate, FVector(660, -500, 4), FVector(740, -400, 70));
+		Span(Out, Colors::Crate, FVector(670, -490, 70), FVector(730, -410, 120));
 		// The office at the back left: a partition, wood below and glass above.
 		const double OX = 520.0, OY = -700.0;
 		Span(Out, Colors::Desk, FVector(OX, Y0, 4), FVector(OX + 8, -810.0, 110));
@@ -252,8 +270,8 @@ namespace GarayModel
 		Chair(Out, FVector(600, -900, 0), 30.0);
 		Span(Out, Colors::Iron, FVector(700, -820, 4), FVector(770, -740, 130));
 		Add(Out, MarketModel::Cylinder, Colors::Iron, FVector(560, -760, 60), FVector(50, 50, 115));
-		// A plain chair by the counter too.
-		Chair(Out, FVector(200, -1150, 0), 90.0);
+		// A plain chair for customers by the window.
+		Chair(Out, FVector(90, -1040, 0), 20.0);
 		if (bRoof)
 		{
 			Span(Out, Colors::InsideWall, FVector(0, Y0, H - 10), FVector(Depth, Y1, H), false);
@@ -269,17 +287,17 @@ namespace GarayModel
 	inline void BuildYard(TArray<FShape>& Out)
 	{
 		FRandom R(1932);
-		const double Y0 = -100.0, Y1 = 2000.0, Back = 2400.0, Wall = 280.0;
+		const double Y1 = YardEnd, Back = YardBack, Wall = 280.0;
 		// Packed earth with sawdust, the yard of the shop as well.
 		Span(Out, Colors::Earth, FVector(0, -1300, -2), FVector(Back, Y1, 1), false);
-		Span(Out, Colors::Sawdust, FVector(900, 400, 1), FVector(2000, 1800, 2), false);
-		// Street wall with the gate; the gate's two wings stand open.
+		Span(Out, Colors::Sawdust, FVector(900, 400, 1), FVector(2000, Y1 - 300, 2), false);
+		// Street wall with the gate; the gate's two wings stand open against the walls.
 		Span(Out, Colors::Plaster, FVector(0, 350, 0), FVector(30, Y1, Wall));
 		Span(Out, Colors::PlasterDark, FVector(-4, 350, Wall - 20), FVector(34, Y1, Wall));
 		Span(Out, Colors::Plaster, FVector(0, -100, 0), FVector(30, -60, Wall + 40));
 		Span(Out, Colors::Plaster, FVector(0, 310, 0), FVector(30, 350, Wall + 40));
-		Add(Out, MarketModel::Cube, Colors::Gate, FVector(110, -40, 130), FVector(190, 8, 250), 72.0);
-		Add(Out, MarketModel::Cube, Colors::Gate, FVector(110, 290, 130), FVector(190, 8, 250), -72.0);
+		Span(Out, Colors::Gate, FVector(30, -58, 5), FVector(220, -50, 255));
+		Span(Out, Colors::Gate, FVector(30, 298, 5), FVector(220, 306, 255));
 		// Schwimmer's sign board on the street wall.
 		Span(Out, Colors::White, FVector(-8, 520, 150), FVector(0, 1830, 250));
 		Span(Out, Colors::Tar, FVector(-10, 520, 148), FVector(0, 1830, 152), false);
@@ -289,13 +307,13 @@ namespace GarayModel
 		Span(Out, Colors::FireWall, FVector(0, Y1, 0), FVector(Back, Y1 + 30, 1500));
 		Span(Out, Colors::FireWall, FVector(Back, -1330, 0), FVector(Back + 30, Y1 + 30, 1500));
 		// Lean-to shed along the back wall for the dry timber.
-		for (int32 i = 0; i <= 5; ++i)
+		for (int32 i = 0; i <= 8; ++i)
 		{
 			const double Y = -900.0 + i * 500.0;
 			Add(Out, MarketModel::Cube, Colors::Stick, FVector(Back - 380, Y, 160), FVector(14, 14, 320));
 		}
-		Add(Out, MarketModel::Cube, Colors::Roof, FVector(Back - 200, 1350 * 0.5 - 1000 * 0.5 + 100, 360), FVector(440, 2600, 8), 0.0, false, 12.0);
-		for (int32 i = 0; i < 4; ++i)
+		Add(Out, MarketModel::Cube, Colors::Roof, FVector(Back - 200, (Y1 - 1000.0) * 0.5, 360), FVector(440, Y1 + 1000.0, 8), 0.0, false, 12.0);
+		for (int32 i = 0; i < 7; ++i)
 		{
 			PlankStack(Out, FVector(Back - 200, -650 + i * 520, 0), 420.0, 110.0, 10 + i % 3, 90.0, R);
 		}
@@ -304,6 +322,9 @@ namespace GarayModel
 		PlankStack(Out, FVector(1200, 1050, 0), 480.0, 120.0, 9, 0.0, R);
 		PlankStack(Out, FVector(1750, 650, 0), 500.0, 120.0, 11, 4.0, R);
 		LogPile(Out, FVector(1750, 1500, 0), 500.0, 4, 0.0);
+		PlankStack(Out, FVector(1250, 2350, 0), 500.0, 130.0, 12, 0.0, R);
+		PlankStack(Out, FVector(1250, 2750, 0), 460.0, 120.0, 8, -3.0, R);
+		LogPile(Out, FVector(1850, 2550, 0), 520.0, 5, 0.0);
 		// Squared beams leaning on the side fire wall.
 		for (int32 i = 0; i < 7; ++i)
 		{
@@ -340,11 +361,11 @@ namespace GarayModel
 		BuildYard(Out);
 	}
 
-	/** The painted lettering (\u escapes keep the Hungarian letters safe in TEXT). */
+	/** The painted lettering on the shop fascia, the yard wall and the hut door. */
 	inline void Signs(TArray<FSign>& Out)
 	{
-		Out.Add({ TEXT("FRIEDRICH HERMANN  ·  NAGYKERESKEDŐ"), FVector(-11, -700, 302), 180.0, 30.0, Colors::Gilt });
-		Out.Add({ TEXT("SCHWIMMER MIHÁLY  FAKERESKEDÉS  ·  GARAY U. 13."), FVector(-9, 1175, 200), 180.0, 40.0, Colors::Tar });
+		Out.Add({ TEXT("FRIEDRICH HERMANN  \u00b7  NAGYKERESKED\u0150"), FVector(-11, -700, 302), 180.0, 30.0, Colors::Gilt });
+		Out.Add({ TEXT("SCHWIMMER MIH\u00c1LY  FAKERESKED\u00c9S  \u00b7  GARAY U. 13."), FVector(-9, 1175, 200), 180.0, 40.0, Colors::Tar });
 		Out.Add({ TEXT("IRODA"), FVector(1248, 1510, 225), 180.0, 18.0, Colors::Tar });
 	}
 
@@ -382,6 +403,29 @@ namespace GarayModel
 		O.Hat = PersonKit::EHat::None; O.Hair = FLinearColor(0.08f, 0.06f, 0.04f);
 		O.Top = PersonKit::ETop::Jacket; O.Coat = FLinearColor(0.24f, 0.24f, 0.26f);
 		O.Tie = FLinearColor(0.35f, 0.07f, 0.05f); O.Trousers = FLinearColor(0.22f, 0.22f, 0.24f);
+		return O;
+	}
+
+	/** One of Hermann's two clerks: shirt sleeves, a waistcoat and a grey apron (Which 0 or 1). */
+	inline PersonKit::FOutfit Clerk(int32 Which)
+	{
+		PersonKit::FOutfit O;
+		O.Hat = PersonKit::EHat::None;
+		O.Top = PersonKit::ETop::Waistcoat;
+		O.bApron = true;
+		O.Apron = FLinearColor(0.42f, 0.42f, 0.40f);
+		if (Which == 0)
+		{
+			O.Height = 176.f; O.Build = 1.05f; O.bMoustache = true;
+			O.Waistcoat = FLinearColor(0.18f, 0.14f, 0.10f); O.Tie = FLinearColor(0.10f, 0.20f, 0.12f);
+			O.Hair = FLinearColor(0.20f, 0.13f, 0.07f);
+		}
+		else
+		{
+			O.Height = 168.f; O.Build = 0.92f;
+			O.Waistcoat = FLinearColor(0.10f, 0.11f, 0.16f); O.bTie = false;
+			O.Hair = FLinearColor(0.05f, 0.04f, 0.03f); O.Skin = FLinearColor(0.76f, 0.56f, 0.44f);
+		}
 		return O;
 	}
 }
