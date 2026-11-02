@@ -297,7 +297,21 @@ namespace BusModel
 
 		// Chassis and floor.
 		B.Box(Dark, FVector(Rear + 30.0, -70.0, AxleZ - 8.0), FVector(NoseTip - 60.0, 70.0, BodyBottom + 10.0));
-		B.Box(Dark, FVector(Rear + Wall, -W + Wall, BodyBottom), FVector(Front, W - Wall, FloorTop));
+		const double ArchFrom = RearAxle - ArchRadius;
+		const double ArchTo = RearAxle + ArchRadius;
+		// The floor, narrower over the rear wheels, which sit in dark wells
+		// (a wall inside each wheel and a lid over it, under the seats).
+		const double WellIn = TrackHalf - TyreWidth * 0.5 - 6.0;
+		B.Box(Dark, FVector(Rear + Wall, -W + Wall, BodyBottom), FVector(ArchFrom, W - Wall, FloorTop));
+		B.Box(Dark, FVector(ArchFrom, -WellIn, BodyBottom), FVector(ArchTo, WellIn, FloorTop));
+		B.Box(Dark, FVector(ArchTo, -W + Wall, BodyBottom), FVector(Front, W - Wall, FloorTop));
+		for (const double Sign : { -1.0, 1.0 })
+		{
+			const double Y0 = Sign > 0 ? WellIn - 2.0 : -W + Wall;
+			const double Y1 = Sign > 0 ? W - Wall : -WellIn + 2.0;
+			B.Box(Dark, FVector(ArchFrom, Sign > 0 ? WellIn - 2.0 : -WellIn, BodyBottom), FVector(ArchTo, Sign > 0 ? WellIn : -WellIn + 2.0, AxleZ + WheelRadius + 8.0));
+			B.Box(Dark, FVector(ArchFrom, Y0, AxleZ + WheelRadius + 6.0), FVector(ArchTo, Y1, AxleZ + WheelRadius + 9.0));
+		}
 		for (const double Axle : { FrontAxle, RearAxle })
 		{
 			B.Cylinder(Dark, FVector(Axle, 0.0, AxleZ), 7.0, 2.0 * TrackHalf, 1, 6);
@@ -306,8 +320,6 @@ namespace BusModel
 		// The sides below the windows: whole panels, and narrow strips round
 		// the rear wheel arch so it comes out round. The door opening on the
 		// left side is left out. (The front wheels stand ahead of the body.)
-		const double ArchFrom = RearAxle - ArchRadius;
-		const double ArchTo = RearAxle + ArchRadius;
 		B.BothSides(Blue, FVector(Rear, W - Wall, BodyBottom), FVector(ArchFrom, W, Waist));
 		B.Box(Blue, FVector(ArchTo, W - Wall, BodyBottom), FVector(Front, W, Waist));
 		B.Box(Blue, FVector(ArchTo, -W, BodyBottom), FVector(DoorFrom, -W + Wall, Waist));
