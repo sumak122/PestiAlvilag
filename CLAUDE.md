@@ -18,6 +18,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Traffic and police: `TrafficManager`, `TrafficCar`, `PoliceCar`, `PoliceModel.h`, `PolicePatrols` (constables, phone boxes), `CarjackedDriver`.
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
+- City background sound: `CityAmbience` (follows the camera, works out nearness to park, markets, Rákóczi út, Keleti, church) + `CityAmbienceSound`/`CitySynth.h` (hum, crowd murmur, wind, bells, trains, dogs, horns, birds, crickets...).
 - Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`.
 - Bus: `BusModel.h` (MÁVAG Harcsa look) + `Bus` (ABus: a tram on a bus route, lines 12, 20, 5 from `buses_1932.py`; riding via `TramRides`).
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`.
