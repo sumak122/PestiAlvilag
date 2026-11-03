@@ -131,6 +131,14 @@ public:
 	// false when he can't now (busy, or out of breath).
 	bool Jab();
 	bool HeavySwing();
+	/**
+	 * The player's punch chain: the next punch of it (jab, straight right,
+	 * hook, uppercut), or with bFinisher its finisher (a plain heavy swing
+	 * when no chain is going). Can start late in a chain punch, too.
+	 */
+	bool ChainPunch(bool bFinisher);
+	/** A landed blow: he stands still for a blink of Seconds (real time). */
+	void HitStop(float Seconds);
 	/** Under his swing and back with a hook, if it is coming; false otherwise. */
 	bool Counter();
 	/** Reaching for his collar; slowly, it can be seen coming. */
@@ -278,4 +286,13 @@ private:
 	/** The punch key: when it went down, and whether holding it made a heavy swing. */
 	double PunchDownAt = -1.0;
 	bool bPunchHeld = false;
+	/** A punch clicked while busy, kept to be done as soon as he can, and when it was clicked. */
+	// (0: none, 1: a punch, 2: a finisher)
+	uint8 KeptPunch = 0;
+	double KeptAt = 0.0;
+	/** Punches thrown in the chain so far, and until when the next one carries it on. */
+	int32 ChainStep = 0;
+	double ChainUntil = -1.0;
+	/** Until when (real time) a landed blow holds him still; below 0 when not. */
+	double HitStopUntil = -1.0;
 };

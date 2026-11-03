@@ -464,7 +464,7 @@ void ARuffian::TickAttack()
 		return;
 	}
 	// He is punching me: sometimes cover up.
-	if (Player->GetFoe() == this && Player->GetAct() == EAct::Jab && FMath::FRand() < 0.35f)
+	if (Player->GetFoe() == this && Brawl::IsLightPunch(Player->GetAct()) && FMath::FRand() < 0.35f)
 	{
 		GuardUntil = Now + 0.6;
 		SetGuard(true);

@@ -478,7 +478,7 @@ void AChaseThief::TickFight()
 		return;
 	}
 	// He is punching: sometimes cover up.
-	if (Player->GetAct() == EAct::Jab && FMath::FRand() < 0.35f)
+	if (Brawl::IsLightPunch(Player->GetAct()) && FMath::FRand() < 0.35f)
 	{
 		GuardUntil = Now + 0.6;
 		SetGuard(true);

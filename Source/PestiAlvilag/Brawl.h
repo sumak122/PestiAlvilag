@@ -43,10 +43,17 @@ namespace Brawl
 		Tackle,     // diving at a runner (the player catching the thief)
 		Tackled,    // brought down from behind
 		Beaten,     // sitting on the ground, hands up: the fight is over
+		// The player's punch chain (click, click, click, click) and its two
+		// finishers (hold the click in the chain), after the jab.
+		Cross,      // second: a straight right
+		Hook,       // third: a left hook
+		Uppercut,   // fourth: a right uppercut that rocks him back
+		Rising,     // finisher after one or two: a jumping uppercut, down he goes
+		Haymaker,   // finisher after three or four: a big overhand right, he flies back
 	};
 
 	/** What landed. */
-	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw };
+	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw, Cross, Hook, Uppercut, Rising, Haymaker };
 
 	// How long each act lasts (s), and how far into it the blow lands (share).
 	constexpr float JabSeconds = 0.38f;
@@ -74,6 +81,32 @@ namespace Brawl
 	constexpr float WindedSeconds = 1.5f;
 	constexpr float TackleSeconds = 1.0f;
 	constexpr float TackledSeconds = 2.0f;
+	// The punch chain: each punch's length (s) and how far into it it lands.
+	constexpr float CrossSeconds = 0.34f;
+	constexpr float CrossLands = 0.42f;
+	constexpr float HookSeconds = 0.38f;
+	constexpr float HookLands = 0.45f;
+	constexpr float UppercutSeconds = 0.46f;
+	constexpr float UppercutLands = 0.45f;
+	constexpr float RisingSeconds = 0.62f;
+	constexpr float RisingLands = 0.42f;
+	constexpr float HaymakerSeconds = 0.7f;
+	constexpr float HaymakerLands = 0.5f;
+	/** Punches in the chain before it starts again from the jab. */
+	constexpr int32 ChainLength = 4;
+	/** A click this long after a punch ends still carries the chain on (s). */
+	constexpr float ChainGap = 0.35f;
+	/** A click made while busy is kept this long and done as soon as he can (s). */
+	constexpr float KeepClick = 0.4f;
+	/** From this share of a chain punch on (after it lands) the next one may start. */
+	constexpr float ChainFrom = 0.62f;
+	/** Stepping in behind a punch: up to this far (cm), over its first share. */
+	constexpr double StepIn = 55.0;
+	constexpr float StepShare = 0.4f;
+	/** A landed blow stops both men for a blink (s of real time), stronger blows longer. */
+	constexpr float HitStopLight = 0.05f;
+	constexpr float HitStopHeavy = 0.11f;
+	constexpr float HitStopSlow = 0.05f;
 
 	/** The counter key lights up gold this long before his swing comes (s). */
 	constexpr float CounterWindow = 0.4f;
@@ -110,6 +143,8 @@ namespace Brawl
 	constexpr float KneeCost = 8.f;
 	constexpr float ShoveCost = 10.f;
 	constexpr float BlockCost = 6.f;
+	constexpr float ChainCost = 7.f;
+	constexpr float FinisherCost = 16.f;
 	constexpr float GuardDrain = 4.f;
 	constexpr float StaminaBack = 25.f;
 	constexpr float RestBefore = 0.7f;
@@ -126,6 +161,11 @@ namespace Brawl
 		case EBlow::Knee: return 9.f;
 		case EBlow::Slam: return 20.f;
 		case EBlow::Throw: return 5.f;
+		case EBlow::Cross: return 9.f;
+		case EBlow::Hook: return 10.f;
+		case EBlow::Uppercut: return 14.f;
+		case EBlow::Rising: return 20.f;
+		case EBlow::Haymaker: return 22.f;
 		default: return 0.f;
 		}
 	}
@@ -145,6 +185,18 @@ namespace Brawl
 	inline bool IsFree(EAct Act)
 	{
 		return Act == EAct::Stance || Act == EAct::Guard;
+	}
+
+	/** True for the quick punches a guard stops (the jab and the chain's next two). */
+	inline bool IsLightPunch(EAct Act)
+	{
+		return Act == EAct::Jab || Act == EAct::Cross || Act == EAct::Hook;
+	}
+
+	/** True for the punches of the chain, finishers too. */
+	inline bool IsChainPunch(EAct Act)
+	{
+		return IsLightPunch(Act) || Act == EAct::Uppercut || Act == EAct::Rising || Act == EAct::Haymaker;
 	}
 
 	using FreeRun::FPose;
@@ -273,17 +325,157 @@ namespace Brawl
 		Duck.KneeR = -46.f;
 		Duck.LegL = 30.f;
 		Duck.LegR = -6.f;
-		FPose Hook = Stance();
-		Hook.Lift = -8.f;
-		Hook.Pitch = -10.f;
-		Hook.Yaw = 44.f;
-		Hook.ArmL = 10.f;
-		Hook.ArmOutL = 80.f;
-		Hook.ElbowL = 95.f;
-		Hook.LegL = 18.f;
+		FPose HookUp = Stance();
+		HookUp.Lift = -8.f;
+		HookUp.Pitch = -10.f;
+		HookUp.Yaw = 44.f;
+		HookUp.ArmL = 10.f;
+		HookUp.ArmOutL = 80.f;
+		HookUp.ElbowL = 95.f;
+		HookUp.LegL = 18.f;
 		const FPose Low = Mix(Stance(), Duck, Smooth(0.f, 0.3f, T));
-		const FPose Up = Mix(Low, Hook, Smooth(0.38f, 0.6f, T));
+		const FPose Up = Mix(Low, HookUp, Smooth(0.38f, 0.6f, T));
 		return Mix(Up, Stance(), Smooth(0.8f, 1.f, T));
+	}
+
+	/** The chain's second punch at T: a straight right, the hips turned in behind it. */
+	inline FPose Cross(float T)
+	{
+		FPose Out = Stance();
+		Out.Yaw = -26.f;
+		Out.Pitch = -12.f;
+		Out.ArmR = 92.f;
+		Out.ArmOutR = -14.f;
+		Out.ElbowR = 6.f;
+		// The left fist back by the chin.
+		Out.ArmL = 48.f;
+		Out.ElbowL = 120.f;
+		Out.LegL = 24.f;
+		Out.LegR = -16.f;
+		Out.KneeR = -10.f;
+		return Mix(Stance(), Out, Bell(T, 0.38f, 0.62f));
+	}
+
+	/** The chain's third punch at T: a left hook, the elbow up level, the body turning round behind it. */
+	inline FPose Hook(float T)
+	{
+		FPose Load = Stance();
+		Load.Yaw = 34.f;
+		Load.Lift = -9.f;
+		Load.KneeL = -24.f;
+		Load.ArmL = 30.f;
+		Load.ArmOutL = 40.f;
+		Load.ElbowL = 100.f;
+		FPose Through = Stance();
+		Through.Yaw = -30.f;
+		Through.Pitch = -12.f;
+		Through.Lift = -7.f;
+		Through.ArmL = 12.f;
+		Through.ArmOutL = 84.f;
+		Through.ElbowL = 96.f;
+		Through.LegL = 16.f;
+		Through.KneeL = -20.f;
+		const FPose Loaded = Mix(Stance(), Load, Smooth(0.f, 0.25f, T));
+		const FPose Swung = Mix(Loaded, Through, Smooth(0.25f, 0.48f, T));
+		return Mix(Swung, Stance(), Smooth(0.68f, 1.f, T));
+	}
+
+	/** The chain's fourth punch at T: down into the knees, then a right uppercut up under his chin. */
+	inline FPose Uppercut(float T)
+	{
+		FPose Dip = Stance();
+		Dip.Lift = -18.f;
+		Dip.Pitch = -16.f;
+		Dip.Yaw = 22.f;
+		Dip.KneeL = -36.f;
+		Dip.KneeR = -40.f;
+		Dip.LegL = 22.f;
+		Dip.ArmR = 12.f;
+		Dip.ArmOutR = -6.f;
+		Dip.ElbowR = 110.f;
+		FPose Up = Stance();
+		Up.Lift = 2.f;
+		Up.Pitch = -2.f;
+		Up.Yaw = -30.f;
+		Up.ArmR = 84.f;
+		Up.ArmOutR = -20.f;
+		Up.ElbowR = 66.f;
+		// The left fist dropped back to the ribs.
+		Up.ArmL = 30.f;
+		Up.ArmOutL = -10.f;
+		Up.ElbowL = 110.f;
+		Up.LegR = -18.f;
+		Up.KneeR = -6.f;
+		const FPose Low = Mix(Stance(), Dip, Smooth(0.f, 0.3f, T));
+		const FPose High = Mix(Low, Up, Smooth(0.3f, 0.5f, T));
+		return Mix(High, Stance(), Smooth(0.72f, 1.f, T));
+	}
+
+	/** The first finisher at T: right down low, then up off the ground with the whole body in the uppercut. */
+	inline FPose Rising(float T)
+	{
+		FPose Crouch = Stance();
+		Crouch.Lift = -30.f;
+		Crouch.Pitch = -22.f;
+		Crouch.Yaw = 30.f;
+		Crouch.KneeL = -50.f;
+		Crouch.KneeR = -56.f;
+		Crouch.LegL = 34.f;
+		Crouch.LegR = 6.f;
+		Crouch.ArmR = -6.f;
+		Crouch.ArmOutR = 10.f;
+		Crouch.ElbowR = 100.f;
+		FPose Leap = Stance();
+		Leap.Lift = 16.f;
+		Leap.Pitch = 10.f;
+		Leap.Yaw = -32.f;
+		Leap.ArmR = 112.f;
+		Leap.ArmOutR = -16.f;
+		Leap.ElbowR = 46.f;
+		Leap.ArmL = 20.f;
+		Leap.ArmOutL = 30.f;
+		Leap.ElbowL = 70.f;
+		Leap.LegL = 46.f;
+		Leap.KneeL = -70.f;
+		Leap.LegR = -10.f;
+		Leap.KneeR = -4.f;
+		const FPose Low = Mix(Stance(), Crouch, Smooth(0.f, 0.3f, T));
+		const FPose High = Mix(Low, Leap, Smooth(0.3f, 0.46f, T));
+		return Mix(High, Stance(), Smooth(0.72f, 1.f, T));
+	}
+
+	/** The second finisher at T: the right fist drawn up high behind, then over the top and down through him. */
+	inline FPose Haymaker(float T)
+	{
+		FPose Wind = Stance();
+		Wind.Pitch = 10.f;
+		Wind.Yaw = 30.f;
+		Wind.Lift = -4.f;
+		Wind.ArmR = -40.f;
+		Wind.ArmOutR = 50.f;
+		Wind.ElbowR = 120.f;
+		Wind.ArmL = 80.f;
+		Wind.ArmOutL = -6.f;
+		Wind.ElbowL = 30.f;
+		Wind.LegL = 14.f;
+		Wind.KneeR = -30.f;
+		FPose Over = Stance();
+		Over.Pitch = -30.f;
+		Over.Yaw = -40.f;
+		Over.Lift = -14.f;
+		Over.ArmR = 70.f;
+		Over.ArmOutR = -20.f;
+		Over.ElbowR = 18.f;
+		Over.ArmL = 30.f;
+		Over.ArmOutL = 20.f;
+		Over.ElbowL = 90.f;
+		Over.LegL = 42.f;
+		Over.KneeL = -38.f;
+		Over.LegR = -30.f;
+		Over.KneeR = -12.f;
+		const FPose Drawn = Mix(Stance(), Wind, Smooth(0.f, 0.36f, T));
+		const FPose Swept = Mix(Drawn, Over, Smooth(0.38f, 0.54f, T));
+		return Mix(Swept, Stance(), Smooth(0.76f, 1.f, T));
 	}
 
 	/** Reaching for his collar at T: both hands out. */
@@ -579,6 +771,11 @@ namespace Brawl
 		case EAct::Tackle: return Tackle(T);
 		case EAct::Tackled: return Tackled(T);
 		case EAct::Beaten: return Beaten(Seconds);
+		case EAct::Cross: return Cross(T);
+		case EAct::Hook: return Hook(T);
+		case EAct::Uppercut: return Uppercut(T);
+		case EAct::Rising: return Rising(T);
+		case EAct::Haymaker: return Haymaker(T);
 		default: return Stance();
 		}
 	}
