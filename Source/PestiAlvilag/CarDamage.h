@@ -41,6 +41,12 @@ namespace CarDamage
 	// Bent bumpers (chrome below this height, cm) also sag this much for each cm they are pushed in.
 	constexpr double BumperTop = -45.0;
 	constexpr double ChromeSag = 0.5;
+	// A headlamp whose middle is pushed in this far is knocked off, and a
+	// bumper pushed in this far anywhere along it falls off (cm).
+	constexpr double LampOffDepth = 7.0;
+	constexpr double BumperOffDepth = 13.0;
+	// The headlamp (drum, lens and stalk) is everything this close to the drum's middle (cm).
+	constexpr double LampReach = 16.0;
 	// How worn out the car gets for each cm/s of a knock over MinSpeed (1 is done for).
 	constexpr double WearPerSpeed = 1.0 / 7000.0;
 
@@ -60,6 +66,18 @@ namespace CarDamage
 		TArray<FDent> Dents;
 		/** 0 like new, 1 worn out: the engine steams, smokes and at last stops. */
 		double Wear = 0.0;
+		/** Which parts have fallen off (bits of ELoose). */
+		int32 Fallen = 0;
+	};
+
+	/** Parts that can be knocked off. */
+	enum ELoose : int32
+	{
+		LampLeft,
+		LampRight,
+		FrontBumper,
+		RearBumper,
+		LooseCount
 	};
 
 	/** 0 to 1, the same for the same whole numbers. */
@@ -179,20 +197,124 @@ namespace CarDamage
 		}
 	}
 
+	/** The middle of each headlamp's drum (left, right). */
+	inline void LampDrums(const CarModel::FBuilder& Clean, FVector Out[2])
+	{
+		LampMiddles(Clean.Parts[CarModel::Lamp], true, Out);
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			Out[Side].X -= 7.0;
+		}
+	}
+
+	/** Which loose part (ELoose) this piece of the body, of this part, with its middle here, belongs to, or INDEX_NONE. */
+	inline int32 LooseOf(int32 Part, const FVector& Middle, const CarModel::FLayout& L, const FVector Drums[2])
+	{
+		if (Part == CarModel::Chrome || Part == CarModel::Lamp)
+		{
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				if ((Middle - Drums[Side]).Size() < LampReach)
+				{
+					return Side == 0 ? LampLeft : LampRight;
+				}
+			}
+		}
+		if (Part == CarModel::Chrome && Middle.Z < BumperTop)
+		{
+			if (Middle.X > L.Nose + 10.0)
+			{
+				return FrontBumper;
+			}
+			if (Middle.X < L.Tail - 8.0)
+			{
+				return RearBumper;
+			}
+		}
+		return INDEX_NONE;
+	}
+
 	/**
-	 * The body Clean with State's dents in it, into Out. Broken lamps' glass
-	 * goes dark (into Rubber) and OutLampBroken / OutTailBroken say which
-	 * (left, right).
+	 * Knocks parts off that the dents have pushed in far enough. Returns the
+	 * ones that have just come off (bits of ELoose), now also in State.Fallen.
 	 */
-	inline void Apply(const CarModel::FBuilder& Clean, const FState& State, CarModel::FBuilder& Out,
+	inline int32 KnockOff(const CarModel::FBuilder& Clean, const CarModel::FLayout& L, FState& State)
+	{
+		FVector Drums[2];
+		LampDrums(Clean, Drums);
+		int32 Off = 0;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			if (Offset(State, Drums[Side], false).Size() > LampOffDepth)
+			{
+				Off |= 1 << (LampLeft + Side);
+			}
+		}
+		const double Ends[2] = { L.Nose + 18.0, L.Tail - 14.0 };
+		for (int32 End = 0; End < 2; ++End)
+		{
+			for (const double Y : { -70.0, -35.0, 0.0, 35.0, 70.0 })
+			{
+				if (Offset(State, FVector(Ends[End], Y, -58.0), false).Size() > BumperOffDepth)
+				{
+					Off |= 1 << (FrontBumper + End);
+				}
+			}
+		}
+		const int32 Fresh = Off & ~State.Fallen;
+		State.Fallen |= Off;
+		return Fresh;
+	}
+
+	/** The shape of one loose part (ELoose), as it was on the car (car frame), and its middle. */
+	inline void BuildLoose(const CarModel::FBuilder& Clean, const CarModel::FLayout& L, int32 Which, CarModel::FBuilder& Out, FVector& OutMiddle)
+	{
+		FVector Drums[2];
+		LampDrums(Clean, Drums);
+		FVector Sum = FVector::ZeroVector;
+		int32 Count = 0;
+		for (int32 p = 0; p < CarModel::PartCount; ++p)
+		{
+			const CarModel::FPart& From = Clean.Parts[p];
+			CarModel::FPart& To = Out.Parts[p];
+			for (int32 t = 0; t + 2 < From.Triangles.Num(); t += 3)
+			{
+				const FVector Middle = (From.Vertices[From.Triangles[t]] + From.Vertices[From.Triangles[t + 1]] + From.Vertices[From.Triangles[t + 2]]) / 3.0;
+				if (LooseOf(p, Middle, L, Drums) != Which)
+				{
+					continue;
+				}
+				for (int32 k = 0; k < 3; ++k)
+				{
+					const int32 I = From.Triangles[t + k];
+					To.Triangles.Add(To.Vertices.Num());
+					To.Vertices.Add(From.Vertices[I]);
+					To.Normals.Add(From.Normals[I]);
+					Sum += From.Vertices[I];
+					++Count;
+				}
+			}
+		}
+		OutMiddle = Count > 0 ? Sum / Count : FVector::ZeroVector;
+	}
+
+	/**
+	 * The body Clean with State's dents in it, into Out, without the parts
+	 * knocked off. Broken lamps' glass goes dark (into Rubber) and
+	 * OutLampBroken / OutTailBroken say which (left, right); a knocked-off
+	 * lamp counts as broken.
+	 */
+	inline void Apply(const CarModel::FBuilder& Clean, const CarModel::FLayout& L, const FState& State, CarModel::FBuilder& Out,
 		bool OutLampBroken[2], bool OutTailBroken[2])
 	{
+		FVector Drums[2];
+		LampDrums(Clean, Drums);
 		FVector LampAt[2], TailAt[2];
 		LampMiddles(Clean.Parts[CarModel::Lamp], true, LampAt);
 		LampMiddles(Clean.Parts[CarModel::TailLamp], false, TailAt);
 		for (int32 Side = 0; Side < 2; ++Side)
 		{
-			OutLampBroken[Side] = Offset(State, LampAt[Side], false).Size() > LampBreakDepth;
+			OutLampBroken[Side] = Offset(State, LampAt[Side], false).Size() > LampBreakDepth || (State.Fallen & (1 << (LampLeft + Side))) != 0;
 			OutTailBroken[Side] = Offset(State, TailAt[Side], false).Size() > LampBreakDepth;
 		}
 
@@ -214,6 +336,16 @@ namespace CarDamage
 			{
 				const int32 I0 = From.Triangles[t], I1 = From.Triangles[t + 1], I2 = From.Triangles[t + 2];
 				const FVector A = From.Vertices[I0], B = From.Vertices[I1], C = From.Vertices[I2];
+
+				// Knocked off: gone from the car.
+				if (State.Fallen != 0)
+				{
+					const int32 Loose = LooseOf(p, (A + B + C) / 3.0, L, Drums);
+					if (Loose != INDEX_NONE && (State.Fallen & (1 << Loose)) != 0)
+					{
+						continue;
+					}
+				}
 
 				// A broken lamp's glass goes dark.
 				int32 Target = p;
