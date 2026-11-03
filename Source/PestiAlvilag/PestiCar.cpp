@@ -119,8 +119,10 @@ void APestiCar::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	// Nobody at the wheel: the engine is off, and so are the lights.
-	Visuals->SetEngineRunning(PC != nullptr);
+	// Nobody at the wheel: the engine is off, and so are the lights. Crashed
+	// too often, the engine dies: the car only rolls on and can be steered.
+	const bool bEngineDead = Visuals->IsEngineDead();
+	Visuals->SetEngineRunning(PC != nullptr && !bEngineDead);
 	if (!PC)
 	{
 		Visuals->SetHeadlights(false);
@@ -133,7 +135,11 @@ void APestiCar::Tick(float DeltaSeconds)
 		}
 		return;
 	}
-	if (!EngineNoise->IsPlaying())
+	if (bEngineDead && EngineNoise->IsPlaying())
+	{
+		EngineNoise->Stop();
+	}
+	else if (!bEngineDead && !EngineNoise->IsPlaying())
 	{
 		EngineNoise->Start();
 	}
@@ -143,7 +149,7 @@ void APestiCar::Tick(float DeltaSeconds)
 		return (PC->IsInputKeyDown(Positive) ? 1.f : 0.f) - (PC->IsInputKeyDown(Negative) ? 1.f : 0.f);
 	};
 
-	const float Throttle = FMath::Clamp(
+	float Throttle = FMath::Clamp(
 		KeyAxis(EKeys::W, EKeys::S) + KeyAxis(EKeys::Up, EKeys::Down)
 			+ PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis)
 			- PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftTriggerAxis),
@@ -152,6 +158,11 @@ void APestiCar::Tick(float DeltaSeconds)
 		KeyAxis(EKeys::D, EKeys::A) + KeyAxis(EKeys::Right, EKeys::Left)
 			+ PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX),
 		-1.f, 1.f);
+	// A dead engine pulls no more: the pedal only brakes.
+	if (bEngineDead)
+	{
+		Throttle = ForwardSpeed > 20.f ? FMath::Min(Throttle, 0.f) : 0.f;
+	}
 	const bool bHandbrake = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 
 	if (PC->WasInputKeyJustPressed(EKeys::C) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
@@ -179,7 +190,10 @@ void APestiCar::Tick(float DeltaSeconds)
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);
 	Visuals->SetSteer(Steer);
 	Visuals->SetThrottle(FMath::Abs(Throttle));
-	UpdateEngineNoise(Throttle);
+	if (!bEngineDead)
+	{
+		UpdateEngineNoise(Throttle);
+	}
 
 	// Turning needs some speed, and gets gentler near top speed. The car is
 	// heavy: the turning builds up and dies away rather than snapping.
@@ -213,7 +227,8 @@ void APestiCar::Tick(float DeltaSeconds)
 	if (GEngine)
 	{
 		APestiHUD::Show(this, 1, 0.f, FColor::White,
-			FString::Printf(TEXT("%d km/h   (F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(GetVelocity().Size2D() * 0.036f)));
+			FString::Printf(TEXT("%d km/h   %s(F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(GetVelocity().Size2D() * 0.036f),
+				bEngineDead ? TEXT("A motor lefulladt / The engine is dead   ") : TEXT("")));
 	}
 }
 
@@ -362,6 +377,18 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 
 	// A head-on hit nearly stops the car; a glancing one lets it scrape along.
 	const FVector WallNormal = FVector(Hit.Normal.X, Hit.Normal.Y, 0.f).GetSafeNormal();
+
+	// The crash dents the car, and the car it hit: by how fast they met, straight on.
+	const FVector Going = GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
+	const float CrashSpeed = static_cast<float>(FMath::Abs(FVector::DotProduct(Going, WallNormal)));
+	Visuals->Knock(Hit.ImpactPoint, WallNormal, CrashSpeed);
+	if (Rammed)
+	{
+		if (UCarVisuals* RammedLooks = Rammed->FindComponentByClass<UCarVisuals>())
+		{
+			RammedLooks->Knock(Hit.ImpactPoint, -WallNormal, CrashSpeed);
+		}
+	}
 	const float Impact = static_cast<float>(FMath::Abs(FVector::DotProduct(GetActorForwardVector(), WallNormal)));
 	ForwardSpeed *= 1.f - 0.8f * Impact;
 	// Sliding into it sideways stops the slide the same way.

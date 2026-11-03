@@ -78,6 +78,25 @@ namespace CarVisuals
 	constexpr float IdleSpeed = 60.f;
 	constexpr float TwoPi = 6.2831853f;
 
+	// Knocks dent the body between these heights (cm, car frame), wherever the box was touched.
+	constexpr double KnockLow = -45.0;
+	constexpr double KnockHigh = 15.0;
+	// A worn car's radiator steams above this wear and smokes black above the second,
+	// a puff every this many seconds, rising this fast (cm/s).
+	constexpr double SteamWear = 0.45;
+	constexpr double SmokeWear = 0.8;
+	constexpr float SteamInterval = 0.16f;
+	constexpr float SteamRise = 70.f;
+	// Knocked-off parts weigh this much (kg: a lamp, a bumper), fly off at
+	// this share of the car's speed plus this much up and out (cm/s), and
+	// come to rest for good after this long (s).
+	constexpr float LampKg = 4.f;
+	constexpr float BumperKg = 14.f;
+	constexpr float LooseCarry = 0.6f;
+	constexpr float LooseUp = 250.f;
+	constexpr float LooseOut = 150.f;
+	constexpr double LooseRestTime = 8.0;
+
 	/** Grows like X when small, but never past 1 (or -1). */
 	float Soft(float X)
 	{
@@ -207,6 +226,8 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 		return;
 	}
 	Style = InStyle;
+	Damage = CarDamage::FState();
+	bLampOut[0] = bLampOut[1] = false;
 	SwayRoll = SwayRollRate = SwayPitch = SwayPitchRate = 0.f;
 	PushSide = PushAhead = 0.f;
 	bVelocityKnown = false;
@@ -453,6 +474,8 @@ void UCarVisuals::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 	const bool bNear = Distance < CarVisuals::WheelRange && Owner->WasRecentlyRendered(0.2f);
 	UpdateSway(DeltaTime, Speed, Push, bNear);
 
+	UpdateWear(DeltaTime, Distance);
+
 	if (bStreetEngine)
 	{
 		UpdateStreetEngine(Camera ? Distance : CarVisuals::ForgetRange + 1.0, Speed, Pickup);
@@ -697,13 +720,15 @@ void UCarVisuals::ShowBeams(bool bShow)
 			Beams.Add(Beam);
 		}
 	}
-	for (USpotLightComponent* Beam : Beams)
+	for (int32 Side = 0; Side < Beams.Num(); ++Side)
 	{
+		USpotLightComponent* Beam = Beams[Side];
 		if (bShow && Clock)
 		{
 			Beam->SetIntensity(Clock->LampCandela(BeamStrength));
 		}
-		Beam->SetVisibility(bShow);
+		// A broken headlamp shines no more.
+		Beam->SetVisibility(bShow && !(Side < 2 && bLampOut[Side]));
 	}
 	if (bShow != bBeamsShown)
 	{
@@ -737,4 +762,171 @@ void UCarVisuals::Puff(float Size, bool bDark)
 	const FVector Back = -Owner->GetActorForwardVector() * CarVisuals::PuffSpeed;
 	const FVector Wander(FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(5.f, 25.f));
 	Smoke->Puff(Pipe, Back + Wander, Size, bDark);
+}
+
+void UCarVisuals::PuffFrom(const FVector& Local, const FVector& Drift, float Size, bool bDark)
+{
+	AActor* Owner = GetOwner();
+	AExhaustSmoke* Smoke = AExhaustSmoke::Get(GetWorld());
+	if (!Owner || !Smoke)
+	{
+		return;
+	}
+	const FVector Wander(FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(-20.f, 20.f), FMath::FRandRange(5.f, 25.f));
+	Smoke->Puff(Owner->GetActorTransform().TransformPosition(Local), Drift + Wander, Size, bDark);
+}
+
+void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed)
+{
+	if (!bShown || !Body || !Body->GetAttachParent())
+	{
+		return;
+	}
+	// Into the car's own frame (the body's parent: the body itself leans).
+	const FTransform Frame = Body->GetAttachParent()->GetComponentTransform();
+	FVector At = Frame.InverseTransformPosition(WorldPoint);
+	At.Z = FMath::Clamp(At.Z, CarVisuals::KnockLow, CarVisuals::KnockHigh);
+	const FVector Into = Frame.InverseTransformVectorNoScale(WorldInto);
+	if (!CarDamage::Knock(Damage, At, Into, Speed))
+	{
+		return;
+	}
+
+	const CarModel::FBuilder& Clean = CarVisuals::BodyShape(Style);
+	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
+	const int32 Fresh = CarDamage::KnockOff(Clean, Layout, Damage);
+	CarModel::FBuilder Dented;
+	bool LampBroken[2] = { false, false };
+	bool TailBroken[2] = { false, false };
+	CarDamage::Apply(Clean, Layout, Damage, Dented, LampBroken, TailBroken);
+	Refill(Body, Dented);
+
+	bLampOut[0] = LampBroken[0];
+	bLampOut[1] = LampBroken[1];
+	if (Beams.Num() > 0)
+	{
+		ShowBeams(bBeamsShown);
+	}
+	for (int32 Which = 0; Which < CarDamage::LooseCount; ++Which)
+	{
+		if ((Fresh & (1 << Which)) != 0)
+		{
+			DropPart(Which);
+		}
+	}
+}
+
+void UCarVisuals::Refill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder& Shape)
+{
+	for (int32 i = 0; i < CarModel::PartCount; ++i)
+	{
+		const CarModel::FPart& Part = Shape.Parts[i];
+		if (Part.Triangles.Num() == 0)
+		{
+			Mesh->ClearMeshSection(i);
+			continue;
+		}
+		if (i == CarModel::Glass && !SeeThroughMaterial)
+		{
+			continue;
+		}
+		// The paint stays with the section; a part new to this mesh (a broken lamp's dark glass) gets its own.
+		const bool bUnpainted = Mesh->GetMaterial(i) == nullptr;
+		Mesh->CreateMeshSection_LinearColor(i, Part.Vertices, Part.Triangles, Part.Normals,
+			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+		if (bUnpainted && BaseMaterial && i != CarModel::Glass)
+		{
+			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			Material->SetVectorParameterValue(TEXT("Color"), CarModel::PartColor(static_cast<CarModel::EPart>(i), Style));
+			Mesh->SetMaterial(i, Material);
+		}
+	}
+}
+
+void UCarVisuals::DropPart(int32 Which)
+{
+	AActor* Owner = GetOwner();
+	USceneComponent* Frame = Body ? Body->GetAttachParent() : nullptr;
+	if (!Owner || !Frame)
+	{
+		return;
+	}
+	CarModel::FBuilder Shape;
+	FVector Middle = FVector::ZeroVector;
+	CarDamage::BuildLoose(CarVisuals::BodyShape(Style), CarModel::Layout(Style.Body), Which, Shape, Middle);
+
+	// The part turns about its own middle as it tumbles.
+	TArray<FVector> Hull;
+	for (int32 i = 0; i < CarModel::PartCount; ++i)
+	{
+		for (FVector& V : Shape.Parts[i].Vertices)
+		{
+			V -= Middle;
+			Hull.Add(V);
+		}
+	}
+	if (Hull.Num() < 4)
+	{
+		return;
+	}
+
+	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Owner, NAME_None, RF_Transient);
+	Piece->SetWorldTransform(FTransform(Frame->GetComponentQuat(), Frame->GetComponentTransform().TransformPosition(Middle)));
+	Piece->SetCanEverAffectNavigation(false);
+	Piece->bUseComplexAsSimpleCollision = false;
+	Fill(Piece, Shape);
+	Piece->AddCollisionConvexMesh(Hull);
+	// It lands on the road and walls, but never trips up people or cars.
+	Piece->SetCollisionObjectType(ECC_PhysicsBody);
+	Piece->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Piece->SetCollisionResponseToAllChannels(ECR_Block);
+	Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	Piece->RegisterComponent();
+	Piece->SetSimulatePhysics(true);
+	Piece->SetMassOverrideInKg(NAME_None, Which == CarDamage::LampLeft || Which == CarDamage::LampRight ? CarVisuals::LampKg : CarVisuals::BumperKg, true);
+	Piece->SetLinearDamping(0.2f);
+	Piece->SetAngularDamping(0.5f);
+
+	// On with the car, out from it and up, tumbling.
+	const FVector Outward = FVector(Piece->GetComponentLocation().X - Frame->GetComponentLocation().X,
+		Piece->GetComponentLocation().Y - Frame->GetComponentLocation().Y, 0.0).GetSafeNormal();
+	const FVector Flung = LastVelocity * CarVisuals::LooseCarry + Outward * CarVisuals::LooseOut
+		+ FVector(0.0, 0.0, CarVisuals::LooseUp * FMath::FRandRange(0.6f, 1.2f));
+	Piece->SetPhysicsLinearVelocity(Flung);
+	Piece->SetPhysicsAngularVelocityInDegrees(FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * 500.f);
+	LooseParts.Add(Piece);
+	LooseSince.Add(GetWorld()->GetTimeSeconds());
+}
+
+void UCarVisuals::UpdateWear(float DeltaTime, double Distance)
+{
+	// Fallen parts stop costing anything once they have come to rest.
+	const double Now = GetWorld()->GetTimeSeconds();
+	for (int32 i = 0; i < LooseParts.Num(); ++i)
+	{
+		UProceduralMeshComponent* Piece = LooseParts[i];
+		if (IsValid(Piece) && Piece->IsSimulatingPhysics() && Now - LooseSince[i] > CarVisuals::LooseRestTime)
+		{
+			Piece->SetSimulatePhysics(false);
+			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
+
+	// A worn car's radiator steams, then smokes black, even once the engine has died.
+	if (Damage.Wear < CarVisuals::SteamWear || !(bEngineRunning || IsEngineDead()) || Distance > CarVisuals::SmokeRange)
+	{
+		return;
+	}
+	SteamTimer -= DeltaTime;
+	if (SteamTimer > 0.f)
+	{
+		return;
+	}
+	SteamTimer = CarVisuals::SteamInterval * FMath::FRandRange(0.7f, 1.3f);
+	const bool bBlack = Damage.Wear > CarVisuals::SmokeWear;
+	PuffFrom(CarDamage::RadiatorCap(CarModel::Layout(Style.Body)), FVector(0.0, 0.0, CarVisuals::SteamRise),
+		bBlack ? FMath::FRandRange(10.f, 15.f) : FMath::FRandRange(7.f, 11.f), bBlack);
 }
