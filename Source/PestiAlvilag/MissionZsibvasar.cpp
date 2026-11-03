@@ -75,8 +75,10 @@ namespace Zsibvasar
 	// They go for the player in this order, two at a time; Pöttöm, last, runs.
 	const ERuffian FightOrder[] = { ERuffian::Svihak, ERuffian::Csontos, ERuffian::Bika };
 	constexpr int32 AtOnce = 2;
-	// The second man in holds back this much (think slower, no grabbing).
-	constexpr float SecondEager = 0.6f;
+	// How keen each is (below 1: thinks slower, no grabbing, no double jabs):
+	// the first man in, and the second, who holds back more.
+	constexpr float FirstEager = 0.8f;
+	constexpr float SecondEager = 0.45f;
 	// Those waiting their turn stand round him this far off (cm), at these
 	// angles from the way he faces (degrees).
 	constexpr double RingRadius = 380.0;
@@ -815,7 +817,7 @@ void AMissionZsibvasar::TickFight()
 	}
 	for (int32 k = 0; k < FMath::Min(Zsibvasar::AtOnce, Standing.Num()); ++k)
 	{
-		Standing[k]->Attack(Person, k == 0 ? 1.f : Zsibvasar::SecondEager);
+		Standing[k]->Attack(Person, k == 0 ? Zsibvasar::FirstEager : Zsibvasar::SecondEager);
 	}
 
 	// He faces the nearest man coming at him, and turns to another who gets much closer.
