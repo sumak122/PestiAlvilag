@@ -59,7 +59,7 @@ namespace CitySynth
 
 	constexpr int32 MaxCalls = 40;
 	constexpr int32 BabbleVoices = 8;
-	constexpr float MixVolume = 0.5f;
+	constexpr float MixVolume = 0.15f;
 	/** How often the dice are thrown for a new far-off sound (s). */
 	constexpr float DiceEvery = 0.25f;
 
