@@ -127,20 +127,25 @@ void AMissionPrologue::OnStepStarted(int32 Step)
 
 bool AMissionPrologue::GetLetter(FString& OutHu, FString& OutEn) const
 {
-	OutHu = TEXT("Kedves Fiam!\n\n")
-		TEXT("Ha lesz\u00e1llsz a vonatr\u00f3l, gyere ki a Keleti nagy kapuj\u00e1n a Baross t\u00e9rre. ")
-		TEXT("Menj a R\u00e1k\u00f3czi \u00faton a Belv\u00e1ros fel\u00e9, \u00e9s fordulj balra a Keny\u00e9rmez\u0151 utc\u00e1ba. ")
-		TEXT("Az a Tisza K\u00e1lm\u00e1n t\u00e9rre visz, ott v\u00e1gj \u00e1t a parkon. ")
-		TEXT("A t\u00e9r t\u00fals\u00f3 v\u00e9g\u00e9n \u00e9red el a N\u00e9psz\u00ednh\u00e1z utc\u00e1t: fordulj balra, \u00e9s p\u00e1r h\u00e1z ut\u00e1n ott v\u00e1rlak a kapuban.\n\n")
-		TEXT("Ha m\u00e9gis elt\u00e9vedn\u00e9l, k\u00e9rdezz meg b\u00e1rkit az utc\u00e1n, a pesti ember sz\u00edvesen \u00fatba igaz\u00edt.\n\n")
-		TEXT(">Cs\u00f3kol:\n>B\u00f6zsi n\u00e9ni");
-	OutEn = TEXT("Dear boy,\n\n")
+	// She owes the player's employer, not the player: cold, and formal ("maga").
+	OutHu = TEXT("Fiatalember!\n\n")
+		TEXT("Nem \u00e9n k\u00e9rtem, hogy hozz\u00e1m j\u00f6jj\u00f6n. De a megb\u00edz\u00f3j\u00e1nak tartozom, \u00e9s B\u00f6zsi n\u00e9ni megadja, amivel tartozik.\n\n")
+		TEXT("Ha lesz\u00e1ll a vonatr\u00f3l, j\u00f6jj\u00f6n ki a Keleti nagy kapuj\u00e1n a Baross t\u00e9rre. ")
+		TEXT("Menjen a R\u00e1k\u00f3czi \u00faton a Belv\u00e1ros fel\u00e9, \u00e9s forduljon balra a Keny\u00e9rmez\u0151 utc\u00e1ba. ")
+		TEXT("Az a Tisza K\u00e1lm\u00e1n t\u00e9rre visz, ott v\u00e1gjon \u00e1t a parkon. ")
+		TEXT("A t\u00e9r t\u00fals\u00f3 v\u00e9g\u00e9n \u00e9ri el a N\u00e9psz\u00ednh\u00e1z utc\u00e1t: forduljon balra, p\u00e1r h\u00e1z ut\u00e1n ott a kapum.\n\n")
+		TEXT("Ha elt\u00e9ved, k\u00e9rdezzen meg valakit az utc\u00e1n. T\u00f6r\u00f6lje meg a l\u00e1b\u00e1t, tartsa a h\u00e1zirendet, \u00e9s ne hozzon bajt a h\u00e1zamra.\n\n")
+		TEXT(">B\u00f6zsi n\u00e9ni\n\n")
+		TEXT("U.i.: A szob\u00e1t a megb\u00edz\u00f3ja fizeti. A k\u00e1rt maga.");
+	OutEn = TEXT("Young man,\n\n")
+		TEXT("It was not my idea that you come to me. But I owe your employer, and Aunt B\u00f6zsi pays what she owes.\n\n")
 		TEXT("When you get off the train, come out through the big gate of Keleti onto Baross t\u00e9r. ")
 		TEXT("Walk along R\u00e1k\u00f3czi \u00fat towards the city centre and turn left into Keny\u00e9rmez\u0151 utca. ")
 		TEXT("It brings you to Tisza K\u00e1lm\u00e1n t\u00e9r: cut across the park. ")
-		TEXT("At the far end of the square you reach N\u00e9psz\u00ednh\u00e1z utca: turn left, and a few houses on I'll be waiting at the gate.\n\n")
-		TEXT("If you get lost, ask anyone in the street: Pest folk are glad to show the way.\n\n")
-		TEXT(">Love,\n>Aunt B\u00f6zsi");
+		TEXT("At the far end of the square you reach N\u00e9psz\u00ednh\u00e1z utca: turn left, and a few houses on is my gate.\n\n")
+		TEXT("If you get lost, ask someone in the street. Wipe your feet, keep the house rules, and bring no trouble to my door.\n\n")
+		TEXT(">Aunt B\u00f6zsi\n\n")
+		TEXT("P.S. Your employer pays for the room. Any damage, you pay for.");
 	return true;
 }
 
@@ -148,8 +153,8 @@ void AMissionPrologue::OnStepDone(int32 Step)
 {
 	if (Step == 0)
 	{
-		Say(TEXT("B\u00f6zsi n\u00e9ni"), TEXT("H\u00e1t megj\u00f6tt\u00e9l, fiam! Gyere csak, megmutatom a szob\u00e1dat."),
-			TEXT("So you made it, son! Come in, I'll show you your room."), 8.f);
+		Say(TEXT("B\u00f6zsi n\u00e9ni"), TEXT("Na, megj\u00f6tt. L\u00e1bat t\u00f6r\u00f6lj\u00f6n! A szoba a gang v\u00e9g\u00e9n van, \u00e9s ne doh\u00e1nyozzon benne."),
+			TEXT("So, you've come. Wipe your feet! The room's at the end of the gallery, and no smoking in it."), 8.f);
 		if (GEngine)
 		{
 			APestiHUD::Show(this, Prologue::MessageLine, 12.f, FColor::Yellow,
