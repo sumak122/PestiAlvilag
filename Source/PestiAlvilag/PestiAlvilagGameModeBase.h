@@ -112,6 +112,9 @@ public:
 	void HurtPlayer(float Amount);
 	void HealPlayer(float Amount);
 	bool IsMissionDone(FName MissionId) const { return CompletedMissions.Contains(MissionId); }
+	int32 GetMissionsDone() const { return CompletedMissions.Num(); }
+	/** Throws the save away and starts the city again from the prologue (F9, the menu's New game). */
+	void StartNewGame();
 
 	/** Home can be slept at once the prologue has led the player there. */
 	bool CanSaveAtHome() const;
@@ -134,7 +137,6 @@ private:
 	double GroundZ(const FVector2D& At) const;
 	/** Reads the save slot the first time it is needed. */
 	void LoadSaveOnce();
-	void StartNewGame();
 
 	int32 WantedLevel = 0;
 	int32 Arrests = 0;

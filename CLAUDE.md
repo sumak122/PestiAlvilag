@@ -26,6 +26,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
 - Missions and saving: `Mission` (base), `MissionPrologue`, `MissionUzenet`, `MissionZsebtolvaj`, `MissionZsibvasar`, `MissionFelmondas` (mission 5, from a real news story) + `GarayYard`/`GarayModel.h` (Garay utca 13: Hermann's shop, Schwimmer's timber yard, their people), `PestiSaveGame`, `Lighters`/`LighterModel.h` (collectibles), `GoalMarkerComponent`, `RouteGuideComponent`.
 - Screen text: `PestiHud` (art deco HUD, menus), `PestiText.h` (Hungarian/English strings).
+- Menus: `PestiMenu` (title screen "Pesti Mesék", Esc/Tab pause menu, settings, controls, credits; logic and keys, plus PestiSettings: volume, mouse, English subtitles). Painted by `PestiHud`.
 
 ## Rules for changes
 - Claude can't build Unreal; Daniel does, and each mistake costs him a failed build. Check carefully before pushing.
