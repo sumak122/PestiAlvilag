@@ -654,13 +654,17 @@ namespace CarModel
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(CabBack, Waist), FVector2D(CabBack, -44.0) },
 			CabBack + 2.0, CabBack + 2.0, { });
 		// The box behind: tall, with a sign panel down each side and doors at the back.
-		B.Box(Paint, FVector(L.Tail, -78.0, -44.0), FVector(CabBack, 78.0, L.RoofTop));
+		// Below the mudguards' tops it is narrower, between the rear wheels, so
+		// the wheels and mudguards stand clear under the full-width box.
+		const double BoxSill = HubZ + WheelRadius + 13.0;
+		B.Box(Paint, FVector(L.Tail, -(WheelY - 12.0), -44.0), FVector(CabBack, WheelY - 12.0, BoxSill));
+		B.Box(Paint, FVector(L.Tail, -78.0, BoxSill), FVector(CabBack, 78.0, L.RoofTop));
 		B.Box(Paint, FVector(L.Tail - 2.0, -80.0, L.RoofTop), FVector(CabBack + 4.0, 80.0, L.RoofTop + 4.0));
-		B.BothSides(Accent, FVector(L.Tail + 14.0, 78.0, -22.0), FVector(CabBack - 14.0, 78.6, L.RoofTop - 14.0));
-		B.BothSides(Paint, FVector(L.Tail + 18.0, 78.4, -18.0), FVector(CabBack - 18.0, 78.8, -14.0));
+		B.BothSides(Accent, FVector(L.Tail + 14.0, 78.0, BoxSill + 8.0), FVector(CabBack - 14.0, 78.6, L.RoofTop - 14.0));
+		B.BothSides(Paint, FVector(L.Tail + 18.0, 78.4, BoxSill + 12.0), FVector(CabBack - 18.0, 78.8, BoxSill + 16.0));
 		B.Box(Guards, FVector(L.Tail - 0.6, -0.6, -40.0), FVector(L.Tail, 0.6, L.RoofTop - 4.0));
 		B.Box(Chrome, FVector(L.Tail - 1.6, 3.0, 14.0), FVector(L.Tail, 10.0, 17.0));
-		for (const double Z : { -30.0, L.RoofTop - 18.0 })
+		for (const double Z : { BoxSill + 6.0, L.RoofTop - 18.0 })
 		{
 			B.Box(Chrome, FVector(L.Tail - 1.4, -70.0, Z), FVector(L.Tail, -60.0, Z + 6.0));
 			B.Box(Chrome, FVector(L.Tail - 1.4, 60.0, Z), FVector(L.Tail, 70.0, Z + 6.0));
