@@ -14,7 +14,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 
 ## Areas (files in Source/PestiAlvilag)
 - Player on foot: `PestiPerson` (big, ~1400 lines: moves, camera, F/T keys), `FreeRun` (vault/slide), `Brawl.h` (fist fighting).
-- Player car: `PestiCar`, `CarBody`, `CarVisuals`, `CarModel.h`, `ExhaustSmoke`, `EngineSound`, `Wreck.h`.
+- Player car: `PestiCar`, `CarBody`, `CarVisuals`, `CarModel.h`, `ExhaustSmoke`, `EngineSound`, `Wreck.h`, `CarDamage.h` (crash dents, broken lamps and glass, parts falling off, wear; used by CarVisuals::Knock).
 - Traffic and police: `TrafficManager`, `TrafficCar`, `PoliceCar`, `PoliceModel.h`, `PolicePatrols` (constables, phone boxes), `CarjackedDriver`.
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
