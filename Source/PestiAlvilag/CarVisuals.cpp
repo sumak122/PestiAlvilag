@@ -51,6 +51,39 @@ namespace CarVisuals
 	// Traffic at this speed is flat out (cm/s).
 	constexpr float StreetTopSpeed = 1400.f;
 
+	// The body sits on springs. It leans out of a turn (at most MaxRoll
+	// degrees), squats pulling away and dips its nose braking (MaxPitch),
+	// half way there at this much push (cm/s each second)...
+	constexpr float MaxRoll = 6.f;
+	constexpr float RollPush = 1500.f;
+	constexpr float MaxPitch = 4.f;
+	constexpr float PitchPush = 1500.f;
+	// ...and swings there and back a little before it settles (spring
+	// stiffness and damping: about 1.5 swings a second, a small overshoot).
+	constexpr float SwayStiffness = 90.f;
+	constexpr float SwayDamping = 7.f;
+	// The car's push is jumpy frame to frame: smoothed this fast.
+	constexpr float PushSmoothing = 12.f;
+	// On the setts the body bobs (cm) and rocks (degrees), and each wheel
+	// hops on its own (cm), fully at this speed and above (cm/s).
+	constexpr float RoughSpeed = 1500.f;
+	constexpr float BodyBob = 1.4f;
+	constexpr float BodyRock = 0.5f;
+	constexpr float WheelHop = 0.7f;
+	// An idling engine shakes the body a little (cm, degrees, shakes a second),
+	// below this speed (cm/s).
+	constexpr float IdleBob = 0.18f;
+	constexpr float IdleRock = 0.12f;
+	constexpr float IdleShakes = 9.f;
+	constexpr float IdleSpeed = 60.f;
+	constexpr float TwoPi = 6.2831853f;
+
+	/** Grows like X when small, but never past 1 (or -1). */
+	float Soft(float X)
+	{
+		return X / (1.f + FMath::Abs(X));
+	}
+
 	// Lamps glow this many times as bright as a lit grey wall, by day and by night.
 	const FLinearColor HeadlampLight(1.f, 0.88f, 0.62f);
 	constexpr float HeadlampDay = 6.f;
@@ -174,6 +207,9 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 		return;
 	}
 	Style = InStyle;
+	SwayRoll = SwayRollRate = SwayPitch = SwayPitchRate = 0.f;
+	PushSide = PushAhead = 0.f;
+	bVelocityKnown = false;
 
 	auto MakeMesh = [Owner, Parent]()
 	{
@@ -196,6 +232,7 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 
 	const CarModel::FBuilder& Shape = CarVisuals::BodyShape(Style);
 	Fill(Body, Shape);
+	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
 	// The headlamp lenses: the middle of the lamp glass on each side of the front.
 	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
 	FVector Sum[2] = { FVector::ZeroVector, FVector::ZeroVector };
@@ -368,19 +405,29 @@ void UCarVisuals::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 		LastLocation = Location;
 		LastYaw = Yaw;
 		bMoved = true;
+		bVelocityKnown = false;
 		return;
 	}
+	const FVector Step(Location.X - LastLocation.X, Location.Y - LastLocation.Y, 0.0);
 	const float Travel = static_cast<float>(FVector::DotProduct(Location - LastLocation, Owner->GetActorForwardVector()));
 	const float Turn = FRotator::NormalizeAxis(Yaw - LastYaw);
 	LastLocation = Location;
 	LastYaw = Yaw;
-	if (FMath::Abs(Travel) > CarVisuals::MaxTravel)
+	if (Step.Size() > CarVisuals::MaxTravel)
 	{
+		bVelocityKnown = false;
 		return;
 	}
 	const float Speed = Travel / DeltaTime;
 	const float Pickup = (Speed - LastSpeed) / DeltaTime;
 	LastSpeed = Speed;
+
+	// How the car is being pushed about (cm/s each second, flat): what the body leans against.
+	const FVector Going = Step / DeltaTime;
+	const FVector Push = bVelocityKnown ? (Going - LastVelocity) / DeltaTime : FVector::ZeroVector;
+	LastVelocity = Going;
+	bVelocityKnown = true;
+	Odometer = FMath::Fmod(Odometer + FMath::Abs(Travel), 1.0e6);
 
 	// The wheels roll as far as the car goes. The front ones turn as far as
 	// the turning needs (a car turns Travel / wheelbase * tan(angle)), or as
@@ -403,14 +450,8 @@ void UCarVisuals::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
 	const double Distance = Camera ? FVector::Dist(Camera->GetCameraLocation(), Location) : 0.0;
 	UpdateLights(DeltaTime, Speed, Pickup, Camera ? Distance : CarVisuals::BeamForget + 1.0);
-	if (Distance < CarVisuals::WheelRange && Owner->WasRecentlyRendered(0.2f))
-	{
-		for (int32 i = 0; i < Wheels.Num(); ++i)
-		{
-			// Rolling forward turns the top of the wheel forward: pitch down.
-			Wheels[i]->SetRelativeRotation(FRotator(-Spin, i < 2 ? SteerAngle : 0.f, 0.f));
-		}
-	}
+	const bool bNear = Distance < CarVisuals::WheelRange && Owner->WasRecentlyRendered(0.2f);
+	UpdateSway(DeltaTime, Speed, Push, bNear);
 
 	if (bStreetEngine)
 	{
@@ -427,6 +468,66 @@ void UCarVisuals::TickComponent(float DeltaTime, ELevelTick TickType, FActorComp
 		const float Effort = FMath::Clamp(Pickup / CarVisuals::FullEffortAcceleration, 0.f, 1.f);
 		PuffTimer = CarVisuals::PuffInterval * FMath::FRandRange(0.7f, 1.3f);
 		Puff(FMath::Lerp(6.f, 10.f, Effort), false);
+	}
+}
+
+void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, bool bNear)
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner || !Body)
+	{
+		return;
+	}
+
+	// Lean against the push: out of the turn, back pulling away, forward braking.
+	const float Side = static_cast<float>(FVector::DotProduct(Push, Owner->GetActorRightVector()));
+	const float Ahead = static_cast<float>(FVector::DotProduct(Push, Owner->GetActorForwardVector()));
+	PushSide = FMath::FInterpTo(PushSide, Side, DeltaTime, CarVisuals::PushSmoothing);
+	PushAhead = FMath::FInterpTo(PushAhead, Ahead, DeltaTime, CarVisuals::PushSmoothing);
+	// Roll + puts the right side down: a right turn pushes right, so the left side goes down.
+	const float WantedRoll = -CarVisuals::MaxRoll * CarVisuals::Soft(PushSide / CarVisuals::RollPush);
+	const float WantedPitch = CarVisuals::MaxPitch * CarVisuals::Soft(PushAhead / CarVisuals::PitchPush);
+
+	// On springs: it swings towards the lean, a little past it, and back.
+	const float SpringTime = FMath::Min(DeltaTime, 0.05f);
+	SwayRollRate += (CarVisuals::SwayStiffness * (WantedRoll - SwayRoll) - CarVisuals::SwayDamping * SwayRollRate) * SpringTime;
+	SwayPitchRate += (CarVisuals::SwayStiffness * (WantedPitch - SwayPitch) - CarVisuals::SwayDamping * SwayPitchRate) * SpringTime;
+	SwayRoll = FMath::Clamp(SwayRoll + SwayRollRate * SpringTime, -1.5f * CarVisuals::MaxRoll, 1.5f * CarVisuals::MaxRoll);
+	SwayPitch = FMath::Clamp(SwayPitch + SwayPitchRate * SpringTime, -1.5f * CarVisuals::MaxPitch, 1.5f * CarVisuals::MaxPitch);
+
+	if (!bNear)
+	{
+		return;
+	}
+
+	// The setts: the faster, the rougher. The bumps come with the distance
+	// driven, so a car standing still stands still.
+	const float Rough = FMath::Clamp(FMath::Abs(Speed) / CarVisuals::RoughSpeed, 0.f, 1.f);
+	const float Along = static_cast<float>(Odometer);
+	float Bob = Rough * CarVisuals::BodyBob * (FMath::PerlinNoise1D(Along / 380.f) + 0.4f * FMath::PerlinNoise1D(Along / 110.f + 17.f));
+	float Rock = Rough * CarVisuals::BodyRock * FMath::PerlinNoise1D(Along / 430.f + 53.f);
+	float Nod = Rough * CarVisuals::BodyRock * 0.7f * FMath::PerlinNoise1D(Along / 510.f + 91.f);
+
+	// Ticking over at a standstill, the engine shakes it.
+	const float Idle = bEngineRunning ? 1.f - FMath::Clamp(FMath::Abs(Speed) / CarVisuals::IdleSpeed, 0.f, 1.f) : 0.f;
+	if (Idle > 0.f)
+	{
+		IdlePhase = FMath::Fmod(IdlePhase + DeltaTime * CarVisuals::IdleShakes * CarVisuals::TwoPi, CarVisuals::TwoPi);
+		Bob += Idle * CarVisuals::IdleBob * FMath::Sin(IdlePhase);
+		Rock += Idle * CarVisuals::IdleRock * FMath::Sin(IdlePhase * 0.5f + 1.f);
+	}
+
+	// Tip the body about the axles' height, so its bottom stays down by the wheels.
+	const FQuat Lean = FRotator(SwayPitch + Nod, 0.f, SwayRoll + Rock).Quaternion();
+	const FVector Pivot(0.0, 0.0, CarModel::HubZ);
+	Body->SetRelativeLocationAndRotation(Pivot - Lean.RotateVector(Pivot) + FVector(0.0, 0.0, Bob), Lean);
+
+	for (int32 i = 0; i < Wheels.Num(); ++i)
+	{
+		const float Hop = Rough * CarVisuals::WheelHop * FMath::PerlinNoise1D(Along / 90.f + 23.f * i);
+		// Rolling forward turns the top of the wheel forward: pitch down.
+		Wheels[i]->SetRelativeLocationAndRotation(CarModel::WheelHub(Style.Body, i) + FVector(0.0, 0.0, Hop),
+			FRotator(-Spin, i < 2 ? SteerAngle : 0.f, 0.f));
 	}
 }
 

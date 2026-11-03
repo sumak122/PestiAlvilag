@@ -105,6 +105,8 @@ private:
 	void UpdateStreetEngine(double Distance, float Speed, float Pickup);
 	void StopStreetEngine();
 	void UpdateLights(float DeltaTime, float Speed, float Pickup, double Distance);
+	/** The body leans, dips and bobs on its springs, and the wheels hop (shown only when Near). */
+	void UpdateSway(float DeltaTime, float Speed, const FVector& Push, bool bNear);
 	void ShowBeams(bool bShow);
 
 	UPROPERTY(Transient)
@@ -159,6 +161,21 @@ private:
 	/** Wheel roll (degrees) and front wheel turn (degrees, + is right). */
 	float Spin = 0.f;
 	float SteerAngle = 0.f;
+
+	/** The body's lean on its springs (degrees; roll + is right side down, pitch + is nose up) and how fast it swings. */
+	float SwayRoll = 0.f;
+	float SwayRollRate = 0.f;
+	float SwayPitch = 0.f;
+	float SwayPitchRate = 0.f;
+	/** The car's push sideways and ahead, smoothed (cm/s each second). */
+	float PushSide = 0.f;
+	float PushAhead = 0.f;
+	/** Last frame's movement (cm/s, flat), and whether there is one yet. */
+	FVector LastVelocity = FVector::ZeroVector;
+	bool bVelocityKnown = false;
+	/** How far the car has rolled (cm, starting again every 10 km): the bumps of the road come with it. */
+	double Odometer = 0.0;
+	float IdlePhase = 0.f;
 
 	float DriverSteer = 0.f;
 	bool bDriverSteers = false;
