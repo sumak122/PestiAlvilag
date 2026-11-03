@@ -31,6 +31,8 @@ struct FMissionStep
 	 * getting there; its target may move (SetStepTarget), say a man running.
 	 */
 	bool bManual = false;
+	/** What people in the street call the place, when the player asks them the way (a street, a square); may be empty. */
+	FString Place;
 };
 
 /**
@@ -62,6 +64,13 @@ public:
 
 	FString TitleHu;
 	FString TitleEn;
+
+	/**
+	 * Where the player should head now, and what people call that place
+	 * (may be empty); false while there is nowhere to go (the mission is
+	 * over or has failed). Used by passers-by who are asked the way.
+	 */
+	bool GetWayTo(FVector& OutTarget, FString& OutPlace) const;
 
 protected:
 	/** The mark over the target; it moves from step to step on its own. */
@@ -123,6 +132,13 @@ protected:
 	virtual bool GetRetrySpot(FVector& OutAt, double& OutYaw) const { return false; }
 	/** The mission has just failed: stop what it set going. */
 	virtual void OnFailed() {}
+	/**
+	 * A letter the player carries for this mission and can read with R:
+	 * handwritten Hungarian (lines split by \n, an empty line between
+	 * paragraphs, a line starting with > goes to the right) and the English.
+	 * False when there is none.
+	 */
+	virtual bool GetLetter(FString& OutHu, FString& OutEn) const { return false; }
 
 private:
 	void StartStep(int32 Step);
@@ -130,6 +146,9 @@ private:
 	/** After failing: the offer to try again, and starting over. */
 	void TickFailed();
 	void Retry(bool bPutBack);
+	/** R takes the mission's letter out to read, R or Backspace puts it away. */
+	void TickLetter();
+	void CloseLetter();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> MissionActors;
@@ -137,4 +156,5 @@ private:
 	int32 CurrentStep = INDEX_NONE;
 	bool bFailed = false;
 	double FailedAt = 0.0;
+	bool bLetterOpen = false;
 };

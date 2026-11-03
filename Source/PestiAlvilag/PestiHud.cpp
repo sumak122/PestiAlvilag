@@ -62,6 +62,23 @@ namespace PestiHud
 
 	// The lighter cabinet: six niches across, five down, the chosen one large
 	// on the right, the rewards along the bottom.
+	// A letter: handwriting in ink on cream paper left of the middle, the
+	// English on a plaque to the right, the street dimmed behind.
+	const FLinearColor LetterShade = FLinearColor(0.f, 0.f, 0.f, 0.45f);
+	const FLinearColor Paper = FLinearColor(FColor(240, 229, 203));
+	const FLinearColor PaperEdge = FLinearColor(FColor(196, 178, 140));
+	const FLinearColor PaperShadow = FLinearColor(0.f, 0.f, 0.f, 0.35f);
+	const FLinearColor LetterInk = FLinearColor(FColor(43, 42, 74));
+	constexpr float PaperWidth = 620.f;
+	constexpr float PaperPad = 50.f;
+	constexpr float HandPx = 31.f;
+	constexpr float HandLine = 43.f;
+	constexpr float LetterGap = 60.f;
+	constexpr float PlaqueWidth = 500.f;
+	constexpr float PlaquePad = 32.f;
+	constexpr float PlaquePx = 19.f;
+	constexpr float PlaqueLine = 28.f;
+
 	constexpr float CabinetWidth = 1580.f;
 	constexpr float CabinetHeight = 935.f;
 	constexpr int32 NicheColumns = 6;
@@ -170,6 +187,12 @@ public:
 		{
 			const FPainter Over{ Geometry, Out, LayerId + 3, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
 			PaintCabinet(Over, *Collection, Wide, High);
+			return LayerId + 6;
+		}
+		if (!Hud->LetterHu.IsEmpty())
+		{
+			const FPainter Over{ Geometry, Out, LayerId + 3, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			PaintLetter(Over, *Hud, Wide, High);
 			return LayerId + 6;
 		}
 		return LayerId + 3;
@@ -587,6 +610,101 @@ private:
 		Paint.Text(Sign.En, EnFont, WordsX, CentreY + 19.f, PestiHud::Grey);
 	}
 
+	/** One line of a letter as it is written out, and whether it sits on the right. */
+	struct FLetterLine
+	{
+		FString Words;
+		bool bRight = false;
+	};
+
+	/** Breaks Words at \n and then into lines no wider than Width; an empty line stays as a gap. */
+	static TArray<FLetterLine> BreakLines(const FPainter& Paint, const FString& Words, const FSlateFontInfo& Info, float Width)
+	{
+		TArray<FLetterLine> Result;
+		TArray<FString> Paragraphs;
+		Words.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		for (FString Paragraph : Paragraphs)
+		{
+			const bool bRight = Paragraph.StartsWith(TEXT(">"));
+			if (bRight)
+			{
+				Paragraph.RightChopInline(1);
+			}
+			TArray<FString> Parts;
+			Paragraph.ParseIntoArray(Parts, TEXT(" "));
+			if (Parts.Num() == 0)
+			{
+				Result.Add(FLetterLine());
+				continue;
+			}
+			FString Current;
+			for (const FString& Part : Parts)
+			{
+				const FString Longer = Current.IsEmpty() ? Part : Current + TEXT(" ") + Part;
+				if (!Current.IsEmpty() && Paint.Measure(Longer, Info).X > Width)
+				{
+					Result.Add(FLetterLine{ Current, bRight });
+					Current = Part;
+				}
+				else
+				{
+					Current = Longer;
+				}
+			}
+			Result.Add(FLetterLine{ Current, bRight });
+		}
+		return Result;
+	}
+
+	/** A letter held up: the handwritten page left of the middle, the English on a plaque to its right. */
+	void PaintLetter(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::LetterShade);
+
+		// The page, as tall as its writing.
+		const FSlateFontInfo Hand = Paint.Font(Hud.HandFont, PestiHud::HandPx);
+		const float PaperW = PestiHud::PaperWidth;
+		const TArray<FLetterLine> Written = BreakLines(Paint, Hud.LetterHu, Hand, PaperW - 2.f * PestiHud::PaperPad);
+		const float PaperH = FMath::Min(High - 40.f, 2.f * PestiHud::PaperPad + Written.Num() * PestiHud::HandLine);
+		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f;
+		const float PaperY = (High - PaperH) * 0.5f;
+		Paint.Box(PaperX + 8.f, PaperY + 10.f, PaperW, PaperH, PestiHud::PaperShadow, 0);
+		Paint.Box(PaperX, PaperY, PaperW, PaperH, PestiHud::Paper, 1);
+		Paint.Frame(PaperX, PaperY, PaperW, PaperH, PestiHud::PaperEdge, 1.5f, 1);
+		float Baseline = PaperY + PestiHud::PaperPad + PestiHud::HandLine * 0.6f;
+		for (const FLetterLine& Row : Written)
+		{
+			if (!Row.Words.IsEmpty())
+			{
+				const float X = Row.bRight ? PaperX + PaperW - PestiHud::PaperPad : PaperX + PestiHud::PaperPad;
+				Paint.Text(Row.Words, Hand, X, Baseline, PestiHud::LetterInk, Row.bRight ? 1.f : 0.f);
+			}
+			Baseline += PestiHud::HandLine;
+		}
+
+		// The English, on a plaque as tall as its lines.
+		const FSlateFontInfo Plain = Paint.Plain(PestiHud::PlaquePx);
+		const float PlaqueX = Wide * 0.5f + PestiHud::LetterGap * 0.5f;
+		const float Inner = PestiHud::PlaqueWidth - 2.f * PestiHud::PlaquePad;
+		const TArray<FLetterLine> English = BreakLines(Paint, Hud.LetterEn, Plain, Inner);
+		const float PlaqueH = 2.f * PestiHud::PlaquePad + 50.f + English.Num() * PestiHud::PlaqueLine + 40.f;
+		const float PlaqueY = (High - PlaqueH) * 0.5f;
+		Paint.Panel(PlaqueX, PlaqueY, PestiHud::PlaqueWidth, PlaqueH);
+		const float TextLeft = PlaqueX + PestiHud::PlaquePad;
+		Paint.Text(TEXT("LEV\u00c9L"), Paint.Deco(24.f, 3.f), TextLeft, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Gold);
+		Paint.Text(TEXT("the letter"), Paint.Plain(15.f, 1.f), PlaqueX + PestiHud::PlaqueWidth - PestiHud::PlaquePad, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Grey, 1.f);
+		float EnglishBaseline = PlaqueY + PestiHud::PlaquePad + 50.f + PestiHud::PlaqueLine * 0.7f;
+		for (const FLetterLine& Said : English)
+		{
+			if (!Said.Words.IsEmpty())
+			{
+				Paint.Text(Said.Words, Plain, Said.bRight ? TextLeft + Inner : TextLeft, EnglishBaseline, PestiHud::Cream, Said.bRight ? 1.f : 0.f);
+			}
+			EnglishBaseline += PestiHud::PlaqueLine;
+		}
+		Paint.Text(TEXT("R  \u00b7  elrak\u00e1s  \u00b7  put away"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
+	}
+
 	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
 	{
 		using namespace PestiHud;
@@ -699,6 +817,18 @@ APestiHUD* APestiHUD::Get(const UObject* WorldContextObject)
 	return PC ? Cast<APestiHUD>(PC->GetHUD()) : nullptr;
 }
 
+void APestiHUD::SetLetter(const FString& Hu, const FString& En)
+{
+	LetterHu = Hu;
+	LetterEn = En;
+}
+
+void APestiHUD::ClearLetter()
+{
+	LetterHu.Reset();
+	LetterEn.Reset();
+}
+
 void APestiHUD::SetCabinet(const ALighters* Shown)
 {
 	// Here, where ALighters is fully known: the weak pointer needs its whole type.
@@ -712,6 +842,7 @@ void APestiHUD::BeginPlay()
 	DecoFont = PestiHud::LoadFont(TEXT("Limelight-Regular.ttf"));
 	BoldFont = PestiHud::LoadFont(TEXT("JosefinSans-SemiBold.ttf"));
 	TextFont = PestiHud::LoadFont(TEXT("JosefinSans-Regular.ttf"));
+	HandFont = PestiHud::LoadFont(TEXT("Parisienne-Regular.ttf"));
 
 	if (GEngine && GEngine->GameViewport)
 	{

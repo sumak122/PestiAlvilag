@@ -13,7 +13,8 @@ class AStoryPerson;
  * at Keleti station in the autumn of 1932 and makes their own way to Bözsi
  * néni's tenement on Népszínház utca, which becomes home. An old gentleman
  * waits on the platform with his suitcase, only as part of the scene.
- * Teaches walking, following the goal marker and saving at home.
+ * Bözsi néni's letter (R) tells the way, and passers-by point it (Q).
+ * Teaches walking, finding the way and saving at home.
  */
 UCLASS()
 class PESTIALVILAG_API AMissionPrologue : public AMission
@@ -32,7 +33,9 @@ protected:
 	TObjectPtr<UStaticMeshComponent> Suitcase;
 
 	virtual void SetUpMission() override;
+	virtual void OnStepStarted(int32 Step) override;
 	virtual void OnStepDone(int32 Step) override;
+	virtual bool GetLetter(FString& OutHu, FString& OutEn) const override;
 
 private:
 	UPROPERTY(Transient)

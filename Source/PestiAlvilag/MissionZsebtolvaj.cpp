@@ -196,8 +196,8 @@ void AMissionZsebtolvaj::OnStepDone(int32 Step)
 			Bozsi->FaceTowards(Player->GetActorLocation());
 		}
 		Say(Zsebtolvaj::BozsiName,
-			TEXT("J\u00f3, hogy j\u00f6ssz, fiam! Seg\u00edts majd hazavinni a kosarat, csak megveszem a krumplit."),
-			TEXT("Good timing, son! Help me carry the basket home, I'll just get the potatoes."), 6.f);
+			TEXT("Ha m\u00e1r itt l\u00e1batlankodik, vigye majd haza a kosarat. Csak megveszem a krumplit."),
+			TEXT("Since you're under my feet anyway, carry the basket home. I'll just get the potatoes."), 6.f);
 	}
 	else if (Step == 2)
 	{
@@ -228,8 +228,8 @@ void AMissionZsebtolvaj::OnStepDone(int32 Step)
 			Bozsi->FaceTowards(Player->GetActorLocation());
 		}
 		Say(Zsebtolvaj::BozsiName,
-			TEXT("Az \u00e9n kis h\u0151s\u00f6m! Ezt a p\u00e1r peng\u0151t megs\u00e9rdemled."),
-			TEXT("My little hero! You've earned these few peng\u0151."), 7.f);
+			TEXT("Na... ezt nem gondoltam volna mag\u00e1r\u00f3l. Tess\u00e9k, ez a p\u00e1r peng\u0151 a mag\u00e1\u00e9."),
+			TEXT("Well... I wouldn't have thought it of you. Here, these few peng\u0151 are yours."), 7.f);
 	}
 }
 

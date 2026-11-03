@@ -147,10 +147,10 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		Carrier = Cast<APestiPerson>(Player);
 		PocketLetter();
 		Say(Uzenet::BozsiName,
-			TEXT("J\u00f3kor j\u00f6ssz, fiam. Vidd el ezt a levelet Pista b\u00e1csinak a Teleki t\u00e9ri zsibv\u00e1s\u00e1rra."),
-			TEXT("Good timing, son. Take this letter to Pista b\u00e1csi at the Teleki t\u00e9r flea market."), 7.f);
+			TEXT("Ha m\u00e1r az \u00e9n kenyeremet eszi, legal\u00e1bb haszn\u00e1t vegyem. Vigye el ezt a levelet Pista b\u00e1csinak a Teleki t\u00e9ri zsibv\u00e1s\u00e1rra."),
+			TEXT("If you're eating my bread, you may as well be of use. Take this letter to Pista b\u00e1csi at the Teleki t\u00e9r flea market."), 7.f);
 		SayLater(7.f, Uzenet::BozsiName,
-			TEXT("Ad majd egy csomagot, azt hozd vissza nekem. A villamos gyorsabb, a meg\u00e1ll\u00f3 itt van a h\u00e1z el\u0151tt."),
+			TEXT("Ad majd egy csomagot, azt hozza vissza nekem. A villamos gyorsabb, a meg\u00e1ll\u00f3 itt van a h\u00e1z el\u0151tt."),
 			TEXT("He'll give you a parcel; bring it back to me. The tram is quicker, the stop is right outside the house."));
 	}
 	else if (Step == 1)
@@ -179,8 +179,8 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		Carrier = nullptr;
 		Lines.Reset();
 		Say(Uzenet::BozsiName,
-			TEXT("\u00dcgyes fi\u00fa vagy! Egy ilyen fi\u00fanak mindig akad munka."),
-			TEXT("Good lad! There's always work for a boy like you."), 8.f);
+			TEXT("Hm. Legal\u00e1bb nem hagyta el \u00fatk\u00f6zben."),
+			TEXT("Hm. At least you didn't lose it on the way."), 8.f);
 	}
 }
 
