@@ -8,6 +8,7 @@
 #include "Pedestrians.generated.h"
 
 class AOsmGraybox;
+class APawn;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
@@ -37,6 +38,13 @@ public:
 	 * arms raised forward by Arms.
 	 */
 	void Hold(const FVector& Location, const FRotator& Rotation, float Legs, float Knees, float Arms);
+
+	/**
+	 * Stands still at Location facing Yaw and, when bPointing, holds out the
+	 * arm on that side towards PointYaw (a map direction); otherwise his arms
+	 * hang down.
+	 */
+	void PointTo(const FVector& Location, double Yaw, double PointYaw, bool bPointing);
 
 private:
 	float Stride = 0.f;
@@ -99,9 +107,9 @@ private:
 	 * What he is doing besides walking: stepping out of the way of someone
 	 * running, stumbling back after a bump, leaping clear of a car, running
 	 * off from a car on the pavement, knocked down (and getting up again), or
-	 * run over at speed and lying still.
+	 * run over at speed and lying still, or stopped to show the player the way.
 	 */
-	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead };
+	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead, Point };
 
 	struct FLine
 	{
@@ -137,6 +145,9 @@ private:
 		bool bFrozen = false;
 		/** The blood under him once he is run over. */
 		UStaticMeshComponent* Blood = nullptr;
+		/** Asked the way: the map direction he points, and whether he knows it at all. */
+		float PointYaw = 0.f;
+		bool bPointing = false;
 	};
 
 	bool LoadLines();
@@ -164,6 +175,10 @@ private:
 	void ClearReact(FWalker& Walker);
 	/** Someone calls out (only now and then, and not over other speech). */
 	void Shout(const TCHAR* Hu, const TCHAR* En);
+	/** Q on foot: the nearest passer-by stops, points the way to the mission's goal and says how far. */
+	void AskTheWay(APawn* Player, double Now);
+	/** The map direction to point from From to get to To along the streets, and how far that is (cm). */
+	float WayFrom(const FVector2D& From, const FVector2D& To, double& OutDistance) const;
 
 	TArray<FLine> Lines;
 	/** Line ends on a coarse grid: cell -> (line, end: 0 start, 1 end). */

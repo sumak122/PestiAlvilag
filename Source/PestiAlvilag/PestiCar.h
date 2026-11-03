@@ -73,6 +73,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car")
 	float ForwardSpeed = 0.f;
 
+	/** How fast the car slides sideways (cm/s, + is to its right): the tyres pull this back to nothing. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Car")
+	float SideSpeed = 0.f;
+
 	/** Degrees the camera turns per unit of mouse movement. */
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	float MouseLookScale = 2.5f;
@@ -155,4 +159,6 @@ private:
 	/** The gear the engine is in, from 0. */
 	int32 Gear = 0;
 	double LastBumpTime = -1.0;
+	/** How fast the car is turning now (degrees a second): follows the wheel with a little lag. */
+	float TurnRate = 0.f;
 };

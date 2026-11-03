@@ -8,6 +8,9 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Cafe.h"
+#include "SoundSpots.h"
+#include "GarayModel.h"
+#include "GarayYard.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "HorseCart.h"
@@ -22,12 +25,14 @@
 #include "MissionUzenet.h"
 #include "MissionZsebtolvaj.h"
 #include "MissionZsibvasar.h"
+#include "MissionFelmondas.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
 #include "PolicePatrols.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
+#include "PestiMenu.h"
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
 #include "PestiTaxi.h"
@@ -64,6 +69,7 @@ namespace PestiStart
 	// "Zsibvasar2": the first test build paid mission 4 at the crates, before the
 	// ruffians fight was in it; a new name has those saves play it again whole.
 	const FName Zsibvasar(TEXT("Zsibvasar2"));
+	const FName Felmondas(TEXT("Felmondas"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -172,6 +178,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 		GetWorld()->SpawnActor<APigeons>();
 	}
 
+	// Sounds placed about the city: the church bell, Keleti, markets, pigeons, the park, the café, courtyards.
+	if (!TActorIterator<ASoundSpots>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ASoundSpots>();
+	}
+
 	// Taxis to ride in as a paying passenger.
 	if (!TActorIterator<ATaxiRides>(GetWorld()))
 	{
@@ -237,6 +249,10 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionZsibvasar>();
 	}
+	else if (!IsMissionDone(PestiStart::Felmondas))
+	{
+		GetWorld()->SpawnActor<AMissionFelmondas>();
+	}
 }
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
@@ -295,6 +311,13 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(AMarketHall::ToCity(FVector2D(-800.0, 0.0)));
 		GetWorld()->SpawnActor<AMarketHall>(AMarketHall::StaticClass(), FVector(AMarketHall::FrontAt(), Z), FRotator(0.0, AMarketHall::Yaw(), 0.0));
+	}
+
+	// And Garay utca 13: Hermann's shop and Schwimmer's timber yard (mission 5).
+	if (!TActorIterator<AGarayYard>(GetWorld()))
+	{
+		const double Z = GroundZ(GarayModel::CityAt);
+		GetWorld()->SpawnActor<AGarayYard>(AGarayYard::StaticClass(), FVector(GarayModel::CityAt, Z), FRotator(0.0, GarayModel::CityYaw, 0.0));
 	}
 
 	// And the eagle that circles over it.
@@ -502,6 +525,7 @@ void APestiAlvilagGameModeBase::UpdateWanted(float DeltaSeconds)
 			{
 				Car->ForwardSpeed = 0.f;
 			}
+			++Arrests;
 			ClearWanted(TEXT("BUSTED! The police caught you."));
 		}
 	}
@@ -576,6 +600,8 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 
 void APestiAlvilagGameModeBase::StartNewGame()
 {
+	// Straight into the new game, not the title screen again.
+	FPestiMenu::SkipTitleOnce();
 	UGameplayStatics::DeleteGameInSlot(UPestiSaveGame::SlotName(), 0);
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }

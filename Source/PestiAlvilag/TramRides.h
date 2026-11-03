@@ -24,6 +24,8 @@ class AWalkingPerson;
  * few riders get off and walk away, and the waiting people walk to the
  * platform steps and take a seat (the tram waits for them).
  *
+ * The same goes for the buses (ABus), which are trams on bus routes.
+ *
  * Reads where the stops' pavements are from the street furniture file
  * (tram_stops); the stops themselves come with the tram routes.
  */

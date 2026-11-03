@@ -7,14 +7,14 @@
 #include "MissionPrologue.generated.h"
 
 class AStoryPerson;
-class APestiTaxi;
 
 /**
- * Act 1, mission 1, "Megérkezés" (Arrival). The player steps out of Keleti
- * station in the autumn of 1932, carries a gentleman's suitcase to his taxi
- * on Baross tér for a 50 fillér tip, then walks through the park on Tisza
- * Kálmán tér to Bözsi néni's tenement on Népszínház utca, which becomes
- * home. Teaches walking, following the goal light and saving at home.
+ * Act 1, mission 1, "Megérkezés" (Arrival). The player steps off the train
+ * at Keleti station in the autumn of 1932 and makes their own way to Bözsi
+ * néni's tenement on Népszínház utca, which becomes home. An old gentleman
+ * waits on the platform with his suitcase, only as part of the scene.
+ * Bözsi néni's letter (R) tells the way, and passers-by point it (Q).
+ * Teaches walking, finding the way and saving at home.
  */
 UCLASS()
 class PESTIALVILAG_API AMissionPrologue : public AMission
@@ -35,21 +35,9 @@ protected:
 	virtual void SetUpMission() override;
 	virtual void OnStepStarted(int32 Step) override;
 	virtual void OnStepDone(int32 Step) override;
-	virtual void TickStep(int32 Step, float DeltaSeconds) override;
+	virtual bool GetLetter(FString& OutHu, FString& OutEn) const override;
 
 private:
-	/** The driver gets in, and the taxi pulls out into the traffic and is gone. */
-	void TickTaxiLeaving(float DeltaSeconds);
-
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Gentleman;
-
-	UPROPERTY(Transient)
-	TObjectPtr<AStoryPerson> Driver;
-
-	UPROPERTY(Transient)
-	TObjectPtr<APestiTaxi> Taxi;
-
-	/** Seconds since the gentleman got in, or below zero while he hasn't. */
-	float TaxiLeavingTime = -1.f;
 };

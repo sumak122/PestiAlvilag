@@ -16,15 +16,18 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
+#include "Mission.h"
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
+#include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPedestrians, Log, All);
@@ -128,6 +131,31 @@ namespace Pedestrians
 	};
 	const FLine2 WitnessLine = { TEXT("\u00daristen! Ment\u0151t! H\u00edvjanak ment\u0151t!"), TEXT("Good God! Call an ambulance!") };
 
+	// Asked the way (Q): the nearest passer-by within reach stops this long,
+	// turns to the player and after a moment points. He never turns further
+	// from the player than MostAside to point, and points a little down.
+	constexpr double AskReach = 250.0;
+	constexpr double AskHeight = 200.0;
+	constexpr float AskSeconds = 5.f;
+	constexpr float PointAfter = 0.5f;
+	constexpr float MostAside = 100.f;
+	constexpr float AskTurnRate = 360.f;
+	constexpr double PointDown = 0.25;
+	// Closer than this he points straight at it; further, along the streets
+	// at the first corner at least PointAhead away.
+	constexpr double PointStraight = 2500.0;
+	constexpr double PointAhead = 1200.0;
+	// How he puts the distance.
+	constexpr double NearBy = 3000.0;
+	constexpr double NotFar = 30000.0;
+	const FLine2 NearLine = { TEXT("Ott van, p\u00e1r l\u00e9p\u00e9sre, arra."), TEXT("It's right there, a few steps that way.") };
+	const FLine2 NotFarLine = { TEXT("Arra, fiam, nincs messze, p\u00e1r perc gyalog."), TEXT("That way, son, it's not far, a few minutes on foot.") };
+	const FLine2 FarLine = { TEXT("Arra indulj, fiam, de j\u00f3 messze van."), TEXT("Head that way, son, but it's a good way off.") };
+	const FLine2 DontKnowLines[] = {
+		{ TEXT("Nem tudom, fiam, nem vagyok ideval\u00f3si."), TEXT("Sorry, son, I'm not from round here.") },
+		{ TEXT("Bocs\u00e1sson meg, sietek!"), TEXT("Excuse me, I'm in a hurry!") },
+	};
+
 	FIntPoint CellOf(const FVector2D& At)
 	{
 		return FIntPoint(FMath::FloorToInt(At.X / EndCell), FMath::FloorToInt(At.Y / EndCell));
@@ -175,6 +203,33 @@ void APedestrian::Hold(const FVector& Location, const FRotator& Rotation, float 
 		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
 		{
 			Part->SetRelativeRotation(FRotator(Arms * (i == 0 ? 1.f : 0.85f), 0.f, 0.f));
+		}
+	}
+}
+
+void APedestrian::PointTo(const FVector& Location, double Yaw, double PointYaw, bool bPointing)
+{
+	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	PersonModel::PoseLegs(Pieces, 0.f, 0.f);
+	PersonModel::PoseElbows(Pieces, 0.f, 0.f);
+	// The arm on the side of the way, turned from hanging down to along it
+	// (in his own frame: X ahead, Y to his right).
+	const double Side = FRotator::NormalizeAxis(PointYaw - Yaw);
+	const int32 PointingArm = Side >= 0.0 ? 1 : 0;
+	const double Radians = FMath::DegreesToRadians(Side);
+	const FVector Aim = FVector(FMath::Cos(Radians), FMath::Sin(Radians), -Pedestrians::PointDown).GetSafeNormal();
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+		{
+			if (bPointing && i == PointingArm)
+			{
+				Part->SetRelativeRotation(FQuat::FindBetweenNormals(FVector(0.0, 0.0, -1.0), Aim));
+			}
+			else
+			{
+				Part->SetRelativeRotation(FRotator::ZeroRotator);
+			}
 		}
 	}
 }
@@ -413,6 +468,121 @@ void APedestrians::Shout(const TCHAR* Hu, const TCHAR* En)
 	}
 	LastShout = Now;
 	Hud->Say(TEXT("J\u00e1r\u00f3kel\u0151"), Hu, En, 3.f);
+}
+
+void APedestrians::AskTheWay(APawn* Player, double Now)
+{
+	if (!Player->IsA<APestiPerson>())
+	{
+		return;
+	}
+	const APlayerController* PC = Cast<APlayerController>(Player->GetController());
+	if (!PC || !PC->WasInputKeyJustPressed(EKeys::Q))
+	{
+		return;
+	}
+	FWalker* Asked = nullptr;
+	double Nearest = FMath::Square(Pedestrians::AskReach);
+	for (FWalker& Walker : Walkers)
+	{
+		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Flee || Walker.React == EReact::Point;
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree
+			|| FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) > Pedestrians::AskHeight)
+		{
+			continue;
+		}
+		const double Gap = FVector2D::DistSquared(Walker.Shown, FVector2D(PlayerAt));
+		if (Gap < Nearest)
+		{
+			Nearest = Gap;
+			Asked = &Walker;
+		}
+	}
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Asked || !Hud)
+	{
+		return;
+	}
+
+	// Where the player should be going: the mission's goal, if there is one.
+	FVector Target = FVector::ZeroVector;
+	FString Place;
+	bool bKnows = false;
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		if (It->GetWayTo(Target, Place))
+		{
+			bKnows = true;
+			break;
+		}
+	}
+	StartReact(*Asked, EReact::Point, Pedestrians::AskSeconds, FVector2D::ZeroVector);
+	Asked->bPointing = bKnows;
+	LastShout = Now;
+	const TCHAR* Who = TEXT("J\u00e1r\u00f3kel\u0151");
+	if (!bKnows)
+	{
+		const Pedestrians::FLine2& Line = Pedestrians::DontKnowLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::DontKnowLines)) - 1)];
+		Hud->Say(Who, Line.Hu, Line.En, Pedestrians::AskSeconds);
+		return;
+	}
+	double Distance = 0.0;
+	Asked->PointYaw = WayFrom(Asked->Shown, FVector2D(Target), Distance);
+	const Pedestrians::FLine2& Line = Distance < Pedestrians::NearBy ? Pedestrians::NearLine
+		: Distance < Pedestrians::NotFar ? Pedestrians::NotFarLine : Pedestrians::FarLine;
+	if (Place.IsEmpty())
+	{
+		Hud->Say(Who, Line.Hu, Line.En, Pedestrians::AskSeconds);
+	}
+	else
+	{
+		Hud->Say(Who, Place + TEXT("? ") + Line.Hu, Place + TEXT("? ") + Line.En, Pedestrians::AskSeconds);
+	}
+}
+
+float APedestrians::WayFrom(const FVector2D& From, const FVector2D& To, double& OutDistance) const
+{
+	OutDistance = FVector2D::Distance(From, To);
+	FVector2D Toward = To;
+	TActorIterator<ATrafficManager> Streets(GetWorld());
+	TArray<FVector> Route;
+	if (OutDistance > Pedestrians::PointStraight && Streets
+		&& Streets->FindPath(FVector(From, PlayerAt.Z), FVector(To, PlayerAt.Z), Route) && Route.Num() > 0)
+	{
+		Route.Add(FVector(To, PlayerAt.Z));
+		// The plan starts at the street corner nearest him, which may be
+		// behind him: go on from the part of the way he stands nearest.
+		int32 First = 0;
+		double Closest = TNumericLimits<double>::Max();
+		for (int32 i = 0; i + 1 < Route.Num(); ++i)
+		{
+			const FVector2D Near = FMath::ClosestPointOnSegment2D(From, FVector2D(Route[i]), FVector2D(Route[i + 1]));
+			const double Gap = FVector2D::DistSquared(From, Near);
+			if (Gap < Closest)
+			{
+				Closest = Gap;
+				First = i + 1;
+			}
+		}
+		// Point along the street at the first corner a little way off, not at his feet.
+		Toward = FVector2D(Route[First]);
+		for (int32 i = First; i < Route.Num(); ++i)
+		{
+			Toward = FVector2D(Route[i]);
+			if (FVector2D::Distance(From, Toward) >= Pedestrians::PointAhead)
+			{
+				break;
+			}
+		}
+		// How far it is along the streets.
+		OutDistance = FVector2D::Distance(From, FVector2D(Route[First]));
+		for (int32 i = First; i + 1 < Route.Num(); ++i)
+		{
+			OutDistance += FVector2D::Distance(FVector2D(Route[i]), FVector2D(Route[i + 1]));
+		}
+	}
+	const FVector2D Way = Toward - From;
+	return static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Way.Y, Way.X)));
 }
 
 void APedestrians::StartReact(FWalker& Walker, EReact React, float Seconds, const FVector2D& Shove)
@@ -670,6 +840,28 @@ bool APedestrians::PoseReacting(FWalker& Walker, float DeltaSeconds)
 		}
 		return true;
 	}
+	case EReact::Point:
+	{
+		// Turns to the one asking, then shows the way; when the way lies
+		// behind him he turns partly towards it.
+		const FVector2D ToPlayer = FVector2D(PlayerAt) - Walker.Shown;
+		float Facing = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToPlayer.Y, ToPlayer.X)));
+		if (Walker.bPointing)
+		{
+			const float Off = static_cast<float>(FRotator::NormalizeAxis(Walker.PointYaw - Facing));
+			if (FMath::Abs(Off) > Pedestrians::MostAside)
+			{
+				Facing = Walker.PointYaw - FMath::Sign(Off) * Pedestrians::MostAside;
+			}
+		}
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, Pedestrians::AskTurnRate * DeltaSeconds);
+		Person->PointTo(Location, Walker.ShownYaw, Walker.PointYaw, Walker.bPointing && Walker.ReactTime > Pedestrians::PointAfter);
+		if (Walker.ReactLeft <= 0.f)
+		{
+			StartReact(Walker, EReact::None, 0.f, FVector2D::ZeroVector);
+		}
+		return true;
+	}
 	case EReact::GetUp:
 	{
 		// Sits up, crouches, and stands.
@@ -743,6 +935,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		PlayerAt = Here;
 		PlayerForward = FVector2D(Player->GetActorForwardVector()).GetSafeNormal();
 		bPlayerDriving = Player->IsA<APestiCar>();
+		AskTheWay(Player, Now);
 	}
 
 	for (FWalker& Walker : Walkers)

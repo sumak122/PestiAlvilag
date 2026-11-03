@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "CarModel.h"
+#include "CarDamage.h"
 #include "PersonKit.h"
 #include "Components/ActorComponent.h"
 #include "CarVisuals.generated.h"
@@ -94,6 +95,17 @@ public:
 	/** A bang from the tail pipe: a big dark puff. */
 	void Backfire();
 
+	/**
+	 * A knock at WorldPoint, pushing the way of WorldInto (into the car), at
+	 * Speed (cm/s, the speed straight into it): dents the body (CarDamage),
+	 * breaks lamps and glass, knocks lamps and bumpers off and wears the car out.
+	 */
+	void Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed);
+
+	/** How worn out the car is from its crashes: 0 like new, 1 the engine is dead. */
+	float GetWear() const { return static_cast<float>(Damage.Wear); }
+	bool IsEngineDead() const { return Damage.Wear >= 1.0; }
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -105,7 +117,17 @@ private:
 	void UpdateStreetEngine(double Distance, float Speed, float Pickup);
 	void StopStreetEngine();
 	void UpdateLights(float DeltaTime, float Speed, float Pickup, double Distance);
+	/** The body leans, dips and bobs on its springs, and the wheels hop (shown only when Near). */
+	void UpdateSway(float DeltaTime, float Speed, const FVector& Push, bool bNear);
 	void ShowBeams(bool bShow);
+	/** Puts a new shape into Mesh, keeping the paint it has. */
+	void Refill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder& Shape);
+	/** One knocked-off part (CarDamage::ELoose) falls off and tumbles away. */
+	void DropPart(int32 Which);
+	/** Steam, then smoke, from the radiator of a worn-out car; fallen parts come to rest. */
+	void UpdateWear(float DeltaTime, double Distance);
+	/** A puff of smoke from this point of the car (car frame), drifting at Drift (world). */
+	void PuffFrom(const FVector& Local, const FVector& Drift, float Size, bool bDark);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Body;
@@ -139,6 +161,11 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USpotLightComponent>> Beams;
 
+	/** Parts knocked off the car, lying where they fell, and when each came off. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> LooseParts;
+	TArray<double> LooseSince;
+
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
@@ -159,6 +186,26 @@ private:
 	/** Wheel roll (degrees) and front wheel turn (degrees, + is right). */
 	float Spin = 0.f;
 	float SteerAngle = 0.f;
+
+	/** The body's lean on its springs (degrees; roll + is right side down, pitch + is nose up) and how fast it swings. */
+	float SwayRoll = 0.f;
+	float SwayRollRate = 0.f;
+	float SwayPitch = 0.f;
+	float SwayPitchRate = 0.f;
+	/** The car's push sideways and ahead, smoothed (cm/s each second). */
+	float PushSide = 0.f;
+	float PushAhead = 0.f;
+	/** Last frame's movement (cm/s, flat), and whether there is one yet. */
+	FVector LastVelocity = FVector::ZeroVector;
+	bool bVelocityKnown = false;
+	/** How far the car has rolled (cm, starting again every 10 km): the bumps of the road come with it. */
+	double Odometer = 0.0;
+	float IdlePhase = 0.f;
+
+	/** The car's dents and wear, which headlamps are out, and the time to the next puff of steam. */
+	CarDamage::FState Damage;
+	bool bLampOut[2] = { false, false };
+	float SteamTimer = 0.f;
 
 	float DriverSteer = 0.f;
 	bool bDriverSteers = false;

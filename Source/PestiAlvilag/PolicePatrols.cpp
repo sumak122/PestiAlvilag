@@ -240,8 +240,9 @@ APoliceBox::APoliceBox()
 
 	// Solid to the player and the cars: the walls and the roof, as one block.
 	Collision = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
+	// No offset of its own: a root's offset is added on top of where the box is
+	// put down, which lifted every box off the ground by half its height.
 	Collision->SetBoxExtent(FVector(PoliceModel::BoxHalf, PoliceModel::BoxHalf, PoliceModel::BoxEaves * 0.5));
-	Collision->SetRelativeLocation(FVector(0.0, 0.0, PoliceModel::BoxEaves * 0.5));
 	Collision->SetCollisionProfileName(TEXT("BlockAll"));
 	RootComponent = Collision;
 

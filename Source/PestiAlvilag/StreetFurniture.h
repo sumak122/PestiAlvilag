@@ -8,6 +8,7 @@
 
 class FJsonObject;
 class UHierarchicalInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -32,7 +33,9 @@ struct FFurniturePart;
  * shape and colour, so thousands of them cost little. A car driven fast into
  * a bench or a litter bin smashes it: its pieces fly (Wreck.h), and it
  * stands again a minute later at the earliest, once the camera is far away
- * and nobody sees.
+ * and nobody sees. A street lamp hit hard tips over and falls across the
+ * road, its lantern glass shatters and its light goes out until it stands
+ * again the same way.
  */
 UCLASS()
 class PESTIALVILAG_API AStreetFurniture : public AActor
@@ -73,6 +76,10 @@ protected:
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> ShapeMeshes;
 
+	/** The shards of a lamp's glass. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> GlassMaterial;
+
 private:
 	/** The instances waiting for the batch of this shape, colour, collision and draw distance (and which batch it is). */
 	TArray<FTransform>& Batch(int32 Shape, const FLinearColor& Color, bool bCollide, float Cull, int32* OutBatch = nullptr);
@@ -100,7 +107,7 @@ private:
 	void BuildPlayground(const FJsonObject& Playground);
 	/** Taxi ranks by the kerb near the landmarks: parked taxis and a sign. */
 	void BuildTaxiStands(const FJsonObject& Root);
-	/** A stop sign by each tram stop (tram_stops). */
+	/** A stop sign by each tram and bus stop (tram_stops). */
 	void BuildTramStops(const FJsonObject& Root);
 	/** Street food sellers with their carts (food_vendors). */
 	void BuildFoodVendors(const FJsonObject& Root);
@@ -125,6 +132,10 @@ private:
 		int32 Instance = 0;
 		int32 Shape = 0;
 		FTransform Transform;
+		/** A lamp's post and crook: they fall over whole (the lantern flies off). */
+		bool bFalls = false;
+		/** A lamp's glass: it shatters. */
+		bool bGlass = false;
 	};
 
 	/** A bench or a litter bin a car can smash. */
@@ -140,10 +151,28 @@ private:
 		bool bBroken = false;
 		bool bSettled = false;
 		double BrokenAt = 0.0;
+		/** The pieces lying about; a lamp's falling post and crook come first. */
 		TArray<UStaticMeshComponent*> Pieces;
+
+		/** A street lamp: its lanterns' numbers in ADayNight. */
+		TArray<int32> LampIds;
+		/** A knocked lamp still tipping over, how far it has tipped (radians), how fast, towards where, and how far it turns about itself as it goes so its crook lands flat. */
+		bool bFalling = false;
+		double FallAngle = 0.0;
+		double FallSpeed = 0.0;
+		FVector FallDir = FVector::ForwardVector;
+		double FallTwist = 0.0;
+		/** How far over it ends up: flat on the road, or less where it leans on a wall. */
+		double LieAngle = 0.0;
+		/** Where the falling pieces sit on the standing lamp, from its foot. */
+		TArray<FTransform> FallFrom;
 	};
 
 	void Smash(int32 Index, double Now);
+	/** Knocks a lamp's post over and shatters its glass, as Smash's part of it. */
+	void KnockLamp(FBreakable& Thing);
+	/** Puts a falling lamp's post and crook where its tipping has got to. */
+	void PoseFall(const FBreakable& Thing) const;
 	void PutBack(FBreakable& Thing);
 
 	TArray<FBreakable> Breakables;

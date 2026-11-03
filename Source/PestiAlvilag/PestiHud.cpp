@@ -3,22 +3,33 @@
 #include "PestiHud.h"
 
 #include "Brushes/SlateColorBrush.h"
+#include "Camera/PlayerCameraManager.h"
 #include "DayNight.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "HomeDoor.h"
+#include "Kismet/GameplayStatics.h"
+#include "Layout/Clipping.h"
 #include "LighterModel.h"
 #include "Lighters.h"
+#include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiMap.h"
+#include "PestiMenu.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
+#include "RouteGuideComponent.h"
 #include "Styling/CoreStyle.h"
+#include "Widgets/Layout/SBackgroundBlur.h"
 #include "Widgets/SLeafWidget.h"
 
 namespace PestiHud
@@ -62,6 +73,23 @@ namespace PestiHud
 
 	// The lighter cabinet: six niches across, five down, the chosen one large
 	// on the right, the rewards along the bottom.
+	// A letter: handwriting in ink on cream paper left of the middle, the
+	// English on a plaque to the right, the street dimmed behind.
+	const FLinearColor LetterShade = FLinearColor(0.f, 0.f, 0.f, 0.45f);
+	const FLinearColor Paper = FLinearColor(FColor(240, 229, 203));
+	const FLinearColor PaperEdge = FLinearColor(FColor(196, 178, 140));
+	const FLinearColor PaperShadow = FLinearColor(0.f, 0.f, 0.f, 0.35f);
+	const FLinearColor LetterInk = FLinearColor(FColor(43, 42, 74));
+	constexpr float PaperWidth = 620.f;
+	constexpr float PaperPad = 50.f;
+	constexpr float HandPx = 31.f;
+	constexpr float HandLine = 43.f;
+	constexpr float LetterGap = 60.f;
+	constexpr float PlaqueWidth = 500.f;
+	constexpr float PlaquePad = 32.f;
+	constexpr float PlaquePx = 19.f;
+	constexpr float PlaqueLine = 28.f;
+
 	constexpr float CabinetWidth = 1580.f;
 	constexpr float CabinetHeight = 935.f;
 	constexpr int32 NicheColumns = 6;
@@ -80,6 +108,99 @@ namespace PestiHud
 
 	// A one-frame line (Seconds 0) still shows when the HUD paints this frame.
 	constexpr double OneFrame = 0.0;
+
+	// The menus: the city blurred and darkened behind them, a faint gold
+	// glow on the chosen setting, the side panels of the pause menu only on
+	// screens this wide, and act 1's seven missions.
+	constexpr float MenuBlur = 6.f;
+	const FLinearColor MenuShade = FLinearColor(FColor(8, 6, 4, 150));
+	const FLinearColor MenuGlow = FLinearColor(FColor(214, 178, 94, 30));
+	constexpr float MenuSidesFrom = 1700.f;
+	constexpr int32 MenuActOneMissions = 7;
+
+	/** A key along the bottom of a menu and what it does. */
+	struct FMenuKey
+	{
+		const TCHAR* Key;
+		const TCHAR* Hu;
+		const TCHAR* En;
+	};
+
+	// The minimap, bottom left: the plan's window, the gold frame round it
+	// and the street's name under it. It shows this much of the city (cm
+	// across) on foot, and up to the second when going fast.
+	constexpr float MiniSize = 300.f;
+	constexpr float MiniInset = 14.f;
+	constexpr float MiniNameBand = 34.f;
+	constexpr double MiniWalkAcross = 26000.0;
+	constexpr double MiniDriveAcross = 46000.0;
+	// Speeds (cm/s) where the zoom starts to open and where it is fully open.
+	constexpr float MiniZoomFrom = 700.f;
+	constexpr float MiniZoomFull = 2000.f;
+	// A jump further than this in a frame (cm/s) is a move to another place, not speed.
+	constexpr float MiniTeleport = 6000.f;
+	constexpr double StreetNameEvery = 0.5;
+	// What the goal marker and the route guides send stays this long (s).
+	constexpr double MapHold = 0.25;
+	// The own mark counts as reached this near (cm).
+	constexpr double MarkReached = 1500.0;
+
+	// The big map: how much it shows (cm across), its zoom steps, the cross's
+	// speed (screen units a second, and per unit of mouse movement), the
+	// legend's width.
+	constexpr double MapStartAcross = 90000.0;
+	constexpr double MapMinAcross = 20000.0;
+	constexpr double MapMaxAcross = 200000.0;
+	constexpr double MapWheelStep = 0.8;
+	constexpr float MapHoldZoom = 2.5f;
+	constexpr float MapCrossSpeed = 700.f;
+	constexpr float MapMouseScale = 14.f;
+	constexpr float MapLegendWidth = 400.f;
+
+	const FLinearColor MapShade = FLinearColor(FColor(14, 12, 9, 30));
+	const FLinearColor MapCurtain = FLinearColor(FColor(8, 7, 5, 210));
+	const FLinearColor RouteShade = FLinearColor(FColor(14, 12, 9, 205));
+	const FLinearColor GoalDark = FLinearColor(FColor(92, 74, 30));
+	const FLinearColor MarkDark = FLinearColor(FColor(122, 31, 25));
+	const FLinearColor TramInk = FLinearColor(FColor(150, 62, 48));
+	const FLinearColor PlaceInk = FLinearColor(FColor(244, 232, 204, 220));
+
+	/** A few names written over the big map, where they belong (world cm). */
+	struct FMapPlace
+	{
+		const TCHAR* Name;
+		double X;
+		double Y;
+	};
+	const FMapPlace MapPlaces[] = {
+		{ TEXT("KELETI P\u00c1LYAUDVAR"), 104000.0, -47000.0 },
+		{ TEXT("R\u00c1K\u00d3CZI \u00daT"), 28000.0, -27500.0 },
+		{ TEXT("N\u00c9PSZ\u00cdNH\u00c1Z UTCA"), 45000.0, 9000.0 },
+		{ TEXT("TELEKI T\u00c9R"), 101500.0, 22500.0 },
+		{ TEXT("TISZA K\u00c1LM\u00c1N T\u00c9R"), 67500.0, -1000.0 },
+		{ TEXT("KEREPESI TEMET\u0150"), 128000.0, 12000.0 },
+	};
+
+	/**
+	 * Where world spots land on the screen for a map: the world spot Centre
+	 * drawn at Screen, Scale screen units a cm, turned by Angle (radians,
+	 * clockwise on the screen).
+	 */
+	struct FMapFrame
+	{
+		FVector2D Centre = FVector2D::ZeroVector;
+		float Angle = 0.f;
+		double Scale = 1.0;
+		FVector2f Screen = FVector2f::ZeroVector;
+
+		FVector2f ToScreen(const FVector2D& World) const
+		{
+			const FVector2D Away = (World - Centre) * Scale;
+			const double C = FMath::Cos(static_cast<double>(Angle));
+			const double S = FMath::Sin(static_cast<double>(Angle));
+			return Screen + FVector2f(static_cast<float>(Away.X * C - Away.Y * S), static_cast<float>(Away.X * S + Away.Y * C));
+		}
+	};
 
 	const FSlateBrush* White()
 	{
@@ -142,6 +263,18 @@ public:
 		const float High = Geometry.GetLocalSize().Y;
 		const double Now = Hud->Now();
 
+		// An open menu hides the rest of the HUD, and so does the big map.
+		if (Hud->Menu.IsOpen())
+		{
+			PaintMenu(Paint, *Hud, Wide, High);
+			return LayerId + 4;
+		}
+		if (Hud->bMapOpen)
+		{
+			PaintBigMap(Paint, *Hud, Wide, High);
+			return LayerId + 14;
+		}
+
 		float NotesTop = PestiHud::Top;
 		if (!Hud->GoalHu.IsEmpty())
 		{
@@ -150,6 +283,7 @@ public:
 		}
 		PaintNotes(Paint, *Hud, Now, NotesTop);
 		PaintStatus(Paint, Wide);
+		PaintMinimap(Paint, *Hud, High);
 		if (Hud->Fight.Until >= Now)
 		{
 			PaintFight(Paint, Hud->Fight, Wide);
@@ -168,11 +302,17 @@ public:
 		}
 		if (const ALighters* Collection = Hud->Cabinet.Get())
 		{
-			const FPainter Over{ Geometry, Out, LayerId + 3, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
 			PaintCabinet(Over, *Collection, Wide, High);
-			return LayerId + 6;
+			return LayerId + 18;
 		}
-		return LayerId + 3;
+		if (!Hud->LetterHu.IsEmpty())
+		{
+			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			PaintLetter(Over, *Hud, Wide, High);
+			return LayerId + 18;
+		}
+		return LayerId + 14;
 	}
 
 private:
@@ -286,6 +426,29 @@ private:
 				Text(Current, Info, X, Baseline, Color, 0.5f);
 			}
 			return Baseline;
+		}
+
+		/** How many lines Wrapped would break the words into. */
+		int32 LineCount(const FString& Words, const FSlateFontInfo& Info, float Width) const
+		{
+			TArray<FString> Parts;
+			Words.ParseIntoArray(Parts, TEXT(" "));
+			FString Current;
+			int32 Count = Parts.Num() > 0 ? 1 : 0;
+			for (const FString& Part : Parts)
+			{
+				const FString Longer = Current.IsEmpty() ? Part : Current + TEXT(" ") + Part;
+				if (!Current.IsEmpty() && Measure(Longer, Info).X > Width)
+				{
+					Current = Part;
+					++Count;
+				}
+				else
+				{
+					Current = Longer;
+				}
+			}
+			return Count;
 		}
 
 		/** A dark plaque with its corners stepped in twice, edged in gold. */
@@ -587,6 +750,101 @@ private:
 		Paint.Text(Sign.En, EnFont, WordsX, CentreY + 19.f, PestiHud::Grey);
 	}
 
+	/** One line of a letter as it is written out, and whether it sits on the right. */
+	struct FLetterLine
+	{
+		FString Words;
+		bool bRight = false;
+	};
+
+	/** Breaks Words at \n and then into lines no wider than Width; an empty line stays as a gap. */
+	static TArray<FLetterLine> BreakLines(const FPainter& Paint, const FString& Words, const FSlateFontInfo& Info, float Width)
+	{
+		TArray<FLetterLine> Result;
+		TArray<FString> Paragraphs;
+		Words.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		for (FString Paragraph : Paragraphs)
+		{
+			const bool bRight = Paragraph.StartsWith(TEXT(">"));
+			if (bRight)
+			{
+				Paragraph.RightChopInline(1);
+			}
+			TArray<FString> Parts;
+			Paragraph.ParseIntoArray(Parts, TEXT(" "));
+			if (Parts.Num() == 0)
+			{
+				Result.Add(FLetterLine());
+				continue;
+			}
+			FString Current;
+			for (const FString& Part : Parts)
+			{
+				const FString Longer = Current.IsEmpty() ? Part : Current + TEXT(" ") + Part;
+				if (!Current.IsEmpty() && Paint.Measure(Longer, Info).X > Width)
+				{
+					Result.Add(FLetterLine{ Current, bRight });
+					Current = Part;
+				}
+				else
+				{
+					Current = Longer;
+				}
+			}
+			Result.Add(FLetterLine{ Current, bRight });
+		}
+		return Result;
+	}
+
+	/** A letter held up: the handwritten page left of the middle, the English on a plaque to its right. */
+	void PaintLetter(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::LetterShade);
+
+		// The page, as tall as its writing.
+		const FSlateFontInfo Hand = Paint.Font(Hud.HandFont, PestiHud::HandPx);
+		const float PaperW = PestiHud::PaperWidth;
+		const TArray<FLetterLine> Written = BreakLines(Paint, Hud.LetterHu, Hand, PaperW - 2.f * PestiHud::PaperPad);
+		const float PaperH = FMath::Min(High - 40.f, 2.f * PestiHud::PaperPad + Written.Num() * PestiHud::HandLine);
+		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f;
+		const float PaperY = (High - PaperH) * 0.5f;
+		Paint.Box(PaperX + 8.f, PaperY + 10.f, PaperW, PaperH, PestiHud::PaperShadow, 0);
+		Paint.Box(PaperX, PaperY, PaperW, PaperH, PestiHud::Paper, 1);
+		Paint.Frame(PaperX, PaperY, PaperW, PaperH, PestiHud::PaperEdge, 1.5f, 1);
+		float Baseline = PaperY + PestiHud::PaperPad + PestiHud::HandLine * 0.6f;
+		for (const FLetterLine& Row : Written)
+		{
+			if (!Row.Words.IsEmpty())
+			{
+				const float X = Row.bRight ? PaperX + PaperW - PestiHud::PaperPad : PaperX + PestiHud::PaperPad;
+				Paint.Text(Row.Words, Hand, X, Baseline, PestiHud::LetterInk, Row.bRight ? 1.f : 0.f);
+			}
+			Baseline += PestiHud::HandLine;
+		}
+
+		// The English, on a plaque as tall as its lines.
+		const FSlateFontInfo Plain = Paint.Plain(PestiHud::PlaquePx);
+		const float PlaqueX = Wide * 0.5f + PestiHud::LetterGap * 0.5f;
+		const float Inner = PestiHud::PlaqueWidth - 2.f * PestiHud::PlaquePad;
+		const TArray<FLetterLine> English = BreakLines(Paint, Hud.LetterEn, Plain, Inner);
+		const float PlaqueH = 2.f * PestiHud::PlaquePad + 50.f + English.Num() * PestiHud::PlaqueLine + 40.f;
+		const float PlaqueY = (High - PlaqueH) * 0.5f;
+		Paint.Panel(PlaqueX, PlaqueY, PestiHud::PlaqueWidth, PlaqueH);
+		const float TextLeft = PlaqueX + PestiHud::PlaquePad;
+		Paint.Text(TEXT("LEV\u00c9L"), Paint.Deco(24.f, 3.f), TextLeft, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Gold);
+		Paint.Text(TEXT("the letter"), Paint.Plain(15.f, 1.f), PlaqueX + PestiHud::PlaqueWidth - PestiHud::PlaquePad, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Grey, 1.f);
+		float EnglishBaseline = PlaqueY + PestiHud::PlaquePad + 50.f + PestiHud::PlaqueLine * 0.7f;
+		for (const FLetterLine& Said : English)
+		{
+			if (!Said.Words.IsEmpty())
+			{
+				Paint.Text(Said.Words, Plain, Said.bRight ? TextLeft + Inner : TextLeft, EnglishBaseline, PestiHud::Cream, Said.bRight ? 1.f : 0.f);
+			}
+			EnglishBaseline += PestiHud::PlaqueLine;
+		}
+		Paint.Text(TEXT("R  \u00b7  elrak\u00e1s  \u00b7  put away"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
+	}
+
 	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
 	{
 		using namespace PestiHud;
@@ -689,6 +947,681 @@ private:
 			X + W - 50.f, RY + 42.f, Grey, 1.f);
 	}
 
+	// The menus (FPestiMenu), laid out like the HUD for a screen 1080 units high.
+
+	void PaintMenu(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		const FPestiMenu& Shown = Hud.Menu;
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::MenuShade);
+		const float CentreX = Wide * 0.5f;
+		const float Y0 = (High - 1080.f) * 0.5f;
+		const float KeysY = High - 50.f;
+		switch (Shown.GetPage())
+		{
+		case EPestiMenuPage::Title:
+			PaintTitle(Paint, Shown, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") } });
+			break;
+		case EPestiMenuPage::Pause:
+			PaintPause(Paint, Hud, Shown, Wide, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
+				{ TEXT("ESC / TAB"), TEXT("vissza a j\u00e1t\u00e9kba"), TEXT("back to the game") } });
+			break;
+		case EPestiMenuPage::Settings:
+			PaintSettings(Paint, Shown, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("A / D"), TEXT("\u00e1ll\u00edt\u00e1s"), TEXT("change") },
+				{ TEXT("ESC / TAB"), TEXT("vissza, mentve"), TEXT("back, saved") } });
+			break;
+		case EPestiMenuPage::Controls:
+			PaintControls(Paint, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
+			break;
+		case EPestiMenuPage::Credits:
+			PaintCredits(Paint, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
+			break;
+		case EPestiMenuPage::Confirm:
+			PaintConfirm(Paint, Shown, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
+				{ TEXT("ESC / TAB"), TEXT("m\u00e9gse"), TEXT("cancel") } });
+			break;
+		default:
+			break;
+		}
+	}
+
+	/** A menu row: Hungarian big, English small under it; the chosen one gold on a dark band, a diamond either side. */
+	void PaintMenuRow(const FPainter& Paint, float CentreX, float Y, const FPestiMenuRow& Row, bool bOn, const FString& Extra) const
+	{
+		const bool bExtra = !Extra.IsEmpty();
+		const FSlateFontInfo HuFont = Paint.Deco(34.f, 4.f);
+		if (bOn)
+		{
+			const float Upper = Y - 44.f;
+			const float Lower = Y + (bExtra ? 52.f : 28.f);
+			Paint.Band(CentreX, Upper, 660.f, Lower - Upper);
+			Paint.Line(CentreX - 220.f, Upper, CentreX + 220.f, Upper, PestiHud::Gold, 1.5f);
+			Paint.Line(CentreX - 220.f, Lower, CentreX + 220.f, Lower, PestiHud::Gold, 1.5f);
+			const float HalfWidth = Paint.Measure(Row.Hu, HuFont).X * 0.5f;
+			Paint.Diamond(CentreX - HalfWidth - 30.f, Y - 12.f, 12.f, PestiHud::Gold, 2);
+			Paint.Diamond(CentreX + HalfWidth + 30.f, Y - 12.f, 12.f, PestiHud::Gold, 2);
+		}
+		const FLinearColor HuColor = !Row.bEnabled ? PestiHud::Dim : (bOn ? PestiHud::Gold : PestiHud::Cream);
+		Paint.Text(Row.Hu, HuFont, CentreX, Y, HuColor, 0.5f);
+		if (PestiSettings::English())
+		{
+			Paint.Text(Row.En, Paint.Plain(17.f, 2.f), CentreX, Y + 22.f, !Row.bEnabled ? PestiHud::Dim : (bOn ? PestiHud::Cream : PestiHud::Grey), 0.5f);
+		}
+		if (bExtra)
+		{
+			Paint.Text(Extra, Paint.Plain(16.f, 1.f), CentreX, Y + 44.f, PestiHud::Brass, 0.5f);
+		}
+	}
+
+	/** The keys along the bottom of a menu, each in a little brass-edged plate with what it does beside it. */
+	void PaintMenuKeys(const FPainter& Paint, float CentreX, float Baseline, const TArray<PestiHud::FMenuKey>& Hints) const
+	{
+		const FSlateFontInfo KeyFont = Paint.Bold(16.f);
+		const FSlateFontInfo SayFont = Paint.Plain(16.f, 1.f);
+		TArray<FString> Labels;
+		float Total = 0.f;
+		for (const PestiHud::FMenuKey& Hint : Hints)
+		{
+			const FString Label = PestiSettings::English() ? FString::Printf(TEXT("%s  (%s)"), Hint.Hu, Hint.En) : FString(Hint.Hu);
+			Labels.Add(Label);
+			Total += Paint.Measure(Hint.Key, KeyFont).X + 28.f + Paint.Measure(Label, SayFont).X + 40.f;
+		}
+		float X = CentreX - (Total - 40.f) * 0.5f;
+		for (int32 i = 0; i < Hints.Num(); ++i)
+		{
+			const float KeyWidth = Paint.Measure(Hints[i].Key, KeyFont).X + 18.f;
+			Paint.Frame(X, Baseline - 18.f, KeyWidth, 24.f, PestiHud::Brass, 1.5f);
+			Paint.Text(Hints[i].Key, KeyFont, X + KeyWidth * 0.5f, Baseline, PestiHud::Cream, 0.5f);
+			const float SayWidth = Paint.Text(Labels[i], SayFont, X + KeyWidth + 10.f, Baseline, PestiHud::Grey);
+			X += KeyWidth + 10.f + SayWidth + 40.f;
+		}
+	}
+
+	/** A small arrow head, pointing left (-1) or right (1). */
+	void PaintChevron(const FPainter& Paint, float X, float Y, float Way, const FLinearColor& Color) const
+	{
+		Paint.Lines({ FVector2f(X - 6.f * Way, Y - 9.f), FVector2f(X + 3.f * Way, Y), FVector2f(X - 6.f * Way, Y + 9.f) }, Color, 2.5f);
+	}
+
+	void PaintTitle(const FPainter& Paint, const FPestiMenu& Shown, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		// The name over a big sunrise of rays.
+		Paint.Rays(CentreX, Y0 + 300.f, 330.f, 23, PestiHud::Fan);
+		Paint.Text(TEXT("PESTI MES\u00c9K"), Paint.Deco(118.f, 10.f), CentreX, Y0 + 270.f, PestiHud::Gold, 0.5f);
+		Paint.Line(CentreX - 400.f, Y0 + 310.f, CentreX + 400.f, Y0 + 310.f, PestiHud::Gold, 2.f);
+		Paint.Line(CentreX - 340.f, Y0 + 318.f, CentreX + 340.f, Y0 + 318.f, PestiHud::Dim, 1.f);
+		Paint.Diamond(CentreX, Y0 + 310.f, 16.f, PestiHud::Gold, 2);
+		Paint.Diamond(CentreX, Y0 + 310.f, 9.f, PestiHud::Solid, 3);
+		Paint.Text(TEXT("BUDAPEST  \u00b7  1932"), Paint.Bold(24.f, 10.f), CentreX, Y0 + 360.f, PestiHud::Cream, 0.5f);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Tales of Pest"), Paint.Plain(19.f, 2.f), CentreX, Y0 + 392.f, PestiHud::Grey, 0.5f);
+		}
+
+		// Continue says where the save starts and how far it has got.
+		FString SaveLine;
+		if (const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Paint.Hud))
+		{
+			SaveLine = FString::Printf(TEXT("B\u00f6zsi n\u00e9ni h\u00e1za  \u00b7  %s  \u00b7  %d k\u00fcldet\u00e9s k\u00e9sz"),
+				*APestiAlvilagGameModeBase::FormatMoney(Game->GetMoney()), Game->GetMissionsDone());
+		}
+		const TArray<FPestiMenuRow> List = Shown.Rows();
+		float RowY = Y0 + 500.f;
+		for (int32 i = 0; i < List.Num(); ++i)
+		{
+			const bool bContinue = List[i].Action == EPestiMenuAction::Continue;
+			PaintMenuRow(Paint, CentreX, RowY, List[i], i == Shown.GetChoice(), bContinue ? SaveLine : FString());
+			RowY += bContinue ? 118.f : 96.f;
+		}
+	}
+
+	void PaintPause(const FPainter& Paint, const APestiHUD& Hud, const FPestiMenu& Shown, float Wide, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const float CentreX = Wide * 0.5f;
+		const float W = 620.f;
+		const float H = 680.f;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + 160.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("SZ\u00dcNET"), CentreX, Y);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Paused"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+		}
+		const TArray<FPestiMenuRow> List = Shown.Rows();
+		for (int32 i = 0; i < List.Num(); ++i)
+		{
+			PaintMenuRow(Paint, CentreX, Y + 130.f + 92.f * i, List[i], i == Shown.GetChoice(), FString());
+		}
+		Paint.Text(TEXT("Menteni otthon lehet, B\u00f6zsi n\u00e9ni ajtaj\u00e1n\u00e1l."), Paint.Bold(19.f), CentreX, Y + H + 50.f, PestiHud::Cream, 0.5f);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("You save at home, at B\u00f6zsi n\u00e9ni's door."), Paint.Plain(16.f, 1.f), CentreX, Y + H + 76.f, PestiHud::Grey, 0.5f);
+		}
+
+		// The side panels only where the screen is wide enough for them.
+		if (Wide < PestiHud::MenuSidesFrom)
+		{
+			return;
+		}
+		const float SideW = 440.f;
+		const float SideY = Y0 + 300.f;
+		// Left, the goal now.
+		if (!Hud.GoalHu.IsEmpty())
+		{
+			const float GX = CentreX - 840.f;
+			const float Inner = SideW - 60.f;
+			const FSlateFontInfo HuFont = Paint.Bold(24.f);
+			const FSlateFontInfo EnFont = Paint.Plain(18.f);
+			const int32 HuLines = Paint.LineCount(Hud.GoalHu, HuFont, Inner);
+			const int32 EnLines = Hud.GoalEn.IsEmpty() ? 0 : Paint.LineCount(Hud.GoalEn, EnFont, Inner);
+			const float GH = 60.f + 30.f * HuLines + (EnLines > 0 ? 10.f + 24.f * EnLines : 0.f);
+			Paint.Panel(GX, SideY, SideW, GH);
+			Paint.Tab(TEXT("C\u00c9L"), GX + 70.f, SideY);
+			const float Last = Paint.Wrapped(Hud.GoalHu, HuFont, GX + SideW * 0.5f, SideY + 52.f, Inner, 30.f, PestiHud::Cream);
+			if (EnLines > 0)
+			{
+				Paint.Wrapped(Hud.GoalEn, EnFont, GX + SideW * 0.5f, Last + 34.f, Inner, 24.f, PestiHud::Grey);
+			}
+		}
+		// Right, how far the story has got.
+		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Paint.Hud);
+		if (!Game)
+		{
+			return;
+		}
+		const float RX = CentreX + 400.f;
+		Paint.Panel(RX, SideY, SideW, 330.f);
+		Paint.Tab(TEXT("\u00c1LL\u00c1S"), RX + 80.f, SideY);
+		const int32 Money = Game->GetMoney();
+		const FString Rows[][3] = {
+			{ TEXT("K\u00fcldet\u00e9sek"), TEXT("missions"), FString::Printf(TEXT("%d / %d"), Game->GetMissionsDone(), PestiHud::MenuActOneMissions) },
+			{ TEXT("P\u00e9nz"), TEXT("money"), FString::Printf(TEXT("%d,%02d P"), Money / 100, FMath::Abs(Money % 100)) },
+			{ TEXT("\u00d6ngy\u00fajt\u00f3k"), TEXT("lighters"), FString::Printf(TEXT("%d / %d"), Game->GetLightersFound(), LighterModel::All().Num()) },
+			{ TEXT("Taxifuvarok"), TEXT("taxi fares"), FString::FromInt(Game->GetTaxiJobs()) },
+			{ TEXT("K\u00f3stolt \u00e9telek"), TEXT("dishes tried"), FString::FromInt(Game->GetDishesTried()) },
+		};
+		const FSlateFontInfo NameFont = Paint.Bold(21.f);
+		float RowY = SideY + 64.f;
+		for (const FString (&Row)[3] : Rows)
+		{
+			const float NameW = Paint.Text(Row[0], NameFont, RX + 32.f, RowY, PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(Row[1], Paint.Plain(16.f, 1.f), RX + 42.f + NameW, RowY, PestiHud::Brass);
+			}
+			Paint.Text(Row[2], Paint.Deco(24.f, 1.f), RX + SideW - 32.f, RowY, PestiHud::Gold, 1.f);
+			Paint.Line(RX + 32.f, RowY + 16.f, RX + SideW - 32.f, RowY + 16.f, PestiHud::Dim, 1.f);
+			RowY += 54.f;
+		}
+	}
+
+	/** Ten bars between two stepped end caps, like the health. */
+	void PaintSlider(const FPainter& Paint, float X, float Y, float W, int32 Bars) const
+	{
+		constexpr float Gap = 4.f;
+		constexpr float BarHeight = 14.f;
+		const float BarWidth = (W - Gap * (PestiSettings::Steps - 1)) / PestiSettings::Steps;
+		Paint.Lines({ FVector2f(X - 6.f, Y - 4.f), FVector2f(X - 12.f, Y - 4.f), FVector2f(X - 12.f, Y + BarHeight + 4.f), FVector2f(X - 6.f, Y + BarHeight + 4.f) }, PestiHud::Gold, 2.f);
+		Paint.Lines({ FVector2f(X + W + 6.f, Y - 4.f), FVector2f(X + W + 12.f, Y - 4.f), FVector2f(X + W + 12.f, Y + BarHeight + 4.f), FVector2f(X + W + 6.f, Y + BarHeight + 4.f) }, PestiHud::Gold, 2.f);
+		for (int32 i = 0; i < PestiSettings::Steps; ++i)
+		{
+			Paint.Box(X + i * (BarWidth + Gap), Y, BarWidth, BarHeight, i < Bars ? PestiHud::Gold : PestiHud::MenuGlow, 1);
+		}
+	}
+
+	void PaintSettings(const FPainter& Paint, const FPestiMenu& Shown, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const float W = 980.f;
+		const float H = 680.f;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + 170.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("BE\u00c1LL\u00cdT\u00c1SOK"), CentreX, Y);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Settings"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+		}
+		const float ValueX = X + W - 400.f;
+		const float ValueW = 330.f;
+		for (int32 i = 0; i < FPestiMenu::SettingCount; ++i)
+		{
+			const float RowY = Y + 120.f + 80.f * i;
+			const bool bOn = i == Shown.GetChoice();
+			if (bOn)
+			{
+				Paint.Box(X + 30.f, RowY - 38.f, W - 60.f, 66.f, PestiHud::MenuGlow);
+				Paint.Line(X + 30.f, RowY - 38.f, X + W - 30.f, RowY - 38.f, PestiHud::Gold, 1.5f);
+				Paint.Line(X + 30.f, RowY + 28.f, X + W - 30.f, RowY + 28.f, PestiHud::Gold, 1.5f);
+				Paint.Diamond(X + 46.f, RowY - 5.f, 10.f, PestiHud::Gold, 2);
+			}
+			FString NameHu;
+			FString NameEn;
+			FString ValueHu;
+			FString ValueEn;
+			int32 Bars = -1;
+			FPestiMenu::Setting(i, NameHu, NameEn, Bars, ValueHu, ValueEn);
+			Paint.Text(NameHu, Paint.Bold(25.f), X + 70.f, RowY, bOn ? PestiHud::Gold : PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(NameEn, Paint.Plain(16.f, 1.f), X + 70.f, RowY + 22.f, PestiHud::Grey);
+			}
+			if (Bars >= 0)
+			{
+				PaintSlider(Paint, ValueX, RowY - 18.f, ValueW, Bars);
+				continue;
+			}
+			const FLinearColor Arrow = bOn ? PestiHud::Gold : PestiHud::Brass;
+			PaintChevron(Paint, ValueX + 4.f, RowY - 10.f, -1.f, Arrow);
+			PaintChevron(Paint, ValueX + ValueW - 4.f, RowY - 10.f, 1.f, Arrow);
+			Paint.Text(ValueHu, Paint.Deco(24.f, 1.f), ValueX + ValueW * 0.5f, RowY - 4.f, bOn ? PestiHud::Gold : PestiHud::Cream, 0.5f);
+			if (bEnglish)
+			{
+				Paint.Text(ValueEn, Paint.Plain(15.f, 1.f), ValueX + ValueW * 0.5f, RowY + 20.f, PestiHud::Grey, 0.5f);
+			}
+		}
+	}
+
+	void PaintControls(const FPainter& Paint, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		static const TCHAR* const Keys[][3] = {
+			{ TEXT("W A S D"), TEXT("J\u00e1r\u00e1s, vezet\u00e9s"), TEXT("Walk, drive") },
+			{ TEXT("Eg\u00e9r"), TEXT("K\u00f6r\u00fcln\u00e9z\u00e9s"), TEXT("Look around (mouse)") },
+			{ TEXT("Shift"), TEXT("Fut\u00e1s"), TEXT("Run") },
+			{ TEXT("Sz\u00f3k\u00f6z"), TEXT("Ugr\u00e1s, \u00e1tugr\u00e1s; aut\u00f3ban k\u00e9zif\u00e9k"), TEXT("Jump, vault; handbrake in a car") },
+			{ TEXT("E"), TEXT("Besz\u00e9d, haszn\u00e1lat"), TEXT("Talk, use") },
+			{ TEXT("F"), TEXT("Besz\u00e1ll\u00e1s, kisz\u00e1ll\u00e1s"), TEXT("Get in or out") },
+			{ TEXT("T"), TEXT("Villamos, busz, taxi"), TEXT("Ride a tram, bus or taxi") },
+			{ TEXT("Bal eg\u00e9rgomb"), TEXT("\u00dct\u00e9s"), TEXT("Punch (left mouse)") },
+			{ TEXT("Jobb eg\u00e9rgomb"), TEXT("V\u00e9dekez\u00e9s"), TEXT("Guard (right mouse)") },
+			{ TEXT("C"), TEXT("M\u00e1sik n\u00e9zet"), TEXT("Change the view") },
+			{ TEXT("H"), TEXT("F\u00e9nysz\u00f3r\u00f3"), TEXT("Headlights") },
+			{ TEXT("L"), TEXT("\u00d6ngy\u00fajt\u00f3-gy\u0171jtem\u00e9ny"), TEXT("Lighter collection") },
+			{ TEXT("M"), TEXT("T\u00e9rk\u00e9p, saj\u00e1t jel"), TEXT("Map, your own mark") },
+			{ TEXT("Esc / Tab"), TEXT("Men\u00fc"), TEXT("Menu") },
+		};
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Keys));
+		const float W = 1000.f;
+		const float H = 120.f + 50.f * Count;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + (1080.f - H) * 0.5f - 20.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("IR\u00c1NY\u00cdT\u00c1S"), CentreX, Y);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Controls"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+		}
+		for (int32 i = 0; i < Count; ++i)
+		{
+			const float RowY = Y + 100.f + 50.f * i;
+			Paint.Text(Keys[i][0], Paint.Bold(20.f, 1.f), X + 60.f, RowY, PestiHud::Gold);
+			Paint.Text(Keys[i][1], Paint.Bold(21.f), X + 300.f, RowY, PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(Keys[i][2], Paint.Plain(17.f), X + W - 60.f, RowY, PestiHud::Grey, 1.f);
+			}
+			Paint.Line(X + 60.f, RowY + 15.f, X + W - 60.f, RowY + 15.f, PestiHud::Dim, 1.f);
+		}
+	}
+
+	void PaintCredits(const FPainter& Paint, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		static const TCHAR* const Lines[][2] = {
+			{ TEXT("Daniel j\u00e1t\u00e9ka, az eredeti Pesti Alvil\u00e1g nyom\u00e1n"), TEXT("A game by Daniel, after his original Pesti Alvil\u00e1g") },
+			{ TEXT("K\u00f3d \u00e9s modellek: Claude (Anthropic)"), TEXT("Code and models: Claude (Anthropic)") },
+			{ TEXT("T\u00e9rk\u00e9p: \u00a9 OpenStreetMap k\u00f6zrem\u0171k\u00f6d\u0151k"), TEXT("Map data: \u00a9 OpenStreetMap contributors") },
+			{ TEXT("Bet\u0171k: Limelight \u00e9s Josefin Sans (SIL OFL)"), TEXT("Fonts: Limelight and Josefin Sans (SIL OFL)") },
+		};
+		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Lines));
+		const float W = 900.f;
+		const float H = 200.f + 76.f * Count;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + (1080.f - H) * 0.5f - 20.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("K\u00c9SZ\u00cdT\u0150K"), CentreX, Y);
+		Paint.Text(TEXT("PESTI MES\u00c9K"), Paint.Deco(48.f, 6.f), CentreX, Y + 110.f, PestiHud::Gold, 0.5f);
+		Paint.Diamond(CentreX, Y + 138.f, 10.f, PestiHud::Gold, 2);
+		Paint.Line(CentreX - 200.f, Y + 138.f, CentreX + 200.f, Y + 138.f, PestiHud::Dim, 1.f);
+		for (int32 i = 0; i < Count; ++i)
+		{
+			const float RowY = Y + 200.f + 76.f * i;
+			Paint.Text(Lines[i][0], Paint.Bold(22.f), CentreX, RowY, PestiHud::Cream, 0.5f);
+			if (bEnglish)
+			{
+				Paint.Text(Lines[i][1], Paint.Plain(17.f), CentreX, RowY + 26.f, PestiHud::Grey, 0.5f);
+			}
+		}
+	}
+
+	void PaintConfirm(const FPainter& Paint, const FPestiMenu& Shown, float CentreX, float Y0) const
+	{
+		const float W = 760.f;
+		const float H = 380.f;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + 330.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Tab(TEXT("BIZTOS?"), CentreX, Y);
+		FString AskHu;
+		FString AskEn;
+		Shown.Question(AskHu, AskEn);
+		const float Last = Paint.Wrapped(AskHu, Paint.Bold(24.f), CentreX, Y + 70.f, W - 100.f, 30.f, PestiHud::Cream);
+		if (PestiSettings::English())
+		{
+			Paint.Wrapped(AskEn, Paint.Plain(18.f), CentreX, Last + 32.f, W - 100.f, 24.f, PestiHud::Grey);
+		}
+		const TArray<FPestiMenuRow> List = Shown.Rows();
+		for (int32 i = 0; i < List.Num(); ++i)
+		{
+			PaintMenuRow(Paint, CentreX, Y + 230.f + 86.f * i, List[i], i == Shown.GetChoice(), FString());
+		}
+	}
+
+
+	// The minimap and the big map (PestiMap's plan, APestiHUD's goal, routes and own mark).
+
+	/** The plan picture, placed and turned by the frame (clip it first). */
+	void PaintPlan(const FPainter& Paint, const PestiMap::FPlan& Plan, const PestiHud::FMapFrame& Frame, int32 Up) const
+	{
+		const float Across = static_cast<float>(Plan.Side * Frame.Scale);
+		if (Across <= 1.f)
+		{
+			return;
+		}
+		const FVector2f FromCorner(static_cast<float>((Frame.Centre.X - Plan.Corner.X) * Frame.Scale),
+			static_cast<float>((Frame.Centre.Y - Plan.Corner.Y) * Frame.Scale));
+		const FGeometry Turned = Paint.Geometry.MakeChild(FVector2f(Across, Across),
+			FSlateLayoutTransform(Frame.Screen - FromCorner),
+			FSlateRenderTransform(FQuat2f(Frame.Angle)), FVector2f(FromCorner.X / Across, FromCorner.Y / Across));
+		FSlateDrawElement::MakeBox(Paint.Out, Paint.Layer + Up, Turned.ToPaintGeometry(), &Plan.Brush, ESlateDrawEffect::None, FLinearColor::White);
+	}
+
+	/** A route as a line from the player along the planned points, dark-edged. */
+	void PaintRoute(const FPainter& Paint, const APestiHUD& Hud, const PestiHud::FMapFrame& Frame, const TArray<FVector2D>& Route,
+		const FLinearColor& Color, int32 Up) const
+	{
+		if (Route.Num() == 0)
+		{
+			return;
+		}
+		TArray<FVector2f> Points;
+		Points.Reserve(Route.Num() + 1);
+		Points.Add(Frame.ToScreen(Hud.ViewAt));
+		// The first planned point is the start of the street the player is on, which may be behind.
+		for (int32 i = Route.Num() > 1 ? 1 : 0; i < Route.Num(); ++i)
+		{
+			Points.Add(Frame.ToScreen(Route[i]));
+		}
+		Paint.Lines(Points, PestiHud::RouteShade, 9.f, Up);
+		Paint.Lines(Points, Color, 5.f, Up + 1);
+	}
+
+	void PaintRoutes(const FPainter& Paint, const APestiHUD& Hud, const PestiHud::FMapFrame& Frame, double Now, int32 Up) const
+	{
+		if (Hud.GoalRouteUntil >= Now)
+		{
+			PaintRoute(Paint, Hud, Frame, Hud.GoalRoute, PestiHud::Gold, Up);
+		}
+		if (Hud.bHasMark && Hud.MarkRouteUntil >= Now)
+		{
+			PaintRoute(Paint, Hud, Frame, Hud.MarkRoute, PestiHud::RedHi, Up + 2);
+		}
+	}
+
+	/** The goal's mark: a diamond in a dark edge with a dark heart. */
+	void PaintGem(const FPainter& Paint, const FVector2f& At, float Across, const FLinearColor& Color, const FLinearColor& Edge, int32 Up) const
+	{
+		Paint.Diamond(At.X, At.Y, Across + 6.f, Edge, Up);
+		Paint.Diamond(At.X, At.Y, Across, Color, Up + 1);
+		Paint.Diamond(At.X, At.Y, Across * 0.35f, PestiHud::Solid, Up + 2);
+	}
+
+	/** A mark on the minimap; one further off waits on the rim (Half from the middle), with a little arrow pointing on. */
+	void PaintBlip(const FPainter& Paint, const FVector2f& At, const FVector2f& Middle, float Half, const FLinearColor& Color,
+		const FLinearColor& Edge, int32 Up) const
+	{
+		const FVector2f Away = At - Middle;
+		const float Most = FMath::Max(FMath::Abs(Away.X), FMath::Abs(Away.Y));
+		if (Most <= Half)
+		{
+			PaintGem(Paint, At, 16.f, Color, Edge, Up);
+			return;
+		}
+		const FVector2f OnRim = Middle + Away * (Half / Most);
+		const FVector2f Way = Away.GetSafeNormal();
+		const FVector2f Side(-Way.Y, Way.X);
+		Paint.Lines({ OnRim + Way * 4.f - Side * 8.f, OnRim + Way * 16.f, OnRim + Way * 4.f + Side * 8.f }, Color, 3.f, Up + 1);
+		PaintGem(Paint, OnRim - Way * 4.f, 12.f, Color, Edge, Up);
+	}
+
+	/** The player: a cream arrow head, pointing Turn radians clockwise from screen up. */
+	void PaintArrow(const FPainter& Paint, const FVector2f& At, float Turn, float Length, int32 Up) const
+	{
+		const float C = FMath::Cos(Turn);
+		const float S = FMath::Sin(Turn);
+		auto Place = [&At, C, S](float X, float Y) { return At + FVector2f(X * C - Y * S, X * S + Y * C); };
+		const FVector2f Tip = Place(0.f, -Length);
+		const FVector2f LeftBack = Place(-0.7f * Length, 0.75f * Length);
+		const FVector2f RightBack = Place(0.7f * Length, 0.75f * Length);
+		const FVector2f Notch = Place(0.f, 0.35f * Length);
+		Paint.Lines({ Tip, RightBack, Notch, LeftBack, Tip }, PestiHud::Solid, 6.f, Up);
+		// Filled with strokes from the tip to the back edges.
+		for (int32 i = 0; i <= 6; ++i)
+		{
+			const float T = i / 6.f;
+			Paint.Lines({ Tip, LeftBack + (Notch - LeftBack) * T }, PestiHud::Cream, 2.5f, Up + 1);
+			Paint.Lines({ Tip, Notch + (RightBack - Notch) * T }, PestiHud::Cream, 2.5f, Up + 1);
+		}
+		Paint.Lines({ Tip, RightBack, Notch, LeftBack, Tip }, PestiHud::Cream, 2.f, Up + 1);
+	}
+
+	/** Bözsi néni's house: a little cream house. */
+	void PaintHouse(const FPainter& Paint, const FVector2f& At, float Across, int32 Up) const
+	{
+		const float H = Across * 0.5f;
+		const TArray<FVector2f> Roof = { FVector2f(At.X - H, At.Y), FVector2f(At.X, At.Y - H), FVector2f(At.X + H, At.Y) };
+		const TArray<FVector2f> Walls = { FVector2f(At.X - H * 0.7f, At.Y), FVector2f(At.X - H * 0.7f, At.Y + H * 0.8f),
+			FVector2f(At.X + H * 0.7f, At.Y + H * 0.8f), FVector2f(At.X + H * 0.7f, At.Y) };
+		Paint.Lines(Roof, PestiHud::Solid, 5.f, Up);
+		Paint.Lines(Walls, PestiHud::Solid, 5.f, Up);
+		Paint.Box(At.X - H * 0.7f, At.Y, H * 1.4f, H * 0.8f, PestiHud::Cream, Up + 1);
+		Paint.Lines(Roof, PestiHud::Cream, 3.f, Up + 1);
+	}
+
+	/** The cross the own mark is put down with. */
+	void PaintCross(const FPainter& Paint, const FVector2f& At, int32 Up) const
+	{
+		Paint.Line(At.X - 26.f, At.Y, At.X - 8.f, At.Y, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X + 8.f, At.Y, At.X + 26.f, At.Y, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X, At.Y - 26.f, At.X, At.Y - 8.f, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X, At.Y + 8.f, At.X, At.Y + 26.f, PestiHud::Cream, 2.f, Up);
+		Paint.Diamond(At.X, At.Y, 6.f, PestiHud::Cream, Up);
+	}
+
+	void PaintMinimap(const FPainter& Paint, const APestiHUD& Hud, float High) const
+	{
+		const PestiMap::FPlan* Plan = PestiMap::Get();
+		if (!Plan || !Hud.bHasView)
+		{
+			return;
+		}
+		const double Now = Hud.Now();
+		const float Across = PestiHud::MiniSize;
+		const float Inset = PestiHud::MiniInset;
+		const float Inner = Across - 2.f * Inset;
+		const float X = PestiHud::Margin;
+		const float Y = High - PestiHud::Margin - Across - PestiHud::MiniNameBand;
+		Paint.Panel(X, Y, Across, Across + PestiHud::MiniNameBand);
+
+		// Over the panel: the plan turned the way the camera looks.
+		const FPainter Over{ Paint.Geometry, Paint.Out, Paint.Layer + 3, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		PestiHud::FMapFrame Frame;
+		Frame.Centre = Hud.ViewAt;
+		Frame.Angle = static_cast<float>(-FMath::DegreesToRadians(Hud.ViewYaw) - UE_HALF_PI);
+		Frame.Scale = Inner / FMath::Max(Hud.MiniAcross, 1.0);
+		Frame.Screen = FVector2f(X + Across * 0.5f, Y + Across * 0.5f);
+
+		const FGeometry Window = Paint.Geometry.MakeChild(FVector2f(Inner, Inner), FSlateLayoutTransform(FVector2f(X + Inset, Y + Inset)));
+		Paint.Out.PushClip(FSlateClippingZone(Window));
+		PaintPlan(Over, *Plan, Frame, 0);
+		Over.Box(X, Y, Across, Across, PestiHud::MapShade, 1);
+		PaintRoutes(Over, Hud, Frame, Now, 2);
+		Paint.Out.PopClip();
+		Over.Frame(X + Inset, Y + Inset, Inner, Inner, PestiHud::Brass, 1.5f, 1);
+
+		const float Half = Inner * 0.5f - 8.f;
+		if (Hud.bHasHome)
+		{
+			const FVector2f Home = Frame.ToScreen(Hud.HomeAt);
+			if (FMath::Abs(Home.X - Frame.Screen.X) < Half && FMath::Abs(Home.Y - Frame.Screen.Y) < Half)
+			{
+				PaintHouse(Over, Home, 18.f, 6);
+			}
+		}
+		if (Hud.GoalBlipUntil >= Now)
+		{
+			PaintBlip(Over, Frame.ToScreen(Hud.GoalBlipAt), Frame.Screen, Half, PestiHud::Gold, PestiHud::GoalDark, 8);
+		}
+		if (Hud.bHasMark)
+		{
+			PaintBlip(Over, Frame.ToScreen(FVector2D(Hud.MarkAt)), Frame.Screen, Half, PestiHud::RedHi, PestiHud::MarkDark, 8);
+		}
+
+		// North (É, észak) on the rim.
+		const FVector2f North = (Frame.ToScreen(Hud.ViewAt - FVector2D(0.0, 1000.0)) - Frame.Screen).GetSafeNormal();
+		const float NorthMost = FMath::Max(FMath::Abs(North.X), FMath::Abs(North.Y));
+		if (NorthMost > UE_KINDA_SMALL_NUMBER)
+		{
+			const FVector2f Rim = Frame.Screen + North * ((Inner * 0.5f) / NorthMost);
+			Over.Diamond(Rim.X, Rim.Y, 26.f, PestiHud::Gold, 6);
+			Over.Diamond(Rim.X, Rim.Y, 22.f, PestiHud::Solid, 7);
+			const FPainter Above{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+			Above.Text(TEXT("\u00c9"), Above.Deco(16.f), Rim.X, Rim.Y + 6.f, PestiHud::Gold, 0.5f);
+		}
+
+		PaintArrow(Over, Frame.Screen, FMath::DegreesToRadians(Hud.FacingYaw - Hud.ViewYaw), 11.f, 8);
+
+		// The street's name under the map.
+		Paint.Text(Hud.StreetName, Paint.Bold(19.f, 1.f), X + Across * 0.5f, Y + Across + 16.f, PestiHud::Cream, 0.5f);
+	}
+
+	void PaintBigMap(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const double Now = Hud.Now();
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::MapCurtain);
+		const PestiMap::FPlan* Plan = PestiMap::Get();
+
+		const float Edge = 60.f;
+		const float Gap = 30.f;
+		const float Inset = 16.f;
+		const float X = Edge;
+		const float Y = 70.f;
+		const float W = FMath::Max(Wide - 2.f * Edge - Gap - PestiHud::MapLegendWidth, 400.f);
+		const float H = High - 2.f * Y;
+		Hud.MapWindow = FVector2f(W - 2.f * Inset, H - 2.f * Inset);
+		Paint.Panel(X, Y, W, H);
+
+		const FPainter Over{ Paint.Geometry, Paint.Out, Paint.Layer + 3, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		PestiHud::FMapFrame Frame;
+		Frame.Centre = Hud.MapCentre;
+		Frame.Angle = 0.f;
+		Frame.Scale = Hud.MapWindow.X / FMath::Max(Hud.MapAcross, 1.0);
+		Frame.Screen = FVector2f(X + W * 0.5f, Y + H * 0.5f);
+
+		const FGeometry Window = Paint.Geometry.MakeChild(Hud.MapWindow, FSlateLayoutTransform(FVector2f(X + Inset, Y + Inset)));
+		Paint.Out.PushClip(FSlateClippingZone(Window));
+		if (Plan)
+		{
+			PaintPlan(Over, *Plan, Frame, 0);
+		}
+		for (const PestiHud::FMapPlace& Place : PestiHud::MapPlaces)
+		{
+			const FVector2f At = Frame.ToScreen(FVector2D(Place.X, Place.Y));
+			Over.Text(Place.Name, Over.Bold(17.f, 3.f), At.X, At.Y, PestiHud::PlaceInk, 0.5f);
+		}
+		PaintRoutes(Over, Hud, Frame, Now, 3);
+		if (Hud.bHasHome)
+		{
+			PaintHouse(Over, Frame.ToScreen(Hud.HomeAt), 24.f, 6);
+		}
+		if (Hud.GoalBlipUntil >= Now)
+		{
+			PaintGem(Over, Frame.ToScreen(Hud.GoalBlipAt), 20.f, PestiHud::Gold, PestiHud::GoalDark, 6);
+		}
+		if (Hud.bHasMark)
+		{
+			PaintGem(Over, Frame.ToScreen(FVector2D(Hud.MarkAt)), 20.f, PestiHud::RedHi, PestiHud::MarkDark, 6);
+		}
+		if (Hud.bHasView)
+		{
+			PaintArrow(Over, Frame.ToScreen(Hud.ViewAt), static_cast<float>(FMath::DegreesToRadians(Hud.FacingYaw) + UE_HALF_PI), 14.f, 8);
+		}
+		PaintCross(Over, Frame.ToScreen(Hud.MapCursor), 9);
+		Paint.Out.PopClip();
+		Over.Frame(X + Inset, Y + Inset, W - 2.f * Inset, H - 2.f * Inset, PestiHud::Brass, 1.5f, 1);
+		Paint.Tab(TEXT("J\u00d3ZSEFV\u00c1ROS  \u00b7  1932"), X + W * 0.5f, Y);
+
+		// The legend and the keys on the right.
+		const float LX = X + W + Gap;
+		const float LW = PestiHud::MapLegendWidth;
+		Paint.Panel(LX, Y, LW, H);
+		Paint.Tab(TEXT("JELMAGYAR\u00c1ZAT"), LX + LW * 0.5f, Y);
+		float RowY = Y + 80.f;
+		const float IconX = LX + 46.f;
+		const float WordsX = LX + 80.f;
+		auto Row = [&](const TCHAR* Hu, const TCHAR* En)
+		{
+			Paint.Text(Hu, Paint.Bold(21.f), WordsX, RowY - 6.f, PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(En, Paint.Plain(16.f), WordsX, RowY + 18.f, PestiHud::Grey);
+			}
+			RowY += 72.f;
+		};
+		PaintArrow(Over, FVector2f(IconX, RowY - 8.f), 0.f, 13.f, 1);
+		Row(TEXT("Te"), TEXT("You"));
+		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::Gold, PestiHud::GoalDark, 1);
+		Row(TEXT("A feladat c\u00e9lja"), TEXT("Mission goal"));
+		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::RedHi, PestiHud::MarkDark, 1);
+		Row(TEXT("A saj\u00e1t jeled"), TEXT("Your own mark"));
+		PaintHouse(Over, FVector2f(IconX, RowY - 8.f), 24.f, 1);
+		Row(TEXT("B\u00f6zsi n\u00e9ni h\u00e1za"), TEXT("B\u00f6zsi n\u00e9ni's house"));
+		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::Gold, 5.f, 1);
+		Row(TEXT("Az \u00fat a c\u00e9lhoz"), TEXT("The way to the goal"));
+		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::TramInk, 2.f, 1);
+		Row(TEXT("Villamos"), TEXT("Tram line"));
+
+		static const TCHAR* const Keys[][3] = {
+			{ TEXT("Eg\u00e9r / W A S D"), TEXT("mozgat\u00e1s"), TEXT("move") },
+			{ TEXT("G\u00f6rg\u0151 / Q E"), TEXT("nagy\u00edt\u00e1s"), TEXT("zoom") },
+			{ TEXT("Bal klikk / Enter"), TEXT("jel ide"), TEXT("set a mark") },
+			{ TEXT("Jobb klikk / Del"), TEXT("jel t\u00f6rl\u00e9se"), TEXT("clear the mark") },
+			{ TEXT("M / Esc"), TEXT("bez\u00e1r\u00e1s"), TEXT("close") },
+		};
+		RowY += 20.f;
+		for (const auto& Key : Keys)
+		{
+			Paint.Text(Key[0], Paint.Bold(18.f), LX + 30.f, RowY, PestiHud::Gold);
+			const FString Says = bEnglish ? FString::Printf(TEXT("%s  (%s)"), Key[1], Key[2]) : FString(Key[1]);
+			Paint.Text(Says, Paint.Plain(17.f), LX + 30.f, RowY + 24.f, PestiHud::Grey);
+			RowY += 58.f;
+		}
+	}
+
 	TWeakObjectPtr<const APestiHUD> Owner;
 };
 
@@ -699,26 +1632,282 @@ APestiHUD* APestiHUD::Get(const UObject* WorldContextObject)
 	return PC ? Cast<APestiHUD>(PC->GetHUD()) : nullptr;
 }
 
+void APestiHUD::SetLetter(const FString& Hu, const FString& En)
+{
+	LetterHu = Hu;
+	LetterEn = En;
+}
+
+void APestiHUD::ClearLetter()
+{
+	LetterHu.Reset();
+	LetterEn.Reset();
+}
+
 void APestiHUD::SetCabinet(const ALighters* Shown)
 {
 	// Here, where ALighters is fully known: the weak pointer needs its whole type.
 	Cabinet = Shown;
 }
 
+APestiHUD::APestiHUD()
+{
+	// The menus and the big map read their keys while the game stands still.
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bTickEvenWhenPaused = true;
+
+	MarkGuide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("MarkGuide"));
+	MarkGuide->bOwnMark = true;
+	RootComponent = MarkGuide;
+}
+
 void APestiHUD::BeginPlay()
 {
 	Super::BeginPlay();
+	SetTickableWhenPaused(true);
 
 	DecoFont = PestiHud::LoadFont(TEXT("Limelight-Regular.ttf"));
 	BoldFont = PestiHud::LoadFont(TEXT("JosefinSans-SemiBold.ttf"));
 	TextFont = PestiHud::LoadFont(TEXT("JosefinSans-Regular.ttf"));
+	HandFont = PestiHud::LoadFont(TEXT("Parisienne-Regular.ttf"));
 
 	if (GEngine && GEngine->GameViewport)
 	{
 		Widget = SNew(SPestiHud, this);
 		GEngine->GameViewport->AddViewportWidgetContent(Widget.ToSharedRef(), 5);
+
+		const TWeakObjectPtr<APestiHUD> Self(this);
+		Blur = SNew(SBackgroundBlur)
+			.BlurStrength(PestiHud::MenuBlur)
+			.Visibility_Lambda([Self]()
+			{
+				const APestiHUD* Hud = Self.Get();
+				return Hud && Hud->Menu.IsOpen() ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+			});
+		GEngine->GameViewport->AddViewportWidgetContent(Blur.ToSharedRef(), 4);
+	}
+	Menu.Start(GetWorld());
+}
+
+void APestiHUD::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	APlayerController* PC = GetOwningPlayerController();
+	if (bMapOpen)
+	{
+		TickMap(PC);
+	}
+	else if (PC && !Menu.IsOpen() && !Cabinet.IsValid()
+		&& (PC->WasInputKeyJustPressed(EKeys::M) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left)))
+	{
+		OpenMap();
+	}
+	else
+	{
+		Menu.Tick(GetWorld(), PC);
+	}
+	TickMinimap(PC);
+}
+
+void APestiHUD::MarkGoal(const FVector& At)
+{
+	GoalBlipAt = FVector2D(At.X, At.Y);
+	GoalBlipUntil = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::ShowRoute(const TArray<FVector>& Points, bool bOwnMark)
+{
+	TArray<FVector2D>& Into = bOwnMark ? MarkRoute : GoalRoute;
+	Into.Reset(Points.Num());
+	for (const FVector& Point : Points)
+	{
+		Into.Emplace(Point.X, Point.Y);
+	}
+	double& Until = bOwnMark ? MarkRouteUntil : GoalRouteUntil;
+	Until = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::TickMinimap(APlayerController* PC)
+{
+	const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Pawn || !World)
+	{
+		bHasView = false;
+		return;
+	}
+	const FVector Location = Pawn->GetActorLocation();
+	const FVector2D At(Location.X, Location.Y);
+
+	// How fast the player goes opens the minimap's zoom (not while the game stands still).
+	const float Dt = static_cast<float>(FApp::GetDeltaTime());
+	if (!bHasView)
+	{
+		LastViewAt = At;
+	}
+	if (!UGameplayStatics::IsGamePaused(World) && Dt > UE_KINDA_SMALL_NUMBER)
+	{
+		const float Moving = static_cast<float>(FVector2D::Distance(At, LastViewAt)) / Dt;
+		if (Moving < PestiHud::MiniTeleport)
+		{
+			ViewSpeed = FMath::FInterpTo(ViewSpeed, Moving, Dt, 3.f);
+		}
+		const float Open = FMath::Clamp((ViewSpeed - PestiHud::MiniZoomFrom) / (PestiHud::MiniZoomFull - PestiHud::MiniZoomFrom), 0.f, 1.f);
+		const double Wanted = FMath::Lerp(PestiHud::MiniWalkAcross, PestiHud::MiniDriveAcross, static_cast<double>(Open));
+		MiniAcross = FMath::FInterpTo(MiniAcross, Wanted, static_cast<double>(Dt), 1.5);
+	}
+	LastViewAt = At;
+	ViewAt = At;
+	bHasView = true;
+	ViewYaw = PC->PlayerCameraManager ? static_cast<float>(PC->PlayerCameraManager->GetCameraRotation().Yaw) : static_cast<float>(PC->GetControlRotation().Yaw);
+	FacingYaw = static_cast<float>(Pawn->GetActorRotation().Yaw);
+
+	const double Clock = FPlatformTime::Seconds();
+	if (Clock >= NextStreetTime)
+	{
+		NextStreetTime = Clock + PestiHud::StreetNameEvery;
+		if (const PestiMap::FPlan* Plan = PestiMap::Get())
+		{
+			StreetName = Plan->StreetAt(At);
+		}
+	}
+
+	if (!bHasHome)
+	{
+		TActorIterator<AHomeDoor> Door(World);
+		if (Door)
+		{
+			const FVector DoorAt = Door->GetActorLocation();
+			HomeAt = FVector2D(DoorAt.X, DoorAt.Y);
+			bHasHome = true;
+		}
+	}
+
+	// The way to the own mark, until the player gets there.
+	if (bHasMark && MarkGuide)
+	{
+		if (FVector2D::Distance(At, FVector2D(MarkAt.X, MarkAt.Y)) < PestiHud::MarkReached)
+		{
+			bHasMark = false;
+			MarkGuide->Stop();
+		}
+		else
+		{
+			MarkGuide->Guide(Location, MarkAt);
+		}
 	}
 }
+
+void APestiHUD::OpenMap()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	bMapOpen = true;
+	if (bHasView)
+	{
+		MapCentre = ViewAt;
+	}
+	else if (const PestiMap::FPlan* Plan = PestiMap::Get())
+	{
+		MapCentre = Plan->Corner + FVector2D(Plan->Side * 0.5, Plan->Side * 0.5);
+	}
+	MapCursor = bHasMark ? FVector2D(MarkAt.X, MarkAt.Y) : MapCentre;
+	MapAcross = PestiHud::MapStartAcross;
+	UGameplayStatics::SetGamePaused(World, true);
+}
+
+void APestiHUD::CloseMap()
+{
+	bMapOpen = false;
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayStatics::SetGamePaused(World, false);
+	}
+}
+
+void APestiHUD::TickMap(APlayerController* PC)
+{
+	if (!PC)
+	{
+		return;
+	}
+	auto Pressed = [PC](const FKey& A, const FKey& B, const FKey& C, const FKey& D)
+	{
+		return PC->WasInputKeyJustPressed(A) || PC->WasInputKeyJustPressed(B) || PC->WasInputKeyJustPressed(C) || PC->WasInputKeyJustPressed(D);
+	};
+	auto Held = [PC](const FKey& A, const FKey& B)
+	{
+		return (PC->IsInputKeyDown(A) || PC->IsInputKeyDown(B)) ? 1.f : 0.f;
+	};
+
+	if (Pressed(EKeys::M, EKeys::Escape, EKeys::Tab, EKeys::Gamepad_Special_Left)
+		|| PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Right) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
+	{
+		CloseMap();
+		return;
+	}
+	const float Dt = FMath::Min(static_cast<float>(FApp::GetDeltaTime()), 0.1f);
+
+	// Zoom: the wheel a step at a time, Q and E (or the shoulder buttons) while held.
+	double Zoom = 1.0;
+	if (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp))
+	{
+		Zoom *= PestiHud::MapWheelStep;
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::MouseScrollDown))
+	{
+		Zoom /= PestiHud::MapWheelStep;
+	}
+	const float Out = Held(EKeys::Q, EKeys::Gamepad_LeftShoulder) - Held(EKeys::E, EKeys::Gamepad_RightShoulder);
+	Zoom *= FMath::Pow(PestiHud::MapHoldZoom, Out * Dt);
+	MapAcross = FMath::Clamp(MapAcross * Zoom, PestiHud::MapMinAcross, PestiHud::MapMaxAcross);
+
+	// The cross: keys and stick at a steady speed on the screen, the mouse as it moves.
+	const double Scale = MapWindow.X / FMath::Max(MapAcross, 1.0);
+	FVector2f Move(
+		Held(EKeys::D, EKeys::Right) - Held(EKeys::A, EKeys::Left) + PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX),
+		Held(EKeys::S, EKeys::Down) - Held(EKeys::W, EKeys::Up) - PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftY));
+	Move *= PestiHud::MapCrossSpeed * Dt;
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	PC->GetInputMouseDelta(MouseX, MouseY);
+	Move += FVector2f(MouseX, -MouseY) * PestiHud::MapMouseScale;
+	MapCursor += FVector2D(Move.X, Move.Y) / FMath::Max(Scale, UE_DOUBLE_SMALL_NUMBER);
+	if (const PestiMap::FPlan* Plan = PestiMap::Get())
+	{
+		MapCursor.X = FMath::Clamp(MapCursor.X, Plan->Corner.X, Plan->Corner.X + Plan->Side);
+		MapCursor.Y = FMath::Clamp(MapCursor.Y, Plan->Corner.Y, Plan->Corner.Y + Plan->Side);
+	}
+	// The map slides along when the cross nears its edge.
+	const double HalfX = MapWindow.X * 0.45 / Scale;
+	const double HalfY = MapWindow.Y * 0.45 / Scale;
+	MapCentre.X = FMath::Clamp(MapCentre.X, MapCursor.X - HalfX, MapCursor.X + HalfX);
+	MapCentre.Y = FMath::Clamp(MapCentre.Y, MapCursor.Y - HalfY, MapCursor.Y + HalfY);
+
+	// Put the own mark down, or take it away.
+	if (Pressed(EKeys::LeftMouseButton, EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom))
+	{
+		const APawn* Pawn = PC->GetPawn();
+		bHasMark = true;
+		MarkAt = FVector(MapCursor.X, MapCursor.Y, Pawn ? Pawn->GetActorLocation().Z : 0.0);
+		if (MarkGuide)
+		{
+			MarkGuide->Stop();
+		}
+	}
+	else if (Pressed(EKeys::RightMouseButton, EKeys::Delete, EKeys::BackSpace, EKeys::Gamepad_FaceButton_Left))
+	{
+		bHasMark = false;
+		if (MarkGuide)
+		{
+			MarkGuide->Stop();
+		}
+	}
+}
+
 
 void APestiHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
@@ -726,7 +1915,12 @@ void APestiHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		GEngine->GameViewport->RemoveViewportWidgetContent(Widget.ToSharedRef());
 	}
+	if (Blur.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(Blur.ToSharedRef());
+	}
 	Widget.Reset();
+	Blur.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -768,13 +1962,21 @@ void APestiHUD::Note(int32 Key, float Seconds, const FColor& Color, const FStrin
 	}
 	// Plain white reads as the panels' cream.
 	const FLinearColor Shade = Color == FColor::White ? PestiHud::Cream : FLinearColor(Color);
-	Notes.Add(Key, FNote{ Text, Shade, Now() + FMath::Max(PestiHud::OneFrame, static_cast<double>(Seconds)) });
+	// "Hungarian  (English)" keeps only its Hungarian when English subtitles are off.
+	FString Kept = Text;
+	FString LineHu;
+	FString LineEn;
+	if (!PestiSettings::English() && PestiHud::SplitLanguages(Text, LineHu, LineEn))
+	{
+		Kept = LineHu;
+	}
+	Notes.Add(Key, FNote{ Kept, Shade, Now() + FMath::Max(PestiHud::OneFrame, static_cast<double>(Seconds)) });
 }
 
 void APestiHUD::SetGoal(const FString& Hu, const FString& En, const FString& Far, const FString& Way)
 {
 	GoalHu = Hu;
-	GoalEn = En;
+	GoalEn = PestiSettings::English() ? En : FString();
 	GoalFar = Far;
 	GoalWay = Way;
 }
@@ -786,17 +1988,17 @@ void APestiHUD::ClearGoal()
 
 void APestiHUD::Say(const FString& Who, const FString& Hu, const FString& En, float Seconds)
 {
-	Speech = FSpeech{ Who, Hu, En, Now() + Seconds };
+	Speech = FSpeech{ Who, Hu, PestiSettings::English() ? En : FString(), Now() + Seconds };
 }
 
 void APestiHUD::Announce(const FString& Hu, const FString& En, float Seconds)
 {
-	Big = FSpeech{ FString(), Hu, En, Now() + Seconds };
+	Big = FSpeech{ FString(), Hu, PestiSettings::English() ? En : FString(), Now() + Seconds };
 }
 
 void APestiHUD::Prompt(const FString& Key, const FString& Hu, const FString& En, bool bNow)
 {
-	KeySign = FPrompt{ Key, Hu, En, bNow, Now() + PestiHud::OneFrame };
+	KeySign = FPrompt{ Key, Hu, PestiSettings::English() ? En : FString(), bNow, Now() + PestiHud::OneFrame };
 }
 
 void APestiHUD::ShowFight(const FString& FoeName, float FoeHealth, float Breath)

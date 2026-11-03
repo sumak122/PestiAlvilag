@@ -75,3 +75,7 @@ DerivedDataCache/*
 
 # Python
 __pycache__/
+
+# Bought asset packs (Kitbash3D etc.): too big for GitHub and not ours to share. Each stays only on Daniel's PC.
+Content/kb3d_*/
+Content/KB3D_*/

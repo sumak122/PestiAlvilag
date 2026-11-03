@@ -17,6 +17,7 @@
 #include "TrafficCar.h"
 #include "Tram.h"
 #include "PestiHud.h"
+#include "PestiMenu.h"
 
 namespace PestiCar
 {
@@ -55,6 +56,17 @@ namespace PestiCar
 	// Lifting off sharply above this share of top speed sometimes bangs the exhaust.
 	constexpr float BackfireSpeed = 0.4f;
 	constexpr float BackfireChance = 0.3f;
+
+	// Grip: how fast the tyres kill sliding sideways (each second the slide
+	// shrinks to e^-Grip of itself). Firm on the road, less when cornering
+	// hard at speed, and very little with the handbrake on: the back steps out.
+	constexpr float RoadGrip = 14.f;
+	constexpr float CorneringGrip = 6.f;
+	constexpr float HandbrakeGrip = 1.8f;
+	// Sliding sideways also scrubs off speed (cm/s each second, at most).
+	constexpr float SlideDrag = 900.f;
+	// The car's weight: how fast the turning follows the wheel (higher is quicker).
+	constexpr float TurnResponse = 7.f;
 }
 
 APestiCar::APestiCar()
@@ -108,19 +120,27 @@ void APestiCar::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	// Nobody at the wheel: the engine is off, and so are the lights.
-	Visuals->SetEngineRunning(PC != nullptr);
+	// Nobody at the wheel: the engine is off, and so are the lights. Crashed
+	// too often, the engine dies: the car only rolls on and can be steered.
+	const bool bEngineDead = Visuals->IsEngineDead();
+	Visuals->SetEngineRunning(PC != nullptr && !bEngineDead);
 	if (!PC)
 	{
 		Visuals->SetHeadlights(false);
 		Visuals->SetBraking(false);
+		SideSpeed = 0.f;
+		TurnRate = 0.f;
 		if (EngineNoise->IsPlaying())
 		{
 			EngineNoise->Stop();
 		}
 		return;
 	}
-	if (!EngineNoise->IsPlaying())
+	if (bEngineDead && EngineNoise->IsPlaying())
+	{
+		EngineNoise->Stop();
+	}
+	else if (!bEngineDead && !EngineNoise->IsPlaying())
 	{
 		EngineNoise->Start();
 	}
@@ -130,7 +150,7 @@ void APestiCar::Tick(float DeltaSeconds)
 		return (PC->IsInputKeyDown(Positive) ? 1.f : 0.f) - (PC->IsInputKeyDown(Negative) ? 1.f : 0.f);
 	};
 
-	const float Throttle = FMath::Clamp(
+	float Throttle = FMath::Clamp(
 		KeyAxis(EKeys::W, EKeys::S) + KeyAxis(EKeys::Up, EKeys::Down)
 			+ PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis)
 			- PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftTriggerAxis),
@@ -139,6 +159,11 @@ void APestiCar::Tick(float DeltaSeconds)
 		KeyAxis(EKeys::D, EKeys::A) + KeyAxis(EKeys::Right, EKeys::Left)
 			+ PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX),
 		-1.f, 1.f);
+	// A dead engine pulls no more: the pedal only brakes.
+	if (bEngineDead)
+	{
+		Throttle = ForwardSpeed > 20.f ? FMath::Min(Throttle, 0.f) : 0.f;
+	}
 	const bool bHandbrake = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 
 	if (PC->WasInputKeyJustPressed(EKeys::C) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
@@ -166,30 +191,51 @@ void APestiCar::Tick(float DeltaSeconds)
 	UpdateSpeed(Throttle, bHandbrake, DeltaSeconds);
 	Visuals->SetSteer(Steer);
 	Visuals->SetThrottle(FMath::Abs(Throttle));
-	UpdateEngineNoise(Throttle);
+	if (!bEngineDead)
+	{
+		UpdateEngineNoise(Throttle);
+	}
 
-	// Turning needs some speed, and gets gentler near top speed.
+	// Turning needs some speed, and gets gentler near top speed. The car is
+	// heavy: the turning builds up and dies away rather than snapping.
 	const float AbsSpeed = FMath::Abs(ForwardSpeed);
 	const float SpeedFactor = FMath::Clamp(AbsSpeed / FullTurnSpeed, 0.f, 1.f);
-	const float HighSpeedDamping = 1.f - 0.45f * FMath::Clamp(AbsSpeed / MaxSpeed, 0.f, 1.f);
+	const float SpeedShare = FMath::Clamp(AbsSpeed / MaxSpeed, 0.f, 1.f);
+	const float HighSpeedDamping = 1.f - 0.45f * SpeedShare;
 	const float HandbrakeBoost = bHandbrake ? 1.6f : 1.f;
-	const float YawDelta = Steer * MaxTurnRate * SpeedFactor * HighSpeedDamping * HandbrakeBoost
-		* FMath::Sign(ForwardSpeed) * DeltaSeconds;
-	AddActorWorldRotation(FRotator(0.f, YawDelta, 0.f));
+	const float WantedTurnRate = Steer * MaxTurnRate * SpeedFactor * HighSpeedDamping * HandbrakeBoost
+		* FMath::Sign(ForwardSpeed);
+	TurnRate = FMath::FInterpTo(TurnRate, WantedTurnRate, DeltaSeconds, PestiCar::TurnResponse);
 
-	MoveWithSlide(GetActorForwardVector() * ForwardSpeed * DeltaSeconds);
+	// The car turns, but the way it was going carries on: what was straight
+	// ahead is now partly sideways, and the tyres have to pull it round.
+	const FVector Moving = GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
+	AddActorWorldRotation(FRotator(0.f, TurnRate * DeltaSeconds, 0.f));
+	ForwardSpeed = static_cast<float>(FVector::DotProduct(Moving, GetActorForwardVector()));
+	SideSpeed = static_cast<float>(FVector::DotProduct(Moving, GetActorRightVector()));
+
+	const float Grip = bHandbrake
+		? PestiCar::HandbrakeGrip
+		: FMath::Lerp(PestiCar::RoadGrip, PestiCar::CorneringGrip, SpeedShare * FMath::Abs(Steer));
+	SideSpeed *= FMath::Exp(-Grip * DeltaSeconds);
+	// Sliding scrubs off some of the speed too.
+	const float Scrub = FMath::Min(FMath::Abs(SideSpeed) / 1000.f, 1.f) * PestiCar::SlideDrag * DeltaSeconds;
+	ForwardSpeed = FMath::FInterpConstantTo(ForwardSpeed, 0.f, 1.f, Scrub);
+
+	MoveWithSlide((GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed) * DeltaSeconds);
 	SnapToGround();
 
 	if (GEngine)
 	{
 		APestiHUD::Show(this, 1, 0.f, FColor::White,
-			FString::Printf(TEXT("%d km/h   (F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(AbsSpeed * 0.036f)));
+			FString::Printf(TEXT("%d km/h   %s(F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(GetVelocity().Size2D() * 0.036f),
+				bEngineDead ? TEXT("A motor lefulladt / The engine is dead   ") : TEXT("")));
 	}
 }
 
 FVector APestiCar::GetVelocity() const
 {
-	return GetActorForwardVector() * ForwardSpeed;
+	return GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
 }
 
 void APestiCar::TakeDriver(APawn* InDriver)
@@ -313,7 +359,8 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 
 	// Scraping along a wall is one bump, not one per frame.
 	const double Now = GetWorld()->GetTimeSeconds();
-	if (FMath::Abs(ForwardSpeed) > PestiCar::BumpSpeed && Now - LastBumpTime > 1.0)
+	const float HitSpeed = FMath::Sqrt(ForwardSpeed * ForwardSpeed + SideSpeed * SideSpeed);
+	if (HitSpeed > PestiCar::BumpSpeed && Now - LastBumpTime > 1.0)
 	{
 		++BumpCount;
 		LastBumpTime = Now;
@@ -321,7 +368,7 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 
 	// Ramming traffic brings the police; ramming the police more so.
 	const AActor* Rammed = Hit.GetActor();
-	if (Rammed && FMath::Abs(ForwardSpeed) > PestiCar::CrimeImpactSpeed && (Rammed->IsA<ATrafficCar>() || Rammed->IsA<ATram>()))
+	if (Rammed && HitSpeed > PestiCar::CrimeImpactSpeed && (Rammed->IsA<ATrafficCar>() || Rammed->IsA<ATram>()))
 	{
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
@@ -331,8 +378,23 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 
 	// A head-on hit nearly stops the car; a glancing one lets it scrape along.
 	const FVector WallNormal = FVector(Hit.Normal.X, Hit.Normal.Y, 0.f).GetSafeNormal();
+
+	// The crash dents the car, and the car it hit: by how fast they met, straight on.
+	const FVector Going = GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
+	const float CrashSpeed = static_cast<float>(FMath::Abs(FVector::DotProduct(Going, WallNormal)));
+	Visuals->Knock(Hit.ImpactPoint, WallNormal, CrashSpeed);
+	if (Rammed)
+	{
+		if (UCarVisuals* RammedLooks = Rammed->FindComponentByClass<UCarVisuals>())
+		{
+			RammedLooks->Knock(Hit.ImpactPoint, -WallNormal, CrashSpeed);
+		}
+	}
 	const float Impact = static_cast<float>(FMath::Abs(FVector::DotProduct(GetActorForwardVector(), WallNormal)));
 	ForwardSpeed *= 1.f - 0.8f * Impact;
+	// Sliding into it sideways stops the slide the same way.
+	const float SideImpact = static_cast<float>(FMath::Abs(FVector::DotProduct(GetActorRightVector(), WallNormal)));
+	SideSpeed *= 1.f - 0.8f * SideImpact;
 	AddActorWorldOffset(FVector::VectorPlaneProject(Delta * (1.f - Hit.Time), WallNormal), true);
 }
 
@@ -365,6 +427,7 @@ void APestiCar::UpdateFreeLook(const APlayerController* PC, float DeltaSeconds)
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	PC->GetInputMouseDelta(MouseX, MouseY);
+	PestiSettings::AdjustMouse(MouseX, MouseY);
 	const float TurnX = MouseX * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightX) * StickLookRate * DeltaSeconds;
 	const float TurnY = MouseY * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightY) * StickLookRate * DeltaSeconds;
 

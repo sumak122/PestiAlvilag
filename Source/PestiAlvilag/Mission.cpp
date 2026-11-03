@@ -20,7 +20,7 @@
 
 namespace Mission
 {
-	// Closer than this the marker alone is enough; no arrows.
+	// Closer than this the marker alone is enough; no route line on the minimap.
 	constexpr double RouteMinDistance = 4000.0;
 
 	// After failing: the offer to try again comes after this long and
@@ -69,6 +69,7 @@ void AMission::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	MissionActors.Reset();
+	CloseLetter();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -122,6 +123,7 @@ void AMission::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	TickLetter();
 	if (bFailed)
 	{
 		TickFailed();
@@ -167,7 +169,7 @@ void AMission::Tick(float DeltaSeconds)
 		Hud->SetGoal(Step.GoalHu, Step.GoalEn, Far, Way);
 	}
 
-	// Arrows over the turns on the way, while the target is still far off.
+	// The way there as a line on the minimap, while the target is still far off.
 	if (Step.bGuide && Distance > Mission::RouteMinDistance)
 	{
 		Guide->Guide(At, Step.Target);
@@ -279,8 +281,64 @@ void AMission::Retry(bool bPutBack)
 	Destroy();
 }
 
+bool AMission::GetWayTo(FVector& OutTarget, FString& OutPlace) const
+{
+	if (bFailed || !Steps.IsValidIndex(CurrentStep) || Steps[CurrentStep].Target.IsNearlyZero())
+	{
+		return false;
+	}
+	OutTarget = Steps[CurrentStep].Target;
+	OutPlace = Steps[CurrentStep].Place;
+	return true;
+}
+
+void AMission::TickLetter()
+{
+	FString LetterHu;
+	FString LetterEn;
+	if (bFailed || !Steps.IsValidIndex(CurrentStep) || !GetLetter(LetterHu, LetterEn))
+	{
+		CloseLetter();
+		return;
+	}
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC)
+	{
+		return;
+	}
+	const bool bToggle = PC->WasInputKeyJustPressed(EKeys::R);
+	const bool bPutAway = bLetterOpen && PC->WasInputKeyJustPressed(EKeys::BackSpace);
+	if (!bToggle && !bPutAway)
+	{
+		return;
+	}
+	if (bLetterOpen)
+	{
+		CloseLetter();
+	}
+	else if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->SetLetter(LetterHu, LetterEn);
+		bLetterOpen = true;
+	}
+}
+
+void AMission::CloseLetter()
+{
+	if (!bLetterOpen)
+	{
+		return;
+	}
+	bLetterOpen = false;
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->ClearLetter();
+	}
+}
+
 void AMission::Pass()
 {
+	CloseLetter();
 	CurrentStep = INDEX_NONE;
 	Marker->Hide();
 	Guide->Stop();

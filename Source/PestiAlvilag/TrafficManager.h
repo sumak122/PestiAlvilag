@@ -21,7 +21,10 @@ struct FTrafficLane
 	FString Way;
 };
 
-/** One tram route through the map, in driving order. Distances are in cm along the track. */
+/**
+ * One tram route through the map, in driving order. Distances are in cm
+ * along the track. Bus routes (bBus) are the same, along the traffic lanes.
+ */
 struct FTramRoute
 {
 	TArray<FVector> Points;
@@ -34,6 +37,8 @@ struct FTramRoute
 	FString Name;
 	float Length = 0.f;
 	float Speed = 700.f;
+	/** A bus line: ABus drives it. */
+	bool bBus = false;
 
 	/** Point on the track this far along it, clamped to the ends. */
 	FVector LocationAt(float Distance) const;
@@ -110,6 +115,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float TramSpacing = 80000.f;
 
+	/** Roughly one bus per this much bus route length (cm); at least one per route. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	float BusSpacing = 70000.f;
+
 	/** True unless a car (AI or player) sits within Room of the start of this lane. */
 	bool HasRoomOnLane(int32 LaneIndex, float Room, const AActor* Asker) const;
 
@@ -144,7 +153,9 @@ protected:
 
 private:
 	bool LoadLanes(const FJsonObject& Root);
+	/** The tram routes ("trams") and bus routes ("buses"). */
 	void LoadTramRoutes(const FJsonObject& Root);
+	void LoadRoutes(const FJsonObject& Root, const TCHAR* Field, bool bBuses);
 	void SpawnCars();
 	void SpawnTrams();
 	/** Puts new cars in the traffic, out of the player's sight, for the ones taken. */
@@ -184,6 +195,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ATrafficCar>> Cars;
 
+	/** The trams and the buses (ABus is a kind of ATram). */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ATram>> Trams;
 };

@@ -520,7 +520,7 @@ void ADayNight::UpdateLampLights()
 	for (int32 i = 0; i < Lamps.Num(); ++i)
 	{
 		const double Distance = FVector::Dist2D(Lamps[i], Eye);
-		if (Distance < LampRange)
+		if (Distance < LampRange && !LampOut[i])
 		{
 			Near.Emplace(Distance, i);
 		}
@@ -579,12 +579,8 @@ void ADayNight::BuildLightPools()
 		Grounds.Append(Parts);
 	}
 
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> Corners;
-	const double R = GroundSurfaces::LightPoolRadius;
 	const FCollisionQueryParams Params(SCENE_QUERY_STAT(LightPoolGround), false, this);
+	PoolGround.Reset(Lamps.Num());
 	for (const FVector& Lamp : Lamps)
 	{
 		double GroundZ = Lamp.Z - LanternHeight * 100.0;
@@ -597,7 +593,38 @@ void ADayNight::BuildLightPools()
 				break;
 			}
 		}
-		const FVector Middle(Lamp.X, Lamp.Y, GroundZ + LightPoolLift);
+		PoolGround.Add(GroundZ);
+	}
+
+	LightPools = NewObject<UProceduralMeshComponent>(this);
+	LightPools->SetupAttachment(RootComponent);
+	LightPools->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LightPools->SetCastShadow(false);
+	MeshLightPools();
+	LightPools->SetMaterial(0, LightPoolMaterial);
+	LightPools->SetVisibility(false);
+	LightPools->RegisterComponent();
+}
+
+void ADayNight::MeshLightPools()
+{
+	using namespace DayNight;
+	if (!LightPools)
+	{
+		return;
+	}
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> Corners;
+	const double R = GroundSurfaces::LightPoolRadius;
+	for (int32 i = 0; i < PoolGround.Num() && i < Lamps.Num(); ++i)
+	{
+		if (LampOut[i])
+		{
+			continue;
+		}
+		const FVector Middle(Lamps[i].X, Lamps[i].Y, PoolGround[i] + LightPoolLift);
 		const int32 First = Vertices.Num();
 		Vertices.Add(Middle + FVector(-R, -R, 0.0));
 		Vertices.Add(Middle + FVector(R, -R, 0.0));
@@ -607,20 +634,23 @@ void ADayNight::BuildLightPools()
 		Corners.Add(FVector2D(1.0, 0.0));
 		Corners.Add(FVector2D(1.0, 1.0));
 		Corners.Add(FVector2D(0.0, 1.0));
-		for (int32 i = 0; i < 4; ++i)
+		for (int32 c = 0; c < 4; ++c)
 		{
 			Normals.Add(FVector::UpVector);
 		}
 		// Facing up: Unreal faces a triangle along (C - A) x (B - A).
 		Triangles.Append({ First, First + 2, First + 1, First, First + 3, First + 2 });
 	}
-
-	LightPools = NewObject<UProceduralMeshComponent>(this);
-	LightPools->SetupAttachment(RootComponent);
-	LightPools->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	LightPools->SetCastShadow(false);
 	LightPools->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Corners, TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
-	LightPools->SetMaterial(0, LightPoolMaterial);
-	LightPools->SetVisibility(false);
-	LightPools->RegisterComponent();
+}
+
+void ADayNight::SetLampOut(int32 Lamp, bool bOut)
+{
+	if (!LampOut.IsValidIndex(Lamp) || LampOut[Lamp] == bOut)
+	{
+		return;
+	}
+	LampOut[Lamp] = bOut;
+	MeshLightPools();
+	UpdateLampLights();
 }
