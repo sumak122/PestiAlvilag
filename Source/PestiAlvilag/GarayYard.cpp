@@ -3,8 +3,10 @@
 #include "GarayYard.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "DayNight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -18,11 +20,22 @@ namespace GarayYardPlace
 	constexpr double GroundLook = 10000.0;
 	// Things in the yard are not drawn from further off than this (cm).
 	constexpr float DrawDistance = 20000.f;
+
+	// The shop's lamps light its walls this many times as bright as a lit
+	// grey wall at night (see ADayNight::LampCandela), 1 m off: by day, so
+	// the room isn't dark against the street, and at night, softer.
+	constexpr float LampDay = 98.f;
+	constexpr float LampNight = 14.f;
+	constexpr float LampReach = 900.f;
+	const FLinearColor LampColor(1.f, 0.85f, 0.62f);
+	// How often the lamps follow the time of day (s).
+	constexpr float LampUpdate = 1.f;
 }
 
 AGarayYard::AGarayYard()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = GarayYardPlace::LampUpdate;
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BasicShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
@@ -84,6 +97,47 @@ void AGarayYard::BeginPlay()
 		Text->SetTextRenderColor(Sign.Color.ToFColor(true));
 		Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Text->RegisterComponent();
+	}
+
+	for (const FVector& Lamp : GarayModel::Spots::ShopLamps)
+	{
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(this, NAME_None, RF_Transient);
+		Light->SetupAttachment(RootComponent);
+		Light->SetRelativeLocation(Lamp - FVector(0.0, 0.0, 15.0));
+		Light->SetMobility(EComponentMobility::Movable);
+		// Shadows keep the light in the shop (and off the street outside).
+		Light->SetCastShadows(true);
+		Light->SetIntensityUnits(ELightUnits::Candelas);
+		Light->SetAttenuationRadius(GarayYardPlace::LampReach);
+		Light->SetLightColor(GarayYardPlace::LampColor);
+		Light->RegisterComponent();
+		ShopLights.Add(Light);
+	}
+	UpdateLamps();
+}
+
+void AGarayYard::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	UpdateLamps();
+}
+
+void AGarayYard::UpdateLamps()
+{
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	if (!Clock)
+	{
+		return;
+	}
+	// Between day and night on a log scale, as the eye's exposure goes.
+	const float Strength = FMath::Exp(FMath::Lerp(FMath::Loge(GarayYardPlace::LampDay), FMath::Loge(GarayYardPlace::LampNight), Clock->GetDarkness()));
+	const float Candela = Clock->LampCandela(Strength);
+	for (UPointLightComponent* Light : ShopLights)
+	{
+		if (Light)
+		{
+			Light->SetIntensity(Candela);
+		}
 	}
 }
 

@@ -97,6 +97,11 @@ public:
 	void AddFoundLighter(int32 Index) { FoundLighters.AddUnique(Index); }
 
 	void MarkMissionDone(FName MissionId);
+
+	/** Whether he has Schwimmer's bamboo baton (it makes his blows harder). */
+	bool HasBaton();
+	/** Schwimmer hands it over: he carries it from now on. */
+	void GiveBaton();
 	/** Starts the first story mission not yet passed, after a short pause (Delay seconds, or the usual below 0). */
 	void StartNextMission(float Delay = -1.f);
 
@@ -150,6 +155,7 @@ private:
 	int32 TaxiJobs = 0;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
+	bool bHasBaton = false;
 	bool bSaveRead = false;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;

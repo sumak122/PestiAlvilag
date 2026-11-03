@@ -28,7 +28,10 @@ namespace PersonKit
 {
 	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood };
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
-	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket };
+	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket, Baton };
+
+	/** The pale yellow of a bamboo cane (HeldColor for EHeld::Baton). */
+	inline FLinearColor Bamboo() { return FLinearColor(0.60f, 0.47f, 0.24f); }
 
 	struct FOutfit
 	{
@@ -694,6 +697,20 @@ namespace PersonKit
 				case EHeld::Newspaper:
 					Block(F, FLinearColor(0.75f, 0.73f, 0.66f), Hand + FVector(2.0, 3.0, -8.0), FVector(8.0, 0.8, 14.0));
 					break;
+				case EHeld::Baton:
+				{
+					// A bamboo cane (nádpálca) of about 75 cm, gripped near its butt end
+					// and hanging forward along the arm; darker rings at the knots.
+					const FVector Butt = Hand + FVector(1.0, 0.0, 7.0);
+					const FVector Tip = Hand + FVector(18.0, 0.0, -68.0);
+					Rod(F, O.HeldColor, Butt, Tip, 1.4, 8);
+					const FLinearColor KnotColor(O.HeldColor.R * 0.62f, O.HeldColor.G * 0.62f, O.HeldColor.B * 0.62f);
+					for (const double Knot : { 0.08, 0.34, 0.6, 0.86 })
+					{
+						Rod(F, KnotColor, Butt + (Tip - Butt) * (Knot - 0.012), Butt + (Tip - Butt) * (Knot + 0.012), 1.65, 8);
+					}
+					break;
+				}
 				case EHeld::Basket:
 					Blob(F, O.HeldColor, Hand + FVector(0.0, 0.0, -24.0), FVector(16.0, 11.0, 10.0), 12, 4, -0.3);
 					Rod(F, O.HeldColor, Hand + FVector(-10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);

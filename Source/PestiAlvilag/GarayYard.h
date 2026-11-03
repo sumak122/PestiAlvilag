@@ -7,6 +7,7 @@
 #include "GarayYard.generated.h"
 
 class UInstancedStaticMeshComponent;
+class UPointLightComponent;
 class UMaterialInterface;
 class UStaticMesh;
 
@@ -14,7 +15,8 @@ class UStaticMesh;
  * Garay utca 13 (GarayModel): Friedrich Hermann's wholesale shop on the
  * street with his glass office at the back, and the timber yard behind the
  * gate that he lets to Schwimmer Mihály. Mission 5, "A felmondás", happens
- * here. Built from basic shapes when play begins.
+ * here. Built from basic shapes when play begins; the shop's ceiling lamps
+ * light it inside, a little dimmer at night so it doesn't glare.
  *
  * The actor's origin is the middle of the yard's street front at pavement
  * level, its +X points away from the street; the game mode spawns it at
@@ -31,10 +33,14 @@ public:
 	/** The yard in the world (or where it would stand), for turning its own points into the city's. */
 	static FTransform Frame(const UWorld* World);
 
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
+	/** The shop's lamps as bright as the time of day wants them. */
+	void UpdateLamps();
 	void AddShape(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide);
 
 	UPROPERTY()
@@ -48,4 +54,8 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Batches;
 
 	TMap<FString, int32> BatchIndex;
+
+	/** The light of each of the shop's ceiling lamps. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UPointLightComponent>> ShopLights;
 };

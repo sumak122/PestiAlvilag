@@ -39,7 +39,11 @@ namespace Felmondas
 	// Géza and the clerks go for him in this order, two at a time.
 	const ERuffian FightOrder[] = { ERuffian::Geza, ERuffian::ClerkOne, ERuffian::ClerkTwo };
 	constexpr int32 AtOnce = 2;
-	constexpr float SecondEager = 0.6f;
+	// How keen each is (below 1: thinks slower, no grabbing, no double jabs):
+	// the first man in, and the second, who holds back more. Made easier
+	// after Daniel's test.
+	constexpr float FirstEager = 0.75f;
+	constexpr float SecondEager = 0.4f;
 	// Another man coming at him this much closer than the one he faces: he turns to him.
 	constexpr double TurnShare = 0.6;
 	// The fight is over this long after the last one goes down (s).
@@ -98,7 +102,11 @@ void AMissionFelmondas::SetUpMission()
 	Schwimmer = SpawnForMission<AStoryPerson>(SchwimmerSpot + FVector(0.0, 0.0, PersonModel::MiddleHeight), SchwimmerYaw);
 	if (Schwimmer)
 	{
-		Schwimmer->SetOutfit(GarayModel::Schwimmer());
+		// Schwimmer with his bamboo baton, as the paper tells it.
+		PersonKit::FOutfit Dress = GarayModel::Schwimmer();
+		Dress.Held = PersonKit::EHeld::Baton;
+		Dress.HeldColor = PersonKit::Bamboo();
+		Schwimmer->SetOutfit(Dress);
 	}
 	SpawnShopPeople();
 
@@ -297,6 +305,18 @@ void AMissionFelmondas::OnStepDone(int32 Step)
 		{
 			Schwimmer->Follow(Player);
 		}
+		// He hands over a baton like his own: the first weapon.
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			if (!Game->HasBaton())
+			{
+				Game->GiveBaton();
+				SayLater(7.f, Felmondas::SchwimmerName,
+					TEXT("Fogd ezt a n\u00e1dp\u00e1lc\u00e1t, olyan, mint az eny\u00e9m. Ha baj van, j\u00f3 szolg\u00e1latot tesz."),
+					TEXT("Take this bamboo baton, same as mine. If there's trouble, it'll serve you well."));
+				Announce(TEXT("N\u00c1DP\u00c1LCA"), TEXT("You got a bamboo baton: your blows land harder"), 5.f);
+			}
+		}
 	}
 	else if (Step == Felmondas::WaitNoon)
 	{
@@ -486,7 +506,7 @@ void AMissionFelmondas::TickFight()
 	{
 		if (k < Felmondas::AtOnce)
 		{
-			Standing[k]->Attack(Person, k == 0 ? 1.f : Felmondas::SecondEager);
+			Standing[k]->Attack(Person, k == 0 ? Felmondas::FirstEager : Felmondas::SecondEager);
 		}
 		else
 		{

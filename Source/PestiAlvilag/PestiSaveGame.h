@@ -38,4 +38,8 @@ public:
 	/** The hidden lighters found, by number (LighterModel::All). */
 	UPROPERTY()
 	TArray<int32> FoundLighters;
+
+	/** Schwimmer's bamboo baton, the first weapon (mission 5). */
+	UPROPERTY()
+	bool bHasBaton = false;
 };

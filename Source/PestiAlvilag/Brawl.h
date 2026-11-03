@@ -130,6 +130,8 @@ namespace Brawl
 		}
 	}
 	constexpr float WindedDamage = 1.5f;
+	/** Blows struck with the bamboo baton take this many times as much. */
+	constexpr float BatonStrength = 1.5f;
 	/** A heavy swing into a guard still gets this share through. */
 	constexpr float GuardBreakShare = 0.4f;
 

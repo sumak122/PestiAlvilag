@@ -150,6 +150,11 @@ public:
 	/** Sits down beaten, both hands up: his fight is over. */
 	void GiveIn();
 
+	/** Dresses him again (after something in his hands changed). */
+	void RefreshDress();
+	/** How much harder than bare fists his blows land (the baton). */
+	virtual float GetBlowStrength() const;
+
 	/** What the fight shows over his head and his health (the foe's bar on the screen). */
 	virtual FString GetFightName() const { return FString(); }
 	virtual float GetHealthShare() const { return 1.f; }
