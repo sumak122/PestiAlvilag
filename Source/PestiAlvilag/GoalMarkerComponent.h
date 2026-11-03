@@ -17,7 +17,8 @@ class UTexture;
  * gem about 2.5 m up that slowly turns, a little fan of rays over it facing
  * the camera, a faint gold thread down to the ground and a sunburst of short
  * gold rays on the ground round the spot. It glows (unlit, see-through) so
- * it reads in the dark too. It lives in the world, not on its owner.
+ * it reads in the dark too. It lives in the world, not on its owner. While it
+ * shows, the minimap shows the goal as a gold diamond (APestiHUD::MarkGoal).
  */
 UCLASS(ClassGroup = (Custom))
 class PESTIALVILAG_API UGoalMarkerComponent : public USceneComponent

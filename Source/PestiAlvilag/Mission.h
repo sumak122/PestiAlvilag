@@ -37,7 +37,7 @@ struct FMissionStep
 
 /**
  * A story mission: a list of steps, each with a goal line on screen, a small
- * art deco marker over the target and see-through arrows over the turns on the way. A
+ * art deco marker over the target, and on the minimap its diamond and the way there. A
  * mission sets itself up in SetUpMission (people, things, the steps), reacts
  * as steps begin and end, and pays its reward when the last step is done.
  *
