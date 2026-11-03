@@ -32,6 +32,7 @@
 #include "PolicePatrols.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
+#include "PestiMenu.h"
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
 #include "PestiTaxi.h"
@@ -599,6 +600,8 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 
 void APestiAlvilagGameModeBase::StartNewGame()
 {
+	// Straight into the new game, not the title screen again.
+	FPestiMenu::SkipTitleOnce();
 	UGameplayStatics::DeleteGameInSlot(UPestiSaveGame::SlotName(), 0);
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }

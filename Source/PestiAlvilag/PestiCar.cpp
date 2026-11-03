@@ -17,6 +17,7 @@
 #include "TrafficCar.h"
 #include "Tram.h"
 #include "PestiHud.h"
+#include "PestiMenu.h"
 
 namespace PestiCar
 {
@@ -426,6 +427,7 @@ void APestiCar::UpdateFreeLook(const APlayerController* PC, float DeltaSeconds)
 	float MouseX = 0.f;
 	float MouseY = 0.f;
 	PC->GetInputMouseDelta(MouseX, MouseY);
+	PestiSettings::AdjustMouse(MouseX, MouseY);
 	const float TurnX = MouseX * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightX) * StickLookRate * DeltaSeconds;
 	const float TurnY = MouseY * MouseLookScale + PC->GetInputAnalogKeyState(EKeys::Gamepad_RightY) * StickLookRate * DeltaSeconds;
 

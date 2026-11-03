@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
+#include "PestiMenu.h"
 #include "PestiHud.generated.h"
 
 struct FCompositeFont;
 class ALighters;
 class SPestiHud;
+class SWidget;
 
 /**
  * The screen panels, in an art deco dress after 1930s Budapest shop signs:
@@ -22,7 +24,8 @@ class SPestiHud;
  * big announcements, and under the middle the key to press for a move
  * (a vault, a slide, a counter). In a fist fight, the other man's health
  * at the top and the player's breath under his health. Over everything, while it is open, the cabinet of
- * lighters found (ALighters).
+ * lighters found (ALighters). While a menu is open (FPestiMenu: the title
+ * screen, Esc's pause menu) only the menu shows, over the city blurred.
  *
  * Everything on screen goes through Show (by key, like the engine's debug
  * messages it replaces) or the goal, speech and announcement calls.
@@ -33,6 +36,8 @@ class PESTIALVILAG_API APestiHUD : public AHUD
 	GENERATED_BODY()
 
 public:
+	APestiHUD();
+
 	/** The player's HUD, or null. */
 	static APestiHUD* Get(const UObject* WorldContextObject);
 
@@ -69,8 +74,12 @@ public:
 	 */
 	void ShowFight(const FString& FoeName, float FoeHealth, float Breath);
 
+	/** True while the title screen or another menu is open (the game stands still). */
+	bool IsMenuOpen() const { return Menu.IsOpen(); }
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
@@ -109,6 +118,9 @@ private:
 	void Note(int32 Key, float Seconds, const FColor& Color, const FString& Text);
 
 	TSharedPtr<SPestiHud> Widget;
+	/** Blurs the city behind an open menu. */
+	TSharedPtr<SWidget> Blur;
+	FPestiMenu Menu;
 	TSharedPtr<const FCompositeFont> DecoFont;
 	TSharedPtr<const FCompositeFont> TextFont;
 	TSharedPtr<const FCompositeFont> BoldFont;
