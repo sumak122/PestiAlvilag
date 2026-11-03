@@ -156,6 +156,13 @@ void APestiPerson::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// A landed blow's blink of stillness ends (it is counted in real time).
+	if (HitStopUntil >= 0.0 && GetWorld()->GetRealTimeSeconds() >= HitStopUntil)
+	{
+		HitStopUntil = -1.0;
+		CustomTimeDilation = 1.f;
+	}
+
 	if (FreeMove != FreeRun::EMove::None)
 	{
 		TickMove(DeltaSeconds);
@@ -692,6 +699,10 @@ void APestiPerson::EndFight()
 	LetGo();
 	Act = Brawl::EAct::None;
 	Foe = nullptr;
+	HitStopUntil = -1.0;
+	CustomTimeDilation = 1.f;
+	ChainStep = 0;
+	KeptPunch = 0;
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->bOrientRotationToMovement = true;
 	if (Movement->MovementMode == MOVE_None)
@@ -715,6 +726,22 @@ void APestiPerson::BeginAct(Brawl::EAct NewAct, float Seconds)
 	{
 	case Brawl::EAct::Jab:
 		PlayFightSound(EKind::Swish, 0.55f, 0.04f);
+		break;
+	case Brawl::EAct::Cross:
+	case Brawl::EAct::Hook:
+		PlayFightSound(EKind::Swish, 0.65f, 0.05f);
+		break;
+	case Brawl::EAct::Uppercut:
+		PlayFightSound(EKind::Swish, 0.8f, 0.1f);
+		PlayFightSound(EKind::Effort, 0.5f, 0.08f);
+		break;
+	case Brawl::EAct::Rising:
+		PlayFightSound(EKind::Swish, 1.f, 0.16f);
+		PlayFightSound(EKind::Effort, 1.f, 0.12f);
+		break;
+	case Brawl::EAct::Haymaker:
+		PlayFightSound(EKind::Swish, 1.f, 0.24f);
+		PlayFightSound(EKind::Effort, 1.f, 0.2f);
 		break;
 	case Brawl::EAct::HeavySwing:
 		PlayFightSound(EKind::Swish, 1.f);
@@ -825,6 +852,70 @@ bool APestiPerson::HeavySwing()
 	}
 	BeginAct(Brawl::EAct::HeavyWind, Brawl::HeavyWindSeconds);
 	return true;
+}
+
+bool APestiPerson::ChainPunch(bool bFinisher)
+{
+	using namespace Brawl;
+	const double Now = GetWorld()->GetTimeSeconds();
+	// Late in a quick punch (after it landed) the next one may start; late in
+	// the uppercut, only the finisher.
+	const bool bLate = ActLength > 0.f && ActClock >= ActLength * ChainFrom
+		&& (IsLightPunch(Act) || (bFinisher && Act == EAct::Uppercut));
+	if (!IsFree(Act) && !bLate)
+	{
+		return false;
+	}
+	if (!bLate && Now > ChainUntil)
+	{
+		ChainStep = 0;
+	}
+	if (bFinisher && ChainStep == 0)
+	{
+		return HeavySwing();
+	}
+	if (!bFinisher && ChainStep >= ChainLength)
+	{
+		ChainStep = 0;
+	}
+
+	EAct Next = EAct::Jab;
+	float Length = JabSeconds;
+	if (bFinisher)
+	{
+		Next = ChainStep <= 2 ? EAct::Rising : EAct::Haymaker;
+		Length = ChainStep <= 2 ? RisingSeconds : HaymakerSeconds;
+	}
+	else if (ChainStep == 1)
+	{
+		Next = EAct::Cross;
+		Length = CrossSeconds;
+	}
+	else if (ChainStep == 2)
+	{
+		Next = EAct::Hook;
+		Length = HookSeconds;
+	}
+	else if (ChainStep == 3)
+	{
+		Next = EAct::Uppercut;
+		Length = UppercutSeconds;
+	}
+	if (!SpendStamina(bFinisher ? FinisherCost : ChainCost))
+	{
+		return false;
+	}
+	// A finisher ends the chain: the next click starts again from the jab.
+	ChainStep = bFinisher ? 0 : ChainStep + 1;
+	ChainUntil = bFinisher ? -1.0 : Now + Length + ChainGap;
+	BeginAct(Next, Length);
+	return true;
+}
+
+void APestiPerson::HitStop(float Seconds)
+{
+	HitStopUntil = GetWorld()->GetRealTimeSeconds() + Seconds;
+	CustomTimeDilation = Brawl::HitStopSlow;
 }
 
 bool APestiPerson::Counter()
@@ -1011,10 +1102,18 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		Lost *= From->GetBlowStrength();
 	}
 
-	// A guard stops jabs and knees, at a cost in breath; a heavy swing breaks through it.
-	if (Act == EAct::Guard && bFacing && (Blow == EBlow::Jab || Blow == EBlow::Knee))
+	// A guard stops jabs, the chain's punches and knees, at a cost in breath;
+	// a heavy swing or a finisher breaks through it.
+	const bool bQuick = Blow == EBlow::Jab || Blow == EBlow::Cross || Blow == EBlow::Hook || Blow == EBlow::Uppercut || Blow == EBlow::Knee;
+	const bool bBig = Blow == EBlow::Heavy || Blow == EBlow::Rising || Blow == EBlow::Haymaker;
+	if (Act == EAct::Guard && bFacing && bQuick)
 	{
-		PlayFightSound(FightSynth::EKind::Block, Blow == EBlow::Jab ? 0.8f : 0.6f);
+		HitStop(HitStopLight);
+		if (From)
+		{
+			From->HitStop(HitStopLight);
+		}
+		PlayFightSound(FightSynth::EKind::Block, Blow == EBlow::Knee ? 0.6f : 0.8f);
 		Stamina -= BlockCost;
 		RestFrom = GetWorld()->GetTimeSeconds() + RestBefore;
 		if (Stamina <= 0.f)
@@ -1023,11 +1122,20 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		}
 		return;
 	}
-	if (Act == EAct::Guard && bFacing && Blow == EBlow::Heavy)
+	const bool bGuardBroken = Act == EAct::Guard && bFacing && bBig;
+	if (bGuardBroken)
 	{
 		PlayFightSound(FightSynth::EKind::Block, 1.f);
 		Lost *= GuardBreakShare;
 		Stamina -= HeavyCost;
+	}
+
+	// Both stand still for a blink as it lands: longer for the big ones.
+	const float Still = bBig || Blow == EBlow::Counter || Blow == EBlow::Slam || Blow == EBlow::Uppercut ? HitStopHeavy : HitStopLight;
+	HitStop(Still);
+	if (From)
+	{
+		From->HitStop(Still);
 	}
 
 	// Held and kneed, he stays held; anything else lets go and knocks him back.
@@ -1040,13 +1148,21 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	switch (Blow)
 	{
 	case EBlow::Jab:
-		PlayFightSound(FightSynth::EKind::Smack, 0.6f);
+	case EBlow::Cross:
+	case EBlow::Hook:
+		PlayFightSound(FightSynth::EKind::Smack, Blow == EBlow::Jab ? 0.6f : 0.75f);
 		if (FMath::RandBool())
 		{
 			PlayFightSound(FightSynth::EKind::Pain, 0.5f, 0.03f);
 		}
 		break;
+	case EBlow::Uppercut:
+		PlayFightSound(FightSynth::EKind::Smack, 0.9f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.7f, 0.03f);
+		break;
 	case EBlow::Heavy:
+	case EBlow::Rising:
+	case EBlow::Haymaker:
 		PlayFightSound(FightSynth::EKind::Smack, Lost < Damage(Blow) ? 0.5f : 1.f);
 		PlayFightSound(FightSynth::EKind::Pain, 0.9f, 0.03f);
 		break;
@@ -1074,6 +1190,8 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	switch (Blow)
 	{
 	case EBlow::Jab:
+	case EBlow::Cross:
+	case EBlow::Hook:
 	case EBlow::Knee:
 		if (!bStayHeld)
 		{
@@ -1083,6 +1201,29 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	case EBlow::Slam:
 		GetCharacterMovement()->StopMovementImmediately();
 		BeginAct(EAct::Down, DownSeconds);
+		break;
+	case EBlow::Rising:
+		// Lifted off his feet: down he goes (only reeling, through a guard).
+		if (bGuardBroken)
+		{
+			BeginAct(EAct::Stagger, StaggerSeconds);
+		}
+		else
+		{
+			GetCharacterMovement()->StopMovementImmediately();
+			BeginAct(EAct::Down, DownSeconds);
+		}
+		break;
+	case EBlow::Haymaker:
+		// Sent flying back; into a wall or a stall, a slam (see Shoved).
+		if (From && !bGuardBroken)
+		{
+			BeThrown(GetActorLocation() - From->GetActorLocation(), From);
+		}
+		else
+		{
+			BeginAct(EAct::Stagger, StaggerSeconds);
+		}
 		break;
 	default:
 		BeginAct(EAct::Stagger, StaggerSeconds);
@@ -1189,6 +1330,29 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 			LandBlow(EBlow::Counter);
 		}
 		break;
+	case EAct::Cross:
+	case EAct::Hook:
+	case EAct::Uppercut:
+	case EAct::Rising:
+	case EAct::Haymaker:
+	{
+		const float LandsAt = Act == EAct::Cross ? CrossLands : Act == EAct::Hook ? HookLands
+			: Act == EAct::Uppercut ? UppercutLands : Act == EAct::Rising ? RisingLands : HaymakerLands;
+		if (!bBlowDone && T >= LandsAt)
+		{
+			bBlowDone = true;
+			const EBlow Landing = Act == EAct::Cross ? EBlow::Cross : Act == EAct::Hook ? EBlow::Hook
+				: Act == EAct::Uppercut ? EBlow::Uppercut : Act == EAct::Rising ? EBlow::Rising : EBlow::Haymaker;
+			LandBlow(Landing);
+			// The blow may have ended this act (a hit back can't come in the
+			// same moment, but be safe): stop here if it did.
+			if (Act == EAct::None)
+			{
+				return;
+			}
+		}
+		break;
+	}
 	case EAct::GrabReach:
 		if (bOver)
 		{
@@ -1295,6 +1459,19 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		break;
 	}
 
+	// Stepping in behind his punches (the player's), so a punch from a little
+	// too far still reaches; never closer than fighters keep.
+	if (IsPlayerControlled() && IsChainPunch(Act) && Other && ActLength > 0.f && T < StepShare)
+	{
+		const FVector Between = Other->GetActorLocation() - GetActorLocation();
+		const double Gap = Between.Size2D() - KeepApart;
+		if (Gap > 1.0)
+		{
+			const double Step = FMath::Min(Gap, StepIn * DeltaSeconds / (ActLength * StepShare));
+			AddActorWorldOffset(Between.GetSafeNormal2D() * Step, true);
+		}
+	}
+
 	// Anything with an end goes back to the fists up (or to getting his breath back).
 	if (bOver && Act != EAct::Beaten && Act != EAct::Held && Act != EAct::Holding)
 	{
@@ -1307,7 +1484,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 	{
 		Movement->MaxWalkSpeed = Act == EAct::Stance ? FightSpeed : Act == EAct::Guard ? GuardSpeed : 0.f;
 	}
-	if (bFree || Act == EAct::Jab || Act == EAct::HeavyWind || Act == EAct::HeavySwing || Act == EAct::Counter
+	if (bFree || IsChainPunch(Act) || Act == EAct::HeavyWind || Act == EAct::HeavySwing || Act == EAct::Counter
 		|| Act == EAct::GrabReach || Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Winded)
 	{
 		FaceFoe(DeltaSeconds);
@@ -1379,18 +1556,29 @@ void APestiPerson::PlayerFight(APlayerController* PC)
 	}
 	else if (PunchDownAt >= 0.0)
 	{
+		// A tap is the next punch of the chain, holding it the finisher;
+		// either one is kept until he can throw it.
 		if (bPunchDown && !bPunchHeld && Now - PunchDownAt >= PestiPerson::HeavyHold)
 		{
 			bPunchHeld = true;
-			HeavySwing();
+			KeptPunch = 2;
+			KeptAt = Now;
 		}
 		else if (!bPunchDown)
 		{
 			if (!bPunchHeld)
 			{
-				Jab();
+				KeptPunch = 1;
+				KeptAt = Now;
 			}
 			PunchDownAt = -1.0;
+		}
+	}
+	if (KeptPunch != 0)
+	{
+		if (Act == EAct::Holding || Act == EAct::Held || Now - KeptAt > KeepClick || ChainPunch(KeptPunch == 2))
+		{
+			KeptPunch = 0;
 		}
 	}
 
@@ -1414,8 +1602,8 @@ void APestiPerson::PlayerFight(APlayerController* PC)
 
 	// On the screen: the keys, the other man's health, his own breath, and the key to press now.
 	APestiHUD::Show(this, 1, 0.f, FColor::White,
-		TEXT("Kattint\u00e1s: \u00fct\u00e9s, nyomva tartva: nagy \u00fct\u00e9s \u00b7 jobb gomb: v\u00e9dekez\u00e9s \u00b7 E: megragad\u00e1s"
-			"  (Click: punch, hold: heavy punch \u00b7 right click: guard \u00b7 E: grab)"));
+		TEXT("Kattint\u00e1s: \u00fct\u00e9ssor, nyomva tartva: befejez\u0151 \u00fct\u00e9s \u00b7 jobb gomb: v\u00e9dekez\u00e9s \u00b7 E: megragad\u00e1s"
+			"  (Click: punch chain, hold: finisher \u00b7 right click: guard \u00b7 E: grab)"));
 	APestiHUD* Hud = APestiHUD::Get(this);
 	if (!Hud)
 	{
