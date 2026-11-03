@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Cafe.h"
+#include "CityAmbience.h"
 #include "GarayModel.h"
 #include "GarayYard.h"
 #include "DayNight.h"
@@ -174,6 +175,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<APigeons>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<APigeons>();
+	}
+
+	// The background sound of the city: hum, murmur, bells, trains, dogs, birds.
+	if (!TActorIterator<ACityAmbience>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ACityAmbience>();
 	}
 
 	// Taxis to ride in as a paying passenger.
