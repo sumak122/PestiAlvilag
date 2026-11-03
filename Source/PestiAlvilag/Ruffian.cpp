@@ -97,11 +97,12 @@ float ARuffian::GetMaxHealth() const
 	case ERuffian::Hermann:
 		// The old man goes down at the first blow.
 		return 1.f;
+	// Made easier after Daniel's test of mission 5.
 	case ERuffian::Geza:
-		return 70.f;
+		return 50.f;
 	case ERuffian::ClerkOne:
 	case ERuffian::ClerkTwo:
-		return 45.f;
+		return 35.f;
 	default:
 		return 60.f;
 	}

@@ -616,7 +616,33 @@ void APestiPerson::SetCarrying(bool bInCarrying)
 
 PersonKit::FOutfit APestiPerson::GetDress() const
 {
-	return PersonModel::PlayerOutfit();
+	PersonKit::FOutfit Outfit = PersonModel::PlayerOutfit();
+	// Schwimmer's bamboo baton in his right hand, once he has it.
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (Game && Game->HasBaton())
+	{
+		Outfit.Held = PersonKit::EHeld::Baton;
+		Outfit.HeldColor = PersonKit::Bamboo();
+	}
+	return Outfit;
+}
+
+void APestiPerson::RefreshDress()
+{
+	if (!bRiding)
+	{
+		PersonModel::Dress(this, PoseRoot, BaseMaterial, GetDress(), Pieces);
+	}
+}
+
+float APestiPerson::GetBlowStrength() const
+{
+	if (!IsPlayerControlled())
+	{
+		return 1.f;
+	}
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	return Game && Game->HasBaton() ? Brawl::BatonStrength : 1.f;
 }
 
 void APestiPerson::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved,
@@ -980,6 +1006,10 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	const FVector ToHim = From ? (From->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() : GetActorForwardVector();
 	const bool bFacing = FVector::DotProduct(GetActorForwardVector(), ToHim) > PestiPerson::GuardFacing;
 	float Lost = Damage(Blow) * (Act == EAct::Winded ? WindedDamage : 1.f);
+	if (From)
+	{
+		Lost *= From->GetBlowStrength();
+	}
 
 	// A guard stops jabs and knees, at a cost in breath; a heavy swing breaks through it.
 	if (Act == EAct::Guard && bFacing && (Blow == EBlow::Jab || Blow == EBlow::Knee))

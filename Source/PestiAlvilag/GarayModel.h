@@ -41,8 +41,10 @@ namespace GarayModel
 		const FLinearColor Plaster(0.55f, 0.46f, 0.32f);
 		const FLinearColor PlasterDark(0.40f, 0.33f, 0.24f);
 		const FLinearColor FireWall(0.46f, 0.42f, 0.36f);
-		const FLinearColor InsideWall(0.62f, 0.58f, 0.48f);
-		const FLinearColor Floor(0.26f, 0.17f, 0.10f);
+		const FLinearColor InsideWall(0.74f, 0.70f, 0.60f);
+		const FLinearColor Floor(0.42f, 0.30f, 0.18f);
+		const FLinearColor Shade(0.10f, 0.22f, 0.14f);
+		const FLinearColor Globe(0.95f, 0.88f, 0.70f);
 		const FLinearColor Roof(0.30f, 0.16f, 0.10f);
 		const FLinearColor RoofTar(0.20f, 0.18f, 0.16f);
 		const FLinearColor Fascia(0.06f, 0.12f, 0.08f);
@@ -79,6 +81,8 @@ namespace GarayModel
 		/** The two clerks: one by the window, one by the sacks at the back. */
 		const FVector ClerkOne(150.0, -860.0, 0.0);
 		const FVector ClerkTwo(350.0, -330.0, 0.0);
+		/** The shop's ceiling lamps (their globes), lit by GarayYard. */
+		const FVector ShopLamps[] = { FVector(250.0, -900.0, 300.0), FVector(250.0, -420.0, 300.0), FVector(650.0, -1000.0, 290.0) };
 		/** The middle of the shop floor. */
 		const FVector Floor(280.0, -650.0, 0.0);
 		/** In the timber yard, by Schwimmer's hut, where the mission starts. */
@@ -229,6 +233,9 @@ namespace GarayModel
 		Span(Out, Colors::Plaster, FVector(Depth - T, -470.0, 225), FVector(Depth, -360.0, H));
 		// Inside: cream walls, shelves of goods along the side and a long counter in front of them.
 		Span(Out, Colors::InsideWall, FVector(T, Y0, 4), FVector(Depth - T, Y0 + 3, H - 10), false);
+		Span(Out, Colors::InsideWall, FVector(T, Y1 - 3, 4), FVector(Depth - T, Y1, H - 10), false);
+		Span(Out, Colors::InsideWall, FVector(Depth - T - 3, Y0, 4), FVector(Depth - T, -470.0, H - 10), false);
+		Span(Out, Colors::InsideWall, FVector(Depth - T - 3, -360.0, 4), FVector(Depth - T, Y1, H - 10), false);
 		Span(Out, Colors::Desk, FVector(110, -1150, 4), FVector(480, -1110, 100));
 		Span(Out, Colors::Desk, FVector(105, -1155, 100), FVector(485, -1105, 104));
 		for (int32 Shelf = 0; Shelf < 4; ++Shelf)
@@ -272,6 +279,13 @@ namespace GarayModel
 		Add(Out, MarketModel::Cylinder, Colors::Iron, FVector(560, -760, 60), FVector(50, 50, 115));
 		// A plain chair for customers by the window.
 		Chair(Out, FVector(90, -1040, 0), 20.0);
+		// Lamps hanging from the ceiling: a rod, a green enamel shade and a glass globe (the yard lights them).
+		for (const FVector& Lamp : Spots::ShopLamps)
+		{
+			Add(Out, MarketModel::Cylinder, Colors::Iron, Lamp + FVector(0, 0, (H - 10 - Lamp.Z) * 0.5), FVector(2, 2, H - 10 - Lamp.Z), 0.0, false);
+			Add(Out, MarketModel::Cone, Colors::Shade, Lamp + FVector(0, 0, 12), FVector(46, 46, 20), 0.0, false);
+			Add(Out, MarketModel::Sphere, Colors::Globe, Lamp, FVector(22, 22, 22), 0.0, false);
+		}
 		if (bRoof)
 		{
 			Span(Out, Colors::InsideWall, FVector(0, Y0, H - 10), FVector(Depth, Y1, H), false);

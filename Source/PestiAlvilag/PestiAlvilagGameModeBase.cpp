@@ -570,6 +570,23 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		TaxiJobs = Save->TaxiJobs;
 		TriedDishes = Save->TriedDishes;
 		FoundLighters = Save->FoundLighters;
+		bHasBaton = Save->bHasBaton;
+	}
+}
+
+bool APestiAlvilagGameModeBase::HasBaton()
+{
+	LoadSaveOnce();
+	// Games that passed mission 5 before the baton was in it have it too.
+	return bHasBaton || IsMissionDone(PestiStart::Felmondas);
+}
+
+void APestiAlvilagGameModeBase::GiveBaton()
+{
+	bHasBaton = true;
+	if (APestiPerson* Person = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0)))
+	{
+		Person->RefreshDress();
 	}
 }
 
@@ -595,6 +612,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->TaxiJobs = TaxiJobs;
 	Save->TriedDishes = TriedDishes;
 	Save->FoundLighters = FoundLighters;
+	Save->bHasBaton = bHasBaton;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 
