@@ -41,6 +41,9 @@ namespace Prologue
 
 	constexpr float IntroFade = 4.f;
 	constexpr int32 MessageLine = 3;
+	// The keys for the letter and for asking the way, shown once the
+	// station's name has gone (s).
+	constexpr float KeysFor = 20.f;
 }
 
 AMissionPrologue::AMissionPrologue()
@@ -109,7 +112,36 @@ void AMissionPrologue::SetUpMission()
 	TActorIterator<AHomeDoor> Door(GetWorld());
 	Home.Target = Door ? Door->GetStandSpot() : FVector::ZeroVector;
 	Home.Radius = 300.f;
+	Home.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
 	Steps.Add(Home);
+}
+
+void AMissionPrologue::OnStepStarted(int32 Step)
+{
+	if (Step == 0)
+	{
+		APestiHUD::Show(this, Prologue::MessageLine, Prologue::KeysFor, FColor::Yellow,
+			TEXT("R: B\u00f6zsi n\u00e9ni level\u00e9t olvasod,  Q: utat k\u00e9rdezel egy j\u00e1r\u00f3kel\u0151t\u0151l  (R: read Aunt B\u00f6zsi's letter,  Q: ask a passer-by the way)"));
+	}
+}
+
+bool AMissionPrologue::GetLetter(FString& OutHu, FString& OutEn) const
+{
+	OutHu = TEXT("Kedves Fiam!\n\n")
+		TEXT("Ha lesz\u00e1llsz a vonatr\u00f3l, gyere ki a Keleti nagy kapuj\u00e1n a Baross t\u00e9rre. ")
+		TEXT("Menj a R\u00e1k\u00f3czi \u00faton a Belv\u00e1ros fel\u00e9, \u00e9s fordulj balra a Keny\u00e9rmez\u0151 utc\u00e1ba. ")
+		TEXT("Az a Tisza K\u00e1lm\u00e1n t\u00e9rre visz, ott v\u00e1gj \u00e1t a parkon. ")
+		TEXT("A t\u00e9r t\u00fals\u00f3 v\u00e9g\u00e9n \u00e9red el a N\u00e9psz\u00ednh\u00e1z utc\u00e1t: fordulj balra, \u00e9s p\u00e1r h\u00e1z ut\u00e1n ott v\u00e1rlak a kapuban.\n\n")
+		TEXT("Ha m\u00e9gis elt\u00e9vedn\u00e9l, k\u00e9rdezz meg b\u00e1rkit az utc\u00e1n, a pesti ember sz\u00edvesen \u00fatba igaz\u00edt.\n\n")
+		TEXT(">Cs\u00f3kol:\n>B\u00f6zsi n\u00e9ni");
+	OutEn = TEXT("Dear boy,\n\n")
+		TEXT("When you get off the train, come out through the big gate of Keleti onto Baross t\u00e9r. ")
+		TEXT("Walk along R\u00e1k\u00f3czi \u00fat towards the city centre and turn left into Keny\u00e9rmez\u0151 utca. ")
+		TEXT("It brings you to Tisza K\u00e1lm\u00e1n t\u00e9r: cut across the park. ")
+		TEXT("At the far end of the square you reach N\u00e9psz\u00ednh\u00e1z utca: turn left, and a few houses on I'll be waiting at the gate.\n\n")
+		TEXT("If you get lost, ask anyone in the street: Pest folk are glad to show the way.\n\n")
+		TEXT(">Love,\n>Aunt B\u00f6zsi");
+	return true;
 }
 
 void AMissionPrologue::OnStepDone(int32 Step)

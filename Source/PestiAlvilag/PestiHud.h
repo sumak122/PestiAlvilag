@@ -57,6 +57,13 @@ public:
 	/** The lighter collection cabinet over everything, or null to put it away. */
 	void SetCabinet(const ALighters* Shown);
 	/**
+	 * A handwritten letter held up over the screen, with the English on a
+	 * plaque beside it, until ClearLetter. In Hu, \n breaks a line, an empty
+	 * line parts paragraphs and a line starting with > sits on the right.
+	 */
+	void SetLetter(const FString& Hu, const FString& En);
+	void ClearLetter();
+	/**
 	 * For this frame, a key sign under the middle of the screen: the key
 	 * and what it does, in Hungarian with the English under it. bNow lights
 	 * the key up: this is the moment to press it.
@@ -112,6 +119,7 @@ private:
 	TSharedPtr<const FCompositeFont> DecoFont;
 	TSharedPtr<const FCompositeFont> TextFont;
 	TSharedPtr<const FCompositeFont> BoldFont;
+	TSharedPtr<const FCompositeFont> HandFont;
 
 	TMap<int32, FNote> Notes;
 	FString GoalHu;
@@ -123,4 +131,6 @@ private:
 	FPrompt KeySign;
 	FFight Fight;
 	TWeakObjectPtr<const ALighters> Cabinet;
+	FString LetterHu;
+	FString LetterEn;
 };
