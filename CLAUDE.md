@@ -18,11 +18,11 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Traffic and police: `TrafficManager`, `TrafficCar`, `PoliceCar`, `PoliceModel.h`, `PolicePatrols` (constables, phone boxes), `CarjackedDriver`.
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
-- City background sound: `CityAmbience` (follows the camera, works out nearness to park, markets, Rákóczi út, Keleti, church) + `CityAmbienceSound`/`CitySynth.h` (hum, crowd murmur, wind, bells, trains, dogs, horns, birds, crickets...).
+- City sounds: `SoundSpots` (sound spots placed about the map: church tower, Keleti, markets, pigeons, park, café, courtyards; plays the nearest few) + `SpotSound`/`CitySynth.h` (each kind of spot's sound made in code; later can be swapped for recordings).
 - Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`.
 - Bus: `BusModel.h` (MÁVAG Harcsa look) + `Bus` (ABus: a tram on a bus route, lines 12, 20, 5 from `buses_1932.py`; riding via `TramRides`).
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`.
-- World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
+- World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs, market earth), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
 - Missions and saving: `Mission` (base), `MissionPrologue`, `MissionUzenet`, `MissionZsebtolvaj`, `MissionZsibvasar`, `MissionFelmondas` (mission 5, from a real news story) + `GarayYard`/`GarayModel.h` (Garay utca 13: Hermann's shop, Schwimmer's timber yard, their people), `PestiSaveGame`, `Lighters`/`LighterModel.h` (collectibles), `GoalMarkerComponent`, `RouteGuideComponent`.
 - Screen text: `PestiHud` (art deco HUD, menus, minimap and the M big map with your own mark), `PestiMap` (bakes the city plan picture and street names for the maps), `PestiText.h` (Hungarian/English strings).

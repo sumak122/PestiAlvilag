@@ -15,6 +15,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+#include "GroundSurfaces.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Lighters.h"
@@ -634,10 +635,15 @@ void AFleaMarket::BuildGround(const FJsonObject& Market)
 	}
 	Ground->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals,
 		TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
-	if (BaseMaterial)
+	// Trodden earth with straw and scraps where it can be drawn, plain earth otherwise.
+	UMaterialInstanceDynamic* Paint = GroundSurfaces::Make(SurfaceModel::EKind::MarketEarth, this);
+	if (!Paint && BaseMaterial)
 	{
-		UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 		Paint->SetVectorParameterValue(TEXT("Color"), MarketModel::Earth());
+	}
+	if (Paint)
+	{
 		Ground->SetMaterial(0, Paint);
 	}
 }
