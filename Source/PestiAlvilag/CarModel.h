@@ -45,7 +45,8 @@ namespace CarModel
 		PartCount
 	};
 
-	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Count };
+	/** Balilla: the little two-door Fiat 508 Balilla (1932), with a sloping back. Opel: the boxy two-door Opel 1.2 Liter (1931). */
+	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Count };
 	enum class EWheel : uint8 { Artillery, Wire, Disc, Count };
 
 	struct FStyle
@@ -144,6 +145,31 @@ namespace CarModel
 			break;
 		case EBody::Tourer:
 			L.RoofTop = 52.0;
+			break;
+		case EBody::Balilla:
+			// 3.4 m long on a 2.25 m wheelbase: short, tall and upright.
+			L.FrontAxle = 112.0;
+			L.RearAxle = -112.0;
+			L.Nose = 160.0;
+			L.Tail = -176.0;
+			L.Cowl = 30.0;
+			L.RoofTop = 84.0;
+			L.Exhaust = FVector(-188.0, 38.0, -62.0);
+			L.SeatX = -38.0;
+			L.RearSeatX = -98.0;
+			L.RearDoorX = -10.0;
+			break;
+		case EBody::Opel:
+			L.FrontAxle = 114.0;
+			L.RearAxle = -114.0;
+			L.Nose = 162.0;
+			L.Tail = -172.0;
+			L.Cowl = 28.0;
+			L.RoofTop = 86.0;
+			L.Exhaust = FVector(-184.0, 38.0, -62.0);
+			L.SeatX = -38.0;
+			L.RearSeatX = -100.0;
+			L.RearDoorX = -10.0;
 			break;
 		default:
 			break;
@@ -408,7 +434,7 @@ namespace CarModel
 	}
 
 	/** The front end: radiator, bonnet, headlamps, bumper, starting handle. */
-	inline void BuildFront(FBuilder& B, const FLayout& L, double BonnetHalf)
+	inline void BuildFront(FBuilder& B, const FLayout& L, double BonnetHalf, bool bPaintedShell = false)
 	{
 		const double Shell = L.Nose - 10.0;
 		// Bonnet: a rounded top, louvres down each side.
@@ -421,7 +447,14 @@ namespace CarModel
 			B.BothSides(Guards, FVector(X, BonnetHalf, -16.0), FVector(X + 4.0, BonnetHalf + 0.6, 6.0));
 		}
 		// Radiator: chrome shell, dark core with upright slats, cap on top.
-		B.Box(Chrome, FVector(Shell, -BonnetHalf + 4.0, -44.0), FVector(L.Nose, BonnetHalf - 4.0, Top + 4.0));
+		B.Box(bPaintedShell ? Paint : Chrome, FVector(Shell, -BonnetHalf + 4.0, -44.0), FVector(L.Nose, BonnetHalf - 4.0, Top + 4.0));
+		if (bPaintedShell)
+		{
+			// A thin chrome edge round the painted shell.
+			B.Box(Chrome, FVector(L.Nose - 0.4, -BonnetHalf + 3.0, -44.0), FVector(L.Nose + 0.4, -BonnetHalf + 9.0, Top + 4.0));
+			B.Box(Chrome, FVector(L.Nose - 0.4, BonnetHalf - 9.0, -44.0), FVector(L.Nose + 0.4, BonnetHalf - 3.0, Top + 4.0));
+			B.Box(Chrome, FVector(L.Nose - 0.4, -BonnetHalf + 3.0, Top - 2.0), FVector(L.Nose + 0.4, BonnetHalf - 3.0, Top + 4.0));
+		}
 		B.Box(Guards, FVector(L.Nose, -BonnetHalf + 9.0, -38.0), FVector(L.Nose + 0.6, BonnetHalf - 9.0, Top - 2.0));
 		for (double Y = -BonnetHalf + 12.0; Y < BonnetHalf - 10.0; Y += 5.0)
 		{
@@ -672,6 +705,50 @@ namespace CarModel
 		BuildRunningGear(B, L, L.Tail);
 	}
 
+	/** The Fiat 508 Balilla: a narrow bonnet, two doors, and a back that slopes down to the spare wheel. */
+	inline void BuildBalilla(FBuilder& B, const FLayout& L)
+	{
+		BuildFront(B, L, 33.0);
+		const double Back = L.Tail;
+		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 34.0, Waist), FVector2D(Back + 12.0, Waist - 14.0),
+			FVector2D(Back + 2.0, Waist - 36.0), FVector2D(Back + 6.0, -44.0) }, Back + 30.0, Back + 64.0, { -50.0 });
+		B.Box(Leather, FVector(Back + 60.0, -60.0, Waist - 4.0), FVector(Back + 68.0, 60.0, Waist + 14.0));
+		// The sloping back is steel, with only a small window in it: painted
+		// panels just outside the glass, round a gap in the middle.
+		const FVector2D SlopeFoot(Back + 30.0, Waist - 2.0);
+		const FVector2D SlopeTop(Back + 68.0, L.RoofTop - 8.0);
+		const FVector2D Out = FVector2D(SlopeFoot.Y - SlopeTop.Y, SlopeTop.X - SlopeFoot.X).GetSafeNormal() * 1.2;
+		auto SlopeAt = [&](double T, double Y)
+		{
+			const FVector2D P = SlopeFoot + (SlopeTop - SlopeFoot) * T + Out;
+			return FVector(P.X, Y, P.Y);
+		};
+		const double Side = BodyHalfWidth - 2.0;
+		const double WindowHalf = 24.0;
+		B.Pane(Paint, SlopeAt(0.0, -Side), SlopeAt(0.0, Side), SlopeAt(0.42, Side), SlopeAt(0.42, -Side));
+		B.Pane(Paint, SlopeAt(0.8, -Side), SlopeAt(0.8, Side), SlopeAt(1.0, Side), SlopeAt(1.0, -Side));
+		B.Pane(Paint, SlopeAt(0.42, -Side), SlopeAt(0.42, -WindowHalf), SlopeAt(0.8, -WindowHalf), SlopeAt(0.8, -Side));
+		B.Pane(Paint, SlopeAt(0.42, WindowHalf), SlopeAt(0.42, Side), SlopeAt(0.8, Side), SlopeAt(0.8, WindowHalf));
+		BuildRunningGear(B, L, Back);
+		BuildRearSpare(B, Back - 4.0, Waist - 38.0);
+	}
+
+	/** The Opel 1.2 Liter: a painted radiator, a box of a body for two doors, a sun visor and a flat back with the spare. */
+	inline void BuildOpel(FBuilder& B, const FLayout& L)
+	{
+		BuildFront(B, L, 35.0, true);
+		const double Back = L.Tail;
+		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 6.0, Waist), FVector2D(Back + 1.0, Waist - 6.0),
+			FVector2D(Back, -38.0), FVector2D(Back + 4.0, -44.0) }, Back + 10.0, Back + 12.0, { -48.0 });
+		// The visor over the windscreen.
+		const double ScreenTop = L.Cowl - 16.0;
+		const double GlassTop = L.RoofTop - 10.0;
+		B.Box(Paint, FVector(ScreenTop - 4.0, -(BodyHalfWidth - 4.0), GlassTop + 1.0), FVector(ScreenTop + 12.0, BodyHalfWidth - 4.0, GlassTop + 3.0));
+		B.Box(Leather, FVector(Back + 46.0, -60.0, Waist - 4.0), FVector(Back + 54.0, 60.0, Waist + 16.0));
+		BuildRunningGear(B, L, Back);
+		BuildRearSpare(B, Back - 9.0, Waist - 32.0);
+	}
+
 	inline void BuildTourer(FBuilder& B, const FLayout& L)
 	{
 		BuildFront(B, L, 38.0);
@@ -715,6 +792,8 @@ namespace CarModel
 		case EBody::Coupe: BuildCoupe(B, L); break;
 		case EBody::Limousine: BuildLimousine(B, L, Style); break;
 		case EBody::Van: BuildVan(B, L); break;
+		case EBody::Balilla: BuildBalilla(B, L); break;
+		case EBody::Opel: BuildOpel(B, L); break;
 		default: BuildSaloon(B, L, Style); break;
 		}
 	}
@@ -814,9 +893,11 @@ namespace CarModel
 	{
 		FStyle Style;
 		Style.PaintColor = InPaint;
-		// Saloons most of all, then tourers and coupés; fewer vans and limousines.
+		// The best sellers of the early thirties first (the Fiat Balilla and the
+		// Opel 1.2), then saloons, tourers and coupés; fewer vans and limousines.
 		const int32 Pick = Random.RandRange(0, 99);
-		Style.Body = Pick < 40 ? EBody::Saloon : Pick < 58 ? EBody::Tourer : Pick < 74 ? EBody::Coupe : Pick < 87 ? EBody::Van : EBody::Limousine;
+		Style.Body = Pick < 22 ? EBody::Balilla : Pick < 40 ? EBody::Opel : Pick < 62 ? EBody::Saloon : Pick < 74 ? EBody::Tourer
+			: Pick < 84 ? EBody::Coupe : Pick < 94 ? EBody::Van : EBody::Limousine;
 		Style.Wheel = static_cast<EWheel>(Random.RandRange(0, static_cast<int32>(EWheel::Count) - 1));
 		// Black mudguards on most; some are painted to match.
 		const bool bMatching = Random.FRand() < 0.3f;
