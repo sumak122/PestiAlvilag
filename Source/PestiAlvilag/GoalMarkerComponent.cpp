@@ -11,6 +11,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "PestiHud.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace GoalMarker
@@ -188,6 +189,11 @@ void UGoalMarkerComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	using namespace GoalMarker;
 	Time += DeltaTime;
+	// The goal's diamond on the minimap, for as long as the marker shows.
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->MarkGoal(GetComponentLocation());
+	}
 	const double Rise = Bob * FMath::Sin(Time * BobSpeed);
 	if (Gem)
 	{

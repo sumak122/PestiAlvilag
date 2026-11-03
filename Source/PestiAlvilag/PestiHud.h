@@ -11,6 +11,7 @@ struct FCompositeFont;
 class ALighters;
 class SPestiHud;
 class SWidget;
+class URouteGuideComponent;
 
 /**
  * The screen panels, in an art deco dress after 1930s Budapest shop signs:
@@ -26,6 +27,15 @@ class SWidget;
  * at the top and the player's breath under his health. Over everything, while it is open, the cabinet of
  * lighters found (ALighters). While a menu is open (FPestiMenu: the title
  * screen, Esc's pause menu) only the menu shows, over the city blurred.
+ *
+ * Bottom left the minimap (PestiMap's city plan), turned the way the camera
+ * looks, with the player's arrow in the middle and the street's name under
+ * it: a gold diamond for the goal (on the rim when it is further) and the
+ * way there as a gold line, a red diamond and red line for the player's own
+ * mark, and Bözsi néni's house. M opens the big map, with the game stopped:
+ * the mouse or W A S D moves the cross, the wheel or Q and E zoom, a left
+ * click (or Enter) puts the own mark there and a right click (or Delete)
+ * takes it away.
  *
  * Everything on screen goes through Show (by key, like the engine's debug
  * messages it replaces) or the goal, speech and announcement calls.
@@ -77,6 +87,13 @@ public:
 	/** True while the title screen or another menu is open (the game stands still). */
 	bool IsMenuOpen() const { return Menu.IsOpen(); }
 
+	/** For this frame, the goal's diamond on the minimap (UGoalMarkerComponent calls it while it shows). */
+	void MarkGoal(const FVector& At);
+	/** For this frame, the way to the goal on the minimap, or to the player's own mark (URouteGuideComponent calls it). */
+	void ShowRoute(const TArray<FVector>& Points, bool bOwnMark);
+	/** True while the big map is open (the game stands still). */
+	bool IsMapOpen() const { return bMapOpen; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -115,6 +132,12 @@ private:
 	};
 
 	double Now() const;
+	/** Where the player is and looks, the zoom, the street's name and the own mark's route. */
+	void TickMinimap(APlayerController* PC);
+	void OpenMap();
+	void CloseMap();
+	/** The big map's keys: move the cross, zoom, set or clear the own mark, close. */
+	void TickMap(APlayerController* PC);
 	void Note(int32 Key, float Seconds, const FColor& Color, const FString& Text);
 
 	TSharedPtr<SPestiHud> Widget;
@@ -135,4 +158,39 @@ private:
 	FPrompt KeySign;
 	FFight Fight;
 	TWeakObjectPtr<const ALighters> Cabinet;
+
+	// The minimap: what it shows this frame (until the time given).
+	FVector2D GoalBlipAt = FVector2D::ZeroVector;
+	double GoalBlipUntil = -1.0;
+	TArray<FVector2D> GoalRoute;
+	double GoalRouteUntil = -1.0;
+	TArray<FVector2D> MarkRoute;
+	double MarkRouteUntil = -1.0;
+	/** The player's own mark, set on the big map. */
+	bool bHasMark = false;
+	FVector MarkAt = FVector::ZeroVector;
+	/** Plans the way to the own mark. */
+	UPROPERTY(Transient)
+	TObjectPtr<URouteGuideComponent> MarkGuide;
+
+	// Where the player is, which way the camera and the player face (degrees), and how much the minimap shows (cm across).
+	bool bHasView = false;
+	FVector2D ViewAt = FVector2D::ZeroVector;
+	FVector2D LastViewAt = FVector2D::ZeroVector;
+	float ViewYaw = 0.f;
+	float FacingYaw = 0.f;
+	float ViewSpeed = 0.f;
+	double MiniAcross = 26000.0;
+	FString StreetName;
+	double NextStreetTime = 0.0;
+	bool bHasHome = false;
+	FVector2D HomeAt = FVector2D::ZeroVector;
+
+	// The big map: its middle and the cross (world cm) and how much it shows (cm across).
+	bool bMapOpen = false;
+	FVector2D MapCentre = FVector2D::ZeroVector;
+	FVector2D MapCursor = FVector2D::ZeroVector;
+	double MapAcross = 90000.0;
+	/** The big map's size on the screen, from the last time it was painted (for the keys). */
+	mutable FVector2f MapWindow = FVector2f(1300.f, 940.f);
 };

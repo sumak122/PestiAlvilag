@@ -20,7 +20,7 @@
 
 namespace Mission
 {
-	// Closer than this the marker alone is enough; no arrows.
+	// Closer than this the marker alone is enough; no route line on the minimap.
 	constexpr double RouteMinDistance = 4000.0;
 
 	// After failing: the offer to try again comes after this long and
@@ -167,7 +167,7 @@ void AMission::Tick(float DeltaSeconds)
 		Hud->SetGoal(Step.GoalHu, Step.GoalEn, Far, Way);
 	}
 
-	// Arrows over the turns on the way, while the target is still far off.
+	// The way there as a line on the minimap, while the target is still far off.
 	if (Step.bGuide && Distance > Mission::RouteMinDistance)
 	{
 		Guide->Guide(At, Step.Target);

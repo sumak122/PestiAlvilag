@@ -3,22 +3,31 @@
 #include "PestiHud.h"
 
 #include "Brushes/SlateColorBrush.h"
+#include "Camera/PlayerCameraManager.h"
 #include "DayNight.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "HomeDoor.h"
+#include "Kismet/GameplayStatics.h"
+#include "Layout/Clipping.h"
 #include "LighterModel.h"
 #include "Lighters.h"
+#include "Misc/App.h"
 #include "Misc/Paths.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiMap.h"
 #include "PestiMenu.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
+#include "RouteGuideComponent.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBackgroundBlur.h"
 #include "Widgets/SLeafWidget.h"
@@ -100,6 +109,82 @@ namespace PestiHud
 		const TCHAR* En;
 	};
 
+	// The minimap, bottom left: the plan's window, the gold frame round it
+	// and the street's name under it. It shows this much of the city (cm
+	// across) on foot, and up to the second when going fast.
+	constexpr float MiniSize = 300.f;
+	constexpr float MiniInset = 14.f;
+	constexpr float MiniNameBand = 34.f;
+	constexpr double MiniWalkAcross = 26000.0;
+	constexpr double MiniDriveAcross = 46000.0;
+	// Speeds (cm/s) where the zoom starts to open and where it is fully open.
+	constexpr float MiniZoomFrom = 700.f;
+	constexpr float MiniZoomFull = 2000.f;
+	// A jump further than this in a frame (cm/s) is a move to another place, not speed.
+	constexpr float MiniTeleport = 6000.f;
+	constexpr double StreetNameEvery = 0.5;
+	// What the goal marker and the route guides send stays this long (s).
+	constexpr double MapHold = 0.25;
+	// The own mark counts as reached this near (cm).
+	constexpr double MarkReached = 1500.0;
+
+	// The big map: how much it shows (cm across), its zoom steps, the cross's
+	// speed (screen units a second, and per unit of mouse movement), the
+	// legend's width.
+	constexpr double MapStartAcross = 90000.0;
+	constexpr double MapMinAcross = 20000.0;
+	constexpr double MapMaxAcross = 200000.0;
+	constexpr double MapWheelStep = 0.8;
+	constexpr float MapHoldZoom = 2.5f;
+	constexpr float MapCrossSpeed = 700.f;
+	constexpr float MapMouseScale = 14.f;
+	constexpr float MapLegendWidth = 400.f;
+
+	const FLinearColor MapShade = FLinearColor(FColor(14, 12, 9, 30));
+	const FLinearColor MapCurtain = FLinearColor(FColor(8, 7, 5, 210));
+	const FLinearColor RouteShade = FLinearColor(FColor(14, 12, 9, 205));
+	const FLinearColor GoalDark = FLinearColor(FColor(92, 74, 30));
+	const FLinearColor MarkDark = FLinearColor(FColor(122, 31, 25));
+	const FLinearColor TramInk = FLinearColor(FColor(150, 62, 48));
+	const FLinearColor PlaceInk = FLinearColor(FColor(244, 232, 204, 220));
+
+	/** A few names written over the big map, where they belong (world cm). */
+	struct FMapPlace
+	{
+		const TCHAR* Name;
+		double X;
+		double Y;
+	};
+	const FMapPlace MapPlaces[] = {
+		{ TEXT("KELETI P\u00c1LYAUDVAR"), 104000.0, -47000.0 },
+		{ TEXT("R\u00c1K\u00d3CZI \u00daT"), 28000.0, -27500.0 },
+		{ TEXT("N\u00c9PSZ\u00cdNH\u00c1Z UTCA"), 45000.0, 9000.0 },
+		{ TEXT("TELEKI T\u00c9R"), 101500.0, 22500.0 },
+		{ TEXT("TISZA K\u00c1LM\u00c1N T\u00c9R"), 67500.0, -1000.0 },
+		{ TEXT("KEREPESI TEMET\u0150"), 128000.0, 12000.0 },
+	};
+
+	/**
+	 * Where world spots land on the screen for a map: the world spot Centre
+	 * drawn at Screen, Scale screen units a cm, turned by Angle (radians,
+	 * clockwise on the screen).
+	 */
+	struct FMapFrame
+	{
+		FVector2D Centre = FVector2D::ZeroVector;
+		float Angle = 0.f;
+		double Scale = 1.0;
+		FVector2f Screen = FVector2f::ZeroVector;
+
+		FVector2f ToScreen(const FVector2D& World) const
+		{
+			const FVector2D Away = (World - Centre) * Scale;
+			const double C = FMath::Cos(static_cast<double>(Angle));
+			const double S = FMath::Sin(static_cast<double>(Angle));
+			return Screen + FVector2f(static_cast<float>(Away.X * C - Away.Y * S), static_cast<float>(Away.X * S + Away.Y * C));
+		}
+	};
+
 	const FSlateBrush* White()
 	{
 		static const FSlateColorBrush Brush(FLinearColor::White);
@@ -161,11 +246,16 @@ public:
 		const float High = Geometry.GetLocalSize().Y;
 		const double Now = Hud->Now();
 
-		// An open menu hides the rest of the HUD.
+		// An open menu hides the rest of the HUD, and so does the big map.
 		if (Hud->Menu.IsOpen())
 		{
 			PaintMenu(Paint, *Hud, Wide, High);
 			return LayerId + 4;
+		}
+		if (Hud->bMapOpen)
+		{
+			PaintBigMap(Paint, *Hud, Wide, High);
+			return LayerId + 14;
 		}
 
 		float NotesTop = PestiHud::Top;
@@ -176,6 +266,7 @@ public:
 		}
 		PaintNotes(Paint, *Hud, Now, NotesTop);
 		PaintStatus(Paint, Wide);
+		PaintMinimap(Paint, *Hud, High);
 		if (Hud->Fight.Until >= Now)
 		{
 			PaintFight(Paint, Hud->Fight, Wide);
@@ -194,11 +285,11 @@ public:
 		}
 		if (const ALighters* Collection = Hud->Cabinet.Get())
 		{
-			const FPainter Over{ Geometry, Out, LayerId + 3, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
 			PaintCabinet(Over, *Collection, Wide, High);
-			return LayerId + 6;
+			return LayerId + 18;
 		}
-		return LayerId + 3;
+		return LayerId + 14;
 	}
 
 private:
@@ -1039,6 +1130,7 @@ private:
 			{ TEXT("C"), TEXT("M\u00e1sik n\u00e9zet"), TEXT("Change the view") },
 			{ TEXT("H"), TEXT("F\u00e9nysz\u00f3r\u00f3"), TEXT("Headlights") },
 			{ TEXT("L"), TEXT("\u00d6ngy\u00fajt\u00f3-gy\u0171jtem\u00e9ny"), TEXT("Lighter collection") },
+			{ TEXT("M"), TEXT("T\u00e9rk\u00e9p, saj\u00e1t jel"), TEXT("Map, your own mark") },
 			{ TEXT("Esc / Tab"), TEXT("Men\u00fc"), TEXT("Menu") },
 		};
 		const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Keys));
@@ -1120,6 +1212,298 @@ private:
 		}
 	}
 
+
+	// The minimap and the big map (PestiMap's plan, APestiHUD's goal, routes and own mark).
+
+	/** The plan picture, placed and turned by the frame (clip it first). */
+	void PaintPlan(const FPainter& Paint, const PestiMap::FPlan& Plan, const PestiHud::FMapFrame& Frame, int32 Up) const
+	{
+		const float Across = static_cast<float>(Plan.Side * Frame.Scale);
+		if (Across <= 1.f)
+		{
+			return;
+		}
+		const FVector2f FromCorner(static_cast<float>((Frame.Centre.X - Plan.Corner.X) * Frame.Scale),
+			static_cast<float>((Frame.Centre.Y - Plan.Corner.Y) * Frame.Scale));
+		const FGeometry Turned = Paint.Geometry.MakeChild(FVector2f(Across, Across),
+			FSlateLayoutTransform(Frame.Screen - FromCorner),
+			FSlateRenderTransform(FQuat2f(Frame.Angle)), FVector2f(FromCorner.X / Across, FromCorner.Y / Across));
+		FSlateDrawElement::MakeBox(Paint.Out, Paint.Layer + Up, Turned.ToPaintGeometry(), &Plan.Brush, ESlateDrawEffect::None, FLinearColor::White);
+	}
+
+	/** A route as a line from the player along the planned points, dark-edged. */
+	void PaintRoute(const FPainter& Paint, const APestiHUD& Hud, const PestiHud::FMapFrame& Frame, const TArray<FVector2D>& Route,
+		const FLinearColor& Color, int32 Up) const
+	{
+		if (Route.Num() == 0)
+		{
+			return;
+		}
+		TArray<FVector2f> Points;
+		Points.Reserve(Route.Num() + 1);
+		Points.Add(Frame.ToScreen(Hud.ViewAt));
+		// The first planned point is the start of the street the player is on, which may be behind.
+		for (int32 i = Route.Num() > 1 ? 1 : 0; i < Route.Num(); ++i)
+		{
+			Points.Add(Frame.ToScreen(Route[i]));
+		}
+		Paint.Lines(Points, PestiHud::RouteShade, 9.f, Up);
+		Paint.Lines(Points, Color, 5.f, Up + 1);
+	}
+
+	void PaintRoutes(const FPainter& Paint, const APestiHUD& Hud, const PestiHud::FMapFrame& Frame, double Now, int32 Up) const
+	{
+		if (Hud.GoalRouteUntil >= Now)
+		{
+			PaintRoute(Paint, Hud, Frame, Hud.GoalRoute, PestiHud::Gold, Up);
+		}
+		if (Hud.bHasMark && Hud.MarkRouteUntil >= Now)
+		{
+			PaintRoute(Paint, Hud, Frame, Hud.MarkRoute, PestiHud::RedHi, Up + 2);
+		}
+	}
+
+	/** The goal's mark: a diamond in a dark edge with a dark heart. */
+	void PaintGem(const FPainter& Paint, const FVector2f& At, float Across, const FLinearColor& Color, const FLinearColor& Edge, int32 Up) const
+	{
+		Paint.Diamond(At.X, At.Y, Across + 6.f, Edge, Up);
+		Paint.Diamond(At.X, At.Y, Across, Color, Up + 1);
+		Paint.Diamond(At.X, At.Y, Across * 0.35f, PestiHud::Solid, Up + 2);
+	}
+
+	/** A mark on the minimap; one further off waits on the rim (Half from the middle), with a little arrow pointing on. */
+	void PaintBlip(const FPainter& Paint, const FVector2f& At, const FVector2f& Middle, float Half, const FLinearColor& Color,
+		const FLinearColor& Edge, int32 Up) const
+	{
+		const FVector2f Away = At - Middle;
+		const float Most = FMath::Max(FMath::Abs(Away.X), FMath::Abs(Away.Y));
+		if (Most <= Half)
+		{
+			PaintGem(Paint, At, 16.f, Color, Edge, Up);
+			return;
+		}
+		const FVector2f OnRim = Middle + Away * (Half / Most);
+		const FVector2f Way = Away.GetSafeNormal();
+		const FVector2f Side(-Way.Y, Way.X);
+		Paint.Lines({ OnRim + Way * 4.f - Side * 8.f, OnRim + Way * 16.f, OnRim + Way * 4.f + Side * 8.f }, Color, 3.f, Up + 1);
+		PaintGem(Paint, OnRim - Way * 4.f, 12.f, Color, Edge, Up);
+	}
+
+	/** The player: a cream arrow head, pointing Turn radians clockwise from screen up. */
+	void PaintArrow(const FPainter& Paint, const FVector2f& At, float Turn, float Length, int32 Up) const
+	{
+		const float C = FMath::Cos(Turn);
+		const float S = FMath::Sin(Turn);
+		auto Place = [&At, C, S](float X, float Y) { return At + FVector2f(X * C - Y * S, X * S + Y * C); };
+		const FVector2f Tip = Place(0.f, -Length);
+		const FVector2f LeftBack = Place(-0.7f * Length, 0.75f * Length);
+		const FVector2f RightBack = Place(0.7f * Length, 0.75f * Length);
+		const FVector2f Notch = Place(0.f, 0.35f * Length);
+		Paint.Lines({ Tip, RightBack, Notch, LeftBack, Tip }, PestiHud::Solid, 6.f, Up);
+		// Filled with strokes from the tip to the back edges.
+		for (int32 i = 0; i <= 6; ++i)
+		{
+			const float T = i / 6.f;
+			Paint.Lines({ Tip, LeftBack + (Notch - LeftBack) * T }, PestiHud::Cream, 2.5f, Up + 1);
+			Paint.Lines({ Tip, Notch + (RightBack - Notch) * T }, PestiHud::Cream, 2.5f, Up + 1);
+		}
+		Paint.Lines({ Tip, RightBack, Notch, LeftBack, Tip }, PestiHud::Cream, 2.f, Up + 1);
+	}
+
+	/** Bözsi néni's house: a little cream house. */
+	void PaintHouse(const FPainter& Paint, const FVector2f& At, float Across, int32 Up) const
+	{
+		const float H = Across * 0.5f;
+		const TArray<FVector2f> Roof = { FVector2f(At.X - H, At.Y), FVector2f(At.X, At.Y - H), FVector2f(At.X + H, At.Y) };
+		const TArray<FVector2f> Walls = { FVector2f(At.X - H * 0.7f, At.Y), FVector2f(At.X - H * 0.7f, At.Y + H * 0.8f),
+			FVector2f(At.X + H * 0.7f, At.Y + H * 0.8f), FVector2f(At.X + H * 0.7f, At.Y) };
+		Paint.Lines(Roof, PestiHud::Solid, 5.f, Up);
+		Paint.Lines(Walls, PestiHud::Solid, 5.f, Up);
+		Paint.Box(At.X - H * 0.7f, At.Y, H * 1.4f, H * 0.8f, PestiHud::Cream, Up + 1);
+		Paint.Lines(Roof, PestiHud::Cream, 3.f, Up + 1);
+	}
+
+	/** The cross the own mark is put down with. */
+	void PaintCross(const FPainter& Paint, const FVector2f& At, int32 Up) const
+	{
+		Paint.Line(At.X - 26.f, At.Y, At.X - 8.f, At.Y, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X + 8.f, At.Y, At.X + 26.f, At.Y, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X, At.Y - 26.f, At.X, At.Y - 8.f, PestiHud::Cream, 2.f, Up);
+		Paint.Line(At.X, At.Y + 8.f, At.X, At.Y + 26.f, PestiHud::Cream, 2.f, Up);
+		Paint.Diamond(At.X, At.Y, 6.f, PestiHud::Cream, Up);
+	}
+
+	void PaintMinimap(const FPainter& Paint, const APestiHUD& Hud, float High) const
+	{
+		const PestiMap::FPlan* Plan = PestiMap::Get();
+		if (!Plan || !Hud.bHasView)
+		{
+			return;
+		}
+		const double Now = Hud.Now();
+		const float Across = PestiHud::MiniSize;
+		const float Inset = PestiHud::MiniInset;
+		const float Inner = Across - 2.f * Inset;
+		const float X = PestiHud::Margin;
+		const float Y = High - PestiHud::Margin - Across - PestiHud::MiniNameBand;
+		Paint.Panel(X, Y, Across, Across + PestiHud::MiniNameBand);
+
+		// Over the panel: the plan turned the way the camera looks.
+		const FPainter Over{ Paint.Geometry, Paint.Out, Paint.Layer + 3, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		PestiHud::FMapFrame Frame;
+		Frame.Centre = Hud.ViewAt;
+		Frame.Angle = static_cast<float>(-FMath::DegreesToRadians(Hud.ViewYaw) - UE_HALF_PI);
+		Frame.Scale = Inner / FMath::Max(Hud.MiniAcross, 1.0);
+		Frame.Screen = FVector2f(X + Across * 0.5f, Y + Across * 0.5f);
+
+		const FGeometry Window = Paint.Geometry.MakeChild(FVector2f(Inner, Inner), FSlateLayoutTransform(FVector2f(X + Inset, Y + Inset)));
+		Paint.Out.PushClip(FSlateClippingZone(Window));
+		PaintPlan(Over, *Plan, Frame, 0);
+		Over.Box(X, Y, Across, Across, PestiHud::MapShade, 1);
+		PaintRoutes(Over, Hud, Frame, Now, 2);
+		Paint.Out.PopClip();
+		Over.Frame(X + Inset, Y + Inset, Inner, Inner, PestiHud::Brass, 1.5f, 1);
+
+		const float Half = Inner * 0.5f - 8.f;
+		if (Hud.bHasHome)
+		{
+			const FVector2f Home = Frame.ToScreen(Hud.HomeAt);
+			if (FMath::Abs(Home.X - Frame.Screen.X) < Half && FMath::Abs(Home.Y - Frame.Screen.Y) < Half)
+			{
+				PaintHouse(Over, Home, 18.f, 6);
+			}
+		}
+		if (Hud.GoalBlipUntil >= Now)
+		{
+			PaintBlip(Over, Frame.ToScreen(Hud.GoalBlipAt), Frame.Screen, Half, PestiHud::Gold, PestiHud::GoalDark, 8);
+		}
+		if (Hud.bHasMark)
+		{
+			PaintBlip(Over, Frame.ToScreen(FVector2D(Hud.MarkAt)), Frame.Screen, Half, PestiHud::RedHi, PestiHud::MarkDark, 8);
+		}
+
+		// North (É, észak) on the rim.
+		const FVector2f North = (Frame.ToScreen(Hud.ViewAt - FVector2D(0.0, 1000.0)) - Frame.Screen).GetSafeNormal();
+		const float NorthMost = FMath::Max(FMath::Abs(North.X), FMath::Abs(North.Y));
+		if (NorthMost > UE_KINDA_SMALL_NUMBER)
+		{
+			const FVector2f Rim = Frame.Screen + North * ((Inner * 0.5f) / NorthMost);
+			Over.Diamond(Rim.X, Rim.Y, 26.f, PestiHud::Gold, 6);
+			Over.Diamond(Rim.X, Rim.Y, 22.f, PestiHud::Solid, 7);
+			const FPainter Above{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+			Above.Text(TEXT("\u00c9"), Above.Deco(16.f), Rim.X, Rim.Y + 6.f, PestiHud::Gold, 0.5f);
+		}
+
+		PaintArrow(Over, Frame.Screen, FMath::DegreesToRadians(Hud.FacingYaw - Hud.ViewYaw), 11.f, 8);
+
+		// The street's name under the map.
+		Paint.Text(Hud.StreetName, Paint.Bold(19.f, 1.f), X + Across * 0.5f, Y + Across + 16.f, PestiHud::Cream, 0.5f);
+	}
+
+	void PaintBigMap(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const double Now = Hud.Now();
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::MapCurtain);
+		const PestiMap::FPlan* Plan = PestiMap::Get();
+
+		const float Edge = 60.f;
+		const float Gap = 30.f;
+		const float Inset = 16.f;
+		const float X = Edge;
+		const float Y = 70.f;
+		const float W = FMath::Max(Wide - 2.f * Edge - Gap - PestiHud::MapLegendWidth, 400.f);
+		const float H = High - 2.f * Y;
+		Hud.MapWindow = FVector2f(W - 2.f * Inset, H - 2.f * Inset);
+		Paint.Panel(X, Y, W, H);
+
+		const FPainter Over{ Paint.Geometry, Paint.Out, Paint.Layer + 3, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		PestiHud::FMapFrame Frame;
+		Frame.Centre = Hud.MapCentre;
+		Frame.Angle = 0.f;
+		Frame.Scale = Hud.MapWindow.X / FMath::Max(Hud.MapAcross, 1.0);
+		Frame.Screen = FVector2f(X + W * 0.5f, Y + H * 0.5f);
+
+		const FGeometry Window = Paint.Geometry.MakeChild(Hud.MapWindow, FSlateLayoutTransform(FVector2f(X + Inset, Y + Inset)));
+		Paint.Out.PushClip(FSlateClippingZone(Window));
+		if (Plan)
+		{
+			PaintPlan(Over, *Plan, Frame, 0);
+		}
+		for (const PestiHud::FMapPlace& Place : PestiHud::MapPlaces)
+		{
+			const FVector2f At = Frame.ToScreen(FVector2D(Place.X, Place.Y));
+			Over.Text(Place.Name, Over.Bold(17.f, 3.f), At.X, At.Y, PestiHud::PlaceInk, 0.5f);
+		}
+		PaintRoutes(Over, Hud, Frame, Now, 3);
+		if (Hud.bHasHome)
+		{
+			PaintHouse(Over, Frame.ToScreen(Hud.HomeAt), 24.f, 6);
+		}
+		if (Hud.GoalBlipUntil >= Now)
+		{
+			PaintGem(Over, Frame.ToScreen(Hud.GoalBlipAt), 20.f, PestiHud::Gold, PestiHud::GoalDark, 6);
+		}
+		if (Hud.bHasMark)
+		{
+			PaintGem(Over, Frame.ToScreen(FVector2D(Hud.MarkAt)), 20.f, PestiHud::RedHi, PestiHud::MarkDark, 6);
+		}
+		if (Hud.bHasView)
+		{
+			PaintArrow(Over, Frame.ToScreen(Hud.ViewAt), static_cast<float>(FMath::DegreesToRadians(Hud.FacingYaw) + UE_HALF_PI), 14.f, 8);
+		}
+		PaintCross(Over, Frame.ToScreen(Hud.MapCursor), 9);
+		Paint.Out.PopClip();
+		Over.Frame(X + Inset, Y + Inset, W - 2.f * Inset, H - 2.f * Inset, PestiHud::Brass, 1.5f, 1);
+		Paint.Tab(TEXT("J\u00d3ZSEFV\u00c1ROS  \u00b7  1932"), X + W * 0.5f, Y);
+
+		// The legend and the keys on the right.
+		const float LX = X + W + Gap;
+		const float LW = PestiHud::MapLegendWidth;
+		Paint.Panel(LX, Y, LW, H);
+		Paint.Tab(TEXT("JELMAGYAR\u00c1ZAT"), LX + LW * 0.5f, Y);
+		float RowY = Y + 80.f;
+		const float IconX = LX + 46.f;
+		const float WordsX = LX + 80.f;
+		auto Row = [&](const TCHAR* Hu, const TCHAR* En)
+		{
+			Paint.Text(Hu, Paint.Bold(21.f), WordsX, RowY - 6.f, PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(En, Paint.Plain(16.f), WordsX, RowY + 18.f, PestiHud::Grey);
+			}
+			RowY += 72.f;
+		};
+		PaintArrow(Over, FVector2f(IconX, RowY - 8.f), 0.f, 13.f, 1);
+		Row(TEXT("Te"), TEXT("You"));
+		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::Gold, PestiHud::GoalDark, 1);
+		Row(TEXT("A feladat c\u00e9lja"), TEXT("Mission goal"));
+		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::RedHi, PestiHud::MarkDark, 1);
+		Row(TEXT("A saj\u00e1t jeled"), TEXT("Your own mark"));
+		PaintHouse(Over, FVector2f(IconX, RowY - 8.f), 24.f, 1);
+		Row(TEXT("B\u00f6zsi n\u00e9ni h\u00e1za"), TEXT("B\u00f6zsi n\u00e9ni's house"));
+		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::Gold, 5.f, 1);
+		Row(TEXT("Az \u00fat a c\u00e9lhoz"), TEXT("The way to the goal"));
+		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::TramInk, 2.f, 1);
+		Row(TEXT("Villamos"), TEXT("Tram line"));
+
+		static const TCHAR* const Keys[][3] = {
+			{ TEXT("Eg\u00e9r / W A S D"), TEXT("mozgat\u00e1s"), TEXT("move") },
+			{ TEXT("G\u00f6rg\u0151 / Q E"), TEXT("nagy\u00edt\u00e1s"), TEXT("zoom") },
+			{ TEXT("Bal klikk / Enter"), TEXT("jel ide"), TEXT("set a mark") },
+			{ TEXT("Jobb klikk / Del"), TEXT("jel t\u00f6rl\u00e9se"), TEXT("clear the mark") },
+			{ TEXT("M / Esc"), TEXT("bez\u00e1r\u00e1s"), TEXT("close") },
+		};
+		RowY += 20.f;
+		for (const auto& Key : Keys)
+		{
+			Paint.Text(Key[0], Paint.Bold(18.f), LX + 30.f, RowY, PestiHud::Gold);
+			const FString Says = bEnglish ? FString::Printf(TEXT("%s  (%s)"), Key[1], Key[2]) : FString(Key[1]);
+			Paint.Text(Says, Paint.Plain(17.f), LX + 30.f, RowY + 24.f, PestiHud::Grey);
+			RowY += 58.f;
+		}
+	}
+
 	TWeakObjectPtr<const APestiHUD> Owner;
 };
 
@@ -1138,9 +1522,13 @@ void APestiHUD::SetCabinet(const ALighters* Shown)
 
 APestiHUD::APestiHUD()
 {
-	// The menus read their keys while the game stands still.
+	// The menus and the big map read their keys while the game stands still.
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bTickEvenWhenPaused = true;
+
+	MarkGuide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("MarkGuide"));
+	MarkGuide->bOwnMark = true;
+	RootComponent = MarkGuide;
 }
 
 void APestiHUD::BeginPlay()
@@ -1173,8 +1561,222 @@ void APestiHUD::BeginPlay()
 void APestiHUD::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	Menu.Tick(GetWorld(), GetOwningPlayerController());
+	APlayerController* PC = GetOwningPlayerController();
+	if (bMapOpen)
+	{
+		TickMap(PC);
+	}
+	else if (PC && !Menu.IsOpen() && !Cabinet.IsValid()
+		&& (PC->WasInputKeyJustPressed(EKeys::M) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left)))
+	{
+		OpenMap();
+	}
+	else
+	{
+		Menu.Tick(GetWorld(), PC);
+	}
+	TickMinimap(PC);
 }
+
+void APestiHUD::MarkGoal(const FVector& At)
+{
+	GoalBlipAt = FVector2D(At.X, At.Y);
+	GoalBlipUntil = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::ShowRoute(const TArray<FVector>& Points, bool bOwnMark)
+{
+	TArray<FVector2D>& Into = bOwnMark ? MarkRoute : GoalRoute;
+	Into.Reset(Points.Num());
+	for (const FVector& Point : Points)
+	{
+		Into.Emplace(Point.X, Point.Y);
+	}
+	double& Until = bOwnMark ? MarkRouteUntil : GoalRouteUntil;
+	Until = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::TickMinimap(APlayerController* PC)
+{
+	const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Pawn || !World)
+	{
+		bHasView = false;
+		return;
+	}
+	const FVector Location = Pawn->GetActorLocation();
+	const FVector2D At(Location.X, Location.Y);
+
+	// How fast the player goes opens the minimap's zoom (not while the game stands still).
+	const float Dt = static_cast<float>(FApp::GetDeltaTime());
+	if (!bHasView)
+	{
+		LastViewAt = At;
+	}
+	if (!UGameplayStatics::IsGamePaused(World) && Dt > UE_KINDA_SMALL_NUMBER)
+	{
+		const float Moving = static_cast<float>(FVector2D::Distance(At, LastViewAt)) / Dt;
+		if (Moving < PestiHud::MiniTeleport)
+		{
+			ViewSpeed = FMath::FInterpTo(ViewSpeed, Moving, Dt, 3.f);
+		}
+		const float Open = FMath::Clamp((ViewSpeed - PestiHud::MiniZoomFrom) / (PestiHud::MiniZoomFull - PestiHud::MiniZoomFrom), 0.f, 1.f);
+		const double Wanted = FMath::Lerp(PestiHud::MiniWalkAcross, PestiHud::MiniDriveAcross, static_cast<double>(Open));
+		MiniAcross = FMath::FInterpTo(MiniAcross, Wanted, static_cast<double>(Dt), 1.5);
+	}
+	LastViewAt = At;
+	ViewAt = At;
+	bHasView = true;
+	ViewYaw = PC->PlayerCameraManager ? static_cast<float>(PC->PlayerCameraManager->GetCameraRotation().Yaw) : static_cast<float>(PC->GetControlRotation().Yaw);
+	FacingYaw = static_cast<float>(Pawn->GetActorRotation().Yaw);
+
+	const double Clock = FPlatformTime::Seconds();
+	if (Clock >= NextStreetTime)
+	{
+		NextStreetTime = Clock + PestiHud::StreetNameEvery;
+		if (const PestiMap::FPlan* Plan = PestiMap::Get())
+		{
+			StreetName = Plan->StreetAt(At);
+		}
+	}
+
+	if (!bHasHome)
+	{
+		TActorIterator<AHomeDoor> Door(World);
+		if (Door)
+		{
+			const FVector DoorAt = Door->GetActorLocation();
+			HomeAt = FVector2D(DoorAt.X, DoorAt.Y);
+			bHasHome = true;
+		}
+	}
+
+	// The way to the own mark, until the player gets there.
+	if (bHasMark && MarkGuide)
+	{
+		if (FVector2D::Distance(At, FVector2D(MarkAt.X, MarkAt.Y)) < PestiHud::MarkReached)
+		{
+			bHasMark = false;
+			MarkGuide->Stop();
+		}
+		else
+		{
+			MarkGuide->Guide(Location, MarkAt);
+		}
+	}
+}
+
+void APestiHUD::OpenMap()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	bMapOpen = true;
+	if (bHasView)
+	{
+		MapCentre = ViewAt;
+	}
+	else if (const PestiMap::FPlan* Plan = PestiMap::Get())
+	{
+		MapCentre = Plan->Corner + FVector2D(Plan->Side * 0.5, Plan->Side * 0.5);
+	}
+	MapCursor = bHasMark ? FVector2D(MarkAt.X, MarkAt.Y) : MapCentre;
+	MapAcross = PestiHud::MapStartAcross;
+	UGameplayStatics::SetGamePaused(World, true);
+}
+
+void APestiHUD::CloseMap()
+{
+	bMapOpen = false;
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayStatics::SetGamePaused(World, false);
+	}
+}
+
+void APestiHUD::TickMap(APlayerController* PC)
+{
+	if (!PC)
+	{
+		return;
+	}
+	auto Pressed = [PC](const FKey& A, const FKey& B, const FKey& C, const FKey& D)
+	{
+		return PC->WasInputKeyJustPressed(A) || PC->WasInputKeyJustPressed(B) || PC->WasInputKeyJustPressed(C) || PC->WasInputKeyJustPressed(D);
+	};
+	auto Held = [PC](const FKey& A, const FKey& B)
+	{
+		return (PC->IsInputKeyDown(A) || PC->IsInputKeyDown(B)) ? 1.f : 0.f;
+	};
+
+	if (Pressed(EKeys::M, EKeys::Escape, EKeys::Tab, EKeys::Gamepad_Special_Left)
+		|| PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Right) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
+	{
+		CloseMap();
+		return;
+	}
+	const float Dt = FMath::Min(static_cast<float>(FApp::GetDeltaTime()), 0.1f);
+
+	// Zoom: the wheel a step at a time, Q and E (or the shoulder buttons) while held.
+	double Zoom = 1.0;
+	if (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp))
+	{
+		Zoom *= PestiHud::MapWheelStep;
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::MouseScrollDown))
+	{
+		Zoom /= PestiHud::MapWheelStep;
+	}
+	const float Out = Held(EKeys::Q, EKeys::Gamepad_LeftShoulder) - Held(EKeys::E, EKeys::Gamepad_RightShoulder);
+	Zoom *= FMath::Pow(PestiHud::MapHoldZoom, Out * Dt);
+	MapAcross = FMath::Clamp(MapAcross * Zoom, PestiHud::MapMinAcross, PestiHud::MapMaxAcross);
+
+	// The cross: keys and stick at a steady speed on the screen, the mouse as it moves.
+	const double Scale = MapWindow.X / FMath::Max(MapAcross, 1.0);
+	FVector2f Move(
+		Held(EKeys::D, EKeys::Right) - Held(EKeys::A, EKeys::Left) + PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX),
+		Held(EKeys::S, EKeys::Down) - Held(EKeys::W, EKeys::Up) - PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftY));
+	Move *= PestiHud::MapCrossSpeed * Dt;
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	PC->GetInputMouseDelta(MouseX, MouseY);
+	Move += FVector2f(MouseX, -MouseY) * PestiHud::MapMouseScale;
+	MapCursor += FVector2D(Move.X, Move.Y) / FMath::Max(Scale, UE_DOUBLE_SMALL_NUMBER);
+	if (const PestiMap::FPlan* Plan = PestiMap::Get())
+	{
+		MapCursor.X = FMath::Clamp(MapCursor.X, Plan->Corner.X, Plan->Corner.X + Plan->Side);
+		MapCursor.Y = FMath::Clamp(MapCursor.Y, Plan->Corner.Y, Plan->Corner.Y + Plan->Side);
+	}
+	// The map slides along when the cross nears its edge.
+	const double HalfX = MapWindow.X * 0.45 / Scale;
+	const double HalfY = MapWindow.Y * 0.45 / Scale;
+	MapCentre.X = FMath::Clamp(MapCentre.X, MapCursor.X - HalfX, MapCursor.X + HalfX);
+	MapCentre.Y = FMath::Clamp(MapCentre.Y, MapCursor.Y - HalfY, MapCursor.Y + HalfY);
+
+	// Put the own mark down, or take it away.
+	if (Pressed(EKeys::LeftMouseButton, EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom))
+	{
+		const APawn* Pawn = PC->GetPawn();
+		bHasMark = true;
+		MarkAt = FVector(MapCursor.X, MapCursor.Y, Pawn ? Pawn->GetActorLocation().Z : 0.0);
+		if (MarkGuide)
+		{
+			MarkGuide->Stop();
+		}
+	}
+	else if (Pressed(EKeys::RightMouseButton, EKeys::Delete, EKeys::BackSpace, EKeys::Gamepad_FaceButton_Left))
+	{
+		bHasMark = false;
+		if (MarkGuide)
+		{
+			MarkGuide->Stop();
+		}
+	}
+}
+
 
 void APestiHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
