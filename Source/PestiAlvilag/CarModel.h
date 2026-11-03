@@ -102,17 +102,17 @@ namespace CarModel
 		/** How far out the wheels' middles are (half the track), and the body's half width. */
 		double TrackY = WheelY;
 		double HalfWidth = BodyHalfWidth;
+		/** Where the driver and a back-seat passenger sit across the car (DriverY, PassengerY; nearer the middle in a narrow car). */
+		double DriverSide = -36.0;
+		double PassengerSide = 30.0;
 	};
 
-	/** The driver sits on the left. */
-	constexpr double DriverY = -36.0;
-	/** How far the driver's arms reach forward to the wheel, and the thighs tilt up (degrees). */
+	/** The driver sits on the left (FLayout::DriverSide). How far the arms reach forward to the wheel, and the thighs tilt up (degrees). */
 	constexpr double DriverArmPitch = 70.0;
 	constexpr double DriverLegPitch = 25.0;
 	/** Taller people are made this tall in the car, so their hats stay under the roof (cm). */
 	constexpr double DriverMaxHeight = 174.0;
-	/** A back-seat passenger sits on the right, hands in the lap. */
-	constexpr double PassengerY = 30.0;
+	/** A back-seat passenger sits on the right (FLayout::PassengerSide), hands in the lap. */
 	constexpr double PassengerArmPitch = 40.0;
 	constexpr double PassengerLegPitch = 10.0;
 
@@ -164,6 +164,8 @@ namespace CarModel
 			L.SeatX = -42.0;
 			L.RearSeatX = -100.0;
 			L.RearDoorX = -24.0;
+			L.DriverSide = -27.0;
+			L.PassengerSide = 25.0;
 			break;
 		case EBody::Opel:
 			// 3.35 m long and 1.42 m wide on a 2.29 m wheelbase, 1.6 m tall.
@@ -179,6 +181,8 @@ namespace CarModel
 			L.SeatX = -38.0;
 			L.RearSeatX = -100.0;
 			L.RearDoorX = -10.0;
+			L.DriverSide = -28.0;
+			L.PassengerSide = 26.0;
 			break;
 		default:
 			break;
@@ -599,7 +603,7 @@ namespace CarModel
 		B.Box(Leather, FVector(X - 12.0, -SeatHalf, Top - 10.0), FVector(X + 20.0, SeatHalf, Top));
 		B.Box(Leather, FVector(X - 16.0, -SeatHalf, Top), FVector(X - 8.0, SeatHalf, Waist + 12.0));
 		// The wheel stands up in front of the chest, on a column slanting down into the dash.
-		const FVector Wheel(X + 54.0, DriverY, Top + 35.0);
+		const FVector Wheel(X + 54.0, L.DriverSide, Top + 35.0);
 		B.Ring(Rubber, Wheel, 19.0, 16.5, 2.5, 0, 16);
 		B.Bar(Rubber, Wheel - FVector(0.0, 16.5, 0.0), Wheel + FVector(0.0, 16.5, 0.0), 1.6);
 		B.Bar(Rubber, Wheel, Wheel + FVector(30.0, 0.0, -26.0), 3.0);
@@ -1203,13 +1207,13 @@ namespace CarModel
 	/** The driver at the wheel, the hips on the cushion (a thigh's thickness above it) and the hands on the wheel. */
 	inline void BuildSeatedDriver(const PersonKit::FOutfit& Outfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
 	{
-		BuildSeatedPerson(Outfit, FVector(L.SeatX + 2.0, DriverY, L.SeatTop + 9.0), DriverArmPitch, DriverLegPitch, Out);
+		BuildSeatedPerson(Outfit, FVector(L.SeatX + 2.0, L.DriverSide, L.SeatTop + 9.0), DriverArmPitch, DriverLegPitch, Out);
 	}
 
 	/** A passenger on the back seat. */
 	inline void BuildBackSeatPassenger(const PersonKit::FOutfit& Outfit, const FLayout& L, TArray<PersonKit::FSection>& Out)
 	{
-		BuildSeatedPerson(Outfit, FVector(L.RearSeatX, PassengerY, L.SeatTop + 9.0), PassengerArmPitch, PassengerLegPitch, Out);
+		BuildSeatedPerson(Outfit, FVector(L.RearSeatX, L.PassengerSide, L.SeatTop + 9.0), PassengerArmPitch, PassengerLegPitch, Out);
 	}
 
 	/** Where someone stands to get in at a back door, on the left (Side -1) or right (1), on the ground. */
