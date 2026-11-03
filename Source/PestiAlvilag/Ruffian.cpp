@@ -87,7 +87,11 @@ float ARuffian::GetMaxHealth() const
 	switch (Kind)
 	{
 	case ERuffian::Bika:
-		return 90.f;
+		return 70.f;
+	case ERuffian::Svihak:
+	case ERuffian::Csontos:
+		// Made a little easier after Daniel's test: two of them at once was a lot.
+		return 45.f;
 	case ERuffian::Pottom:
 		return 45.f;
 	case ERuffian::Hermann:
