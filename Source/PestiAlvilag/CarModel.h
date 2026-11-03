@@ -99,6 +99,9 @@ namespace CarModel
 		/** Where a back-seat passenger's hips are, and the middle of the back doors. */
 		double RearSeatX = -100.0;
 		double RearDoorX = -80.0;
+		/** How far out the wheels' middles are (half the track), and the body's half width. */
+		double TrackY = WheelY;
+		double HalfWidth = BodyHalfWidth;
 	};
 
 	/** The driver sits on the left. */
@@ -147,26 +150,31 @@ namespace CarModel
 			L.RoofTop = 52.0;
 			break;
 		case EBody::Balilla:
-			// 3.4 m long on a 2.25 m wheelbase: short, tall and upright.
-			L.FrontAxle = 112.0;
+			// 3.2 m long and 1.39 m wide on a 2.25 m wheelbase, 1.19 m track, 1.6 m tall.
+			L.FrontAxle = 113.0;
 			L.RearAxle = -112.0;
-			L.Nose = 160.0;
-			L.Tail = -176.0;
-			L.Cowl = 30.0;
-			L.RoofTop = 84.0;
-			L.Exhaust = FVector(-188.0, 38.0, -62.0);
+			L.Nose = 146.0;
+			L.Tail = -146.0;
+			L.Cowl = 42.0;
+			L.RoofTop = 70.0;
+			L.TrackY = 60.0;
+			L.HalfWidth = 58.0;
+			L.Exhaust = FVector(-160.0, 30.0, -62.0);
 			L.SeatX = -38.0;
 			L.RearSeatX = -98.0;
 			L.RearDoorX = -10.0;
 			break;
 		case EBody::Opel:
+			// 3.35 m long and 1.42 m wide on a 2.29 m wheelbase, 1.6 m tall.
 			L.FrontAxle = 114.0;
-			L.RearAxle = -114.0;
-			L.Nose = 162.0;
-			L.Tail = -172.0;
-			L.Cowl = 28.0;
-			L.RoofTop = 86.0;
-			L.Exhaust = FVector(-184.0, 38.0, -62.0);
+			L.RearAxle = -115.0;
+			L.Nose = 150.0;
+			L.Tail = -156.0;
+			L.Cowl = 38.0;
+			L.RoofTop = 72.0;
+			L.TrackY = 61.0;
+			L.HalfWidth = 60.0;
+			L.Exhaust = FVector(-170.0, 30.0, -62.0);
 			L.SeatX = -38.0;
 			L.RearSeatX = -100.0;
 			L.RearDoorX = -10.0;
@@ -181,7 +189,7 @@ namespace CarModel
 	inline FVector WheelHub(EBody Body, int32 Index)
 	{
 		const FLayout L = Layout(Body);
-		return FVector(Index < 2 ? L.FrontAxle : L.RearAxle, (Index % 2 == 0) ? -WheelY : WheelY, HubZ);
+		return FVector(Index < 2 ? L.FrontAxle : L.RearAxle, (Index % 2 == 0) ? -L.TrackY : L.TrackY, HubZ);
 	}
 
 	struct FBuilder
@@ -464,7 +472,7 @@ namespace CarModel
 		B.Cylinder(Chrome, FVector(Shell + 5.0, 0.0, Top + 11.0), 1.2, 3.0, 2, 6);
 		// Headlamps on a bar between the mudguards, with the lenses forward.
 		const double LampX = L.Nose - 2.0;
-		B.Bar(Chrome, FVector(LampX, -WheelY + 8.0, -6.0), FVector(LampX, WheelY - 8.0, -6.0), 3.0);
+		B.Bar(Chrome, FVector(LampX, -L.TrackY + 8.0, -6.0), FVector(LampX, L.TrackY - 8.0, -6.0), 3.0);
 		for (const double S : { -1.0, 1.0 })
 		{
 			const FVector Drum(LampX + 2.0, S * (BonnetHalf + 20.0), 10.0);
@@ -474,8 +482,8 @@ namespace CarModel
 		}
 		// Bumper: two chrome blades on irons.
 		const double BumperX = L.Nose + 18.0;
-		B.Bar(Chrome, FVector(BumperX, -80.0, -58.0), FVector(BumperX, 80.0, -58.0), 5.0);
-		B.Bar(Chrome, FVector(BumperX - 0.5, -76.0, -50.0), FVector(BumperX - 0.5, 76.0, -50.0), 3.0);
+		B.Bar(Chrome, FVector(BumperX, -(L.HalfWidth + 8.0), -58.0), FVector(BumperX, L.HalfWidth + 8.0, -58.0), 5.0);
+		B.Bar(Chrome, FVector(BumperX - 0.5, -(L.HalfWidth + 4.0), -50.0), FVector(BumperX - 0.5, L.HalfWidth + 4.0, -50.0), 3.0);
 		B.BarBothSides(Guards, FVector(L.Nose - 8.0, 40.0, -54.0), FVector(BumperX, 40.0, -54.0), 3.0);
 		// Starting handle under the radiator.
 		B.Bar(Chrome, FVector(L.Nose, 0.0, -48.0), FVector(L.Nose + 9.0, 0.0, -48.0), 1.5);
@@ -492,31 +500,31 @@ namespace CarModel
 		Arc(Front, FVector2D(L.FrontAxle, HubZ), R, 2.0, 150.0, 12);
 		Front.Add(FVector2D(L.FrontAxle - 54.0, BoardZ + 3.0));
 		Front.Add(FVector2D(L.FrontAxle - 66.0, BoardZ));
-		B.Guard(Guards, Front, WheelY - 12.0, WheelY + 12.0, 3.0);
+		B.Guard(Guards, Front, L.TrackY - 12.0, L.TrackY + 12.0, 3.0);
 		// Rear mudguard.
 		TArray<FVector2D> Rear;
 		Rear.Add(FVector2D(L.RearAxle + 52.0, BoardZ));
 		Arc(Rear, FVector2D(L.RearAxle, HubZ), R, 30.0, 178.0, 10);
 		Rear.Add(FVector2D(L.RearAxle - R - 4.0, HubZ - 6.0));
-		B.Guard(Guards, Rear, WheelY - 12.0, WheelY + 12.0, 3.0);
+		B.Guard(Guards, Rear, L.TrackY - 12.0, L.TrackY + 12.0, 3.0);
 		// Running boards between them, with rubber treads.
-		B.BothSides(Guards, FVector(L.RearAxle + 50.0, BodyHalfWidth - 2.0, BoardZ - 2.0), FVector(L.FrontAxle - 64.0, WheelY + 10.0, BoardZ + 1.5));
+		B.BothSides(Guards, FVector(L.RearAxle + 50.0, L.HalfWidth - 2.0, BoardZ - 2.0), FVector(L.FrontAxle - 64.0, L.TrackY + 10.0, BoardZ + 1.5));
 		for (double X = L.RearAxle + 58.0; X < L.FrontAxle - 70.0; X += 12.0)
 		{
-			B.BothSides(Rubber, FVector(X, BodyHalfWidth + 2.0, BoardZ + 1.5), FVector(X + 6.0, WheelY + 8.0, BoardZ + 2.2));
+			B.BothSides(Rubber, FVector(X, L.HalfWidth + 2.0, BoardZ + 1.5), FVector(X + 6.0, L.TrackY + 8.0, BoardZ + 2.2));
 		}
 		// Chassis rails and axles, dark under the body.
 		B.Box(Guards, FVector(Tail + 4.0, -46.0, -62.0), FVector(L.Nose - 6.0, 46.0, -44.0));
-		B.Bar(Guards, FVector(L.FrontAxle, -WheelY + 8.0, HubZ), FVector(L.FrontAxle, WheelY - 8.0, HubZ), 5.0);
-		B.Bar(Guards, FVector(L.RearAxle, -WheelY + 8.0, HubZ), FVector(L.RearAxle, WheelY - 8.0, HubZ), 7.0);
+		B.Bar(Guards, FVector(L.FrontAxle, -L.TrackY + 8.0, HubZ), FVector(L.FrontAxle, L.TrackY - 8.0, HubZ), 5.0);
+		B.Bar(Guards, FVector(L.RearAxle, -L.TrackY + 8.0, HubZ), FVector(L.RearAxle, L.TrackY - 8.0, HubZ), 7.0);
 		B.Cylinder(Guards, FVector(L.RearAxle, 0.0, HubZ), 11.0, 18.0, 1, 10);
 		// Rear bumper and the red tail lamps on the mudguards.
 		const double BumperX = Tail - 14.0;
-		B.Bar(Chrome, FVector(BumperX, -78.0, -58.0), FVector(BumperX, 78.0, -58.0), 5.0);
+		B.Bar(Chrome, FVector(BumperX, -(L.HalfWidth + 6.0), -58.0), FVector(BumperX, L.HalfWidth + 6.0, -58.0), 5.0);
 		B.BarBothSides(Guards, FVector(Tail + 6.0, 40.0, -56.0), FVector(BumperX, 40.0, -56.0), 3.0);
 		for (const double S : { -1.0, 1.0 })
 		{
-			const FVector Drum(L.RearAxle - R - 2.0, S * (WheelY + 2.0), HubZ + 22.0);
+			const FVector Drum(L.RearAxle - R - 2.0, S * (L.TrackY + 2.0), HubZ + 22.0);
 			B.Bar(Chrome, Drum - FVector(-4.0, 0.0, 10.0), Drum, 1.5);
 			B.Cylinder(Chrome, Drum, 5.0, 6.0, 0, 10);
 			B.Cylinder(TailLamp, Drum - FVector(3.2, 0.0, 0.0), 4.2, 1.0, 0, 10);
@@ -542,8 +550,9 @@ namespace CarModel
 	{
 		const double X = L.SeatX;
 		const double Top = L.SeatTop;
-		B.Box(Leather, FVector(X - 12.0, -62.0, Top - 10.0), FVector(X + 20.0, 62.0, Top));
-		B.Box(Leather, FVector(X - 16.0, -62.0, Top), FVector(X - 8.0, 62.0, Waist + 12.0));
+		const double SeatHalf = L.HalfWidth - 10.0;
+		B.Box(Leather, FVector(X - 12.0, -SeatHalf, Top - 10.0), FVector(X + 20.0, SeatHalf, Top));
+		B.Box(Leather, FVector(X - 16.0, -SeatHalf, Top), FVector(X - 8.0, SeatHalf, Waist + 12.0));
 		// The wheel stands up in front of the chest, on a column slanting down into the dash.
 		const FVector Wheel(X + 54.0, DriverY, Top + 35.0);
 		B.Ring(Rubber, Wheel, 19.0, 16.5, 2.5, 0, 16);
@@ -559,7 +568,7 @@ namespace CarModel
 	inline void BuildClosedBody(FBuilder& B, const FLayout& L, const TArray<FVector2D>& Lower, double GlassBack, double RoofBack,
 		const TArray<double>& Pillars)
 	{
-		const double W = BodyHalfWidth;
+		const double W = L.HalfWidth;
 		const double GlassTop = L.RoofTop - 10.0;
 		B.SideOutline(Paint, Lower, -W, W);
 		// The glass house, slightly narrower than the body.
@@ -601,7 +610,7 @@ namespace CarModel
 	{
 		for (const double S : { -1.0, 1.0 })
 		{
-			const double Y = S * (BodyHalfWidth + 0.3);
+			const double Y = S * (L.HalfWidth + 0.3);
 			B.Box(Accent, FVector(BandBack, Y - 0.3, 2.0), FVector(L.Cowl - 4.0, Y + 0.3, 14.0));
 			int32 Index = 0;
 			for (double X = BandBack; X + 11.0 <= L.Cowl - 4.0; X += 11.0, ++Index)
@@ -705,48 +714,89 @@ namespace CarModel
 		BuildRunningGear(B, L, L.Tail);
 	}
 
-	/** The Fiat 508 Balilla: a narrow bonnet, two doors, and a back that slopes down to the spare wheel. */
-	inline void BuildBalilla(FBuilder& B, const FLayout& L)
+	/** Over the rear wheels' mudguards, where a small car's body sides stop (cm, car frame). */
+	inline double SmallGuardTop()
 	{
-		BuildFront(B, L, 33.0);
-		const double Back = L.Tail;
-		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 34.0, Waist), FVector2D(Back + 12.0, Waist - 14.0),
-			FVector2D(Back + 2.0, Waist - 36.0), FVector2D(Back + 6.0, -44.0) }, Back + 30.0, Back + 64.0, { -50.0 });
-		B.Box(Leather, FVector(Back + 60.0, -60.0, Waist - 4.0), FVector(Back + 68.0, 60.0, Waist + 14.0));
-		// The sloping back is steel, with only a small window in it: painted
-		// panels just outside the glass, round a gap in the middle.
-		const FVector2D SlopeFoot(Back + 30.0, Waist - 2.0);
-		const FVector2D SlopeTop(Back + 68.0, L.RoofTop - 8.0);
-		const FVector2D Out = FVector2D(SlopeFoot.Y - SlopeTop.Y, SlopeTop.X - SlopeFoot.X).GetSafeNormal() * 1.2;
-		auto SlopeAt = [&](double T, double Y)
-		{
-			const FVector2D P = SlopeFoot + (SlopeTop - SlopeFoot) * T + Out;
-			return FVector(P.X, Y, P.Y);
-		};
-		const double Side = BodyHalfWidth - 2.0;
-		const double WindowHalf = 24.0;
-		B.Pane(Paint, SlopeAt(0.0, -Side), SlopeAt(0.0, Side), SlopeAt(0.42, Side), SlopeAt(0.42, -Side));
-		B.Pane(Paint, SlopeAt(0.8, -Side), SlopeAt(0.8, Side), SlopeAt(1.0, Side), SlopeAt(1.0, -Side));
-		B.Pane(Paint, SlopeAt(0.42, -Side), SlopeAt(0.42, -WindowHalf), SlopeAt(0.8, -WindowHalf), SlopeAt(0.8, -Side));
-		B.Pane(Paint, SlopeAt(0.42, WindowHalf), SlopeAt(0.42, Side), SlopeAt(0.8, Side), SlopeAt(0.8, WindowHalf));
-		BuildRunningGear(B, L, Back);
-		BuildRearSpare(B, Back - 4.0, Waist - 38.0);
+		return HubZ + WheelRadius + 9.0;
 	}
 
-	/** The Opel 1.2 Liter: a painted radiator, a box of a body for two doors, a sun visor and a flat back with the spare. */
+	/**
+	 * A narrow small car's body sides from the mudguards' tops up to the
+	 * waist, from the windscreen to the tail (the waist runs back to
+	 * TailTop, then rounds down): BuildClosedBody's outline.
+	 */
+	inline TArray<FVector2D> SmallBodyUpper(const FLayout& L, double TailTop)
+	{
+		return { FVector2D(L.Cowl, SmallGuardTop()), FVector2D(L.Cowl, Waist), FVector2D(TailTop, Waist), FVector2D(L.Tail + 2.0, Waist - 12.0),
+			FVector2D(L.Tail, SmallGuardTop()) };
+	}
+
+	/**
+	 * Below that, in two pieces so the rear wheels stay clear: the body down
+	 * to the floor ahead of the rear wheels, and down again behind them.
+	 */
+	inline void BuildSmallBodyLower(FBuilder& B, const FLayout& L)
+	{
+		const double W = L.HalfWidth;
+		const double ArchFront = L.RearAxle + WheelRadius + 8.0;
+		const double ArchBack = L.RearAxle - WheelRadius - 8.0;
+		const double GuardTop = SmallGuardTop();
+		B.SideOutline(Paint, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, GuardTop), FVector2D(ArchFront, GuardTop), FVector2D(ArchFront, -44.0) }, -W, W);
+		B.SideOutline(Paint, { FVector2D(ArchBack, -40.0), FVector2D(ArchBack, GuardTop), FVector2D(L.Tail, GuardTop), FVector2D(L.Tail + 3.0, -40.0) }, -W, W);
+		// The floor between the rear wheel arches, dark.
+		B.Box(Guards, FVector(ArchBack, -W + 14.0, -44.0), FVector(ArchFront, W - 14.0, GuardTop));
+	}
+
+	/**
+	 * The Fiat 508 Balilla two-door berlina of 1932: small, narrow and tall.
+	 * A tall radiator in a painted shell with a chrome edge, a long narrow
+	 * bonnet, upright windscreen with a peak, a door and a quarter window
+	 * each side, an upright back with a luggage grid, wire wheels, and the
+	 * spare wheel on the left front wing beside the door.
+	 */
+	inline void BuildBalilla(FBuilder& B, const FLayout& L)
+	{
+		BuildFront(B, L, 29.0, true);
+		const double Back = L.Tail;
+		// The glass house: door glass back to -46, a quarter light behind it, and a rounded back.
+		BuildClosedBody(B, L, SmallBodyUpper(L, Back + 8.0), Back + 12.0, Back + 14.0, { -40.0 });
+		BuildSmallBodyLower(B, L);
+		// A peak over the windscreen.
+		const double PeakX = L.Cowl - 16.0;
+		B.Box(Paint, FVector(PeakX - 2.0, -(L.HalfWidth - 3.0), L.RoofTop - 11.0), FVector(PeakX + 7.0, L.HalfWidth - 3.0, L.RoofTop - 8.0));
+		B.Box(Leather, FVector(Back + 34.0, -50.0, Waist - 4.0), FVector(Back + 42.0, 50.0, Waist + 12.0));
+		BuildRunningGear(B, L, Back);
+		// The luggage grid at the back, folded up.
+		B.Box(Guards, FVector(Back - 22.0, -46.0, -52.0), FVector(Back - 1.0, 46.0, -50.0));
+		for (const double Y : { -40.0, -20.0, 0.0, 20.0, 40.0 })
+		{
+			B.Box(Chrome, FVector(Back - 22.0, Y - 1.0, -50.0), FVector(Back - 1.0, Y + 1.0, -49.0));
+		}
+		// The spare wheel in the left front wing, standing beside the bonnet.
+		const FVector Spare(L.Cowl - 8.0, -(L.TrackY + 7.0), -18.0);
+		B.Ring(Rubber, Spare, WheelRadius - 3.0, 23.0, 11.0, 1, 16);
+		B.Cylinder(Paint, Spare, 23.0, 8.0, 1, 16);
+		B.Cylinder(Chrome, Spare + FVector(0.0, -5.0, 0.0), 8.0, 2.0, 1, 12);
+		B.Box(Guards, FVector(L.Cowl - 12.0, -(L.TrackY + 2.0), -52.0), FVector(L.Cowl - 4.0, -(L.TrackY - 2.0), -40.0));
+	}
+
+	/**
+	 * The Opel 1.2 Liter two-door Limousine of 1932: a narrow upright box.
+	 * A flat chrome radiator, a sun visor over the windscreen, a door and a
+	 * quarter window each side, a flat back with the spare wheel, wire wheels.
+	 */
 	inline void BuildOpel(FBuilder& B, const FLayout& L)
 	{
-		BuildFront(B, L, 35.0, true);
+		BuildFront(B, L, 30.0);
 		const double Back = L.Tail;
-		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 6.0, Waist), FVector2D(Back + 1.0, Waist - 6.0),
-			FVector2D(Back, -38.0), FVector2D(Back + 4.0, -44.0) }, Back + 10.0, Back + 12.0, { -48.0 });
-		// The visor over the windscreen.
-		const double ScreenTop = L.Cowl - 16.0;
-		const double GlassTop = L.RoofTop - 10.0;
-		B.Box(Paint, FVector(ScreenTop - 4.0, -(BodyHalfWidth - 4.0), GlassTop + 1.0), FVector(ScreenTop + 12.0, BodyHalfWidth - 4.0, GlassTop + 3.0));
-		B.Box(Leather, FVector(Back + 46.0, -60.0, Waist - 4.0), FVector(Back + 54.0, 60.0, Waist + 16.0));
+		BuildClosedBody(B, L, SmallBodyUpper(L, Back + 3.0), Back + 6.0, Back + 8.0, { -42.0 });
+		BuildSmallBodyLower(B, L);
+		// The sun visor over the windscreen.
+		const double VisorX = L.Cowl - 16.0;
+		B.Box(Paint, FVector(VisorX - 4.0, -(L.HalfWidth - 3.0), L.RoofTop - 10.0), FVector(VisorX + 13.0, L.HalfWidth - 3.0, L.RoofTop - 8.0));
+		B.Box(Leather, FVector(Back + 30.0, -52.0, Waist - 4.0), FVector(Back + 38.0, 52.0, Waist + 14.0));
 		BuildRunningGear(B, L, Back);
-		BuildRearSpare(B, Back - 9.0, Waist - 32.0);
+		BuildRearSpare(B, Back - 9.0, Waist - 34.0);
 	}
 
 	inline void BuildTourer(FBuilder& B, const FLayout& L)
@@ -1008,7 +1058,7 @@ namespace CarModel
 	/** Where someone stands to get in at a back door, on the left (Side -1) or right (1), on the ground. */
 	inline FVector RearDoor(EBody Body, double Side)
 	{
-		return FVector(Layout(Body).RearDoorX, Side * (BodyHalfWidth + 45.0), Ground);
+		return FVector(Layout(Body).RearDoorX, Side * (Layout(Body).HalfWidth + 45.0), Ground);
 	}
 
 	/** A key telling styles with the same shapes apart (the colours don't matter). */
