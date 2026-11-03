@@ -785,6 +785,22 @@ void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, flo
 	// Into the car's own frame (the body's parent: the body itself leans).
 	const FTransform Frame = Body->GetAttachParent()->GetComponentTransform();
 	FVector At = Frame.InverseTransformPosition(WorldPoint);
+	// Every car has the same collision box, so on a small car (the Fiat) the box
+	// meets the wall well before the body does: move the knock onto the body.
+	const CarModel::FBuilder& Clean = CarVisuals::BodyShape(Style);
+	FBox BodyBox(ForceInit);
+	for (const CarModel::FPart& Piece : Clean.Parts)
+	{
+		for (const FVector& V : Piece.Vertices)
+		{
+			BodyBox += V;
+		}
+	}
+	if (BodyBox.IsValid)
+	{
+		At.X = FMath::Clamp(At.X, BodyBox.Min.X, BodyBox.Max.X);
+		At.Y = FMath::Clamp(At.Y, BodyBox.Min.Y, BodyBox.Max.Y);
+	}
 	At.Z = FMath::Clamp(At.Z, CarVisuals::KnockLow, CarVisuals::KnockHigh);
 	const FVector Into = Frame.InverseTransformVectorNoScale(WorldInto);
 	if (!CarDamage::Knock(Damage, At, Into, Speed))
@@ -792,7 +808,6 @@ void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, flo
 		return;
 	}
 
-	const CarModel::FBuilder& Clean = CarVisuals::BodyShape(Style);
 	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
 	const int32 Fresh = CarDamage::KnockOff(Clean, Layout, Damage);
 	CarModel::FBuilder Dented;
