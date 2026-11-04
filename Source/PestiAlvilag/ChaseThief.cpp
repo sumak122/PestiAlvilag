@@ -457,6 +457,20 @@ void AChaseThief::TickFight()
 		return;
 	}
 
+	// He is open after a big swing or a finisher: hit him back.
+	if (!Player->IsOpenAfterFinisher())
+	{
+		bSawOpening = false;
+	}
+	else if (!bSawOpening && Apart <= Reach + 20.0)
+	{
+		bSawOpening = true;
+		if (FMath::FRand() < PunishChance && Jab())
+		{
+			return;
+		}
+	}
+
 	if (SecondJabAt > 0.0 && Now >= SecondJabAt)
 	{
 		SecondJabAt = -1.0;

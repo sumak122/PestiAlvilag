@@ -88,10 +88,11 @@ namespace Brawl
 	constexpr float HookLands = 0.45f;
 	constexpr float UppercutSeconds = 0.46f;
 	constexpr float UppercutLands = 0.45f;
-	constexpr float RisingSeconds = 0.62f;
-	constexpr float RisingLands = 0.42f;
-	constexpr float HaymakerSeconds = 0.7f;
-	constexpr float HaymakerLands = 0.5f;
+	// The finishers leave him open a while after they land (the moment to hit him back).
+	constexpr float RisingSeconds = 0.8f;
+	constexpr float RisingLands = 0.36f;
+	constexpr float HaymakerSeconds = 0.9f;
+	constexpr float HaymakerLands = 0.42f;
 	/** Punches in the chain before it starts again from the jab. */
 	constexpr int32 ChainLength = 4;
 	/** A click this long after a punch ends still carries the chain on (s). */
@@ -107,6 +108,16 @@ namespace Brawl
 	constexpr float HitStopLight = 0.05f;
 	constexpr float HitStopHeavy = 0.11f;
 	constexpr float HitStopSlow = 0.05f;
+	// The other man breaks a run of quick punches: after this many in a row
+	// (a run ends after a gap this long, s), with this chance, and then he
+	// hits back with this chance (otherwise he covers up).
+	constexpr int32 BreakRunMin = 2;
+	constexpr int32 BreakRunMax = 3;
+	constexpr float PunchRunGap = 0.8f;
+	constexpr float BreakChance = 0.75f;
+	constexpr float BreakHitBack = 0.75f;
+	/** The chance the other man hits back when the player is open after a finisher. */
+	constexpr float PunishChance = 0.7f;
 
 	/** The counter key lights up gold this long before his swing comes (s). */
 	constexpr float CounterWindow = 0.4f;
@@ -143,8 +154,8 @@ namespace Brawl
 	constexpr float KneeCost = 8.f;
 	constexpr float ShoveCost = 10.f;
 	constexpr float BlockCost = 6.f;
-	constexpr float ChainCost = 7.f;
-	constexpr float FinisherCost = 16.f;
+	constexpr float ChainCost = 8.f;
+	constexpr float FinisherCost = 24.f;
 	constexpr float GuardDrain = 4.f;
 	constexpr float StaminaBack = 25.f;
 	constexpr float RestBefore = 0.7f;

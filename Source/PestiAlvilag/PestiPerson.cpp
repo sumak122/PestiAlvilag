@@ -1122,6 +1122,35 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		}
 		return;
 	}
+	// Not the player: a run of quick punches gets broken after two or three.
+	// He takes the next one on his arms and (mostly) hits straight back.
+	if (!IsPlayerControlled() && From && bQuick && Blow != EBlow::Knee)
+	{
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (Now - LastQuickHitAt > PunchRunGap)
+		{
+			QuickHitsInRow = 0;
+		}
+		LastQuickHitAt = Now;
+		if (QuickHitsInRow >= BreakRunAfter && (Act == EAct::Hurt || Act == EAct::Stance) && Stamina > 0.f && FMath::FRand() < BreakChance)
+		{
+			QuickHitsInRow = 0;
+			BreakRunAfter = FMath::RandRange(BreakRunMin, BreakRunMax);
+			HitStop(HitStopLight);
+			From->HitStop(HitStopLight);
+			PlayFightSound(FightSynth::EKind::Block, 0.85f);
+			Stamina -= BlockCost;
+			RestFrom = GetWorld()->GetTimeSeconds() + RestBefore;
+			BeginAct(EAct::Stance, 0.f);
+			if (FMath::FRand() >= BreakHitBack || !Jab())
+			{
+				BeginAct(EAct::Guard, 0.f);
+			}
+			return;
+		}
+		++QuickHitsInRow;
+	}
+
 	const bool bGuardBroken = Act == EAct::Guard && bFacing && bBig;
 	if (bGuardBroken)
 	{
