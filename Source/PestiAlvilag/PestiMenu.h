@@ -48,6 +48,12 @@ enum class EPestiMenuAction : uint8
 	Quit,
 	Yes,
 	No,
+	// The test grounds (ATestGrounds): the page, its rows, and back from it.
+	TestAreas,
+	TestFight,
+	TestVehicles,
+	TestBackToCity,
+	Back,
 };
 
 enum class EPestiMenuPage : uint8
@@ -59,6 +65,8 @@ enum class EPestiMenuPage : uint8
 	Controls,
 	Credits,
 	Confirm,
+	/** The test grounds: the fight yard, the vehicle yard, back to the city. */
+	Tests,
 };
 
 struct FPestiMenuRow
@@ -92,6 +100,8 @@ public:
 	EPestiMenuPage GetBase() const { return Base; }
 	int32 GetChoice() const { return Choice; }
 	bool HasSave() const { return bHasSave; }
+	/** The test grounds can be reached on foot only (not driving or riding). */
+	bool IsOnFoot() const { return bOnFoot; }
 
 	/** The rows of the title screen, the pause menu or the question. */
 	TArray<FPestiMenuRow> Rows() const;
@@ -118,6 +128,9 @@ private:
 	int32 BaseChoice = 0;
 	EPestiMenuAction Asking = EPestiMenuAction::None;
 	bool bHasSave = false;
+	/** On foot when the menu opened, and out on the test grounds then. */
+	bool bOnFoot = false;
+	bool bOnTestGrounds = false;
 	/** The title screen stops the game a moment after the level starts, once everything has had a frame to set itself up. */
 	bool bStopSoon = false;
 };

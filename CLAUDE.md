@@ -26,6 +26,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Landmarks: `Nepszinhaz`, `KeletiStation` (big), `KeletiEagle`/`EagleModel.h`, `MarketHall` + `MarketHallModel.h` + `HallMarketModel.h`, `FleaMarket` (biggest, ~1600 lines: Teleki and hall markets) + `MarketModel.h`, `Cafe`, `FoodVendor`, `FoodMenus`, `HomeDoor`.
 - Missions and saving: `Mission` (base), `MissionPrologue`, `MissionUzenet`, `MissionZsebtolvaj`, `MissionZsibvasar`, `MissionFelmondas` (mission 5, from a real news story) + `GarayYard`/`GarayModel.h` (Garay utca 13: Hermann's shop, Schwimmer's timber yard, their people), `PestiSaveGame`, `Lighters`/`LighterModel.h` (collectibles), `GoalMarkerComponent`, `RouteGuideComponent`.
 - Screen text: `PestiHud` (art deco HUD, menus, minimap and the M big map with your own mark), `PestiMap` (bakes the city plan picture and street names for the maps), `PestiText.h` (Hungarian/English strings).
+- Test grounds: `TestGrounds` + `TestGroundsModel.h` (far west of the city, built on first use from the Esc menu row PRÓBATEREP: fight yard with number keys for the thief/ruffians/shop people, vehicle yard with every car, the horse cart, a wall, wrecks and a track).
 - Menus: `PestiMenu` (title screen "Pesti Mesék", Esc/Tab pause menu, settings, controls, credits; logic and keys, plus PestiSettings: volume, mouse, English subtitles). Painted by `PestiHud`.
 
 ## Rules for changes

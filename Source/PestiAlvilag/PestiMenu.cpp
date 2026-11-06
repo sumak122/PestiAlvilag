@@ -13,7 +13,9 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiPerson.h"
 #include "PestiSaveGame.h"
+#include "TestGrounds.h"
 
 namespace PestiSettings
 {
@@ -152,6 +154,10 @@ void FPestiMenu::Start(UWorld* World)
 void FPestiMenu::Open(UWorld* World, EPestiMenuPage To)
 {
 	bHasSave = UGameplayStatics::DoesSaveGameExist(UPestiSaveGame::SlotName(), 0);
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const APestiPerson* Walker = PC ? Cast<APestiPerson>(PC->GetPawn()) : nullptr;
+	bOnFoot = Walker && !Walker->IsRiding();
+	bOnTestGrounds = World && ATestGrounds::IsPlayerHere(World);
 	Page = To;
 	Base = To;
 	Choice = 0;
@@ -176,7 +182,14 @@ void FPestiMenu::Close(UWorld* World)
 TArray<FPestiMenuRow> FPestiMenu::Rows() const
 {
 	TArray<FPestiMenuRow> Out;
-	if (Page == EPestiMenuPage::Confirm)
+	if (Page == EPestiMenuPage::Tests)
+	{
+		Out.Add({ TEXT("VEREKED\u0150 UDVAR"), TEXT("Fight yard"), EPestiMenuAction::TestFight, bOnFoot });
+		Out.Add({ TEXT("J\u00c1RM\u0170TELEP"), TEXT("Vehicle yard"), EPestiMenuAction::TestVehicles, bOnFoot });
+		Out.Add({ TEXT("VISSZA A V\u00c1ROSBA"), TEXT("Back to the city"), EPestiMenuAction::TestBackToCity, bOnFoot && bOnTestGrounds });
+		Out.Add({ TEXT("VISSZA"), TEXT("Back"), EPestiMenuAction::Back });
+	}
+	else if (Page == EPestiMenuPage::Confirm)
 	{
 		Out.Add({ TEXT("IGEN"), TEXT("Yes"), EPestiMenuAction::Yes });
 		Out.Add({ TEXT("NEM"), TEXT("No"), EPestiMenuAction::No });
@@ -198,6 +211,7 @@ TArray<FPestiMenuRow> FPestiMenu::Rows() const
 		Out.Add({ TEXT("UTOLS\u00d3 MENT\u00c9S"), TEXT("Load last save"), EPestiMenuAction::LoadSave, bHasSave });
 		Out.Add({ TEXT("BE\u00c1LL\u00cdT\u00c1SOK"), TEXT("Settings"), EPestiMenuAction::Settings });
 		Out.Add({ TEXT("IR\u00c1NY\u00cdT\u00c1S"), TEXT("Controls"), EPestiMenuAction::Controls });
+		Out.Add({ TEXT("PR\u00d3BATEREP"), TEXT("Test areas"), EPestiMenuAction::TestAreas });
 		Out.Add({ TEXT("F\u0150MEN\u00dc"), TEXT("Main menu"), EPestiMenuAction::MainMenu });
 		Out.Add({ TEXT("KIL\u00c9P\u00c9S"), TEXT("Quit game"), EPestiMenuAction::Quit });
 	}
@@ -417,6 +431,29 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 		BaseChoice = Choice;
 		Page = EPestiMenuPage::Credits;
 		break;
+	case EPestiMenuAction::TestAreas:
+		BaseChoice = Choice;
+		Page = EPestiMenuPage::Tests;
+		Choice = 0;
+		// Not on foot: straight to "back", the only row that can be chosen.
+		if (!bOnFoot)
+		{
+			Choice = Rows().Num() - 1;
+		}
+		break;
+	case EPestiMenuAction::TestFight:
+	case EPestiMenuAction::TestVehicles:
+		Close(World);
+		ATestGrounds::Go(World, Action == EPestiMenuAction::TestFight ? ETestGround::Fight : ETestGround::Vehicles);
+		break;
+	case EPestiMenuAction::TestBackToCity:
+		Close(World);
+		ATestGrounds::GoBack(World);
+		break;
+	case EPestiMenuAction::Back:
+		Page = Base;
+		Choice = BaseChoice;
+		break;
 	case EPestiMenuAction::No:
 		Page = Base;
 		Choice = BaseChoice;
@@ -485,6 +522,7 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 	case EPestiMenuPage::Title:
 	case EPestiMenuPage::Pause:
 	case EPestiMenuPage::Confirm:
+	case EPestiMenuPage::Tests:
 	{
 		if (bUp || (Page == EPestiMenuPage::Confirm && bLeft))
 		{
@@ -507,6 +545,10 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 			if (Page == EPestiMenuPage::Confirm)
 			{
 				Do(World, PC, EPestiMenuAction::No);
+			}
+			else if (Page == EPestiMenuPage::Tests)
+			{
+				Do(World, PC, EPestiMenuAction::Back);
 			}
 			else if (Page == EPestiMenuPage::Pause)
 			{
