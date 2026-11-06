@@ -980,6 +980,11 @@ private:
 			PaintCredits(Paint, CentreX, Y0);
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
 			break;
+		case EPestiMenuPage::Tests:
+			PaintPause(Paint, Hud, Shown, Wide, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
+				{ TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
+			break;
 		case EPestiMenuPage::Confirm:
 			PaintConfirm(Paint, Shown, CentreX, Y0);
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
@@ -1084,22 +1089,35 @@ private:
 	void PaintPause(const FPainter& Paint, const APestiHUD& Hud, const FPestiMenu& Shown, float Wide, float Y0) const
 	{
 		const bool bEnglish = PestiSettings::English();
+		const bool bTests = Shown.GetPage() == EPestiMenuPage::Tests;
+		const TArray<FPestiMenuRow> List = Shown.Rows();
 		const float CentreX = Wide * 0.5f;
 		const float W = 620.f;
-		const float H = 680.f;
+		// Room for six rows; taller for more.
+		const float H = 680.f + 92.f * FMath::Max(0, List.Num() - 6);
 		const float X = CentreX - W * 0.5f;
 		const float Y = Y0 + 160.f;
 		Paint.Panel(X, Y, W, H);
 		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
-		Paint.Tab(TEXT("SZ\u00dcNET"), CentreX, Y);
+		Paint.Tab(bTests ? TEXT("PR\u00d3BATEREP") : TEXT("SZ\u00dcNET"), CentreX, Y);
 		if (bEnglish)
 		{
-			Paint.Text(TEXT("Paused"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+			Paint.Text(bTests ? TEXT("Test areas") : TEXT("Paused"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
 		}
-		const TArray<FPestiMenuRow> List = Shown.Rows();
 		for (int32 i = 0; i < List.Num(); ++i)
 		{
 			PaintMenuRow(Paint, CentreX, Y + 130.f + 92.f * i, List[i], i == Shown.GetChoice(), FString());
+		}
+		if (bTests)
+		{
+			Paint.Text(Shown.IsOnFoot() ? TEXT("Ide gyalog jutsz ki, a kocsi itt marad.") : TEXT("Ehhez sz\u00e1llj ki el\u0151bb."),
+				Paint.Bold(19.f), CentreX, Y + H + 50.f, PestiHud::Cream, 0.5f);
+			if (bEnglish)
+			{
+				Paint.Text(Shown.IsOnFoot() ? TEXT("You go out there on foot; any car stays where it is.") : TEXT("Get out of the vehicle first."),
+					Paint.Plain(16.f, 1.f), CentreX, Y + H + 76.f, PestiHud::Grey, 0.5f);
+			}
+			return;
 		}
 		Paint.Text(TEXT("Menteni otthon lehet, B\u00f6zsi n\u00e9ni ajtaj\u00e1n\u00e1l."), Paint.Bold(19.f), CentreX, Y + H + 50.f, PestiHud::Cream, 0.5f);
 		if (bEnglish)
