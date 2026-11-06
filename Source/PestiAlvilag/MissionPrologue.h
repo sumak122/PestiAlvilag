@@ -38,6 +38,9 @@ protected:
 	virtual bool GetLetter(FString& OutHu, FString& OutEn) const override;
 
 private:
+	/** Off the train: a short scene on the platform with the mission's name. */
+	void PlayOpening();
+
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Gentleman;
 };

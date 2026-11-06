@@ -5,6 +5,7 @@
 #include "ChaseModel.h"
 #include "ChaseThief.h"
 #include "Components/SceneComponent.h"
+#include "Cutscene.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "FleaMarket.h"
@@ -74,6 +75,7 @@ AMissionZsebtolvaj::AMissionZsebtolvaj()
 	MissionId = TEXT("Zsebtolvaj");
 	Reward = 660;
 	TitleHu = TEXT("Zsebtolvaj");
+	Number = 3;
 	TitleEn = TEXT("The pickpocket");
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -185,7 +187,11 @@ void AMissionZsebtolvaj::SetUpMission()
 	Find.Target = BozsiFeet;
 	Find.Radius = Zsebtolvaj::TalkRadius;
 	Find.bPressE = true;
+	Find.SceneSeconds = 7.f;
+	Find.SceneWith = Bozsi.Get();
 	Steps.Add(Find);
+	bStartsAtRing = true;
+	StartLetter = TEXT("B");
 
 	FMissionStep Chase;
 	Chase.GoalHu = TEXT("Kapd el a zsebtolvajt!");
@@ -216,6 +222,8 @@ void AMissionZsebtolvaj::SetUpMission()
 	Back.Target = BozsiFeet;
 	Back.Radius = Zsebtolvaj::TalkRadius;
 	Back.bPressE = true;
+	Back.SceneSeconds = 7.f;
+	Back.SceneWith = Bozsi.Get();
 	Steps.Add(Back);
 }
 
@@ -313,6 +321,8 @@ void AMissionZsebtolvaj::TickStep(int32 Step, float DeltaSeconds)
 			{
 				bSnatched = true;
 				SnatchAt = Now;
+				// No time to stand and watch: the scene ends and the chase is on.
+				ACutscene::StopAll(this);
 				Thief->ShowPurse(true);
 				Thief->RunFrom(Cast<APestiPerson>(GetPlayer()));
 				Say(Zsebtolvaj::BozsiName, TEXT("Jaj! A p\u00e9nzt\u00e1rc\u00e1m! Fogj\u00e1k meg, tolvaj!"), TEXT("Oh! My purse! Stop, thief!"), 4.f);

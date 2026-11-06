@@ -79,6 +79,7 @@ AMissionFelmondas::AMissionFelmondas()
 	MissionId = TEXT("Felmondas");
 	Reward = 820;
 	TitleHu = TEXT("A felmond\u00e1s");
+	Number = 5;
 	TitleEn = TEXT("The notice");
 }
 
@@ -127,7 +128,12 @@ void AMissionFelmondas::SetUpMission()
 	Talk.Target = PistaAt;
 	Talk.Radius = Felmondas::TalkRadius;
 	Talk.bPressE = true;
+	// Trying again goes straight back to the shop door: no ring, no scene.
+	Talk.SceneSeconds = bResuming ? 0.f : 14.f;
+	Talk.SceneWith = Pista.Get();
 	Steps.Add(Talk);
+	bStartsAtRing = !bResuming;
+	StartLetter = TEXT("P");
 
 	FMissionStep Find;
 	Find.GoalHu = TEXT("Keresd meg Schwimmer Mih\u00e1lyt a fatelep\u00e9n, Garay utca 13.");
@@ -178,6 +184,9 @@ void AMissionFelmondas::SetUpMission()
 	MeetStep.Target = MeetAt;
 	MeetStep.Radius = Felmondas::TalkRadius;
 	MeetStep.bPressE = true;
+	// Ends just before the paper comes up (HeadlineAfter).
+	MeetStep.SceneSeconds = 6.5f;
+	MeetStep.SceneWith = Schwimmer.Get();
 	Steps.Add(MeetStep);
 
 	FMissionStep Read;
