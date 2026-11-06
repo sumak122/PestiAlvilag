@@ -95,6 +95,14 @@ namespace DayNight
 	// The sun is only turned when it has moved this far (degrees), as
 	// turning it redraws all the shadows.
 	constexpr float SunStep = 0.2f;
+
+	// When the lamps are lit (or put out) the windows and lanterns switch
+	// over during this many seconds, a scattered few each frame, rather
+	// than all in one frame (which froze the game for a moment).
+	constexpr float GlowSwitchSeconds = 4.f;
+	constexpr int32 GlowSwitchStride = 7919;
+	// The ground under this many lamps is found each frame, long before dusk.
+	constexpr int32 PoolGroundPerFrame = 40;
 }
 
 ADayNight::ADayNight()
@@ -309,6 +317,20 @@ void ADayNight::Tick(float DeltaSeconds)
 		UpdateGlows(false);
 		UpdateSeeThrough(false);
 	}
+	StepGlowSwitch(DeltaSeconds);
+
+	// The ground glow under the lamps is made ready early, a little each
+	// frame, instead of all at once when the lamps are first lit.
+	if (PoolWait > 0.f)
+	{
+		PoolWait -= DeltaSeconds;
+	}
+	else
+	{
+		BuildLightPools();
+		FindPoolGround(DayNight::PoolGroundPerFrame);
+	}
+
 	LampTimer -= DeltaSeconds;
 	if (LampTimer <= 0.f)
 	{
@@ -409,6 +431,7 @@ void ADayNight::AddNightGlow(UMeshComponent* Mesh, int32 Slot, const FLinearColo
 	{
 		SetGlow(Glow.Glow, Color, Strength);
 		Mesh->SetMaterial(Slot, Glow.Glow);
+		Glow.bLit = true;
 	}
 }
 
@@ -423,23 +446,62 @@ void ADayNight::UpdateGlows(bool bForce)
 	}
 	LastGlowDarkness = Darkness;
 
+	// Gone meshes are dropped, but not during a switch-over, as that would
+	// shuffle the ones still waiting their turn.
+	const bool bMayDrop = GlowSwitchNext == INDEX_NONE && !bSwitch;
 	for (int32 i = Glows.Num() - 1; i >= 0; --i)
 	{
 		FNightGlow& Glow = Glows[i];
-		UMeshComponent* Mesh = Glow.Mesh.Get();
-		if (!Mesh)
+		if (!Glow.Mesh.IsValid())
 		{
-			Glows.RemoveAtSwap(i);
+			if (bMayDrop)
+			{
+				Glows.RemoveAtSwap(i);
+			}
 			continue;
 		}
 		if (bLampsLit)
 		{
 			SetGlow(Glow.Glow, Glow.Color, Glow.Strength);
 		}
-		if (bSwitch)
+	}
+	if (bSwitch)
+	{
+		GlowSwitchNext = 0;
+		GlowSwitchCount = Glows.Num();
+	}
+}
+
+void ADayNight::StepGlowSwitch(float DeltaSeconds)
+{
+	using namespace DayNight;
+	if (GlowSwitchNext == INDEX_NONE)
+	{
+		return;
+	}
+	const int32 Total = FMath::Min(GlowSwitchCount, Glows.Num());
+	// Spread over GlowSwitchSeconds whatever the frame rate.
+	int32 Budget = FMath::Max(8, FMath::CeilToInt(static_cast<float>(Total) * DeltaSeconds / GlowSwitchSeconds));
+	// Stepping by a big prime visits every glow once, in a scattered order,
+	// so lights come on here and there across the city rather than street by street.
+	const int64 Step = (Total > 0 && Total % GlowSwitchStride == 0) ? 1 : GlowSwitchStride;
+	while (GlowSwitchNext < Total && Budget > 0)
+	{
+		const int32 Index = static_cast<int32>((static_cast<int64>(GlowSwitchNext) * Step) % Total);
+		++GlowSwitchNext;
+		FNightGlow& Glow = Glows[Index];
+		UMeshComponent* Mesh = Glow.Mesh.Get();
+		if (!Mesh || Glow.bLit == bLampsLit)
 		{
-			Mesh->SetMaterial(Glow.Slot, bLampsLit ? Glow.Glow.Get() : Glow.Day.Get());
+			continue;
 		}
+		Mesh->SetMaterial(Glow.Slot, bLampsLit ? Glow.Glow.Get() : Glow.Day.Get());
+		Glow.bLit = bLampsLit;
+		--Budget;
+	}
+	if (GlowSwitchNext >= Total)
+	{
+		GlowSwitchNext = INDEX_NONE;
 	}
 }
 
@@ -531,7 +593,6 @@ void ADayNight::UpdateLampLights()
 
 	// The far lamps' glow: as bright in the middle as a real lamp makes the
 	// ground straight under it.
-	BuildLightPools();
 	if (LightPools && LightPoolMaterial)
 	{
 		const float Middle = Candela / FMath::Square(LanternHeight) * LitGroundShare / UE_PI;
@@ -570,8 +631,26 @@ void ADayNight::BuildLightPools()
 	LightPoolMaterial->SetScalarParameterValue(TEXT("FadeFrom"), static_cast<float>(LampFade));
 	LightPoolMaterial->SetScalarParameterValue(TEXT("FadeLength"), static_cast<float>(LampRange - LampFade));
 
+	LightPools = NewObject<UProceduralMeshComponent>(this);
+	LightPools->SetupAttachment(RootComponent);
+	LightPools->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LightPools->SetCastShadow(false);
+	LightPools->SetMaterial(0, LightPoolMaterial);
+	LightPools->SetVisibility(false);
+	LightPools->RegisterComponent();
+}
+
+void ADayNight::FindPoolGround(int32 Budget)
+{
+	using namespace DayNight;
+	if (!LightPools || PoolGround.Num() >= Lamps.Num())
+	{
+		return;
+	}
+
 	// The ground under each lamp, from the city's own ground (a plain trace
-	// would hit the lamp post).
+	// would hit the lamp post). Only the pieces whose box is over the lamp
+	// can be under it, so the others are not traced.
 	TArray<UPrimitiveComponent*> Grounds;
 	for (TActorIterator<AOsmGraybox> It(GetWorld()); It; ++It)
 	{
@@ -580,12 +659,17 @@ void ADayNight::BuildLightPools()
 	}
 
 	const FCollisionQueryParams Params(SCENE_QUERY_STAT(LightPoolGround), false, this);
-	PoolGround.Reset(Lamps.Num());
-	for (const FVector& Lamp : Lamps)
+	const int32 Last = FMath::Min(Lamps.Num(), PoolGround.Num() + Budget);
+	for (int32 i = PoolGround.Num(); i < Last; ++i)
 	{
+		const FVector Lamp = Lamps[i];
 		double GroundZ = Lamp.Z - LanternHeight * 100.0;
 		for (UPrimitiveComponent* Ground : Grounds)
 		{
+			if (!Ground->Bounds.GetBox().IsInsideXY(Lamp))
+			{
+				continue;
+			}
 			FHitResult Hit;
 			if (Ground->LineTraceComponent(Hit, Lamp, Lamp - FVector(0.0, 0.0, 2000.0), Params))
 			{
@@ -595,15 +679,11 @@ void ADayNight::BuildLightPools()
 		}
 		PoolGround.Add(GroundZ);
 	}
-
-	LightPools = NewObject<UProceduralMeshComponent>(this);
-	LightPools->SetupAttachment(RootComponent);
-	LightPools->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	LightPools->SetCastShadow(false);
-	MeshLightPools();
-	LightPools->SetMaterial(0, LightPoolMaterial);
-	LightPools->SetVisibility(false);
-	LightPools->RegisterComponent();
+	// Laid once every lamp known so far has its ground (and again if more lamps come later).
+	if (PoolGround.Num() >= Lamps.Num())
+	{
+		MeshLightPools();
+	}
 }
 
 void ADayNight::MeshLightPools()
