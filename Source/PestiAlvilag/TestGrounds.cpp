@@ -15,6 +15,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Bicycle.h"
 #include "HorseCart.h"
 #include "InputCoreTypes.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -517,6 +518,18 @@ void ATestGrounds::SpawnVehicles()
 			{
 				Cart->FinishSpawning(Place);
 				Vehicles.Add(Cart);
+			}
+			continue;
+		}
+		if (Spot.Kind == EVehicle::Bicycle || Spot.Kind == EVehicle::ShopBicycle)
+		{
+			ABicycle* Bike = GetWorld()->SpawnActorDeferred<ABicycle>(ABicycle::StaticClass(), Place, nullptr, nullptr,
+				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+			if (Bike)
+			{
+				Bike->bShopBike = Spot.Kind == EVehicle::ShopBicycle;
+				Bike->FinishSpawning(Place);
+				Vehicles.Add(Bike);
 			}
 			continue;
 		}

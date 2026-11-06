@@ -14,6 +14,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "CarBody.h"
 #include "FightSound.h"
+#include "Bicycle.h"
 #include "HorseCart.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -46,6 +47,8 @@ namespace PestiPerson
 	constexpr float RunElbow = 75.f;
 
 	constexpr double MinTimeOnFoot = 0.3;
+	// How close he must stand to a bicycle's saddle to get on (cm).
+	constexpr double BikeReach = 200.0;
 
 	// Being hit: slower than this does no harm, and each cm/s over it
 	// takes this much health (a car at 36 km/h takes about half). One bump
@@ -443,6 +446,25 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 			PC->Possess(*It);
 			return;
 		}
+	}
+	// A bicycle: onto the saddle (he has to stand right by it).
+	ABicycle* NearestBike = nullptr;
+	double BikeDist = FMath::Min(static_cast<double>(EnterCarRange), PestiPerson::BikeReach);
+	for (TActorIterator<ABicycle> It(GetWorld()); It; ++It)
+	{
+		const double Dist = FVector::Dist2D(It->GetSaddleLocation(), GetActorLocation());
+		if (!It->GetController() && Dist < BikeDist)
+		{
+			NearestBike = *It;
+			BikeDist = Dist;
+		}
+	}
+	if (NearestBike)
+	{
+		SetInWorld(false);
+		NearestBike->TakeRider(this);
+		PC->Possess(NearestBike);
+		return;
 	}
 	APestiCar* Nearest = nullptr;
 	double NearestDist = EnterCarRange;

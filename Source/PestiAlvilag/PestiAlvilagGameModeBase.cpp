@@ -15,6 +15,7 @@
 #include "StableYardModel.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
+#include "Bicycle.h"
 #include "HorseCart.h"
 #include "KeletiEagle.h"
 #include "KeletiStation.h"
@@ -60,6 +61,9 @@ namespace PestiStart
 	// Kun utca and Teleki tér, facing the street.
 	const FVector2D HomeDoorAt(58392.f, 21268.f);
 	constexpr float HomeDoorYaw = 108.6f;
+	// A bicycle stands this far out from the door and along the wall to its right (cm).
+	constexpr double BikeOut = 90.0;
+	constexpr double BikeAlong = 260.0;
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
 	const FName Zsebtolvaj(TEXT("Zsebtolvaj"));
@@ -283,6 +287,17 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 		const FVector CartLocation(CartAt, GroundZ(CartAt) + 150.0);
 		const double CartYaw = StableYardModel::CityYaw + StableYardModel::Spots::CartYaw;
 		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.0, CartYaw, 0.0), CarParams);
+	}
+
+	if (!TActorIterator<ABicycle>(GetWorld()))
+	{
+		// A bicycle against the house wall a few steps along from Bözsi néni's door.
+		const FRotator DoorFacing(0.0, PestiStart::HomeDoorYaw, 0.0);
+		const FVector2D Out(DoorFacing.Vector());
+		const FVector2D Along(FRotator(0.0, PestiStart::HomeDoorYaw + 90.0, 0.0).Vector());
+		const FVector2D BikeAt = PestiStart::HomeDoorAt + Out * PestiStart::BikeOut + Along * PestiStart::BikeAlong;
+		const FVector BikeLocation(BikeAt, GroundZ(BikeAt) + 80.0);
+		GetWorld()->SpawnActor<ABicycle>(ABicycle::StaticClass(), BikeLocation, FRotator(0.0, PestiStart::HomeDoorYaw + 90.0, 0.0), CarParams);
 	}
 
 	return Pawn;
