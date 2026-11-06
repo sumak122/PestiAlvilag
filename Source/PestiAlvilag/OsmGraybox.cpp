@@ -23,7 +23,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogOsmGraybox, Log, All);
 
 namespace OsmGraybox
 {
-	// Main mesh sections, one color each; then one wall section per plaster color.
+	// Main mesh sections, one color each; then one wall section per plaster color
+	// for the ground floors, then one per plaster color for the floors above.
 	enum ESection : int32
 	{
 		Ground,
@@ -72,7 +73,12 @@ namespace OsmGraybox
 
 	// Bump when the mesh layout changes, so levels saved with an older mesh rebuild it.
 	// 2: picture coordinates (UVs) and tangents for the pack materials.
-	constexpr int32 MeshVersion = 2;
+	// 3: walls split into ground floor and upper floor sections.
+	constexpr int32 MeshVersion = 3;
+
+	// Walls below this height (cm) are the ground floor, which gets stone blocks;
+	// above it smooth plaster. Matches the facades' ground floor.
+	constexpr double GroundFloorTop = 450.0;
 
 	struct FSection
 	{
@@ -216,8 +222,19 @@ namespace OsmGraybox
 
 	// The script orients rings so the solid is on the left of every edge,
 	// which puts the outside on the right.
-	void AddWalls(FSection& Section, const TArray<TArray<FVector2D>>& Rings, double Base, double Height, bool bFlip)
+	// Walls below Split go into Lower, the rest into Upper.
+	void AddWalls(FSection& Lower, FSection& Upper, const TArray<TArray<FVector2D>>& Rings, double Base, double Height, double Split, bool bFlip)
 	{
+		auto AddWallQuad = [bFlip](FSection& Section, const FVector2D& P0, const FVector2D& P1, double Z0, double Z1, const FVector& Outward)
+		{
+			const int32 A = Section.AddVertex(FVector(P0.X, P0.Y, Z0), Outward);
+			const int32 B = Section.AddVertex(FVector(P1.X, P1.Y, Z0), Outward);
+			const int32 C = Section.AddVertex(FVector(P1.X, P1.Y, Z1), Outward);
+			const int32 D = Section.AddVertex(FVector(P0.X, P0.Y, Z1), Outward);
+			Section.AddTriangle(A, B, C, Outward, bFlip);
+			Section.AddTriangle(A, C, D, Outward, bFlip);
+		};
+
 		for (const TArray<FVector2D>& Ring : Rings)
 		{
 			for (int32 i = 0; i < Ring.Num(); ++i)
@@ -230,12 +247,19 @@ namespace OsmGraybox
 					continue;
 				}
 				const FVector Outward = FVector(Edge.Y, -Edge.X, 0.0).GetSafeNormal();
-				const int32 A = Section.AddVertex(FVector(P0.X, P0.Y, Base), Outward);
-				const int32 B = Section.AddVertex(FVector(P1.X, P1.Y, Base), Outward);
-				const int32 C = Section.AddVertex(FVector(P1.X, P1.Y, Height), Outward);
-				const int32 D = Section.AddVertex(FVector(P0.X, P0.Y, Height), Outward);
-				Section.AddTriangle(A, B, C, Outward, bFlip);
-				Section.AddTriangle(A, C, D, Outward, bFlip);
+				if (Split <= Base)
+				{
+					AddWallQuad(Upper, P0, P1, Base, Height, Outward);
+				}
+				else if (Split >= Height)
+				{
+					AddWallQuad(Lower, P0, P1, Base, Height, Outward);
+				}
+				else
+				{
+					AddWallQuad(Lower, P0, P1, Base, Split, Outward);
+					AddWallQuad(Upper, P0, P1, Split, Height, Outward);
+				}
 			}
 		}
 	}
@@ -535,16 +559,23 @@ void AOsmGraybox::ApplyPackMaterials()
 	{
 		Mesh->SetMaterial(Roofs, RoofMaterial);
 	}
-	// Each plaster colour gets one of the pack's walls, tinted to that colour.
-	static const TCHAR* const WallNames[] = { TEXT("DifferentWall"), TEXT("DifferentWall2"), TEXT("EustacheWall"),
-		TEXT("ConcreteOld"), TEXT("RoughConcrete") };
-	const int32 NumWallNames = static_cast<int32>(UE_ARRAY_COUNT(WallNames));
+	// Each plaster colour gets the pack's stone blocks on the ground floor and
+	// smooth plaster above, both tinted to that colour.
+	static const TCHAR* const BlockNames[] = { TEXT("DifferentWall"), TEXT("DifferentWall2"), TEXT("EustacheWall") };
+	static const TCHAR* const PlasterNames[] = { TEXT("ConcreteOld"), TEXT("WhiteConcrete") };
+	const int32 NumBlockNames = static_cast<int32>(UE_ARRAY_COUNT(BlockNames));
+	const int32 NumPlasterNames = static_cast<int32>(UE_ARRAY_COUNT(PlasterNames));
+	const int32 NumWallColors = FMath::Max(1, WallColors.Num());
 	for (int32 i = 0; i < WallColors.Num(); ++i)
 	{
 		const FLinearColor Tint = PackTint(WallColors[i]);
-		if (UMaterialInstanceDynamic* WallMaterial = MakePackMaterial(WallNames[i % NumWallNames], this, PackTileSize, &Tint))
+		if (UMaterialInstanceDynamic* BlockMaterial = MakePackMaterial(BlockNames[i % NumBlockNames], this, PackTileSize, &Tint))
 		{
-			Mesh->SetMaterial(FirstWalls + i, WallMaterial);
+			Mesh->SetMaterial(FirstWalls + i, BlockMaterial);
+		}
+		if (UMaterialInstanceDynamic* PlasterMaterial = MakePackMaterial(PlasterNames[i % NumPlasterNames], this, PackTileSize, &Tint))
+		{
+			Mesh->SetMaterial(FirstWalls + NumWallColors + i, PlasterMaterial);
 		}
 	}
 }
@@ -582,7 +613,7 @@ bool AOsmGraybox::Build()
 
 	const int32 NumWallColors = FMath::Max(1, WallColors.Num());
 	TArray<FSection> Sections;
-	Sections.SetNum(FirstWalls + NumWallColors);
+	Sections.SetNum(FirstWalls + 2 * NumWallColors);
 
 	TArray<TArray<FVector2D>> Rings;
 	TArray<int32> Triangles;
@@ -678,11 +709,12 @@ bool AOsmGraybox::Build()
 			Building->TryGetNumberField(TEXT("base"), Base);
 			const uint32 Seed = FCrc::StrCrc32(*Building->GetStringField(TEXT("id")));
 			FSection& WallSection = Sections[FirstWalls + Seed % NumWallColors];
-			AddWalls(WallSection, Rings, Base, Height, bFlipFaces);
+			FSection& UpperWallSection = Sections[FirstWalls + NumWallColors + Seed % NumWallColors];
+			AddWalls(WallSection, UpperWallSection, Rings, Base, Height, GroundFloorTop, bFlipFaces);
 			AddFlatPolygon(Sections[Roofs], Rings, Triangles, Height, bFlipFaces);
 			if (Base > 0.0)
 			{
-				AddFlatPolygon(WallSection, Rings, Triangles, Base, bFlipFaces, FVector::DownVector);
+				AddFlatPolygon(Base < GroundFloorTop ? WallSection : UpperWallSection, Rings, Triangles, Base, bFlipFaces, FVector::DownVector);
 			}
 			++NumBuildings;
 		}
@@ -690,9 +722,11 @@ bool AOsmGraybox::Build()
 
 	TArray<FLinearColor> Colors = { GroundColor, RoadColor, PlazaColor, ParkColor, TramColor, RailColor,
 		TrackEdgeColor, RailGrooveColor, RailHeadColor, KerbColor, RoofColor };
-	for (int32 i = 0; i < NumWallColors; ++i)
+	// Ground floor walls, then the same colours again for the floors above.
+	for (int32 i = 0; i < 2 * NumWallColors; ++i)
 	{
-		Colors.Add(WallColors.IsValidIndex(i) ? WallColors[i] : FLinearColor(0.62f, 0.55f, 0.45f));
+		const int32 k = i % NumWallColors;
+		Colors.Add(WallColors.IsValidIndex(k) ? WallColors[k] : FLinearColor(0.62f, 0.55f, 0.45f));
 	}
 	for (int32 i = 0; i < Sections.Num(); ++i)
 	{
