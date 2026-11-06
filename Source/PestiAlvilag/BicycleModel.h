@@ -69,10 +69,34 @@ namespace BicycleModel
 	/** True when the basket (and the parcels in it) belong to the Steer part and turn with the bars. */
 	inline bool BasketTurns(EKind Kind) { return IsRoadster(Kind); }
 	/** The middle of the shop plate in the frame. */
-	inline FVector PlateMiddle(EKind Kind) { return IsRoadster(Kind) ? FVector(26.0, 0.0, 67.0) : FVector(28.0, 0.0, 58.5); }
-	/** The whole bicycle's middle and half sizes, for a collision box (fits both kinds). */
-	inline FVector BoxMiddle() { return FVector(12.0, 0.0, 52.0); }
-	inline FVector BoxHalf() { return FVector(110.0, 30.0, 52.0); }
+	inline FVector PlateMiddle(EKind Kind) { return IsRoadster(Kind) ? FVector(26.0, 0.0, 79.5) : FVector(28.0, 0.0, 57.5); }
+	/** The height of the tube the plate hangs from, at X: the top tube of a roadster, the lower top tube of a shop bicycle. */
+	inline double PlateTubeZ(EKind Kind, double X)
+	{
+		return IsRoadster(Kind) ? 82.0 + (X + 14.0) * 10.0 / 72.0 : 66.0 - (X + 11.0) * 2.0 / 73.0;
+	}
+	/**
+	 * The collision box (fits both kinds): its middle and half sizes. Its
+	 * bottom is BoxBottom above the road, so the wheels roll over rails,
+	 * kerbs and cobbles without the box catching on them.
+	 */
+	constexpr double BoxBottom = 30.0;
+	inline FVector BoxMiddle() { return FVector(12.0, 0.0, BoxBottom + 37.0); }
+	inline FVector BoxHalf() { return FVector(110.0, 30.0, 37.0); }
+
+	/**
+	 * The kickstand, hinged on the left behind the bottom bracket. Built
+	 * hanging straight down; turned by StandFolded it lies back along the
+	 * chain stay, by StandDown it props the bicycle, leaning ParkedLean
+	 * (degrees of roll, below zero to the left) with the bars turned
+	 * ParkedSteer.
+	 */
+	inline FVector StandHinge() { return BottomBracket() + FVector(-12.0, -6.0, -2.0); }
+	constexpr double StandLength = 28.0;
+	constexpr double StandFolded = -96.0;
+	constexpr double StandDown = -18.0;
+	constexpr double ParkedLean = -7.0;
+	constexpr double ParkedSteer = -14.0;
 
 	/** The pedal spindle of one side (Side +1 right, -1 left) at a turn of the cranks: 0 is the right crank straight up, 90 forward. */
 	inline FVector Pedal(double CrankDegrees, double Side)
@@ -255,6 +279,11 @@ namespace BicycleModel
 		Block(F, PlateRed(), Plate, FVector(17.0, 0.45, 5.6));
 		Block(F, PlateCream(), Plate, FVector(15.6, 0.6, 4.4));
 		Block(F, PlateRed(), Plate, FVector(11.0, 0.7, 0.7));
+		// Two clips hang it from the tube above.
+		for (const double ClipX : { Plate.X - 11.0, Plate.X + 11.0 })
+		{
+			Rod(F, Nickel(), FVector(ClipX, 0.0, Plate.Z + 4.0), FVector(ClipX, 0.0, PlateTubeZ(Kind, ClipX) + 0.5), 0.55, 5);
+		}
 
 		// The seat post and the saddle: a leather top on two coil springs.
 		const FVector S = SaddleTop();
@@ -280,7 +309,7 @@ namespace BicycleModel
 		// A leather tool bag behind the saddle.
 		Block(F, Saddle(), S + FVector(-14.0, 0.0, -7.0), FVector(3.5, 6.0, 3.5));
 
-		// The rear mudguard, the chain guard, a little rear rack and the kickstand.
+		// The rear mudguard, the chain guard and a little rear rack.
 		Arc(F, Enamel(), Rear, RearRadius + 3.0, PI * 0.08, PI * 0.95, 0.5, 3.4, 4);
 		Rod(F, Enamel(), Rear + FVector(-RearRadius - 2.0, 0.0, 6.0), Rear + FVector(-RearRadius + 4.0, 0.0, RearRadius - 2.0), 0.6, 4);
 		Block(F, PlateRed(), Rear + FVector(-RearRadius - 2.6, 0.0, 8.0), FVector(0.4, 2.0, 1.4));
@@ -291,7 +320,6 @@ namespace BicycleModel
 			Block(F, Enamel(), (A + B) * 0.5 + FVector(0.0, 0.0, 2.0), FVector((B - A).Size() * 0.5 - 2.0, 0.4, 5.5));
 			Arc(F, Enamel(), BB + FVector(0.0, 10.6, 0.0), 11.5, -PI * 0.1, PI * 0.95, 0.8, 0.5, 4);
 		}
-		Rod(F, Enamel(), BB + FVector(-12.0, -6.0, -2.0), Rear + FVector(-6.0, -6.0, -RearRadius + 12.0), 0.9, 5);
 		for (const double Side : { -1.0, 1.0 })
 		{
 			Rod(F, Enamel(), Rear + FVector(-4.0, 8.0 * Side, 0.0), Rear + FVector(-20.0, 8.0 * Side, RearRadius + 6.0), 0.7, 5);
@@ -371,7 +399,21 @@ namespace BicycleModel
 		}
 	}
 
-inline void BuildCranks(PersonKit::FPiece& P)
+	/** The kickstand round its hinge, hanging straight down: a rod with a flat foot. */
+	inline void BuildStand(PersonKit::FPiece& P)
+	{
+		using namespace PersonKit;
+		const FVector Hinge = StandHinge();
+		P.Pivot = Hinge;
+		Loft(P, Nickel(), {
+			{ Hinge + FVector(0.0, -2.0, 0.0), FVector(1.8, 0.0, 0.0), FVector(0.0, 0.0, 1.8) },
+			{ Hinge + FVector(0.0, 1.5, 0.0), FVector(1.8, 0.0, 0.0), FVector(0.0, 0.0, 1.8) },
+		}, 8, true, true);
+		Rod(P, Enamel(), Hinge, Hinge + FVector(0.0, -1.5, -StandLength + 1.0), 0.9, 6);
+		Block(P, Enamel(), Hinge + FVector(0.0, -1.5, -StandLength + 0.6), FVector(2.2, 1.6, 0.6));
+	}
+
+	inline void BuildCranks(PersonKit::FPiece& P)
 	{
 		using namespace PersonKit;
 		const FVector BB = BottomBracket();

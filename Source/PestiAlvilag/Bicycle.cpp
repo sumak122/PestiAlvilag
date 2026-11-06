@@ -19,9 +19,6 @@
 
 namespace BicycleRide
 {
-	// The collision box floats this far above the road; the tyres reach down to it (cm).
-	constexpr float HoverHeight = 10.f;
-
 	// Pedalling up to a brisk 27 km/h (cm/s, and cm/s each second); rolling on, it slows a little.
 	constexpr float TopSpeed = 750.f;
 	constexpr float PedalPush = 230.f;
@@ -40,6 +37,9 @@ namespace BicycleRide
 	constexpr float MaxLean = 28.f;
 	constexpr float LeanRate = 6.f;
 	constexpr float Gravity = 980.f;
+	// Left standing, it settles onto its kickstand this quickly (degrees a second).
+	constexpr float StandRate = 160.f;
+	constexpr float ParkSteerRate = 30.f;
 
 	// One turn of the cranks rolls it this far (cm): the rear wheel's round, geared up.
 	constexpr float GearRatio = 2.4f;
@@ -72,7 +72,7 @@ ABicycle::ABicycle()
 
 	Rig = CreateDefaultSubobject<USceneComponent>(TEXT("Rig"));
 	Rig->SetupAttachment(CollisionBox);
-	Rig->SetRelativeLocation(FVector(-BicycleModel::BoxMiddle().X, 0.0, -(BicycleModel::BoxHalf().Z + BicycleRide::HoverHeight)));
+	Rig->SetRelativeLocation(FVector(-BicycleModel::BoxMiddle().X, 0.0, -(BicycleModel::BoxHalf().Z + BicycleModel::BoxBottom)));
 
 	SteerPivot = CreateDefaultSubobject<USceneComponent>(TEXT("SteerPivot"));
 	SteerPivot->SetupAttachment(Rig);
@@ -122,6 +122,12 @@ void ABicycle::BeginPlay()
 	Parts[WheelFront] = MakeMesh(SteerBody.Get(), Bike.Parts[WheelFront], FrontAxle(Kind) - Head);
 	Parts[WheelRear] = MakeMesh(Rig.Get(), Bike.Parts[WheelRear], RearAxle());
 	Parts[Cranks] = MakeMesh(Rig.Get(), Bike.Parts[Cranks], BottomBracket());
+	PersonKit::FPiece Kickstand;
+	BuildStand(Kickstand);
+	StandMesh = MakeMesh(Rig.Get(), Kickstand, StandHinge());
+	StandPitch = static_cast<float>(StandDown);
+	Lean = static_cast<float>(ParkedLean);
+	SteerAngle = static_cast<float>(ParkedSteer);
 
 	// The parcels, in the basket on the frame, or on the fork of a roadster.
 	for (int32 i = 0; i < MaxParcels; ++i)
@@ -192,10 +198,11 @@ void ABicycle::Tick(float DeltaSeconds)
 	}
 	else
 	{
-		// Nobody on it: it rolls to a stop and stands up straight.
+		// Nobody on it: it rolls to a stop, and stands on its kickstand with the bars turned a little.
 		bPedalling = false;
-		SteerAngle = FMath::FInterpConstantTo(SteerAngle, 0.f, DeltaSeconds, BicycleRide::SteerRate);
 		Speed = FMath::FInterpConstantTo(Speed, 0.f, DeltaSeconds, BicycleRide::Brake);
+		const float ParkedBars = FMath::Abs(Speed) < 5.f ? static_cast<float>(BicycleModel::ParkedSteer) : 0.f;
+		SteerAngle = FMath::FInterpConstantTo(SteerAngle, ParkedBars, DeltaSeconds, BicycleRide::ParkSteerRate);
 	}
 	Move(DeltaSeconds);
 	Animate(DeltaSeconds);
@@ -263,8 +270,13 @@ void ABicycle::Move(float DeltaSeconds)
 	const double TurnRate = Speed * FMath::Tan(FMath::DegreesToRadians(SteerAngle)) / Wheelbase;
 
 	// It leans into the turn as far as the turn throws it outward.
-	const float WantLean = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Speed * TurnRate), Gravity)), -MaxLean, MaxLean);
+	// Left standing, it leans over onto its kickstand.
+	const bool bParked = !Rider && FMath::Abs(Speed) < 5.f;
+	const float WantLean = bParked ? static_cast<float>(BicycleModel::ParkedLean)
+		: FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Speed * TurnRate), Gravity)), -MaxLean, MaxLean);
 	Lean = FMath::FInterpTo(Lean, WantLean, DeltaSeconds, LeanRate);
+	const float WantStand = static_cast<float>(Rider ? BicycleModel::StandFolded : BicycleModel::StandDown);
+	StandPitch = FMath::FInterpConstantTo(StandPitch, WantStand, DeltaSeconds, StandRate);
 
 	if (FMath::IsNearlyZero(Speed))
 	{
@@ -318,6 +330,10 @@ void ABicycle::Animate(float DeltaSeconds)
 		Crank = FMath::Fmod(Crank + Step / CrankTravel * 360.f, 360.f);
 	}
 	Parts[Cranks]->SetRelativeRotation(FRotator(-Crank, 0.f, 0.f));
+	if (StandMesh)
+	{
+		StandMesh->SetRelativeRotation(FRotator(StandPitch, 0.f, 0.f));
+	}
 	if (Rider)
 	{
 		PoseRider();
@@ -449,7 +465,7 @@ void ABicycle::SnapToGround()
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start - FVector(0.f, 0.f, 2000.f), ECC_Visibility, Params))
 	{
 		FVector Location = Start;
-		Location.Z = Hit.ImpactPoint.Z + BicycleRide::HoverHeight + CollisionBox->GetScaledBoxExtent().Z;
+		Location.Z = Hit.ImpactPoint.Z + BicycleModel::BoxBottom + CollisionBox->GetScaledBoxExtent().Z;
 		SetActorLocation(Location, false);
 	}
 }

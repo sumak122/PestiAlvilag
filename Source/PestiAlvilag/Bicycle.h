@@ -24,7 +24,8 @@ class USpringArmComponent;
  * bars turn, the bicycle leans into the turn, and it turns tighter slow
  * than fast. F gets off when it is nearly stopped. The rider is the
  * player's own dress-up figure, his feet on the turning pedals and his
- * hands on the grips. Riding hard into a wall stops it dead.
+ * hands on the grips. Riding hard into a wall stops it dead. Left alone it
+ * leans over onto its kickstand.
  */
 UCLASS()
 class PESTIALVILAG_API ABicycle : public APawn
@@ -87,6 +88,9 @@ protected:
 	TArray<TObjectPtr<UProceduralMeshComponent>> Parts;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> StandMesh;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> ParcelMeshes;
 
 	UPROPERTY(Transient)
@@ -112,6 +116,8 @@ private:
 	float SteerAngle = 0.f;
 	/** How far over it leans (degrees, right positive). */
 	float Lean = 0.f;
+	/** How the kickstand is turned about its hinge (degrees: down to prop it, back when ridden). */
+	float StandPitch = 0.f;
 	/** How far the cranks and the wheels have turned (degrees, and cm rolled). */
 	float Crank = 0.f;
 	float Rolled = 0.f;
