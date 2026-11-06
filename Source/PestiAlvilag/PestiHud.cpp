@@ -89,6 +89,19 @@ namespace PestiHud
 	constexpr float PlaquePad = 32.f;
 	constexpr float PlaquePx = 19.f;
 	constexpr float PlaqueLine = 28.f;
+	// A newspaper cutting: old print on yellowed newsprint, the same plaque beside it.
+	const FLinearColor Newsprint = FLinearColor(FColor(230, 220, 195));
+	const FLinearColor NewsprintEdge = FLinearColor(FColor(184, 166, 126));
+	const FLinearColor PrintInk = FLinearColor(FColor(38, 33, 25));
+	constexpr float ClippingWidth = 640.f;
+	constexpr float ClippingPadX = 40.f;
+	constexpr float ClippingPadY = 30.f;
+	constexpr float MastPx = 44.f;
+	constexpr float DatelinePx = 17.f;
+	constexpr float HeadlinePx = 38.f;
+	constexpr float HeadlineLine = 42.f;
+	constexpr float StoryPx = 21.f;
+	constexpr float StoryLine = 28.f;
 
 	constexpr float CabinetWidth = 1580.f;
 	constexpr float CabinetHeight = 935.f;
@@ -310,6 +323,12 @@ public:
 		{
 			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
 			PaintLetter(Over, *Hud, Wide, High);
+			return LayerId + 18;
+		}
+		if (!Hud->ClippingHeadline.IsEmpty())
+		{
+			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			PaintClipping(Over, *Hud, Wide, High);
 			return LayerId + 18;
 		}
 		return LayerId + 14;
@@ -843,6 +862,97 @@ private:
 			EnglishBaseline += PestiHud::PlaqueLine;
 		}
 		Paint.Text(TEXT("R  \u00b7  elrak\u00e1s  \u00b7  put away"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
+	}
+
+	/** A newspaper cutting held up: the page left of the middle, the English on a plaque to its right. */
+	void PaintClipping(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::LetterShade);
+
+		// The cutting, as tall as its print: masthead, dateline, headline, story.
+		const FSlateFontInfo Mast = Paint.Font(Hud.PaperFont, PestiHud::MastPx, 3.f);
+		const FSlateFontInfo Dateline = Paint.Font(Hud.PaperFont, PestiHud::DatelinePx);
+		const FSlateFontInfo Head = Paint.Font(Hud.PaperFont, PestiHud::HeadlinePx);
+		const FSlateFontInfo Story = Paint.Font(Hud.PaperFont, PestiHud::StoryPx);
+		const float PaperW = PestiHud::ClippingWidth;
+		const float Inner = PaperW - 2.f * PestiHud::ClippingPadX;
+		const TArray<FLetterLine> HeadLines = BreakLines(Paint, Hud.ClippingHeadline, Head, Inner);
+		const TArray<FLetterLine> StoryLines = BreakLines(Paint, Hud.ClippingBody, Story, Inner);
+		const float MastH = 62.f;
+		const float DatelineH = 40.f;
+		const float HeadTop = PestiHud::ClippingPadY + MastH + DatelineH;
+		float StoryH = 0.f;
+		for (const FLetterLine& Row : StoryLines)
+		{
+			StoryH += Row.Words.IsEmpty() ? PestiHud::StoryLine * 0.4f : PestiHud::StoryLine;
+		}
+		const float WantH = HeadTop + HeadLines.Num() * PestiHud::HeadlineLine + 34.f + StoryH + PestiHud::ClippingPadY;
+		const float PaperH = FMath::Min(High - 40.f, WantH);
+		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f;
+		const float PaperY = (High - PaperH) * 0.5f;
+		Paint.Box(PaperX + 10.f, PaperY + 12.f, PaperW, PaperH, PestiHud::PaperShadow, 0);
+		Paint.Box(PaperX, PaperY, PaperW, PaperH, PestiHud::Newsprint, 1);
+		Paint.Frame(PaperX, PaperY, PaperW, PaperH, PestiHud::NewsprintEdge, 1.5f, 1);
+
+		const float Left = PaperX + PestiHud::ClippingPadX;
+		const float Right = Left + Inner;
+		const float Middle = PaperX + PaperW * 0.5f;
+		const float MastBase = PaperY + PestiHud::ClippingPadY + 42.f;
+		Paint.Text(TEXT("PESTI NAPI H\u00cdREK"), Mast, Middle, MastBase, PestiHud::PrintInk, 0.5f);
+		const float RuleY = PaperY + PestiHud::ClippingPadY + MastH - 6.f;
+		Paint.Line(Left, RuleY, Right, RuleY, PestiHud::PrintInk, 1.f);
+		Paint.Line(Left, RuleY + 4.f, Right, RuleY + 4.f, PestiHud::PrintInk, 1.f);
+		const float DateBase = RuleY + 25.f;
+		Paint.Text(TEXT("Budapest, 1932"), Dateline, Left, DateBase, PestiHud::PrintInk);
+		Paint.Text(TEXT("\u00c1ra 10 fill\u00e9r"), Dateline, Right, DateBase, PestiHud::PrintInk, 1.f);
+		Paint.Line(Left, DateBase + 8.f, Right, DateBase + 8.f, PestiHud::PrintInk, 1.f);
+
+		float Baseline = PaperY + HeadTop + PestiHud::HeadlineLine * 0.75f;
+		for (const FLetterLine& Row : HeadLines)
+		{
+			Paint.Text(Row.Words, Head, Middle, Baseline, PestiHud::PrintInk, 0.5f);
+			Baseline += PestiHud::HeadlineLine;
+		}
+		const float ShortRuleY = Baseline - PestiHud::HeadlineLine * 0.5f + 6.f;
+		Paint.Line(Middle - 60.f, ShortRuleY, Middle + 60.f, ShortRuleY, PestiHud::PrintInk, 1.f);
+		Baseline = ShortRuleY + 14.f + PestiHud::StoryLine * 0.75f;
+		const float Bottom = PaperY + PaperH - PestiHud::ClippingPadY * 0.5f;
+		for (const FLetterLine& Row : StoryLines)
+		{
+			if (Row.Words.IsEmpty())
+			{
+				Baseline += PestiHud::StoryLine * 0.4f;
+				continue;
+			}
+			if (Baseline > Bottom)
+			{
+				break;
+			}
+			Paint.Text(Row.Words, Story, Left, Baseline, PestiHud::PrintInk);
+			Baseline += PestiHud::StoryLine;
+		}
+
+		// The English, on a plaque as tall as its lines.
+		const FSlateFontInfo Plain = Paint.Plain(PestiHud::PlaquePx);
+		const float PlaqueX = Wide * 0.5f + PestiHud::LetterGap * 0.5f;
+		const float PlaqueInner = PestiHud::PlaqueWidth - 2.f * PestiHud::PlaquePad;
+		const TArray<FLetterLine> English = BreakLines(Paint, Hud.ClippingEn, Plain, PlaqueInner);
+		const float PlaqueH = 2.f * PestiHud::PlaquePad + 50.f + English.Num() * PestiHud::PlaqueLine + 40.f;
+		const float PlaqueY = (High - PlaqueH) * 0.5f;
+		Paint.Panel(PlaqueX, PlaqueY, PestiHud::PlaqueWidth, PlaqueH);
+		const float TextLeft = PlaqueX + PestiHud::PlaquePad;
+		Paint.Text(TEXT("\u00daJS\u00c1G"), Paint.Deco(24.f, 3.f), TextLeft, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Gold);
+		Paint.Text(TEXT("the next day's paper"), Paint.Plain(15.f, 1.f), PlaqueX + PestiHud::PlaqueWidth - PestiHud::PlaquePad, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Grey, 1.f);
+		float EnglishBaseline = PlaqueY + PestiHud::PlaquePad + 50.f + PestiHud::PlaqueLine * 0.7f;
+		for (const FLetterLine& Said : English)
+		{
+			if (!Said.Words.IsEmpty())
+			{
+				Paint.Text(Said.Words, Plain, TextLeft, EnglishBaseline, PestiHud::Cream);
+			}
+			EnglishBaseline += PestiHud::PlaqueLine;
+		}
+		Paint.Text(TEXT("E  \u00b7  tov\u00e1bb  \u00b7  continue"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
 	}
 
 	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
@@ -1662,6 +1772,20 @@ void APestiHUD::ClearLetter()
 	LetterEn.Reset();
 }
 
+void APestiHUD::SetClipping(const FString& Headline, const FString& Body, const FString& En)
+{
+	ClippingHeadline = Headline;
+	ClippingBody = Body;
+	ClippingEn = En;
+}
+
+void APestiHUD::ClearClipping()
+{
+	ClippingHeadline.Reset();
+	ClippingBody.Reset();
+	ClippingEn.Reset();
+}
+
 void APestiHUD::SetCabinet(const ALighters* Shown)
 {
 	// Here, where ALighters is fully known: the weak pointer needs its whole type.
@@ -1688,6 +1812,7 @@ void APestiHUD::BeginPlay()
 	BoldFont = PestiHud::LoadFont(TEXT("JosefinSans-SemiBold.ttf"));
 	TextFont = PestiHud::LoadFont(TEXT("JosefinSans-Regular.ttf"));
 	HandFont = PestiHud::LoadFont(TEXT("Parisienne-Regular.ttf"));
+	PaperFont = PestiHud::LoadFont(TEXT("OldStandardTT-Regular.ttf"));
 
 	if (GEngine && GEngine->GameViewport)
 	{

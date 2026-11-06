@@ -9,8 +9,10 @@
 #include "FleaMarket.h"
 #include "GarayModel.h"
 #include "GarayYard.h"
+#include "InputCoreTypes.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiHud.h"
 #include "PestiPerson.h"
 #include "Ruffian.h"
 #include "StoryPerson.h"
@@ -38,7 +40,10 @@ namespace Felmondas
 	constexpr double MeetBehind = 170.0;
 	// After Schwimmer's thanks, the paper comes out, and stays up this long (s).
 	constexpr double HeadlineAfter = 7.0;
-	constexpr double HeadlineFor = 9.0;
+	/** The cutting stays up until E, or this long at most (s). */
+	constexpr double HeadlineFor = 120.0;
+	/** E only puts the cutting away after this long, so a press meant for Schwimmer can't (s). */
+	constexpr double HeadlineMin = 1.0;
 	// Spawning a person a little above the floor (cm).
 	constexpr double SpawnLift = 10.0;
 
@@ -440,14 +445,21 @@ void AMissionFelmondas::TickStep(int32 Step, float DeltaSeconds)
 	}
 	if (Step == Felmondas::Paper)
 	{
-		if (HeadlineAt < 0.0 && Now - ThanksAt >= Felmondas::HeadlineAfter)
+		if (HeadlineAt < 0.0)
 		{
-			HeadlineAt = Now;
-			Announce(TEXT("KERESKED\u0150K V\u00c9RES VEREKED\u00c9SE A GARAY-UTC\u00c1BAN"),
-				TEXT("The next day's paper: \"Merchants' bloody brawl in Garay utca\""), static_cast<float>(Felmondas::HeadlineFor));
+			if (Now - ThanksAt >= Felmondas::HeadlineAfter)
+			{
+				HeadlineAt = Now;
+				ShowClipping();
+			}
+			return;
 		}
-		else if (HeadlineAt >= 0.0 && Now - HeadlineAt >= Felmondas::HeadlineFor)
+		const APawn* Player = GetPlayer();
+		const APlayerController* PC = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
+		const bool bPutAway = Now - HeadlineAt >= Felmondas::HeadlineMin && PC && PC->WasInputKeyJustPressed(EKeys::E);
+		if (bPutAway || Now - HeadlineAt >= Felmondas::HeadlineFor)
 		{
+			HideClipping();
 			FinishStep();
 		}
 	}
@@ -583,8 +595,35 @@ bool AMissionFelmondas::GetRetrySpot(FVector& OutAt, double& OutYaw) const
 	return true;
 }
 
+void AMissionFelmondas::ShowClipping()
+{
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Hud)
+	{
+		return;
+	}
+	Hud->SetClipping(
+		TEXT("Keresked\u0151k v\u00e9res vereked\u00e9se a Garay-utc\u00e1ban"),
+		TEXT("Friedrich Hermann 67 \u00e9ves nagykeresked\u0151, a Garay-utca 13. sz\u00e1m\u00fa telek tulajdonosa, felmondott b\u00e9rl\u0151j\u00e9nek, Schwimmer Mih\u00e1ly fakeresked\u0151nek, aki az\u00f3ta t\u00f6bbsz\u00f6r is fenyegette a csal\u00e1dot.\n\n")
+		TEXT("Tegnap d\u00e9lben Schwimmer \u00e9s egy ismeretlen fiatalember behatolt Hermann \u00fczlet\u00e9be, \u00e9s \u00fctlegelni kezdt\u00e9k az id\u0151s keresked\u0151t, a seg\u00edts\u00e9g\u00e9re siet\u0151 fi\u00e1t, Friedrich G\u00e9za m\u00e9rn\u00f6k\u00f6t, \u00e9s az alkalmazottakat. A j\u00e1r\u00f3kel\u0151k rend\u0151r\u00e9rt ki\u00e1ltottak, a t\u00e1mad\u00f3k elmenek\u00fcltek.\n\n")
+		TEXT("Hermannt a ment\u0151k bek\u00f6t\u00f6zt\u00e9k. S\u00falyos testi s\u00e9rt\u00e9s miatt feljelent\u00e9st tett a f\u0151kapit\u00e1nys\u00e1gon."),
+		TEXT("Merchants' bloody brawl in Garay utca.\n\n")
+		TEXT("Friedrich Hermann, 67, wholesale merchant and owner of the yard at Garay utca 13, had given notice to his tenant, timber merchant Schwimmer Mih\u00e1ly, who has since threatened the family more than once.\n\n")
+		TEXT("Yesterday at noon Schwimmer and an unknown young man burst into Hermann's shop and set upon the old merchant, his son G\u00e9za, an engineer, who rushed to help, and the clerks. Passers-by shouted for the police; the attackers fled.\n\n")
+		TEXT("Ambulance men bandaged Hermann. He has reported them at police headquarters for serious bodily harm."));
+}
+
+void AMissionFelmondas::HideClipping()
+{
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->ClearClipping();
+	}
+}
+
 void AMissionFelmondas::OnFailed()
 {
+	HideClipping();
 	if (Reached >= Felmondas::HitHermann)
 	{
 		Felmondas::ResumeWorld = GetWorld();
@@ -607,6 +646,7 @@ void AMissionFelmondas::OnFailed()
 
 void AMissionFelmondas::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HideClipping();
 	for (ARuffian* Man : ShopPeople)
 	{
 		if (IsValid(Man))
