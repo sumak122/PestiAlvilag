@@ -88,10 +88,11 @@ namespace Brawl
 	constexpr float HookLands = 0.45f;
 	constexpr float UppercutSeconds = 0.46f;
 	constexpr float UppercutLands = 0.45f;
-	constexpr float RisingSeconds = 0.62f;
-	constexpr float RisingLands = 0.42f;
-	constexpr float HaymakerSeconds = 0.7f;
-	constexpr float HaymakerLands = 0.5f;
+	// The finishers leave him open a while after they land (the moment to hit him back).
+	constexpr float RisingSeconds = 0.8f;
+	constexpr float RisingLands = 0.36f;
+	constexpr float HaymakerSeconds = 0.9f;
+	constexpr float HaymakerLands = 0.42f;
 	/** Punches in the chain before it starts again from the jab. */
 	constexpr int32 ChainLength = 4;
 	/** A click this long after a punch ends still carries the chain on (s). */
@@ -107,6 +108,16 @@ namespace Brawl
 	constexpr float HitStopLight = 0.05f;
 	constexpr float HitStopHeavy = 0.11f;
 	constexpr float HitStopSlow = 0.05f;
+	// The other man breaks a run of quick punches: after this many in a row
+	// (a run ends after a gap this long, s), with this chance, and then he
+	// hits back with this chance (otherwise he covers up).
+	constexpr int32 BreakRunMin = 2;
+	constexpr int32 BreakRunMax = 3;
+	constexpr float PunchRunGap = 0.8f;
+	constexpr float BreakChance = 0.75f;
+	constexpr float BreakHitBack = 0.75f;
+	/** The chance the other man hits back when the player is open after a finisher. */
+	constexpr float PunishChance = 0.7f;
 
 	/** The counter key lights up gold this long before his swing comes (s). */
 	constexpr float CounterWindow = 0.4f;
@@ -143,8 +154,8 @@ namespace Brawl
 	constexpr float KneeCost = 8.f;
 	constexpr float ShoveCost = 10.f;
 	constexpr float BlockCost = 6.f;
-	constexpr float ChainCost = 7.f;
-	constexpr float FinisherCost = 16.f;
+	constexpr float ChainCost = 8.f;
+	constexpr float FinisherCost = 24.f;
 	constexpr float GuardDrain = 4.f;
 	constexpr float StaminaBack = 25.f;
 	constexpr float RestBefore = 0.7f;
@@ -726,24 +737,96 @@ namespace Brawl
 		return Mix(Falling, GetUp(0.5f), Smooth(0.62f, 0.85f, T));
 	}
 
-	/** Beaten: sitting on the ground leaning back, both hands up, giving in. */
-	inline FPose Beaten(float Seconds)
+	/** How long a beaten man takes to go down (s), before he lies there. */
+	constexpr float CollapseSeconds = 0.9f;
+
+	/** Face down on the ground, head turned, one arm under him. */
+	inline FPose LyingFaceDown()
 	{
-		const float Shake = FMath::Sin(Seconds * 5.f);
 		FPose P;
-		P.Lift = -62.f;
-		P.Pitch = 22.f;
-		P.LegL = 84.f;
-		P.LegR = 70.f;
-		P.KneeL = -26.f;
-		P.KneeR = -54.f;
-		// Upper arms out, forearms up, palms to him.
-		P.ArmL = 80.f + 6.f * Shake;
-		P.ArmR = 76.f - 6.f * Shake;
-		P.ArmOutL = 40.f;
-		P.ArmOutR = 40.f;
-		P.ElbowL = 85.f;
-		P.ElbowR = 85.f;
+		P.Lift = -76.f;
+		P.Pitch = -86.f;
+		P.Roll = -4.f;
+		P.LegL = -6.f;
+		P.LegR = 4.f;
+		P.KneeL = -24.f;
+		P.KneeR = -8.f;
+		P.ArmL = 150.f;
+		P.ArmOutL = 30.f;
+		P.ElbowL = 70.f;
+		P.ArmR = 10.f;
+		P.ArmOutR = 12.f;
+		P.ElbowR = 20.f;
+		return P;
+	}
+
+	/** Curled up on his side, knees drawn up, arms over his belly. */
+	inline FPose LyingCurled()
+	{
+		FPose P;
+		P.Lift = -66.f;
+		P.Pitch = -14.f;
+		P.Roll = 84.f;
+		P.LegL = 70.f;
+		P.LegR = 58.f;
+		P.KneeL = -96.f;
+		P.KneeR = -84.f;
+		P.ArmL = 58.f;
+		P.ArmOutL = -24.f;
+		P.ElbowL = 110.f;
+		P.ArmR = 50.f;
+		P.ArmOutR = -30.f;
+		P.ElbowR = 120.f;
+		return P;
+	}
+
+	/**
+	 * Beaten: knees go, he crumples and lies there for good, moaning and now
+	 * and then stirring. Kind picks how he ends up: over on his back (above
+	 * 0.5), face down (below -0.5), or curled up on his side.
+	 */
+	inline FPose Beaten(float Seconds, float Kind = 1.f)
+	{
+		FPose OnBack = Lying();
+		// Out cold: the arms flat out on the ground, not up in the air.
+		OnBack.ArmL = 4.f;
+		OnBack.ArmOutL = 38.f;
+		OnBack.ElbowL = 30.f;
+		OnBack.ArmR = 0.f;
+		OnBack.ArmOutR = 22.f;
+		OnBack.ElbowR = 12.f;
+		const FPose Ground = Kind > 0.5f ? OnBack : Kind < -0.5f ? LyingFaceDown() : LyingCurled();
+		// Going down: the knees buckle first, then over.
+		FPose Buckle = Stagger(0.3f);
+		Buckle.Lift = -34.f;
+		Buckle.KneeL = -70.f;
+		Buckle.KneeR = -76.f;
+		Buckle.LegL = 40.f;
+		Buckle.LegR = 34.f;
+		Buckle.Pitch = Kind < -0.5f ? -30.f : 10.f;
+		Buckle.ArmL = 20.f;
+		Buckle.ArmR = 16.f;
+		Buckle.ArmOutL = 20.f;
+		Buckle.ArmOutR = 20.f;
+		const float Fallen = FMath::Clamp(Seconds / CollapseSeconds, 0.f, 1.f);
+		const FPose Going = Mix(Mix(Stance(), Buckle, Smooth(0.f, 0.35f, Fallen)), Ground, Smooth(0.3f, 1.f, Fallen));
+		if (Fallen < 1.f)
+		{
+			return Going;
+		}
+		// Lying there: slow heavy breaths, and every few seconds a knee drawn
+		// up and a hand to his head, then still again.
+		const float Lain = Seconds - CollapseSeconds;
+		FPose P = Ground;
+		const float Breath = FMath::Sin(Lain * 2.4f);
+		P.Lift += 1.2f * Breath;
+		P.Pitch += (Kind < -0.5f ? -1.f : 1.f) * 1.5f * Breath;
+		const float Cycle = FMath::Fmod(Lain + 1.5f, 6.5f) / 6.5f;
+		const float Stir = Bell(Cycle, 0.08f, 0.25f) * (Cycle < 0.33f ? 1.f : 0.f);
+		P.LegR += 30.f * Stir;
+		P.KneeR -= 40.f * Stir;
+		P.ArmL += (Kind < -0.5f ? -30.f : 40.f) * Stir;
+		P.ElbowL += 50.f * Stir;
 		return P;
 	}
 
@@ -770,7 +853,7 @@ namespace Brawl
 		case EAct::Winded: return Winded(Seconds);
 		case EAct::Tackle: return Tackle(T);
 		case EAct::Tackled: return Tackled(T);
-		case EAct::Beaten: return Beaten(Seconds);
+		case EAct::Beaten: return Beaten(Seconds, Side);
 		case EAct::Cross: return Cross(T);
 		case EAct::Hook: return Hook(T);
 		case EAct::Uppercut: return Uppercut(T);

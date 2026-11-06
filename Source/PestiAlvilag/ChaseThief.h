@@ -106,4 +106,6 @@ private:
 	double CircleFlipAt = 0.0;
 	double SecondJabAt = -1.0;
 	bool bSawWindUp = false;
+	/** The player left himself open after a finisher, seen once. */
+	bool bSawOpening = false;
 };

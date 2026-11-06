@@ -139,6 +139,11 @@ public:
 	bool ChainPunch(bool bFinisher);
 	/** A landed blow: he stands still for a blink of Seconds (real time). */
 	void HitStop(float Seconds);
+	/** After a heavy swing or a finisher has landed: open to a blow back until it ends. */
+	bool IsOpenAfterFinisher() const
+	{
+		return bBlowDone && (Act == Brawl::EAct::HeavySwing || Act == Brawl::EAct::Rising || Act == Brawl::EAct::Haymaker);
+	}
 	/** Under his swing and back with a hook, if it is coming; false otherwise. */
 	bool Counter();
 	/** Reaching for his collar; slowly, it can be seen coming. */
@@ -295,4 +300,10 @@ private:
 	double ChainUntil = -1.0;
 	/** Until when (real time) a landed blow holds him still; below 0 when not. */
 	double HitStopUntil = -1.0;
+	/** Quick punches taken in a row, when the last one came, and after how many he breaks the run. */
+	int32 QuickHitsInRow = 0;
+	double LastQuickHitAt = -10.0;
+	int32 BreakRunAfter = Brawl::BreakRunMax;
+	/** Beaten and lying there: when he groans next. */
+	double NextGroanAt = 0.0;
 };

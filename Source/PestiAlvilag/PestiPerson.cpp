@@ -1083,6 +1083,10 @@ void APestiPerson::TackleDown(APestiPerson* Runner)
 void APestiPerson::GiveIn()
 {
 	LetGo();
+	// How he ends up on the ground: on his back, face down or curled up (see Brawl::Beaten).
+	const int32 Way = FMath::RandRange(0, 2);
+	HurtSide = Way == 0 ? 1.f : Way == 1 ? -1.f : 0.f;
+	NextGroanAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(2.f, 4.f);
 	BeginAct(Brawl::EAct::Beaten, 0.f);
 	GetCharacterMovement()->StopMovementImmediately();
 }
@@ -1122,6 +1126,35 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		}
 		return;
 	}
+	// Not the player: a run of quick punches gets broken after two or three.
+	// He takes the next one on his arms and (mostly) hits straight back.
+	if (!IsPlayerControlled() && From && bQuick && Blow != EBlow::Knee)
+	{
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (Now - LastQuickHitAt > PunchRunGap)
+		{
+			QuickHitsInRow = 0;
+		}
+		LastQuickHitAt = Now;
+		if (QuickHitsInRow >= BreakRunAfter && (Act == EAct::Hurt || Act == EAct::Stance) && Stamina > 0.f && FMath::FRand() < BreakChance)
+		{
+			QuickHitsInRow = 0;
+			BreakRunAfter = FMath::RandRange(BreakRunMin, BreakRunMax);
+			HitStop(HitStopLight);
+			From->HitStop(HitStopLight);
+			PlayFightSound(FightSynth::EKind::Block, 0.85f);
+			Stamina -= BlockCost;
+			RestFrom = GetWorld()->GetTimeSeconds() + RestBefore;
+			BeginAct(EAct::Stance, 0.f);
+			if (FMath::FRand() >= BreakHitBack || !Jab())
+			{
+				BeginAct(EAct::Guard, 0.f);
+			}
+			return;
+		}
+		++QuickHitsInRow;
+	}
+
 	const bool bGuardBroken = Act == EAct::Guard && bFacing && bBig;
 	if (bGuardBroken)
 	{
@@ -1453,6 +1486,14 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		if (bOver)
 		{
 			Stamina = AfterWinded;
+		}
+		break;
+	case EAct::Beaten:
+		// Lying there, a groan now and then.
+		if (Now >= NextGroanAt)
+		{
+			NextGroanAt = Now + FMath::FRandRange(3.f, 7.f);
+			PlayFightSound(FightSynth::EKind::Pain, 0.3f);
 		}
 		break;
 	default:
