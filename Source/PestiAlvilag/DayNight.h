@@ -96,6 +96,9 @@ public:
 	/** Moves the clock on an hour. */
 	void SkipHour();
 
+	/** Sets the clock so that it shows AtHour (0 to 24) RealSeconds from now. */
+	void ReachHourIn(float AtHour, float RealSeconds);
+
 	/**
 	 * Makes a material slot glow at night: from dusk it shows Color, Strength
 	 * times as bright as a lit grey wall, and goes back to its own material

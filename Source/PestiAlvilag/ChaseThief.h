@@ -31,6 +31,12 @@ public:
 
 	/** The way he runs, in the city (cm), from where he stands. */
 	void SetRoute(const TArray<FVector2D>& InRoute);
+	/**
+	 * Strolls from stall to stall like any other shopper till told to act:
+	 * walks to one of Spots (in the city, cm), looks at the goods there
+	 * (Yaws, degrees) a while, then on to another. Starts lingering at First.
+	 */
+	void Browse(const TArray<FVector2D>& Spots, const TArray<double>& Yaws, int32 First);
 	/** Walks up behind Mark, slowly, as if browsing. */
 	void SneakUpTo(AActor* Mark);
 	/** True once he stands right by whoever he sneaks up on. */
@@ -68,9 +74,10 @@ protected:
 	TArray<TObjectPtr<UStaticMeshComponent>> Purse;
 
 private:
-	enum class EMode : uint8 { Idle, Sneak, Run, Fight, Slink, Away };
+	enum class EMode : uint8 { Idle, Sneak, Run, Fight, Slink, Away, Browse };
 
 	void TickRun(float DeltaSeconds);
+	void TickBrowse(float DeltaSeconds);
 	void TickFight();
 	/** Heads for To at Speed, and vaults or slides over what is in the way. */
 	void Steer(const FVector2D& To, float Speed);
@@ -85,6 +92,13 @@ private:
 	int32 NextPoint = 0;
 	double RouteLength = 0.0;
 	double LegsDone = 0.0;
+
+	/** Browsing: the stalls' spots and which way each looks, the one he is at or heads for, till when he lingers (-1 while walking), since when he walks (s). */
+	TArray<FVector2D> BrowseAt;
+	TArray<double> BrowseYaw;
+	int32 BrowseNext = 0;
+	double LingerUntil = -1.0;
+	double BrowseWalkSince = 0.0;
 
 	TWeakObjectPtr<AActor> Mark;
 	TWeakObjectPtr<APestiPerson> Chaser;

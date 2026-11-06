@@ -16,6 +16,16 @@ namespace ChaseThief
 {
 	constexpr float MaxHealth = 70.f;
 
+	// Browsing before he strikes: a shopper's amble (cm/s), at a stall this
+	// close (cm), looking at the goods this long (s), turning this fast
+	// (deg/s), and giving up on a stall he cannot reach after this long (s).
+	constexpr float BrowseSpeed = 105.f;
+	constexpr double BrowseReach = 45.0;
+	constexpr float LingerMin = 4.f;
+	constexpr float LingerMax = 9.f;
+	constexpr float BrowseTurn = 140.f;
+	constexpr double BrowseWalkMax = 10.0;
+
 	// Sneaking up: this slow, and this close counts as by her (cm/s, cm).
 	constexpr float SneakSpeed = 150.f;
 	constexpr double MarkReach = 110.0;
@@ -137,6 +147,50 @@ void AChaseThief::SetRoute(const TArray<FVector2D>& InRoute)
 	}
 }
 
+void AChaseThief::Browse(const TArray<FVector2D>& Spots, const TArray<double>& Yaws, int32 First)
+{
+	if (Spots.Num() == 0 || Yaws.Num() != Spots.Num())
+	{
+		return;
+	}
+	BrowseAt = Spots;
+	BrowseYaw = Yaws;
+	BrowseNext = FMath::Clamp(First, 0, Spots.Num() - 1);
+	LingerUntil = GetWorld()->GetTimeSeconds() + FMath::FRandRange(ChaseThief::LingerMin, ChaseThief::LingerMax);
+	Mode = EMode::Browse;
+}
+
+void AChaseThief::TickBrowse(float DeltaSeconds)
+{
+	if (!BrowseAt.IsValidIndex(BrowseNext) || !BrowseYaw.IsValidIndex(BrowseNext) || Act != Brawl::EAct::None || IsFreeRunning())
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	const FVector2D Stall = BrowseAt[BrowseNext];
+	if (LingerUntil < 0.0)
+	{
+		// On his way to the next stall, unless something keeps him from it.
+		if (FVector2D::Distance(FVector2D(GetActorLocation()), Stall) > ChaseThief::BrowseReach && Now - BrowseWalkSince < ChaseThief::BrowseWalkMax)
+		{
+			Steer(Stall, ChaseThief::BrowseSpeed);
+			return;
+		}
+		LingerUntil = Now + FMath::FRandRange(ChaseThief::LingerMin, ChaseThief::LingerMax);
+	}
+
+	// Looking over the goods.
+	const float Facing = FMath::FixedTurn(static_cast<float>(GetActorRotation().Yaw), static_cast<float>(BrowseYaw[BrowseNext]),
+		ChaseThief::BrowseTurn * DeltaSeconds);
+	SetActorRotation(FRotator(0.f, Facing, 0.f));
+	if (Now >= LingerUntil && BrowseAt.Num() > 1)
+	{
+		BrowseNext = (BrowseNext + FMath::RandRange(1, BrowseAt.Num() - 1)) % BrowseAt.Num();
+		LingerUntil = -1.0;
+		BrowseWalkSince = Now;
+	}
+}
+
 void AChaseThief::SneakUpTo(AActor* InMark)
 {
 	Mark = InMark;
@@ -239,6 +293,9 @@ void AChaseThief::Tick(float DeltaSeconds)
 				Steer(FVector2D(Target->GetActorLocation()), ChaseThief::SneakSpeed);
 			}
 		}
+		break;
+	case EMode::Browse:
+		TickBrowse(DeltaSeconds);
 		break;
 	case EMode::Run:
 	case EMode::Slink:

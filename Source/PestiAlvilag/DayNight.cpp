@@ -304,6 +304,14 @@ void ADayNight::SkipHour()
 	UpdateSeeThrough(true);
 }
 
+void ADayNight::ReachHourIn(float AtHour, float RealSeconds)
+{
+	Hour = FMath::Fmod(AtHour - FMath::Max(RealSeconds, 0.f) * DayNight::TimeScale / 3600.f + 24.f, 24.f);
+	UpdateSun(true);
+	UpdateGlows(true);
+	UpdateSeeThrough(true);
+}
+
 void ADayNight::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
