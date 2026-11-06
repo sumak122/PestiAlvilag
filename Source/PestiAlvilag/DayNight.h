@@ -38,6 +38,9 @@ struct FNightGlow
 	FLinearColor Color = FLinearColor::White;
 	/** How bright it glows, in steps of a lit grey wall at night. */
 	float Strength = 1.f;
+
+	/** Whether the slot wears its glow now (switched over a few at a time, see StepGlowSwitch). */
+	bool bLit = false;
 };
 
 /** An unlit see-through material (glass, smoke) and its daytime tint. */
@@ -133,8 +136,12 @@ private:
 	void FindSky();
 	void UpdateSun(bool bForce);
 	void UpdateGlows(bool bForce);
+	/** Puts on (or takes off) the glow of the next few slots, so the whole city doesn't switch in one frame. */
+	void StepGlowSwitch(float DeltaSeconds);
 	void UpdateLampLights();
 	void BuildLightPools();
+	/** Finds the ground under up to Budget more lamps (a few each frame, from the start of play). */
+	void FindPoolGround(int32 Budget);
 	/** Lays the glow on the ground under each lamp that is not out. */
 	void MeshLightPools();
 	void FindSeeThroughs();
@@ -206,4 +213,11 @@ private:
 	float LastShadeDarkness = -1.f;
 	float LampTimer = 0.f;
 	float GlowTimer = 0.f;
+
+	/** The next step of a glow switch-over, or INDEX_NONE when none is going on. */
+	int32 GlowSwitchNext = INDEX_NONE;
+	/** How many glows there were when the switch-over began. */
+	int32 GlowSwitchCount = 0;
+	/** Seconds of play before the lamps' ground glow is got ready (the city is still being built). */
+	float PoolWait = 2.f;
 };
