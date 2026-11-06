@@ -1083,6 +1083,10 @@ void APestiPerson::TackleDown(APestiPerson* Runner)
 void APestiPerson::GiveIn()
 {
 	LetGo();
+	// How he ends up on the ground: on his back, face down or curled up (see Brawl::Beaten).
+	const int32 Way = FMath::RandRange(0, 2);
+	HurtSide = Way == 0 ? 1.f : Way == 1 ? -1.f : 0.f;
+	NextGroanAt = GetWorld()->GetTimeSeconds() + FMath::FRandRange(2.f, 4.f);
 	BeginAct(Brawl::EAct::Beaten, 0.f);
 	GetCharacterMovement()->StopMovementImmediately();
 }
@@ -1482,6 +1486,14 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		if (bOver)
 		{
 			Stamina = AfterWinded;
+		}
+		break;
+	case EAct::Beaten:
+		// Lying there, a groan now and then.
+		if (Now >= NextGroanAt)
+		{
+			NextGroanAt = Now + FMath::FRandRange(3.f, 7.f);
+			PlayFightSound(FightSynth::EKind::Pain, 0.3f);
 		}
 		break;
 	default:

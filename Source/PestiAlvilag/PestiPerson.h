@@ -304,4 +304,6 @@ private:
 	int32 QuickHitsInRow = 0;
 	double LastQuickHitAt = -10.0;
 	int32 BreakRunAfter = Brawl::BreakRunMax;
+	/** Beaten and lying there: when he groans next. */
+	double NextGroanAt = 0.0;
 };
