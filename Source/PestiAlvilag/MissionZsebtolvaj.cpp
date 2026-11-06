@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "FleaMarket.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "HallMarketModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "MarketHall.h"
 #include "PersonModel.h"
@@ -34,7 +35,16 @@ namespace Zsebtolvaj
 
 	// The snatch: he sidles up for at most this long (s). Tackling only
 	// once he has been running this long (s).
-	constexpr double SneakSeconds = 8.0;
+	constexpr double SneakSeconds = 10.0;
+	// Before that he shops at the stalls near her at the front end of the
+	// nave (the cross hall round his old spot has none), between these
+	// (hall frame, cm), keeping this far from her and from where a retry
+	// puts the player, and where nobody else stands this close (cm).
+	constexpr double BrowseFromX = 450.0;
+	constexpr double BrowseToX = 1550.0;
+	constexpr double BrowseHalfY = 850.0;
+	constexpr double BrowseKeepOff = 300.0;
+	constexpr double BrowseTaken = 120.0;
 	constexpr double NoTackleSeconds = 1.5;
 	// Further behind than this for this long, and he is gone (cm, s).
 	constexpr double LostDistance = 4000.0;
@@ -112,11 +122,55 @@ void AMissionZsebtolvaj::SetUpMission()
 		Bozsi->SetOutfit(Shopper);
 	}
 
-	// The pickpocket, browsing a few stalls along, his way out worked out from the hall.
+	// The pickpocket is just one more shopper going from stall to stall
+	// near her, nothing to mark him out till he strikes. He starts at the
+	// free spot nearest his old place; his way out is worked out from the
+	// hall.
+	TArray<FVector2D> BrowseAt;
+	TArray<double> BrowseYaw;
+	int32 FirstSpot = INDEX_NONE;
+	{
+		TArray<HallMarket::FStall> HallStalls;
+		TArray<HallMarket::FShopper> HallShoppers;
+		TArray<HallMarket::FLamp> HallLamps;
+		HallMarket::Layout(HallStalls, HallShoppers, HallLamps);
+		double Nearest = TNumericLimits<double>::Max();
+		for (const HallMarket::FStall& Stall : HallStalls)
+		{
+			const double Facing = FMath::DegreesToRadians(Stall.Yaw);
+			const FVector2D Spot = FVector2D(Stall.At) + FVector2D(FMath::Cos(Facing), FMath::Sin(Facing)) * HallMarket::ShopperOut;
+			if (Spot.X < Zsebtolvaj::BrowseFromX || Spot.X > Zsebtolvaj::BrowseToX || FMath::Abs(Spot.Y) > Zsebtolvaj::BrowseHalfY
+				|| FVector2D::Distance(Spot, Zsebtolvaj::BozsiAt) < Zsebtolvaj::BrowseKeepOff
+				|| FVector2D::Distance(Spot, Zsebtolvaj::RetryAt) < Zsebtolvaj::BrowseKeepOff)
+			{
+				continue;
+			}
+			bool bTaken = false;
+			for (const HallMarket::FShopper& Other : HallShoppers)
+			{
+				bTaken = bTaken || FVector2D::Distance(Spot, FVector2D(Other.At)) < Zsebtolvaj::BrowseTaken;
+			}
+			if (bTaken)
+			{
+				continue;
+			}
+			const double Off = FVector2D::Distance(Spot, Zsebtolvaj::ThiefAt);
+			if (Off < Nearest)
+			{
+				Nearest = Off;
+				FirstSpot = BrowseAt.Num();
+			}
+			BrowseAt.Add(AMarketHall::ToCity(Spot));
+			BrowseYaw.Add(HallYaw + Stall.Yaw + 180.0);
+		}
+	}
 	const FVector ThiefFeet = HallPoint(Zsebtolvaj::ThiefAt);
-	Thief = SpawnForMission<AChaseThief>(ThiefFeet + FVector(0.0, 0.0, PersonModel::MiddleHeight + 5.0), HallYaw + Zsebtolvaj::ThiefYaw);
+	const FVector ThiefStart = BrowseAt.IsValidIndex(FirstSpot) ? FVector(BrowseAt[FirstSpot], GroundZ(BrowseAt[FirstSpot])) : ThiefFeet;
+	const double ThiefStartYaw = BrowseAt.IsValidIndex(FirstSpot) ? BrowseYaw[FirstSpot] : HallYaw + Zsebtolvaj::ThiefYaw;
+	Thief = SpawnForMission<AChaseThief>(ThiefStart + FVector(0.0, 0.0, PersonModel::MiddleHeight + 5.0), ThiefStartYaw);
 	if (Thief)
 	{
+		Thief->Browse(BrowseAt, BrowseYaw, FirstSpot);
 		TArray<FVector2D> Route;
 		for (const FVector2D& Local : ChaseModel::ThiefRoute())
 		{

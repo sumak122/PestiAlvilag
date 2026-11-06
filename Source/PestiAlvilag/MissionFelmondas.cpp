@@ -2,7 +2,10 @@
 
 #include "MissionFelmondas.h"
 
+#include "Camera/PlayerCameraManager.h"
+#include "DayNight.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "FleaMarket.h"
 #include "GarayModel.h"
 #include "GarayYard.h"
@@ -26,6 +29,9 @@ namespace Felmondas
 	constexpr double HermannReach = 280.0;
 	// Waiting outside the shop until the bells ring for noon (s).
 	constexpr double NoonAfter = 9.0;
+	// The clock jumps to then on arriving; more than this (hours) fades in from black (s).
+	constexpr float FadeJump = 0.5f;
+	constexpr float NoonFade = 1.5f;
 	// Further than this from the shop during the fight, he has walked out of it (cm).
 	constexpr double FightLeft = 2500.0;
 	// Schwimmer waits for him behind Pista bácsi's stall, this far back (cm).
@@ -378,6 +384,20 @@ void AMissionFelmondas::TickStep(int32 Step, float DeltaSeconds)
 		if (bThere && WaitingSince < 0.0)
 		{
 			WaitingSince = Now;
+			// Whatever the hour he gets here, the bells ring for noon after
+			// a short wait: the clock jumps to just before it, behind a
+			// moment of black if that is a big jump.
+			if (ADayNight* Sky = ADayNight::Get(GetWorld()))
+			{
+				const float Before = Sky->GetHour();
+				Sky->ReachHourIn(12.f, static_cast<float>(Felmondas::NoonAfter));
+				const float Jump = FMath::Abs(Sky->GetHour() - Before);
+				APlayerController* PC = Cast<APlayerController>(Person->GetController());
+				if (FMath::Min(Jump, 24.f - Jump) > Felmondas::FadeJump && PC && PC->PlayerCameraManager)
+				{
+					PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, Felmondas::NoonFade, FLinearColor::Black);
+				}
+			}
 			if (Schwimmer)
 			{
 				Schwimmer->Follow(nullptr);
