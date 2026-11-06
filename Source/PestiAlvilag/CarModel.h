@@ -164,6 +164,8 @@ namespace CarModel
 			L.SeatX = -42.0;
 			L.RearSeatX = -100.0;
 			L.RearDoorX = -24.0;
+			// Sitting low, so a hat stays under the low roof.
+			L.SeatTop = Waist - 54.0;
 			L.DriverSide = -27.0;
 			L.PassengerSide = 25.0;
 			break;
@@ -181,6 +183,7 @@ namespace CarModel
 			L.SeatX = -38.0;
 			L.RearSeatX = -100.0;
 			L.RearDoorX = -10.0;
+			L.SeatTop = Waist - 50.0;
 			L.DriverSide = -28.0;
 			L.PassengerSide = 26.0;
 			break;
@@ -600,7 +603,7 @@ namespace CarModel
 		const double X = L.SeatX;
 		const double Top = L.SeatTop;
 		const double SeatHalf = L.HalfWidth - 10.0;
-		B.Box(Leather, FVector(X - 12.0, -SeatHalf, Top - 10.0), FVector(X + 20.0, SeatHalf, Top));
+		B.Box(Leather, FVector(X - 12.0, -SeatHalf, FMath::Max(Top - 10.0, -43.0)), FVector(X + 20.0, SeatHalf, Top));
 		B.Box(Leather, FVector(X - 16.0, -SeatHalf, Top), FVector(X - 8.0, SeatHalf, Waist + 12.0));
 		// The wheel stands up in front of the chest, on a column slanting down into the dash.
 		const FVector Wheel(X + 54.0, L.DriverSide, Top + 35.0);
@@ -1059,7 +1062,8 @@ namespace CarModel
 		case Guards: return Style.GuardColor;
 		case Rubber: return FLinearColor(0.012f, 0.012f, 0.012f);
 		case Chrome: return FLinearColor(0.62f, 0.62f, 0.64f);
-		case Glass: return FLinearColor(0.30f, 0.36f, 0.38f, 0.45f);
+		// Dark: the glass is unlit, so a light tint glares white when the eye adjusts to shade.
+		case Glass: return FLinearColor(0.05f, 0.06f, 0.065f, 0.35f);
 		case Lamp: return FLinearColor(1.0f, 0.92f, 0.65f);
 		case TailLamp: return FLinearColor(0.7f, 0.02f, 0.02f);
 		case Leather: return FLinearColor(0.18f, 0.07f, 0.04f);
