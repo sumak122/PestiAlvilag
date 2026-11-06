@@ -123,7 +123,7 @@ public:
 
 	/** How wide one repeat of a pack picture is on the buildings (cm). */
 	UPROPERTY(EditAnywhere, Category = "Graybox|Pack", meta = (ClampMin = "20"))
-	float PackTileSize = 300.f;
+	float PackTileSize = 200.f;
 
 	/** Dress street-facing walls with windows, ledges, cornices, shops and gates. */
 	UPROPERTY(EditAnywhere, Category = "Graybox|Facades")
