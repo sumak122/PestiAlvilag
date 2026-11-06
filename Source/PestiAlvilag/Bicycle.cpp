@@ -7,6 +7,8 @@
 #include "CarBody.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "DayNight.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -40,6 +42,19 @@ namespace BicycleRide
 	// Left standing, it settles onto its kickstand this quickly (degrees a second).
 	constexpr float StandRate = 160.f;
 	constexpr float ParkSteerRate = 30.f;
+
+	// The dynamo lamp: dark below FirstGlow (cm/s), full by FullGlow; as bright as a car's
+	// headlamp by day and at night (times a lit grey wall), and its beam at full.
+	constexpr float FirstGlow = 40.f;
+	constexpr float FullGlow = 450.f;
+	const FLinearColor LampLight(1.f, 0.84f, 0.55f);
+	constexpr float LampDay = 5.f;
+	constexpr float LampNight = 30.f;
+	constexpr float BeamStrength = 160.f;
+	constexpr float BeamReach = 2200.f;
+	constexpr float BeamDip = 8.f;
+	// The glow is set again only when it has changed by this much.
+	constexpr float GlowStep = 0.04f;
 
 	// One turn of the cranks rolls it this far (cm): the rear wheel's round, geared up.
 	constexpr float GearRatio = 2.4f;
@@ -122,6 +137,10 @@ void ABicycle::BeginPlay()
 	Parts[WheelFront] = MakeMesh(SteerBody.Get(), Bike.Parts[WheelFront], FrontAxle(Kind) - Head);
 	Parts[WheelRear] = MakeMesh(Rig.Get(), Bike.Parts[WheelRear], RearAxle());
 	Parts[Cranks] = MakeMesh(Rig.Get(), Bike.Parts[Cranks], BottomBracket());
+	PersonKit::FPiece Glass;
+	BuildLens(Glass, Kind);
+	LensMesh = MakeMesh(SteerBody.Get(), Glass, FVector::ZeroVector);
+	LensPaint = LensMesh->GetMaterial(0);
 	PersonKit::FPiece Kickstand;
 	BuildStand(Kickstand);
 	StandMesh = MakeMesh(Rig.Get(), Kickstand, StandHinge());
@@ -334,9 +353,75 @@ void ABicycle::Animate(float DeltaSeconds)
 	{
 		StandMesh->SetRelativeRotation(FRotator(StandPitch, 0.f, 0.f));
 	}
+	UpdateLamp();
 	if (Rider)
 	{
 		PoseRider();
+	}
+}
+
+void ABicycle::UpdateLamp()
+{
+	using namespace BicycleRide;
+	ADayNight* Clock = ADayNight::Get(GetWorld());
+	if (!Clock || !LensMesh)
+	{
+		return;
+	}
+	// The dynamo makes more light the faster the wheel turns.
+	const float Glow = FMath::Clamp((FMath::Abs(Speed) - FirstGlow) / (FullGlow - FirstGlow), 0.f, 1.f);
+	const float Darkness = Clock->GetDarkness();
+	if (Glow <= 0.f)
+	{
+		if (LampGlow > 0.f)
+		{
+			LensMesh->SetMaterial(0, LensPaint.Get());
+			LampGlow = 0.f;
+		}
+	}
+	else if (LampGlow <= 0.f || FMath::Abs(Glow - LampGlow) > GlowStep || FMath::Abs(Darkness - LampDarkness) > GlowStep)
+	{
+		if (!LensGlow)
+		{
+			LensGlow = Clock->MakeGlowMaterial(this);
+		}
+		if (LensGlow)
+		{
+			Clock->SetGlow(LensGlow, LampLight, FMath::Lerp(LampDay, LampNight, Darkness) * Glow);
+			if (LampGlow <= 0.f)
+			{
+				LensMesh->SetMaterial(0, LensGlow.Get());
+			}
+		}
+		LampGlow = Glow;
+		LampDarkness = Darkness;
+	}
+
+	// A beam on the road ahead, at night, for the bicycle someone is riding.
+	const bool bWantBeam = Glow > 0.f && Rider && Clock->AreLampsLit();
+	if (bWantBeam && !Beam)
+	{
+		const BicycleModel::EKind Kind = bShopBike ? BicycleModel::EKind::ShopBike : BicycleModel::EKind::Roadster;
+		Beam = NewObject<USpotLightComponent>(this);
+		Beam->SetupAttachment(SteerBody);
+		Beam->SetRelativeLocationAndRotation(BicycleModel::LampAt(Kind) - BicycleModel::HeadBottom(Kind) + FVector(4.0, 0.0, 0.0), FRotator(-BeamDip, 0.f, 0.f));
+		Beam->SetMobility(EComponentMobility::Movable);
+		Beam->SetCastShadows(false);
+		Beam->SetIntensityUnits(ELightUnits::Candelas);
+		Beam->SetAttenuationRadius(BeamReach);
+		Beam->SetInnerConeAngle(8.f);
+		Beam->SetOuterConeAngle(22.f);
+		Beam->SetLightColor(LampLight);
+		Beam->RegisterComponent();
+		AddInstanceComponent(Beam);
+	}
+	if (Beam)
+	{
+		Beam->SetVisibility(bWantBeam);
+		if (bWantBeam)
+		{
+			Beam->SetIntensity(Clock->LampCandela(BeamStrength) * Glow);
+		}
 	}
 }
 

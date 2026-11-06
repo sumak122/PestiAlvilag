@@ -10,7 +10,9 @@
 class UBoxComponent;
 class UCameraComponent;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
+class USpotLightComponent;
 class USceneComponent;
 class USpringArmComponent;
 
@@ -25,7 +27,8 @@ class USpringArmComponent;
  * than fast. F gets off when it is nearly stopped. The rider is the
  * player's own dress-up figure, his feet on the turning pedals and his
  * hands on the grips. Riding hard into a wall stops it dead. Left alone it
- * leans over onto its kickstand.
+ * leans over onto its kickstand. A dynamo on the rear tyre lights the lamp,
+ * brighter the faster it goes.
  */
 UCLASS()
 class PESTIALVILAG_API ABicycle : public APawn
@@ -90,6 +93,20 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> StandMesh;
 
+	/** The lamp's glass, and its own paint and its glow (lit by the dynamo). */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> LensMesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LensPaint;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> LensGlow;
+
+	/** The lamp's beam on the road at night, made the first time it is needed. */
+	UPROPERTY(Transient)
+	TObjectPtr<USpotLightComponent> Beam;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> ParcelMeshes;
 
@@ -107,6 +124,8 @@ private:
 	void Move(float DeltaSeconds);
 	void Animate(float DeltaSeconds);
 	void PoseRider();
+	/** The dynamo lamp: brighter the faster it goes, a beam on the road at night. */
+	void UpdateLamp();
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void LetRiderOff(APlayerController* PC);
 	void SnapToGround();
@@ -118,6 +137,9 @@ private:
 	float Lean = 0.f;
 	/** How the kickstand is turned about its hinge (degrees: down to prop it, back when ridden). */
 	float StandPitch = 0.f;
+	/** How bright the lamp was last set (0 dark, 1 full), and how dark the evening was then. */
+	float LampGlow = 0.f;
+	float LampDarkness = 0.f;
 	/** How far the cranks and the wheels have turned (degrees, and cm rolled). */
 	float Crank = 0.f;
 	float Rolled = 0.f;

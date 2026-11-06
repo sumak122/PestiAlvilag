@@ -10,8 +10,8 @@
  * (kifutófiúk) of Pest rode them: a heavy black roadster with a small
  * front wheel under a big wicker basket on an iron carrier fixed to the
  * frame, a painted shop plate in the frame, upright swept-back bars with a
- * bell, a sprung leather saddle, mudguards, a chain guard and a carbide
- * lamp.
+ * bell, a sprung leather saddle, mudguards, a chain guard and a lamp lit by a bottle
+ * dynamo on the rear tyre.
  *
  * Pieces that move: the frame (with the carrier and basket, which do not
  * turn), the steering (fork, bars, bell, lamp), each wheel round its hub,
@@ -66,6 +66,23 @@ namespace BicycleModel
 	/** The carrier platform the basket stands on (middle of its top), and the basket's half sizes. */
 	inline FVector CarrierTop(EKind Kind) { return IsRoadster(Kind) ? FVector(93.0, 0.0, 79.0) : FVector(96.0, 0.0, 62.0); }
 	inline FVector BasketHalf() { return FVector(24.0, 22.0, 11.0); }
+	/** Where the lamp's bracket starts, and the middle of the lamp (its glass faces forward, 3 cm in front). */
+	inline FVector LampFoot(EKind Kind)
+	{
+		return IsRoadster(Kind) ? CarrierTop(Kind) + FVector(BasketHalf().X + 0.5, 0.0, -1.0) : HeadBottom(Kind) + FVector(1.5, 0.0, 1.0);
+	}
+	inline FVector LampAt(EKind Kind)
+	{
+		return IsRoadster(Kind) ? LampFoot(Kind) + FVector(4.0, 0.0, -5.0) : HeadBottom(Kind) + FVector(8.0, 0.0, 2.0);
+	}
+	/**
+	 * The bottle dynamo on the left seat stay: the middle of its roller,
+	 * pressed against the rear tyre's side, and the way its body runs from
+	 * the roller in towards the hub.
+	 */
+	inline FVector DynamoRoller() { return RearAxle() + FVector(FMath::Cos(PI / 3.0) * 31.0, -3.2, FMath::Sin(PI / 3.0) * 31.0); }
+	inline FVector DynamoDown() { return FVector(-FMath::Cos(PI / 3.0), 0.0, -FMath::Sin(PI / 3.0)); }
+
 	/** True when the basket (and the parcels in it) belong to the Steer part and turn with the bars. */
 	inline bool BasketTurns(EKind Kind) { return IsRoadster(Kind); }
 	/** The middle of the shop plate in the frame. */
@@ -116,6 +133,7 @@ namespace BicycleModel
 	inline FLinearColor PlateRed() { return FLinearColor(0.40f, 0.05f, 0.04f); }
 	inline FLinearColor Brass() { return FLinearColor(0.55f, 0.38f, 0.12f); }
 	inline FLinearColor Paper() { return FLinearColor(0.55f, 0.42f, 0.27f); }
+	inline FLinearColor LensGlass() { return FLinearColor(0.80f, 0.78f, 0.66f); }
 	inline FLinearColor Twine() { return FLinearColor(0.80f, 0.74f, 0.60f); }
 
 	/**
@@ -327,6 +345,34 @@ namespace BicycleModel
 		}
 		Block(F, Enamel(), Rear + FVector(-10.0, 0.0, RearRadius + 6.5), FVector(14.0, 9.0, 0.6));
 
+		// The bottle dynamo: a ribbed roller on the tyre's side, a nickel body, a bracket to the
+		// seat stay, and the wire up the frame to the lamp.
+		{
+			const FVector Roller = DynamoRoller();
+			const FVector Down = DynamoDown();
+			const FVector BodyTop = Roller + Down * 1.5 + FVector(0.0, -1.6, 0.0);
+			const FVector BodyEnd = BodyTop + Down * 9.0;
+			Loft(F, Tyre(), {
+				{ Roller + FVector(0.0, -0.4, 0.0) - Down * 1.2, FVector(1.1, 0.0, 0.0), FVector(0.0, 1.1, 0.0) },
+				{ Roller + FVector(0.0, -0.4, 0.0) + Down * 0.6, FVector(1.1, 0.0, 0.0), FVector(0.0, 1.1, 0.0) },
+			}, 8, true, true);
+			Rod(F, Nickel(), Roller + Down * 0.6 + FVector(0.0, -0.4, 0.0), BodyTop, 0.5, 5);
+			Loft(F, Nickel(), {
+				{ BodyTop, FVector(-Down.Z, 0.0, Down.X) * 1.6, FVector(0.0, 1.6, 0.0) },
+				{ BodyTop + Down * 2.0, FVector(-Down.Z, 0.0, Down.X) * 2.1, FVector(0.0, 2.1, 0.0) },
+				{ BodyEnd, FVector(-Down.Z, 0.0, Down.X) * 2.1, FVector(0.0, 2.1, 0.0) },
+				{ BodyEnd + Down * 0.8, FVector(-Down.Z, 0.0, Down.X) * 1.4, FVector(0.0, 1.4, 0.0) },
+			}, 10, true, true);
+			// The bracket to the seat stay (which runs from the seat cluster down to the axle at Y -6.5).
+			const FVector StayAt = Rear + (Seat - Rear) * 0.42 + FVector(0.0, -5.0, 0.0);
+			Rod(F, Enamel(), BodyTop + Down * 5.0, StayAt, 0.6, 4);
+			// The wire: along the stay to the seat cluster, along the top tube to the head.
+			const FLinearColor Wire(0.05f, 0.04f, 0.03f);
+			Rod(F, Wire, BodyEnd + Down * 0.8, StayAt + FVector(0.0, -0.8, 0.0), 0.25, 3);
+			Rod(F, Wire, StayAt + FVector(0.0, -0.8, 0.0), Seat + FVector(0.0, -2.2, -1.0), 0.25, 3);
+			Rod(F, Wire, Seat + FVector(0.0, -2.2, -1.0), HeadTop(Kind) + FVector(1.0, -2.6, -3.0), 0.25, 3);
+		}
+
 		if (!BasketTurns(Kind))
 		{
 			BuildBasket(F, Kind);
@@ -379,24 +425,33 @@ namespace BicycleModel
 		Blob(P, Nickel(), Bell, FVector(2.6, 2.6, 1.8), 10, 4, -0.2);
 		Blob(P, Nickel(), Bell + FVector(0.0, 0.0, 1.6), FVector(0.6, 0.6, 0.6), 6, 2);
 
-		// The carbide lamp: on a bracket at the head, in front of the basket's foot, or on the front of a roadster's rack.
-		const FVector LampFoot = IsRoadster(Kind) ? CarrierTop(Kind) + FVector(BasketHalf().X + 0.5, 0.0, -1.0) : HeadBottom(Kind) + FVector(1.5, 0.0, 1.0);
-		const FVector Lamp = IsRoadster(Kind) ? LampFoot + FVector(4.0, 0.0, -5.0) : HeadBottom(Kind) + FVector(8.0, 0.0, 2.0);
-		Rod(P, Enamel(), LampFoot, Lamp + FVector(-3.0, 0.0, 0.0), 0.6, 4);
+		// The lamp (its glass is BuildLens): on a bracket at the head, in front of the basket's foot, or on the front of a roadster's rack.
+		const FVector Lamp = LampAt(Kind);
+		Rod(P, Enamel(), LampFoot(Kind), Lamp + FVector(-3.0, 0.0, 0.0), 0.6, 4);
 		Loft(P, Brass(), {
 			{ Lamp + FVector(-3.5, 0.0, 0.0), FVector(0.0, 3.4, 0.0), FVector(0.0, 0.0, 3.6) },
 			{ Lamp + FVector(2.0, 0.0, 0.0), FVector(0.0, 3.6, 0.0), FVector(0.0, 0.0, 3.8) },
 			{ Lamp + FVector(3.0, 0.0, 0.0), FVector(0.0, 4.2, 0.0), FVector(0.0, 0.0, 4.4) },
 		}, 12, true, false);
-		Loft(P, FLinearColor(0.80f, 0.78f, 0.66f), {
-			{ Lamp + FVector(3.0, 0.0, 0.0), FVector(0.0, 3.7, 0.0), FVector(0.0, 0.0, 3.9) },
-			{ Lamp + FVector(3.3, 0.0, 0.0), FVector(0.0, 3.7, 0.0), FVector(0.0, 0.0, 3.9) },
-		}, 12, false, true);
 		Blob(P, Brass(), Lamp + FVector(-1.0, 0.0, 3.8), FVector(1.4, 1.4, 1.4), 6, 3);
 		if (BasketTurns(Kind))
 		{
 			BuildBasket(P, Kind);
 		}
+	}
+
+	/**
+	 * The lamp's glass, on its own so it can glow: the steering's piece, with
+	 * the same pivot (HeadBottom). The dynamo on the rear tyre lights it.
+	 */
+	inline void BuildLens(PersonKit::FPiece& P, EKind Kind)
+	{
+		P.Pivot = HeadBottom(Kind);
+		const FVector Lamp = LampAt(Kind);
+		PersonKit::Loft(P, LensGlass(), {
+			{ Lamp + FVector(3.0, 0.0, 0.0), FVector(0.0, 3.7, 0.0), FVector(0.0, 0.0, 3.9) },
+			{ Lamp + FVector(3.4, 0.0, 0.0), FVector(0.0, 3.7, 0.0), FVector(0.0, 0.0, 3.9) },
+		}, 12, false, true);
 	}
 
 	/** The kickstand round its hinge, hanging straight down: a rod with a flat foot. */
