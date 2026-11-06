@@ -53,6 +53,14 @@ namespace Zsibvasar
 	// The marker only moves when its target has moved this far.
 	constexpr double MarkerMoves = 40.0;
 
+	// Pista bácsi's bonus (fillér) for all six crates there quickly: the
+	// time allowed is the straight way from the hall times this for the
+	// turns, at this pace (cm/s, between trot and canter), plus a little (s).
+	constexpr int32 BonusPay = 150;
+	constexpr double BonusWinding = 1.45;
+	constexpr double BonusPace = 400.0;
+	constexpr double BonusSlack = 20.0;
+
 	// A one-time tip when the first crate falls off.
 	constexpr int32 TipKey = 34;
 	constexpr float TipSeconds = 10.f;
@@ -245,6 +253,12 @@ void AMissionZsibvasar::OnStepStarted(int32 Step)
 	{
 		SpawnRuffians();
 	}
+	if (Step == 4)
+	{
+		bBonus = true;
+		BonusUntil = GetWorld()->GetTimeSeconds()
+			+ FVector::Dist2D(DoorStop, PistaAt) * Zsibvasar::BonusWinding / Zsibvasar::BonusPace + Zsibvasar::BonusSlack;
+	}
 	if (Step == 3)
 	{
 		if (Porter)
@@ -288,10 +302,20 @@ void AMissionZsibvasar::OnStepDone(int32 Step)
 		Say(Zsibvasar::PorterName,
 			TEXT("Na, mind fent van. Lassan hajts, fiam, mert leesnek!"),
 			TEXT("Right, they're all on. Drive slowly, son, or they'll fall off!"), 6.f);
+		SayLater(6.f, Zsibvasar::PorterName,
+			TEXT("Pista b\u00e1csi r\u00e1ad\u00e1st fizet, ha mind a hat gyorsan \u00e9s eg\u00e9szben oda\u00e9r."),
+			TEXT("Pista b\u00e1csi pays extra if all six get there quickly and in one piece."));
 	}
 	else if (Step == 4)
 	{
 		Lines.Reset();
+		if (bBonus && GetWorld()->GetTimeSeconds() <= BonusUntil)
+		{
+			Reward += Zsibvasar::BonusPay;
+			Announce(TEXT("R\u00c1AD\u00c1S"), FString::Printf(TEXT("All six crates, in good time: Pista b\u00e1csi adds %s"),
+				*APestiAlvilagGameModeBase::FormatMoney(Zsibvasar::BonusPay)), 4.f);
+		}
+		bBonus = false;
 		if (Pista && Player)
 		{
 			Pista->FaceTowards(Player->GetActorLocation());
@@ -356,6 +380,11 @@ void AMissionZsibvasar::TickStep(int32 Step, float DeltaSeconds)
 		TickFight();
 		return;
 	}
+	if (Step == 4 && bBonus && Now > BonusUntil)
+	{
+		bBonus = false;
+		Announce(TEXT("Lek\u00e9sted a r\u00e1ad\u00e1st"), TEXT("Too slow for Pista b\u00e1csi's bonus"), 3.f);
+	}
 	if (Step == 4 && Cart->GetCrates() >= HorseCartModel::MaxCrates
 		&& FVector::Dist2D(Cart->GetActorLocation(), PistaAt) < Zsibvasar::DeliverRadius)
 	{
@@ -411,7 +440,15 @@ void AMissionZsibvasar::TickCrates(int32 Step)
 	while (Cart->TakeFallenCrate(Landed))
 	{
 		AddGroundCrate(Landed, Cart->GetActorRotation().Yaw + FMath::FRandRange(-40.0, 40.0));
-		Announce(TEXT("Leesett egy l\u00e1da!"), TEXT("A crate fell off!"), 3.f);
+		if (Step == 4 && bBonus)
+		{
+			bBonus = false;
+			Announce(TEXT("Leesett egy l\u00e1da!"), TEXT("A crate fell off! No bonus from Pista b\u00e1csi now"), 3.f);
+		}
+		else
+		{
+			Announce(TEXT("Leesett egy l\u00e1da!"), TEXT("A crate fell off!"), 3.f);
+		}
 		if (!bWarned)
 		{
 			bWarned = true;
@@ -585,6 +622,14 @@ void AMissionZsibvasar::UpdateGoal(int32 Step)
 			Current.GoalHu = TEXT("\u00dclj vissza a kocsira (F)");
 			Current.GoalEn = TEXT("Get back on the cart (F)");
 			Want = Cart->GetBenchLocation();
+		}
+		else if (bBonus)
+		{
+			// The time left for the bonus, counting down.
+			const int32 Left = FMath::Max(0, FMath::CeilToInt(BonusUntil - GetWorld()->GetTimeSeconds()));
+			Current.GoalHu = FString::Printf(TEXT("%s  \u00b7  r\u00e1ad\u00e1s m\u00e9g %d:%02d"), *DeliverHu, Left / 60, Left % 60);
+			Current.GoalEn = FString::Printf(TEXT("%s  \u00b7  bonus for %d:%02d more"), *DeliverEn, Left / 60, Left % 60);
+			Want = PistaAt;
 		}
 		else
 		{

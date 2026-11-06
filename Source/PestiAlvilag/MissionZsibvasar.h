@@ -90,6 +90,9 @@ private:
 	FString DeliverHu;
 	FString DeliverEn;
 	bool bWarned = false;
+	/** Pista bácsi's bonus: still to be had (no crate dropped since loading), and the time it must be done by (s). */
+	bool bBonus = false;
+	double BonusUntil = -1.0;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ARuffian>> Ruffians;
