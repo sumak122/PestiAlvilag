@@ -6,15 +6,18 @@
 #include "GroundSurfaces.h"
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
 #include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogOsmGraybox, Log, All);
 
@@ -67,14 +70,31 @@ namespace OsmGraybox
 	constexpr double TrackDetailZ = 14.0;
 	constexpr double RailHeadZ = 16.0;
 
+	// Bump when the mesh layout changes, so levels saved with an older mesh rebuild it.
+	// 2: picture coordinates (UVs) and tangents for the pack materials.
+	constexpr int32 MeshVersion = 2;
+
 	struct FSection
 	{
 		TArray<FVector> Vertices;
 		TArray<FVector> Normals;
 		TArray<int32> Triangles;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
 
 		int32 AddVertex(const FVector& Position, const FVector& Normal)
 		{
+			// Pictures are laid by the metre: flat faces take them from above,
+			// walls from the front with up being up.
+			FVector Across = FVector::XAxisVector;
+			FVector2D UV(Position.X, Position.Y);
+			if (FMath::Abs(Normal.Z) < 0.7)
+			{
+				Across = FVector(-Normal.Y, Normal.X, 0.0).GetSafeNormal();
+				UV = FVector2D(FVector::DotProduct(Position, Across), -Position.Z);
+			}
+			UVs.Add(UV / 100.0);
+			Tangents.Add(FProcMeshTangent(Across, false));
 			Normals.Add(Normal);
 			return Vertices.Add(Position);
 		}
@@ -98,6 +118,46 @@ namespace OsmGraybox
 			}
 		}
 	};
+
+	// Kitbash3D Art Nouveau material instances. The pack lives only in Content on
+	// Daniel's PC, never in git, so a missing pack just gives nullptr.
+	UMaterialInterface* LoadPackMaterial(const TCHAR* Name)
+	{
+		const FString Package = FString::Printf(TEXT("/Game/kb3d_artnouveau/Materials/MI_KB3D_ANV_%s"), Name);
+		if (!FPackageName::DoesPackageExist(Package))
+		{
+			return nullptr;
+		}
+		return LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("%s.MI_KB3D_ANV_%s"), *Package, Name));
+	}
+
+	// One pack material, repeating every TileSize cm, its picture multiplied by Tint if given.
+	UMaterialInstanceDynamic* MakePackMaterial(const TCHAR* Name, UObject* InOuter, float TileSize, const FLinearColor* Tint)
+	{
+		UMaterialInterface* Pack = LoadPackMaterial(Name);
+		if (!Pack)
+		{
+			return nullptr;
+		}
+		UMaterialInstanceDynamic* PackMaterial = UMaterialInstanceDynamic::Create(Pack, InOuter);
+		if (!PackMaterial)
+		{
+			return nullptr;
+		}
+		// Our picture coordinates count metres.
+		PackMaterial->SetScalarParameterValue(TEXT("Tile_UV"), 100.f / FMath::Max(TileSize, 20.f));
+		if (Tint)
+		{
+			PackMaterial->SetVectorParameterValue(TEXT("basecolor_mult"), *Tint);
+		}
+		return PackMaterial;
+	}
+
+	// The pack's walls are nearly white; our plaster colours, a little brightened, tint them.
+	FLinearColor PackTint(const FLinearColor& Color)
+	{
+		return FLinearColor(FMath::Min(Color.R * 1.5f, 1.f), FMath::Min(Color.G * 1.5f, 1.f), FMath::Min(Color.B * 1.5f, 1.f), 1.f);
+	}
 
 	// Rings come as flat [x0, y0, x1, y1, ...] lists; triangle indices count
 	// through all rings in order.
@@ -408,7 +468,7 @@ void AOsmGraybox::OnConstruction(const FTransform& Transform)
 	}
 	const FDateTime FileTime = IFileManager::Get().GetTimeStamp(*DataPath());
 	const bool bFileChanged = FileTime != FDateTime::MinValue() && FileTime != BuiltFromFileTime;
-	if (Mesh->GetNumSections() == 0 || bFileChanged)
+	if (Mesh->GetNumSections() == 0 || bFileChanged || BuiltVersion != OsmGraybox::MeshVersion)
 	{
 		Build();
 	}
@@ -417,6 +477,9 @@ void AOsmGraybox::OnConstruction(const FTransform& Transform)
 void AOsmGraybox::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Pack materials go on only while playing, so the saved level never needs the pack.
+	ApplyPackMaterials();
 
 	// Facades exist only while the game runs: kept in the editor's level they
 	// were copied whenever Play was pressed, which ran out of memory.
@@ -458,6 +521,32 @@ TSharedPtr<FJsonObject> AOsmGraybox::LoadData() const
 		return nullptr;
 	}
 	return Root;
+}
+
+void AOsmGraybox::ApplyPackMaterials()
+{
+	using namespace OsmGraybox;
+
+	if (!bPackMaterials || !Mesh)
+	{
+		return;
+	}
+	if (UMaterialInstanceDynamic* RoofMaterial = MakePackMaterial(TEXT("RoofTiles"), this, PackTileSize, nullptr))
+	{
+		Mesh->SetMaterial(Roofs, RoofMaterial);
+	}
+	// Each plaster colour gets one of the pack's walls, tinted to that colour.
+	static const TCHAR* const WallNames[] = { TEXT("DifferentWall"), TEXT("DifferentWall2"), TEXT("EustacheWall"),
+		TEXT("ConcreteOld"), TEXT("RoughConcrete") };
+	const int32 NumWallNames = static_cast<int32>(UE_ARRAY_COUNT(WallNames));
+	for (int32 i = 0; i < WallColors.Num(); ++i)
+	{
+		const FLinearColor Tint = PackTint(WallColors[i]);
+		if (UMaterialInstanceDynamic* WallMaterial = MakePackMaterial(WallNames[i % NumWallNames], this, PackTileSize, &Tint))
+		{
+			Mesh->SetMaterial(FirstWalls + i, WallMaterial);
+		}
+	}
 }
 
 void AOsmGraybox::BuildFacades()
@@ -614,7 +703,7 @@ bool AOsmGraybox::Build()
 		}
 		// Kerbs are only a picture; walking and driving over them stays smooth.
 		Mesh->CreateMeshSection_LinearColor(i, Section.Vertices, Section.Triangles, Section.Normals,
-			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), bCreateCollision && i != Kerbs);
+			Section.UVs, TArray<FLinearColor>(), Section.Tangents, bCreateCollision && i != Kerbs);
 
 		// Stone, slabs and grass where there's a picture for it, plain colour otherwise.
 		UMaterialInstanceDynamic* Material = nullptr;
@@ -642,6 +731,7 @@ bool AOsmGraybox::Build()
 	}
 
 	BuiltFromFileTime = IFileManager::Get().GetTimeStamp(*Path);
+	BuiltVersion = MeshVersion;
 	UE_LOG(LogOsmGraybox, Log, TEXT("Built %d buildings from %s"), NumBuildings, *Path);
 
 	BuildFacades(*Root);
@@ -745,6 +835,20 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 			FacadeMaterials[j]->SetVectorParameterValue(TEXT("Color"), FacadeColors[j]);
 		}
 	}
+	// With the Art Nouveau pack: stone trim and wooden gates and shop fronts.
+	// Windows keep their dark glass, which the night lamps also light.
+	if (bPackMaterials)
+	{
+		const FLinearColor StoneTint = PackTint(StoneColor);
+		if (UMaterialInstanceDynamic* StoneMaterial = MakePackMaterial(TEXT("WhiteConcrete"), this, PackTileSize, &StoneTint))
+		{
+			FacadeMaterials[Stone] = StoneMaterial;
+		}
+		if (UMaterialInstanceDynamic* WoodMaterial = MakePackMaterial(TEXT("Wood"), this, PackTileSize, nullptr))
+		{
+			FacadeMaterials[Wood] = WoodMaterial;
+		}
+	}
 	int32 FacadeTriangles = 0;
 	for (int32 t = 0; t < FacadeTiles.Num(); ++t)
 	{
@@ -763,7 +867,7 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 				continue;
 			}
 			Tile->CreateMeshSection_LinearColor(j, Section.Vertices, Section.Triangles, Section.Normals,
-				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+				Section.UVs, TArray<FLinearColor>(), Section.Tangents, false);
 			Tile->SetMaterial(j, FacadeMaterials[j]);
 			if (j == LitGlass && Clock)
 			{

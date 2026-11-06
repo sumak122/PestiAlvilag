@@ -116,6 +116,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Graybox|Colors")
 	FLinearColor SignColor = FLinearColor(0.03f, 0.10f, 0.06f);
 
+	/** While playing, use the Kitbash3D Art Nouveau pack's walls, roof tiles, stone and wood
+	 *  when the pack is in Content/kb3d_artnouveau. Without the pack, the plain colours stay. */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Pack")
+	bool bPackMaterials = true;
+
+	/** How wide one repeat of a pack picture is on the buildings (cm). */
+	UPROPERTY(EditAnywhere, Category = "Graybox|Pack", meta = (ClampMin = "20"))
+	float PackTileSize = 300.f;
+
 	/** Dress street-facing walls with windows, ledges, cornices, shops and gates. */
 	UPROPERTY(EditAnywhere, Category = "Graybox|Facades")
 	bool bBuildFacades = true;
@@ -137,6 +146,7 @@ protected:
 
 private:
 	bool Build();
+	void ApplyPackMaterials();
 	void BuildFacades();
 	void BuildFacades(const FJsonObject& Root);
 	bool HasFacades() const;
@@ -146,4 +156,8 @@ private:
 	/** When the data file was last built from; a newer file triggers a rebuild. */
 	UPROPERTY()
 	FDateTime BuiltFromFileTime;
+
+	/** Mesh layout version the saved mesh was built with (OsmGraybox::MeshVersion). */
+	UPROPERTY()
+	int32 BuiltVersion = 0;
 };
