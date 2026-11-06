@@ -11,6 +11,8 @@
 #include "SoundSpots.h"
 #include "GarayModel.h"
 #include "GarayYard.h"
+#include "StableYard.h"
+#include "StableYardModel.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "HorseCart.h"
@@ -57,11 +59,6 @@ namespace PestiStart
 	// Bözsi néni's street door on the north side of Népszínház utca, between
 	// Kun utca and Teleki tér, facing the street.
 	const FVector2D HomeDoorAt(58392.f, 21268.f);
-	// Pista bácsi's horse and cart, waiting at the kerb by Tisza Kálmán tér
-	// (II. János Pál pápa tér), round the corner from home: along Népszínház
-	// utca to Nagy Fuvaros utca and down it to the park.
-	const FVector2D HorseCartAt(53292.f, 17629.f);
-	constexpr float HorseCartYaw = 159.2f;
 	constexpr float HomeDoorYaw = 108.6f;
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
@@ -281,8 +278,11 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 
 	if (!TActorIterator<AHorseCart>(GetWorld()))
 	{
-		const FVector CartLocation(PestiStart::HorseCartAt, GroundZ(PestiStart::HorseCartAt) + 150.0);
-		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.f, PestiStart::HorseCartYaw, 0.f), CarParams);
+		// Pista bácsi's horse and cart wait in the carters' yard on Auróra utca.
+		const FVector2D CartAt(AStableYard::ToCity(StableYardModel::Spots::Cart, 0.0));
+		const FVector CartLocation(CartAt, GroundZ(CartAt) + 150.0);
+		const double CartYaw = StableYardModel::CityYaw + StableYardModel::Spots::CartYaw;
+		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.0, CartYaw, 0.0), CarParams);
 	}
 
 	return Pawn;
@@ -320,7 +320,15 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		GetWorld()->SpawnActor<AGarayYard>(AGarayYard::StaticClass(), FVector(GarayModel::CityAt, Z), FRotator(0.0, GarayModel::CityYaw, 0.0));
 	}
 
-	// And the eagle that circles over it.
+	// And the carters' yard on Auróra utca, where Pista bácsi keeps his horse
+	// (its ground height taken in the middle of the yard).
+	if (!TActorIterator<AStableYard>(GetWorld()))
+	{
+		const double Z = GroundZ(FVector2D(AStableYard::ToCity(FVector(1500.0, 0.0, 0.0), 0.0)));
+		GetWorld()->SpawnActor<AStableYard>(AStableYard::StaticClass(), FVector(StableYardModel::CityAt, Z), FRotator(0.0, StableYardModel::CityYaw, 0.0));
+	}
+
+	// And the eagle that circles over Keleti.
 	if (!TActorIterator<AKeletiEagle>(GetWorld()))
 	{
 		const FVector2D At = AKeletiStation::FrontAt();

@@ -19,6 +19,8 @@
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "Ruffian.h"
+#include "StableYard.h"
+#include "StableYardModel.h"
 #include "StoryPerson.h"
 
 namespace Zsibvasar
@@ -26,11 +28,6 @@ namespace Zsibvasar
 	// Pista bácsi's junk stall at the flea market, in case the market
 	// can't be found (the street furniture file puts him here).
 	const FVector2D PistaFallback(101337.0, 30370.0);
-	// Where the game mode leaves his cart, by Tisza Kálmán tér, in case it
-	// isn't there: then the mission brings one.
-	const FVector2D CartFallback(53292.0, 17629.0);
-	constexpr double CartFallbackYaw = 159.2;
-
 	// By the market hall's side door on Vásár utca, in the hall's own
 	// frame (AMarketHall::ToCity): the cart stops on the road, the crates
 	// stand stacked on the pavement, the porter beside them.
@@ -147,8 +144,10 @@ void AMissionZsibvasar::SetUpMission()
 	}
 	if (!Cart)
 	{
-		const FVector At(Zsibvasar::CartFallback, GroundZ(Zsibvasar::CartFallback) + 150.0);
-		Cart = SpawnForMission<AHorseCart>(At, Zsibvasar::CartFallbackYaw);
+		// No cart about (the game mode leaves it in the yard on Auróra utca): the mission brings one there.
+		const FVector2D Yard(AStableYard::ToCity(StableYardModel::Spots::Cart, 0.0));
+		const FVector At(Yard, GroundZ(Yard) + 150.0);
+		Cart = SpawnForMission<AHorseCart>(At, StableYardModel::CityYaw + StableYardModel::Spots::CartYaw);
 		KeepAfterMission(Cart);
 	}
 	if (Cart)
@@ -202,9 +201,9 @@ void AMissionZsibvasar::SetUpMission()
 	Steps.Add(Talk);
 
 	FMissionStep GetOn;
-	GetOn.GoalHu = TEXT("\u00dclj fel Pista b\u00e1csi kocsij\u00e1ra a Tisza K\u00e1lm\u00e1n t\u00e9rn\u00e9l (F)");
-	GetOn.GoalEn = TEXT("Get on Pista b\u00e1csi's cart by Tisza K\u00e1lm\u00e1n t\u00e9r (F)");
-	GetOn.Target = Cart ? Cart->GetBenchLocation() : FVector(Zsibvasar::CartFallback, 0.0);
+	GetOn.GoalHu = TEXT("\u00dclj fel Pista b\u00e1csi kocsij\u00e1ra az Aur\u00f3ra utcai fuvarosudvarban (F)");
+	GetOn.GoalEn = TEXT("Get on Pista b\u00e1csi's cart in the carters' yard on Aur\u00f3ra utca (F)");
+	GetOn.Target = Cart ? Cart->GetBenchLocation() : AStableYard::ToCity(StableYardModel::Spots::Cart, 0.0);
 	GetOn.Radius = Zsibvasar::CartRadius;
 	GetOn.bManual = true;
 	Steps.Add(GetOn);
@@ -291,8 +290,8 @@ void AMissionZsibvasar::OnStepDone(int32 Step)
 			TEXT("Fiam, megint a der\u00e9kam... Hat l\u00e1da \u00e1ru v\u00e1r r\u00e1m a v\u00e1s\u00e1rcsarnokn\u00e1l, a V\u00e1s\u00e1r utcai kapun\u00e1l."),
 			TEXT("Son, my back again... Six crates of goods are waiting for me at the market hall, at the V\u00e1s\u00e1r utca door."), 7.f);
 		SayLater(7.f, Zsibvasar::PistaName,
-			TEXT("A lovam, Csillag, a kocsival a Tisza K\u00e1lm\u00e1n t\u00e9rn\u00e9l \u00e1ll. Hozd el nekem a l\u00e1d\u00e1kat!"),
-			TEXT("My horse, Csillag, stands with the cart by Tisza K\u00e1lm\u00e1n t\u00e9r. Fetch me the crates!"));
+			TEXT("A lovam, Csillag, a kocsival az Aur\u00f3ra utcai fuvarosudvarban \u00e1ll, J\u00f3ska vigy\u00e1z r\u00e1. Hozd el nekem a l\u00e1d\u00e1kat!"),
+			TEXT("My horse, Csillag, stands with the cart in the carters' yard on Aur\u00f3ra utca; J\u00f3ska looks after him. Fetch me the crates!"));
 		SayLater(7.f, Zsibvasar::PistaName,
 			TEXT("\u00c9s ne v\u00e1gtass, mert leesnek a l\u00e1d\u00e1k!"),
 			TEXT("And don't gallop, or the crates fall off!"));

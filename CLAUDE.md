@@ -19,7 +19,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.
 - Trams: `Tram`, `TramModel.h`, `TramRides`, `TramSound`/`TramSynth.h`.
 - City sounds: `SoundSpots` (sound spots placed about the map: church tower, Keleti, markets, pigeons, park, café, courtyards; plays the nearest few) + `SpotSound`/`CitySynth.h` (each kind of spot's sound made in code; later can be swapped for recordings).
-- Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`.
+- Horse cart: `HorseCart`, `HorseCartModel.h`, `HorseSound`/`HorseSynth.h`; `StableYard` + `StableYardModel.h` (carters' yard on Auróra utca where the cart waits, Jóska the stable lad).
 - Bus: `BusModel.h` (MÁVAG Harcsa look) + `Bus` (ABus: a tram on a bus route, lines 12, 20, 5 from `buses_1932.py`; riding via `TramRides`).
 - People: `PersonKit.h` + `PersonModel` (bodies, clothes), `Pedestrians` + `WalkingPerson` (walkers), `StoryPerson` (named characters), `ParkKeeper`, `Pigeons`/`PigeonModel.h`, `ChaseThief`/`ChaseModel.h`, `Ruffian` (mission 4 gang, group fight).
 - World and look: `OsmGraybox` (streets, buildings, facades), `StreetFurniture` (big: lamps, benches, shops), `ShopModel.h`, `GroundSurfaces` + `SurfaceModel.h` (cobbles, kerbs, market earth), `DayNight` (sun, lamps, glass at night), `FallingLeaves`, `ParkModel.h`, `Knockables`/`KnockModel.h`.
