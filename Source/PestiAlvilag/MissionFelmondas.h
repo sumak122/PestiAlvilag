@@ -56,6 +56,9 @@ private:
 	FVector YardPoint(const FVector& Local) const;
 	/** Hermann, Géza and the clerks, at their places in the shop. */
 	void SpawnShopPeople();
+	/** The next day's paper over the screen, and putting it away. */
+	void ShowClipping();
+	void HideClipping();
 	ARuffian* GetShopPerson(ERuffian Kind) const;
 	/** The old man squares up to him once he walks up to the counter. */
 	void TickHermann();

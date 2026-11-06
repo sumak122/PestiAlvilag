@@ -79,6 +79,13 @@ public:
 	void SetLetter(const FString& Hu, const FString& En);
 	void ClearLetter();
 	/**
+	 * A newspaper cutting held up over the screen: the headline over the
+	 * story, the English on a plaque beside it, until ClearClipping. In Body
+	 * and En, \n breaks a line and an empty line parts paragraphs.
+	 */
+	void SetClipping(const FString& Headline, const FString& Body, const FString& En);
+	void ClearClipping();
+	/**
 	 * For this frame, a key sign under the middle of the screen: the key
 	 * and what it does, in Hungarian with the English under it. bNow lights
 	 * the key up: this is the moment to press it.
@@ -155,6 +162,7 @@ private:
 	TSharedPtr<const FCompositeFont> TextFont;
 	TSharedPtr<const FCompositeFont> BoldFont;
 	TSharedPtr<const FCompositeFont> HandFont;
+	TSharedPtr<const FCompositeFont> PaperFont;
 
 	TMap<int32, FNote> Notes;
 	FString GoalHu;
@@ -168,6 +176,9 @@ private:
 	TWeakObjectPtr<const ALighters> Cabinet;
 	FString LetterHu;
 	FString LetterEn;
+	FString ClippingHeadline;
+	FString ClippingBody;
+	FString ClippingEn;
 
 	// The minimap: what it shows this frame (until the time given).
 	FVector2D GoalBlipAt = FVector2D::ZeroVector;
