@@ -22,6 +22,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
+#include "BozsiHouseModel.h"
 #include "ParkKeeper.h"
 #include "ParkModel.h"
 #include "PersonModel.h"
@@ -944,6 +945,11 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			FVector Foot;
 			double Yaw = 0.0;
 			if (!Gate.IsValid() || !Place(*Gate, Foot, Yaw))
+			{
+				continue;
+			}
+			// Bözsi néni's house has its own gateway, standing open.
+			if (FVector::Dist2D(Foot, FVector(BozsiHouseModel::CityAt, 0.0)) < 100.0)
 			{
 				continue;
 			}

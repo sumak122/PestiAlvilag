@@ -134,7 +134,12 @@ private:
 	void UpdateFaint();
 	void SpawnNextMission();
 	/** Where he stands on the pavement outside the home door. */
-	static FVector2D HomeStartAt();
+	FVector2D HomeStartAt() const;
+	/** The home door: Bözsi néni's, or after the raid (mission 8) the attic room's on Bérkocsis utca; and the way it faces. */
+	FVector2D HomeDoorSpot() const;
+	double HomeDoorFacing() const;
+	/** Moves the home door to where home is now. */
+	void PlaceHomeDoor();
 	void ClearWanted(const TCHAR* Message);
 	/** Puts up the hero buildings the level doesn't have yet. */
 	void SpawnLandmarks();
