@@ -6,6 +6,7 @@
 #include "Mission.h"
 #include "MissionBunda.generated.h"
 
+class APestiCar;
 class APestiPerson;
 class APoliceman;
 class AShapeSet;
@@ -88,6 +89,8 @@ private:
 	/** The constables after the player; true if one has caught him. */
 	bool TickRaiders(float DeltaSeconds);
 	void EndRaid();
+	/** A car left on the pavement by the escape's street door, for the getaway. */
+	void SpawnGetawayCar();
 	/** True once he has been arrested since the police came after him. */
 	bool WasArrested() const;
 	void ShowPaper(bool bShow);
@@ -121,6 +124,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UPoliceWhistle> Whistle;
+
+	UPROPERTY(Transient)
+	TObjectPtr<APestiCar> GetawayCar;
 
 	TArray<EKind> Kinds;
 	TArray<FRaider> Raiders;

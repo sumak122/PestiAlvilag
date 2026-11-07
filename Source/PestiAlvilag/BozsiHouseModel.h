@@ -81,9 +81,18 @@ namespace BozsiHouseModel
 	/** Where the house stands in the city: the middle of the gateway on the street front, and the way into the lot (degrees). */
 	const FVector2D CityAt(58771.5, 21395.5);
 	constexpr double CityYaw = -71.4;
-	/** Where the small back door comes out: on the pavement across Tisza Kalman ter's south side, facing the square. */
-	const FVector2D ExitAt(58800.0, 15950.0);
-	constexpr double ExitYaw = -71.4;
+	/**
+	 * Where the escape comes out: the next house's street door on the south
+	 * side of Tisza Kalman ter (its foot on the wall, facing the square), and
+	 * the pavement in front of it, where the player stands.
+	 */
+	const FVector2D ExitDoorAt(58789.0, 16209.0);
+	constexpr double ExitDoorYaw = -110.3;
+	const FVector2D ExitAt(58737.0, 16068.0);
+	constexpr double ExitYaw = -110.3;
+	/** A car left up on the pavement a few steps away, for the getaway, facing along the square's south side. */
+	const FVector2D GetawayCarAt(59165.0, 15646.0);
+	constexpr double GetawayCarYaw = -20.8;
 	/** The player's attic room after the raid, Berkocsis utca: its street door (on the wall, facing the street). */
 	const FVector2D AtticDoorAt(18173.0, 30456.0);
 	constexpr double AtticDoorYaw = -103.0;
@@ -586,5 +595,26 @@ namespace BozsiHouseModel
 	{
 		// The house number on the blue plate by the gateway.
 		Out.Add({ TEXT("29"), FVector(-18.0, GateHalf + 20.0, 261.0), 180.0, 16.0, Colors::White });
+	}
+
+	/**
+	 * A tall street door of dark wood in a stone frame, like the home door
+	 * (its own frame: X out from the wall, Z up from the pavement), with a
+	 * lamp over it if bLamp.
+	 */
+	inline void StreetDoor(TArray<FShape>& Out, TArray<FLamp>& Lamps, bool bLamp)
+	{
+		Add(Out, MarketModel::Cube, Colors::GateWood, FVector(7.0, 0.0, 150.0), FVector(12.0, 160.0, 300.0), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Iron, FVector(14.0, 0.0, 150.0), FVector(2.0, 4.0, 290.0), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Stone, FVector(12.0, -95.0, 160.0), FVector(20.0, 30.0, 320.0), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Stone, FVector(12.0, 95.0, 160.0), FVector(20.0, 30.0, 320.0), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Stone, FVector(12.0, 0.0, 330.0), FVector(20.0, 220.0, 40.0), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Stone, FVector(30.0, 0.0, 5.0), FVector(60.0, 200.0, 10.0), 0.0, false);
+		if (bLamp)
+		{
+			Add(Out, MarketModel::Cube, Colors::Iron, FVector(30.0, 0.0, 370.0), FVector(60.0, 4.0, 4.0), 0.0, false);
+			Add(Out, MarketModel::Sphere, Colors::Globe, FVector(55.0, 0.0, 355.0), FVector(20.0, 20.0, 26.0), 0.0, false);
+			Lamps.Add({ FVector(55.0, 0.0, 340.0), 500.f });
+		}
 	}
 }

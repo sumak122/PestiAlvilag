@@ -14,6 +14,7 @@
 #include "HomeDoor.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
 #include "PoliceModel.h"
@@ -51,6 +52,8 @@ namespace BundaPlay
 	// how near and how level he must be for them to make straight for him.
 	constexpr float RaidSpeed = 500.f;
 	constexpr double CatchReach = 130.0;
+	// The getaway car is let down onto the pavement from this high (cm).
+	constexpr double CarLift = 120.0;
 	constexpr double ChaseNear = 450.0;
 	constexpr double ChaseLevel = 80.0;
 	// The second constable follows the first this much later (s); the chase waits this long after the scene.
@@ -317,6 +320,20 @@ void AMissionBunda::SetUpMission()
 	Kinds.Add(EKind::Room);
 }
 
+void AMissionBunda::SpawnGetawayCar()
+{
+	if (GetawayCar)
+	{
+		return;
+	}
+	const FVector2D CarSpot = BozsiHouseModel::GetawayCarAt;
+	const FTransform Place(FRotator(0.0, BozsiHouseModel::GetawayCarYaw, 0.0), FVector(CarSpot, GroundZ(CarSpot, HouseGround) + BundaPlay::CarLift));
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	GetawayCar = GetWorld()->SpawnActor<APestiCar>(APestiCar::StaticClass(), Place, Params);
+	AddMissionActor(GetawayCar.Get());
+}
+
 void AMissionBunda::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
 	// Seconds after the line before it (or after now, if none is waiting).
@@ -577,11 +594,18 @@ void AMissionBunda::OnStepDone(int32 Step)
 			Whistle->SetWorldLocation(HouseAt(BozsiHouseModel::Spots::BackYard));
 			Whistle->Blow();
 		}
-		Hint(TEXT("Kijutott\u00e1l a Tisza K\u00e1lm\u00e1n t\u00e9rre, de a rend\u0151r\u00f6k a nyomodban vannak!  (You're out on Tisza K\u00e1lm\u00e1n t\u00e9r, but the police are after you!)"));
+		SpawnGetawayCar();
+		Hint(TEXT("Kijutott\u00e1l a Tisza K\u00e1lm\u00e1n t\u00e9rre, de a rend\u0151r\u00f6k a nyomodban vannak! Ott egy aut\u00f3 a j\u00e1rd\u00e1n.  (You're out on Tisza K\u00e1lm\u00e1n t\u00e9r, but the police are after you! There's a car on the pavement.)"));
 		break;
 	}
 
 	case EKind::LoseRaid:
+		// The car he got away in stays his.
+		if (GetawayCar)
+		{
+			KeepAfterMission(GetawayCar.Get());
+			GetawayCar = nullptr;
+		}
 		Hint(TEXT("Ler\u00e1ztad \u0151ket. Kih\u00fazod magad reggelig...  (You've lost them. You lie low till morning...)"));
 		break;
 
