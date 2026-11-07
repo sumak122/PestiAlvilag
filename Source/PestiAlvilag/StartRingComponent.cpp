@@ -273,7 +273,7 @@ void UStartRingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	using namespace StartRing;
 	Time += DeltaTime;
-	if (APestiHUD* Hud = APestiHUD::Get(this))
+	if (APestiHUD* Hud = bOnMap ? APestiHUD::Get(this) : nullptr)
 	{
 		Hud->MarkStart(GetComponentLocation(), ShownLetter);
 	}

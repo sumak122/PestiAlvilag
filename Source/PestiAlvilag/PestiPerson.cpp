@@ -684,7 +684,7 @@ void APestiPerson::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimit
 	{
 		bBlowDone = true;
 		GetCharacterMovement()->StopMovementImmediately();
-		TakeBlow(Brawl::EBlow::Slam, ThrownBy.Get());
+		TakeBlow(bThrownHard ? Brawl::EBlow::WallSlam : Brawl::EBlow::Slam, ThrownBy.Get());
 	}
 }
 
@@ -696,7 +696,9 @@ void APestiPerson::LoseHealth(float Amount)
 	}
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
-		Game->HurtPlayer(Amount * PestiPerson::PlayerHurtShare);
+		// Kemény áll (Bandi's lesson): blows take less out of him.
+		const float Chin = KnowsLesson(Brawl::ELesson::Chin) ? Brawl::ChinShare : 1.f;
+		Game->HurtPlayer(Amount * PestiPerson::PlayerHurtShare * Chin);
 	}
 }
 
@@ -739,6 +741,11 @@ void APestiPerson::EndFight()
 
 void APestiPerson::BeginAct(Brawl::EAct NewAct, float Seconds)
 {
+	// A punch may still come out of a sidestep just ended (SlipPunch).
+	if (Act == Brawl::EAct::Sidestep && NewAct != Brawl::EAct::Sidestep)
+	{
+		DodgeEndedAt = GetWorld()->GetTimeSeconds();
+	}
 	Act = NewAct;
 	ActClock = 0.f;
 	ActLength = Seconds;
@@ -784,6 +791,19 @@ void APestiPerson::BeginAct(Brawl::EAct NewAct, float Seconds)
 		break;
 	case Brawl::EAct::Shove:
 		PlayFightSound(EKind::Effort, 1.f);
+		break;
+	case Brawl::EAct::BodyBlow:
+		PlayFightSound(EKind::Swish, 0.7f, 0.12f);
+		PlayFightSound(EKind::Effort, 0.6f, 0.1f);
+		break;
+	case Brawl::EAct::SlipCounter:
+		PlayFightSound(EKind::Swish, 0.8f, 0.08f);
+		break;
+	case Brawl::EAct::Headbutt:
+		PlayFightSound(EKind::Effort, 0.9f, 0.15f);
+		break;
+	case Brawl::EAct::WallThrow:
+		PlayFightSound(EKind::Effort, 1.f, 0.3f);
 		break;
 	case Brawl::EAct::Tackle:
 		PlayFightSound(EKind::Effort, 1.f);
@@ -854,7 +874,8 @@ bool APestiPerson::SpendStamina(float Cost)
 	{
 		return false;
 	}
-	Stamina -= Cost;
+	// Kitartás (Bandi's lesson): every move costs him less breath.
+	Stamina -= KnowsLesson(Brawl::ELesson::Breath) ? Cost * Brawl::BreathShare : Cost;
 	RestFrom = GetWorld()->GetTimeSeconds() + Brawl::RestBefore;
 	return true;
 }
@@ -1033,6 +1054,111 @@ bool APestiPerson::Shove(const FVector& Direction)
 	return true;
 }
 
+bool APestiPerson::KnowsLesson(Brawl::ELesson Lesson) const
+{
+	if (!IsPlayerControlled())
+	{
+		return false;
+	}
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	return Game && Game->KnowsLesson(static_cast<int32>(Lesson));
+}
+
+bool APestiPerson::BellyPunch()
+{
+	if (!Brawl::IsFree(Act) || !SpendStamina(Brawl::BodyBlowCost))
+	{
+		return false;
+	}
+	ChainStep = 0;
+	BeginAct(Brawl::EAct::BodyBlow, Brawl::BodyBlowSeconds);
+	return true;
+}
+
+bool APestiPerson::SlipPunch()
+{
+	using namespace Brawl;
+	// Late in the hop, or a moment after it, with the fists up.
+	const bool bLateInHop = Act == EAct::Sidestep && ActLength > 0.f && ActClock >= ActLength * SlipFrom;
+	const bool bJustAfter = IsFree(Act) && GetWorld()->GetTimeSeconds() - DodgeEndedAt <= SlipWindow;
+	if ((!bLateInHop && !bJustAfter) || !SpendStamina(SlipCounterCost))
+	{
+		return false;
+	}
+	ChainStep = 0;
+	BeginAct(EAct::SlipCounter, SlipCounterSeconds);
+	return true;
+}
+
+bool APestiPerson::ButtHim()
+{
+	if ((Act != Brawl::EAct::Holding && Act != Brawl::EAct::Knee) || !Holding.IsValid() || !SpendStamina(Brawl::HeadbuttCost))
+	{
+		return false;
+	}
+	BeginAct(Brawl::EAct::Headbutt, Brawl::HeadbuttSeconds);
+	return true;
+}
+
+bool APestiPerson::ThrowAtWall()
+{
+	if ((Act != Brawl::EAct::Holding && Act != Brawl::EAct::Knee) || !Holding.IsValid() || !SpendStamina(Brawl::WallThrowCost))
+	{
+		return false;
+	}
+	// Round to the nearest wall (he goes round with him), or straight on if there is none.
+	FVector Way = FVector::ZeroVector;
+	if (FindWall(Way))
+	{
+		SetActorRotation(FRotator(0.0, Way.Rotation().Yaw, 0.0));
+	}
+	BeginAct(Brawl::EAct::WallThrow, Brawl::WallThrowSeconds);
+	return true;
+}
+
+bool APestiPerson::FindWall(FVector& OutWay) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BrawlWall), false, this);
+	if (const APestiPerson* Held = Holding.Get())
+	{
+		Params.AddIgnoredActor(Held);
+	}
+	const FVector From = GetActorLocation();
+	double Best = Brawl::WallLook;
+	bool bFound = false;
+	constexpr int32 Ways = 16;
+	for (int32 i = 0; i < Ways; ++i)
+	{
+		const FVector Way = FRotator(0.0, 360.0 * i / Ways, 0.0).Vector();
+		FHitResult Wall;
+		if (World->LineTraceSingleByChannel(Wall, From, From + Way * Brawl::WallLook, ECC_Visibility, Params)
+			&& FMath::Abs(Wall.ImpactNormal.Z) < PestiPerson::SlamNormalZ && !Cast<APawn>(Wall.GetActor()) && Wall.Distance < Best)
+		{
+			Best = Wall.Distance;
+			OutWay = Way;
+			bFound = true;
+		}
+	}
+	return bFound;
+}
+
+void APestiPerson::GivePoints(APestiPerson* From, int32 Points) const
+{
+	if (!From || From == this || !From->IsPlayerControlled() || IsPlayerControlled() || Points <= 0)
+	{
+		return;
+	}
+	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+	{
+		Game->AddFightPoints(Points);
+	}
+}
+
 void APestiPerson::SetGuard(bool bUp)
 {
 	if (bUp && Act == Brawl::EAct::Stance)
@@ -1075,6 +1201,7 @@ void APestiPerson::BeThrown(const FVector& Direction, APestiPerson* Thrower)
 {
 	HeldBy = nullptr;
 	ThrownBy = Thrower;
+	bThrownHard = false;
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->SetMovementMode(MOVE_Walking);
 	BeginAct(Brawl::EAct::Shoved, Brawl::ShovedSeconds);
@@ -1174,6 +1301,8 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	// a heavy swing or a finisher breaks through it.
 	const bool bQuick = Blow == EBlow::Jab || Blow == EBlow::Cross || Blow == EBlow::Hook || Blow == EBlow::Uppercut || Blow == EBlow::Knee;
 	const bool bBig = Blow == EBlow::Heavy || Blow == EBlow::Rising || Blow == EBlow::Haymaker;
+	// Bandi's moves get past a guard: under it, round it, or he is held.
+	const bool bLesson = Blow == EBlow::Body || Blow == EBlow::SlipCounter || Blow == EBlow::Headbutt || Blow == EBlow::WallSlam;
 	if (Act == EAct::Guard && bFacing && bQuick)
 	{
 		HitStop(HitStopLight);
@@ -1232,7 +1361,7 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 	}
 
 	// Both stand still for a blink as it lands: longer for the big ones.
-	const float Still = bBig || Blow == EBlow::Counter || Blow == EBlow::Slam || Blow == EBlow::Uppercut ? HitStopHeavy : HitStopLight;
+	const float Still = bBig || bLesson || Blow == EBlow::Counter || Blow == EBlow::Slam || Blow == EBlow::Uppercut ? HitStopHeavy : HitStopLight;
 	HitStop(Still);
 	if (From)
 	{
@@ -1276,17 +1405,31 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		PlayFightSound(FightSynth::EKind::Pain, 0.7f, 0.03f);
 		break;
 	case EBlow::Slam:
+	case EBlow::WallSlam:
 		PlayFightSound(FightSynth::EKind::Slam, 1.f);
 		PlayFightSound(FightSynth::EKind::Pain, 0.9f, 0.05f);
+		break;
+	case EBlow::Body:
+		PlayFightSound(FightSynth::EKind::Smack, 0.7f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.6f, 0.04f);
+		break;
+	case EBlow::SlipCounter:
+	case EBlow::Headbutt:
+		PlayFightSound(FightSynth::EKind::Smack, 0.95f);
+		PlayFightSound(FightSynth::EKind::Pain, 0.8f, 0.03f);
 		break;
 	default:
 		break;
 	}
 	LoseHealth(Lost);
+	// The player's fight points: more for the big blows, most for beating him.
+	const int32 BlowPoints = bBig || bLesson || Blow == EBlow::Counter || Blow == EBlow::Slam ? PointsBig : PointsHit;
 	if (Act == EAct::Beaten)
 	{
+		GivePoints(From, BlowPoints + PointsWin);
 		return;
 	}
+	GivePoints(From, BlowPoints);
 	HurtSide = FMath::RandBool() ? 1.f : -1.f;
 	// The blow rocks him (less through a guard), and jolts back up the arm that threw it.
 	if (bGuardBroken)
@@ -1313,8 +1456,24 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		}
 		break;
 	case EBlow::Slam:
+	case EBlow::WallSlam:
 		GetCharacterMovement()->StopMovementImmediately();
 		BeginAct(EAct::Down, DownSeconds);
+		GivePoints(From, PointsDown);
+		break;
+	case EBlow::Body:
+		// The breath knocked out of him: doubled up if it was the last of it.
+		Stamina -= BodyBlowBreath;
+		RestFrom = GetWorld()->GetTimeSeconds() + RestBefore;
+		if (Stamina <= 0.f)
+		{
+			Stamina = 0.f;
+			BeginAct(EAct::Winded, WindedSeconds);
+		}
+		else
+		{
+			BeginAct(EAct::Hurt, HurtSeconds);
+		}
 		break;
 	case EBlow::Rising:
 		// Lifted off his feet: down he goes (only reeling, through a guard).
@@ -1326,6 +1485,7 @@ void APestiPerson::TakeBlow(Brawl::EBlow Blow, APestiPerson* From)
 		{
 			GetCharacterMovement()->StopMovementImmediately();
 			BeginAct(EAct::Down, DownSeconds);
+			GivePoints(From, PointsDown);
 		}
 		break;
 	case EBlow::Haymaker:
@@ -1407,7 +1567,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 
 	// The one he holds stays in front of him, facing him.
 	APestiPerson* Victim = Holding.Get();
-	if (Victim && (Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Shove))
+	if (Victim && (Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Shove || Act == EAct::Headbutt || Act == EAct::WallThrow))
 	{
 		const FVector Ahead = GetActorForwardVector().GetSafeNormal2D();
 		Victim->SetActorLocationAndRotation(GetActorLocation() + Ahead * HoldGap, FRotator(0.0, (-Ahead).Rotation().Yaw, 0.0),
@@ -1508,6 +1668,47 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 			return;
 		}
 		break;
+	case EAct::BodyBlow:
+		if (!bBlowDone && T >= BodyBlowLands)
+		{
+			bBlowDone = true;
+			LandBlow(EBlow::Body);
+		}
+		break;
+	case EAct::SlipCounter:
+		if (!bBlowDone && T >= SlipCounterLands)
+		{
+			bBlowDone = true;
+			LandBlow(EBlow::SlipCounter);
+		}
+		break;
+	case EAct::Headbutt:
+		// Into his face, and he lets go of him: the man reels back free.
+		if (!bBlowDone && T >= HeadbuttLands)
+		{
+			bBlowDone = true;
+			LetGo();
+			if (Victim)
+			{
+				Victim->TakeBlow(EBlow::Headbutt, this);
+			}
+		}
+		break;
+	case EAct::WallThrow:
+		// Swung round, then hurled off hard: into the wall, a slam that hurts more.
+		if (!bBlowDone && T >= WallThrowLets)
+		{
+			bBlowDone = true;
+			Holding = nullptr;
+			if (Victim)
+			{
+				const FVector Ahead = GetActorForwardVector().GetSafeNormal2D();
+				Victim->BeThrown(Ahead, this);
+				Victim->bThrownHard = true;
+				Victim->LaunchCharacter(Ahead * WallThrowSpeed + FVector(0.0, 0.0, ThrowLift), true, true);
+			}
+		}
+		break;
 	case EAct::Shove:
 		if (!bBlowDone && T >= ShoveLets)
 		{
@@ -1540,7 +1741,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 			{
 				bBlowDone = true;
 				Movement->StopMovementImmediately();
-				TakeBlow(EBlow::Slam, ThrownBy.Get());
+				TakeBlow(bThrownHard ? EBlow::WallSlam : EBlow::Slam, ThrownBy.Get());
 				return;
 			}
 		}
@@ -1583,7 +1784,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 
 	// Stepping in behind his punches (the player's), so a punch from a little
 	// too far still reaches; never closer than fighters keep.
-	if (IsPlayerControlled() && IsChainPunch(Act) && Other && ActLength > 0.f && T < StepShare)
+	if (IsPlayerControlled() && (IsChainPunch(Act) || Act == EAct::BodyBlow || Act == EAct::SlipCounter) && Other && ActLength > 0.f && T < StepShare)
 	{
 		const FVector Between = Other->GetActorLocation() - GetActorLocation();
 		const double Gap = Between.Size2D() - KeepApart;
@@ -1615,7 +1816,8 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 		Movement->MaxWalkSpeed = Act == EAct::Stance ? FightSpeed : Act == EAct::Guard ? GuardSpeed : 0.f;
 	}
 	if (bFree || IsChainPunch(Act) || Act == EAct::Sidestep || Act == EAct::HeavyWind || Act == EAct::HeavySwing || Act == EAct::Counter
-		|| Act == EAct::GrabReach || Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Winded)
+		|| Act == EAct::GrabReach || Act == EAct::Holding || Act == EAct::Knee || Act == EAct::Winded
+		|| Act == EAct::BodyBlow || Act == EAct::SlipCounter || Act == EAct::Headbutt)
 	{
 		FaceFoe(DeltaSeconds);
 	}
@@ -1627,7 +1829,7 @@ void APestiPerson::TickBrawl(float DeltaSeconds)
 	const float GoingAhead = static_cast<float>(FVector::DotProduct(Moving, GetActorForwardVector()));
 	const float GoingAside = static_cast<float>(FVector::DotProduct(Moving, GetActorRightVector()));
 	const float Tired = FMath::Clamp(1.f - Stamina / MaxStamina, 0.f, 1.f);
-	const FreeRun::FPose Moved = FightMotion.Update(PoseFor(Act, Shown, ActClock, Act == EAct::Sidestep ? DodgeSide : HurtSide), Act, DeltaSeconds, GoingAhead, GoingAside, Tired);
+	const FreeRun::FPose Moved = FightMotion.Update(PoseFor(Act, Shown, ActClock, Act == EAct::Sidestep || Act == EAct::SlipCounter ? DodgeSide : HurtSide), Act, DeltaSeconds, GoingAhead, GoingAside, Tired);
 	ApplyPose(Moved, FightMotion.GetLegTwist());
 }
 
@@ -1663,6 +1865,36 @@ void APestiPerson::PlayerFight(APlayerController* PC)
 	const bool bGuardPressed = PC->WasInputKeyJustPressed(EKeys::RightMouseButton) || PC->WasInputKeyJustPressed(EKeys::Gamepad_RightShoulder);
 	const bool bGrabPressed = PC->WasInputKeyJustPressed(EKeys::E) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right);
 	const bool bDodgePressed = PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom);
+	const bool bThrowPressed = PC->WasInputKeyJustPressed(EKeys::F) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top);
+	const bool bHoldingHim = Act == EAct::Holding || Act == EAct::Knee;
+
+	// Bandi's moves, once learnt. Holding him: Space a headbutt, F a throw at the wall.
+	if (bHoldingHim && bDodgePressed && KnowsLesson(ELesson::Headbutt) && ButtHim())
+	{
+		return;
+	}
+	if (bHoldingHim && bThrowPressed && KnowsLesson(ELesson::WallThrow) && ThrowAtWall())
+	{
+		return;
+	}
+	// A click late in a sidestep or just after it: the punch from the side.
+	if (bPunchPressed && KnowsLesson(ELesson::SlipCounter) && SlipPunch())
+	{
+		KeptPunch = 0;
+		PunchDownAt = -1.0;
+		return;
+	}
+	// A click while stepping back from him: the punch to the belly.
+	if (bPunchPressed && Other && IsFree(Act) && KnowsLesson(ELesson::BodyBlow))
+	{
+		const FVector Toward = (Other->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		if (FVector::DotProduct(InputDirection(PC), Toward) < -0.5 && BellyPunch())
+		{
+			KeptPunch = 0;
+			PunchDownAt = -1.0;
+			return;
+		}
+	}
 
 	// Space: a sidestep the way the keys point (back, with none).
 	if (bDodgePressed && Dodge(InputDirection(PC)))
@@ -1767,6 +1999,14 @@ void APestiPerson::PlayerFight(APlayerController* PC)
 	}
 	else if (Act == EAct::Holding || Act == EAct::Knee)
 	{
-		Hud->Prompt(TEXT("E"), TEXT("L\u00f6k\u00e9s"), TEXT("Shove"), false);
+		FVector WallWay = FVector::ZeroVector;
+		if (KnowsLesson(ELesson::WallThrow) && FindWall(WallWay))
+		{
+			Hud->Prompt(TEXT("F"), TEXT("Falhoz v\u00e1g\u00e1s"), TEXT("Wall throw"), true);
+		}
+		else
+		{
+			Hud->Prompt(TEXT("E"), TEXT("L\u00f6k\u00e9s"), TEXT("Shove"), false);
+		}
 	}
 }

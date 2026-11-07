@@ -17,6 +17,9 @@
  * the pickpocket (Attack, Brawl), or turn tail and run (Flee). Beaten, he
  * sits on the ground with his hands up.
  *
+ * Bandi's boxing yard puts the men of its ring in the same skin, one at a
+ * time: some quicker, some harder hitting, one who covers up a lot.
+ *
  * Mission 5 ("A felmondás") borrows the same fighting for the people in
  * Friedrich Hermann's shop on Garay utca: old Hermann, who goes down at
  * the first blow, his son Géza and his two clerks.
@@ -32,7 +35,13 @@ enum class ERuffian : uint8
 	Hermann,
 	Geza,
 	ClerkOne,
-	ClerkTwo
+	ClerkTwo,
+	// Bandi's boxing yard (ABoxingYard): the five men to beat in the ring, in order.
+	BoxBandi,
+	BoxJeno,
+	BoxMazsas,
+	BoxGyuri,
+	BoxVasoklu
 };
 
 UCLASS()
@@ -66,6 +75,7 @@ public:
 
 	virtual FString GetFightName() const override;
 	virtual float GetHealthShare() const override;
+	virtual float GetBlowStrength() const override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -80,6 +90,8 @@ private:
 	void TickAttack();
 	void TickFlee();
 	float GetMaxHealth() const;
+	/** How much faster than the usual he thinks in a fight (1 the usual). */
+	float Quickness() const;
 
 	EMode Mode = EMode::Idle;
 	float Health = 0.f;

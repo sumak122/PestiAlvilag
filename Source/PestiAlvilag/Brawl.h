@@ -59,7 +59,9 @@ namespace Brawl
 	};
 
 	/** What landed. */
-	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw, Cross, Hook, Uppercut, Rising, Haymaker };
+	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw, Cross, Hook, Uppercut, Rising, Haymaker,
+		// Bandi's moves: the belly punch, the punch from the sidestep, the headbutt, a man hurled into a wall.
+		Body, SlipCounter, Headbutt, WallSlam };
 
 	// How long each act lasts (s), and how far into it the blow lands (share).
 	constexpr float JabSeconds = 0.38f;
@@ -173,6 +175,57 @@ namespace Brawl
 	constexpr float RestBefore = 0.7f;
 	constexpr float AfterWinded = 40.f;
 
+	// Bandi's moves (BoxingYard): how long each lasts (s), how far into it
+	// it lands, and the breath it costs.
+	constexpr float BodyBlowSeconds = 0.5f;
+	constexpr float BodyBlowLands = 0.45f;
+	constexpr float BodyBlowCost = 12.f;
+	/** The breath a belly punch knocks out of him. */
+	constexpr float BodyBlowBreath = 35.f;
+	constexpr float SlipCounterSeconds = 0.42f;
+	constexpr float SlipCounterLands = 0.45f;
+	constexpr float SlipCounterCost = 8.f;
+	/** A click this long after a sidestep ends still makes the punch from it (s). */
+	constexpr double SlipWindow = 0.3;
+	/** Late in the hop, from this share of it, the punch can start. */
+	constexpr float SlipFrom = 0.3f;
+	constexpr float HeadbuttSeconds = 0.55f;
+	constexpr float HeadbuttLands = 0.47f;
+	constexpr float HeadbuttCost = 12.f;
+	constexpr float WallThrowSeconds = 0.8f;
+	constexpr float WallThrowLets = 0.55f;
+	constexpr float WallThrowCost = 16.f;
+	/** A wall this near (cm) is found to throw him at, and he flies this fast (cm/s). */
+	constexpr double WallLook = 450.0;
+	constexpr float WallThrowSpeed = 1250.f;
+
+	/** What Bandi teaches: four moves and two ways of standing up to a fight. */
+	enum class ELesson : uint8 { BodyBlow, SlipCounter, Headbutt, WallThrow, Breath, Chin, Count };
+	/** What each lesson costs in fight points. */
+	inline int32 LessonCost(ELesson Lesson)
+	{
+		switch (Lesson)
+		{
+		case ELesson::BodyBlow: return 30;
+		case ELesson::SlipCounter: return 40;
+		case ELesson::Headbutt: return 50;
+		case ELesson::WallThrow: return 90;
+		case ELesson::Breath: return 25;
+		case ELesson::Chin: return 35;
+		default: return 0;
+		}
+	}
+	/** With Kitartás every move costs this share of the breath; with Kemény áll blows take this share of the health. */
+	constexpr float BreathShare = 0.75f;
+	constexpr float ChinShare = 0.75f;
+	// Fight points (bunyópont) the player earns: a blow that lands, a big
+	// one (a finisher, a counter, one of Bandi's), knocking a man down, and
+	// beating him.
+	constexpr int32 PointsHit = 1;
+	constexpr int32 PointsBig = 3;
+	constexpr int32 PointsDown = 5;
+	constexpr int32 PointsWin = 10;
+
 	/** How much health a blow takes (out of 100); a winded man takes more. */
 	inline float Damage(EBlow Blow)
 	{
@@ -189,6 +242,10 @@ namespace Brawl
 		case EBlow::Uppercut: return 14.f;
 		case EBlow::Rising: return 20.f;
 		case EBlow::Haymaker: return 22.f;
+		case EBlow::Body: return 10.f;
+		case EBlow::SlipCounter: return 14.f;
+		case EBlow::Headbutt: return 16.f;
+		case EBlow::WallSlam: return 30.f;
 		default: return 0.f;
 		}
 	}

@@ -100,6 +100,20 @@ public:
 
 	void MarkMissionDone(FName MissionId);
 
+	/**
+	 * Fight points (bunyópont): every blow the player lands earns some
+	 * (see Brawl::PointsHit), and a note shows the points of the fight so
+	 * far. Bandi (ABoxingYard) teaches moves for them.
+	 */
+	int32 GetFightPoints() const { return FightPoints; }
+	void AddFightPoints(int32 Points);
+	/** Bandi's lessons (Brawl::ELesson, as a number): learnt or not, and learning one for its points; false if short of them. */
+	bool KnowsLesson(int32 Lesson) const { return Lesson >= 0 && Lesson < 32 && (Lessons & (1 << Lesson)) != 0; }
+	bool LearnLesson(int32 Lesson, int32 Cost);
+	/** The men beaten in Bandi's ring so far, in order (0 to 5). */
+	int32 GetBoxingWins() const { return BoxingWins; }
+	void AddBoxingWin() { BoxingWins = FMath::Min(BoxingWins + 1, 5); }
+
 	/** Whether he has Schwimmer's bamboo baton (it makes his blows harder). */
 	bool HasBaton();
 	/** Schwimmer hands it over: he carries it from now on. */
@@ -172,6 +186,12 @@ private:
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;
+	int32 FightPoints = 0;
+	int32 Lessons = 0;
+	int32 BoxingWins = 0;
+	/** The points of the fight going on, and when the last came (for the note). */
+	int32 RecentPoints = 0;
+	double RecentPointsAt = -100.0;
 	bool bSaveRead = false;
 	/** A jump to a mission is waiting to put the player by its ring, until this time. */
 	bool bPlaceAtRing = false;

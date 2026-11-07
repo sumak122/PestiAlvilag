@@ -406,16 +406,16 @@ namespace BoxingYardModel
 	inline void Signs(TArray<FSign>& Out)
 	{
 		// Over the gate, on the street side.
-		Out.Add({ TEXT("ÖKÖLVÍVÁS"), FVector(-4.0, 0.0, 290.0), 180.0, 26.0, Colors::Lettering });
+		Out.Add({ TEXT("\u00d6K\u00d6LV\u00cdV\u00c1S"), FVector(-4.0, 0.0, 290.0), 180.0, 26.0, Colors::Lettering });
 		// The slate by the ring: the men to beat, in chalk.
 		const FVector SlateAt(RingAt.X - 120.0 - 11.0, RingAt.Y - RingHalf - 230.0, 0.0);
-		const TCHAR* Names[] = { TEXT("1. BANDI"), TEXT("2. FÜRGE JENŐ"), TEXT("3. MÁZSÁS"), TEXT("4. SZŐKE GYURI"), TEXT("5. VASÖKLŰ") };
+		const TCHAR* Names[] = { TEXT("1. BANDI"), TEXT("2. F\u00dcRGE JEN\u0150"), TEXT("3. M\u00c1ZS\u00c1S"), TEXT("4. SZ\u0150KE GYURI"), TEXT("5. VAS\u00d6KL\u0170") };
 		for (int32 i = 0; i < 5; ++i)
 		{
 			Out.Add({ Names[i], SlateAt + FVector(0.0, -25.0, 155.0 - i * 13.0), 180.0, 7.5, Colors::Chalk });
 		}
 		// The old painted board on the back wall.
-		Out.Add({ TEXT("KŐBÁNYAI SÖR"), FVector(Depth - 2.0, 0.0, 1110.0), 180.0, 120.0, Colors::WallAdRed });
+		Out.Add({ TEXT("K\u0150B\u00c1NYAI S\u00d6R"), FVector(Depth - 2.0, 0.0, 1110.0), 180.0, 120.0, Colors::WallAdRed });
 		Out.Add({ TEXT("A LEGJOBB"), FVector(Depth - 2.0, 0.0, 990.0), 180.0, 60.0, Colors::Lettering });
 	}
 

@@ -15,6 +15,8 @@
 #include "GarayYard.h"
 #include "StableYard.h"
 #include "StableYardModel.h"
+#include "BoxingYard.h"
+#include "BoxingYardModel.h"
 #include "LaciYard.h"
 #include "LaciYardModel.h"
 #include "DayNight.h"
@@ -98,6 +100,11 @@ namespace PestiStart
 	// out from the ring the player stands (cm), so it counts when he walks in.
 	constexpr double RingWait = 10.0;
 	constexpr double RingStandOff = 260.0;
+	// The fight points note (AddFightPoints): its key on the screen, how long
+	// it stays, and the gap (s) after which points start a new count.
+	constexpr int32 PointsNoteKey = 61;
+	constexpr float PointsNoteSeconds = 4.f;
+	constexpr double PointsNoteGap = 6.0;
 
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
@@ -434,6 +441,13 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(FVector2D(ALaciYard::ToCity(LaciYardModel::Spots::Park, 0.0)));
 		GetWorld()->SpawnActor<ALaciYard>(ALaciYard::StaticClass(), FVector(LaciYardModel::CityAt, Z), FRotator(0.0, LaciYardModel::CityYaw, 0.0));
+	}
+
+	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).
+	if (!TActorIterator<ABoxingYard>(GetWorld()))
+	{
+		const double Z = GroundZ(FVector2D(ABoxingYard::ToCity(BoxingYardModel::RingAt, 0.0)));
+		GetWorld()->SpawnActor<ABoxingYard>(ABoxingYard::StaticClass(), FVector(BoxingYardModel::CityAt, Z), FRotator(0.0, BoxingYardModel::CityYaw, 0.0));
 	}
 
 	// And Bözsi néni's house, Népszínház utca 29, built in place of the plain
@@ -777,6 +791,9 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		TriedDishes = Save->TriedDishes;
 		FoundLighters = Save->FoundLighters;
 		bHasBaton = Save->bHasBaton;
+		FightPoints = Save->FightPoints;
+		Lessons = Save->Lessons;
+		BoxingWins = Save->BoxingWins;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
@@ -866,6 +883,36 @@ void APestiAlvilagGameModeBase::GiveBaton()
 	}
 }
 
+void APestiAlvilagGameModeBase::AddFightPoints(int32 Points)
+{
+	if (Points <= 0)
+	{
+		return;
+	}
+	FightPoints += Points;
+	// The note counts up through one fight; a new fight starts it again.
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now - RecentPointsAt > PestiStart::PointsNoteGap)
+	{
+		RecentPoints = 0;
+	}
+	RecentPoints += Points;
+	RecentPointsAt = Now;
+	APestiHUD::Show(this, PestiStart::PointsNoteKey, PestiStart::PointsNoteSeconds, FColor(255, 210, 60),
+		FString::Printf(TEXT("+%d BUNY\u00d3PONT  (+%d fight points, %d in all)"), RecentPoints, RecentPoints, FightPoints));
+}
+
+bool APestiAlvilagGameModeBase::LearnLesson(int32 Lesson, int32 Cost)
+{
+	if (Lesson < 0 || Lesson >= 32 || KnowsLesson(Lesson) || FightPoints < Cost)
+	{
+		return false;
+	}
+	FightPoints -= Cost;
+	Lessons |= 1 << Lesson;
+	return true;
+}
+
 void APestiAlvilagGameModeBase::MarkMissionDone(FName MissionId)
 {
 	CompletedMissions.AddUnique(MissionId);
@@ -894,6 +941,9 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->TriedDishes = TriedDishes;
 	Save->FoundLighters = FoundLighters;
 	Save->bHasBaton = bHasBaton;
+	Save->FightPoints = FightPoints;
+	Save->Lessons = Lessons;
+	Save->BoxingWins = BoxingWins;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

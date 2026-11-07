@@ -105,6 +105,8 @@ public:
 	void MarkGoal(const FVector& At);
 	/** For this frame, where a story mission waits to begin, with the giver's first letter, on the minimap and the big map (UStartRingComponent calls it). */
 	void MarkStart(const FVector& At, const FString& Letter);
+	/** For this frame, a place to go back to (Laci's garage, Bandi's boxing yard), with its letter, on the minimap and the big map. */
+	void MarkPlace(const FVector& At, const FString& Letter);
 	/**
 	 * A scene (ACutscene): how far the black bars are in, 0 to 1. While they
 	 * show, the rest of the HUD goes, and what people say shows as subtitles
@@ -202,6 +204,14 @@ private:
 	FVector2D StartBlipAt = FVector2D::ZeroVector;
 	FString StartLetter;
 	double StartBlipUntil = -1.0;
+	/** The places to go back to, each with its letter. */
+	struct FPlaceMark
+	{
+		FVector2D At = FVector2D::ZeroVector;
+		FString Letter;
+		double Until = -1.0;
+	};
+	TArray<FPlaceMark> PlaceMarks;
 
 	// A scene: the bars and the title.
 	float SceneBars = 0.f;

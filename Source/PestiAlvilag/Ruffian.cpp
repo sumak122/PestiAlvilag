@@ -2,6 +2,7 @@
 
 #include "Ruffian.h"
 
+#include "BoxingYardModel.h"
 #include "GarayModel.h"
 
 #include "Components/CapsuleComponent.h"
@@ -71,6 +72,16 @@ FString ARuffian::GetSpeakerName() const
 		return TEXT("Lajos, a seg\u00e9d");
 	case ERuffian::ClerkTwo:
 		return TEXT("Bandi, a seg\u00e9d");
+	case ERuffian::BoxBandi:
+		return TEXT("Bandi");
+	case ERuffian::BoxJeno:
+		return TEXT("F\u00fcrge Jen\u0151");
+	case ERuffian::BoxMazsas:
+		return TEXT("M\u00e1zs\u00e1s");
+	case ERuffian::BoxGyuri:
+		return TEXT("Sz\u0151ke Gyuri");
+	case ERuffian::BoxVasoklu:
+		return TEXT("Vas\u00f6kl\u0171");
 	default:
 		return TEXT("Bika");
 	}
@@ -103,8 +114,35 @@ float ARuffian::GetMaxHealth() const
 	case ERuffian::ClerkOne:
 	case ERuffian::ClerkTwo:
 		return 35.f;
+	// The ring: each harder than the one before.
+	case ERuffian::BoxBandi:
+		return 45.f;
+	case ERuffian::BoxJeno:
+		return 50.f;
+	case ERuffian::BoxMazsas:
+		return 80.f;
+	case ERuffian::BoxGyuri:
+		return 70.f;
+	case ERuffian::BoxVasoklu:
+		return 100.f;
 	default:
 		return 60.f;
+	}
+}
+
+float ARuffian::Quickness() const
+{
+	// Little Jenő and the champion think and strike faster.
+	switch (Kind)
+	{
+	case ERuffian::BoxJeno:
+		return 1.5f;
+	case ERuffian::BoxVasoklu:
+		return 1.3f;
+	case ERuffian::BoxMazsas:
+		return 0.85f;
+	default:
+		return 1.f;
 	}
 }
 
@@ -131,8 +169,34 @@ float ARuffian::GetVoicePitch() const
 		return 112.f;
 	case ERuffian::ClerkTwo:
 		return 126.f;
+	case ERuffian::BoxBandi:
+		return 115.f;
+	case ERuffian::BoxJeno:
+		return 132.f;
+	case ERuffian::BoxMazsas:
+		return 80.f;
+	case ERuffian::BoxGyuri:
+		return 110.f;
+	case ERuffian::BoxVasoklu:
+		return 92.f;
 	default:
 		return 142.f;
+	}
+}
+
+float ARuffian::GetBlowStrength() const
+{
+	// Bandi pulls his punches sparring; the porter and the champion hit hard.
+	switch (Kind)
+	{
+	case ERuffian::BoxBandi:
+		return 0.7f;
+	case ERuffian::BoxMazsas:
+		return 1.35f;
+	case ERuffian::BoxVasoklu:
+		return 1.25f;
+	default:
+		return 1.f;
 	}
 }
 
@@ -149,6 +213,16 @@ PersonKit::FOutfit ARuffian::GetDress() const
 		return GarayModel::Clerk(0);
 	case ERuffian::ClerkTwo:
 		return GarayModel::Clerk(1);
+	case ERuffian::BoxBandi:
+		return BoxingYardModel::Bandi();
+	case ERuffian::BoxJeno:
+		return BoxingYardModel::Rival(1);
+	case ERuffian::BoxMazsas:
+		return BoxingYardModel::Rival(2);
+	case ERuffian::BoxGyuri:
+		return BoxingYardModel::Rival(3);
+	case ERuffian::BoxVasoklu:
+		return BoxingYardModel::Rival(4);
 	default:
 		break;
 	}
@@ -467,7 +541,7 @@ void ARuffian::TickAttack()
 	{
 		return;
 	}
-	NextThink = Now + FMath::FRandRange(Ruffian::ThinkMin, Ruffian::ThinkMax) / Eagerness;
+	NextThink = Now + FMath::FRandRange(Ruffian::ThinkMin, Ruffian::ThinkMax) / (Eagerness * Quickness());
 
 	// Short of breath: cover up and back off.
 	if (Stamina < Ruffian::LowBreath)
@@ -478,7 +552,7 @@ void ARuffian::TickAttack()
 		return;
 	}
 	// He is punching me: sometimes cover up.
-	if (Player->GetFoe() == this && Brawl::IsLightPunch(Player->GetAct()) && FMath::FRand() < 0.35f)
+	if (Player->GetFoe() == this && Brawl::IsLightPunch(Player->GetAct()) && FMath::FRand() < (Kind == ERuffian::BoxGyuri ? 0.7f : 0.35f))
 	{
 		GuardUntil = Now + 0.6;
 		SetGuard(true);
