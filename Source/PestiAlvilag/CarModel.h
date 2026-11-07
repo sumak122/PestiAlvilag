@@ -189,17 +189,20 @@ namespace CarModel
 			break;
 		case EBody::Steyr:
 			// The Steyr XII / XXX saloon: a long bonnet, a tall four-door body
-			// and a trunk on a rack behind, about 4.6 m long over the bumpers.
-			L.FrontAxle = 150.0;
-			L.RearAxle = -132.0;
-			L.Nose = 160.0;
-			L.Tail = -200.0;
-			L.Cowl = 30.0;
+			// and a trunk on a rack behind, about 4.4 m long over the bumpers.
+			// Everything sits 25 cm further forward than the long trunk would
+			// put it, so bumper to bumper the car is centred on its collision
+			// box (PestiCar::BoxExtent), like the other cars.
+			L.FrontAxle = 175.0;
+			L.RearAxle = -107.0;
+			L.Nose = 185.0;
+			L.Tail = -175.0;
+			L.Cowl = 55.0;
 			L.RoofTop = 80.0;
-			L.SeatX = -32.0;
-			L.RearSeatX = -112.0;
-			L.RearDoorX = -68.0;
-			L.Exhaust = FVector(-238.0, 40.0, -62.0);
+			L.SeatX = -7.0;
+			L.RearSeatX = -87.0;
+			L.RearDoorX = -43.0;
+			L.Exhaust = FVector(-213.0, 40.0, -62.0);
 			break;
 		default:
 			break;
@@ -1027,11 +1030,11 @@ namespace CarModel
 		const double Back = L.Tail;
 		const double W = L.HalfWidth;
 		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 12.0, Waist), FVector2D(Back + 2.0, Waist - 12.0),
-			FVector2D(Back, Waist - 44.0), FVector2D(Back + 4.0, -44.0) }, Back + 10.0, Back + 14.0, { -31.0, -100.0 }, true);
+			FVector2D(Back, Waist - 44.0), FVector2D(Back + 4.0, -44.0) }, Back + 10.0, Back + 14.0, { -6.0, -75.0 }, true);
 		// The small back window: paint below and above it; the broad panel behind the
 		// quarter windows.
 		const double GlassTop = L.RoofTop - 10.0;
-		const double QuarterBack = -164.0;
+		const double QuarterBack = -139.0;
 		B.BothSides(Paint, FVector(Back + 2.0, W - 6.0, Waist - 1.0), FVector(QuarterBack, W, GlassTop + 1.0));
 		B.Bar(Paint, FVector(Back + 10.5, -(W - 4.0), Waist + 9.0), FVector(Back + 10.5, W - 4.0, Waist + 9.0), 16.0);
 		B.Bar(Paint, FVector(Back + 14.0, -(W - 4.0), GlassTop - 4.0), FVector(Back + 14.0, W - 4.0, GlassTop - 4.0), 8.0);
