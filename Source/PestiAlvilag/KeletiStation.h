@@ -46,6 +46,9 @@ public:
 	/** A point given in the station's own frame, in the city. */
 	static FVector2D ToCity(const FVector2D& Local);
 
+	/** The two steam engines at the platforms, in the station's own frame: their chimney tops, and their cylinders (where steam hisses out low down). */
+	static void SteamSpots(TArray<FVector>& OutChimneys, TArray<FVector>& OutCylinders);
+
 protected:
 	/** Walls, platforms, trains, the statue: solid, walkable. */
 	UPROPERTY(VisibleAnywhere, Category = "Station")

@@ -74,6 +74,14 @@ namespace DayNight
 	constexpr float NightSky = 0.5f;
 	constexpr float NightFog = 0.04f;
 
+	// The weather (SetWeather): a full overcast takes this share of the
+	// sunlight away and thickens the haze to this; a full mist makes the fog
+	// this thick, nearly as thick high up as on the ground.
+	constexpr float CloudDims = 0.75f;
+	constexpr float CloudFog = 0.05f;
+	constexpr float MistFog = 0.2f;
+	constexpr float MistFalloff = 0.02f;
+
 	// Street lamps: the nearest light the ground, out to 110 m round the
 	// camera, fading out over the last 30 m; each makes the pavement under it
 	// about twice as bright as a lit grey wall. Beyond that a glow on the
@@ -253,6 +261,8 @@ void ADayNight::FindSky()
 	if (Fog && Fog->GetComponent())
 	{
 		DayFogColor = Fog->GetComponent()->FogInscatteringLuminance;
+		DayFogDensity = Fog->GetComponent()->FogDensity;
+		DayFogFalloff = Fog->GetComponent()->FogHeightFalloff;
 	}
 
 	// The night's exposure: blended in with the darkness, so the day is untouched.
@@ -377,7 +387,8 @@ void ADayNight::UpdateSun(bool bForce)
 			}
 			else
 			{
-				Light->SetIntensity(DaySunIntensity * FMath::Clamp((Elevation + 6.f) / 8.f, 0.f, 1.f));
+				// Under cloud the sun is only a bright patch in the grey.
+				Light->SetIntensity(DaySunIntensity * FMath::Clamp((Elevation + 6.f) / 8.f, 0.f, 1.f) * (1.f - DayNight::CloudDims * Overcast));
 				Light->SetLightColor(FMath::Lerp(LowSunColor, DaySunColor, FMath::Clamp(Elevation / 20.f, 0.f, 1.f)));
 			}
 		}
@@ -393,8 +404,29 @@ void ADayNight::UpdateSun(bool bForce)
 	}
 	if (Fog && Fog->GetComponent())
 	{
-		Fog->GetComponent()->SetFogInscatteringColor(DayFogColor * FMath::Lerp(1.f, NightFog, Darkness));
+		UExponentialHeightFogComponent* FogLayer = Fog->GetComponent();
+		// Grey weather takes the blue out of the haze.
+		const float Grey = DayFogColor.GetLuminance();
+		const FLinearColor Haze = FMath::Lerp(DayFogColor, FLinearColor(Grey, Grey * 1.02f, Grey * 1.06f), FMath::Max(Overcast, Mist));
+		FogLayer->SetFogInscatteringColor(Haze * FMath::Lerp(1.f, NightFog, Darkness));
+		// Thicker under cloud, and thick and even from the ground up in a mist.
+		const float Cloudy = FMath::Lerp(DayFogDensity, FMath::Max(DayFogDensity, DayNight::CloudFog), Overcast);
+		const float Density = FMath::Lerp(Cloudy, DayNight::MistFog, Mist);
+		const float Falloff = FMath::Lerp(DayFogFalloff, DayNight::MistFalloff, Mist);
+		if (FMath::Abs(Density - ShownFogDensity) > 0.0005f || FMath::Abs(Falloff - ShownFogFalloff) > 0.002f)
+		{
+			ShownFogDensity = Density;
+			ShownFogFalloff = Falloff;
+			FogLayer->SetFogDensity(Density);
+			FogLayer->SetFogHeightFalloff(Falloff);
+		}
 	}
+}
+
+void ADayNight::SetWeather(float InOvercast, float InMist)
+{
+	Overcast = FMath::Clamp(InOvercast, 0.f, 1.f);
+	Mist = FMath::Clamp(InMist, 0.f, 1.f);
 }
 
 UMaterialInstanceDynamic* ADayNight::MakeGlowMaterial(UObject* Outer) const

@@ -16,6 +16,7 @@
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
 #include "TestGrounds.h"
+#include "Weather.h"
 
 namespace PestiSettings
 {
@@ -158,6 +159,10 @@ void FPestiMenu::Open(UWorld* World, EPestiMenuPage To)
 	const APestiPerson* Walker = PC ? Cast<APestiPerson>(PC->GetPawn()) : nullptr;
 	bOnFoot = Walker && !Walker->IsRiding();
 	bOnTestGrounds = World && ATestGrounds::IsPlayerHere(World);
+	if (const AWeather* Sky = World ? AWeather::Get(World) : nullptr)
+	{
+		WeatherPick = static_cast<int32>(Sky->GetTestWeather());
+	}
 	Page = To;
 	Base = To;
 	Choice = 0;
@@ -217,6 +222,10 @@ TArray<FPestiMenuRow> FPestiMenu::Rows() const
 		Out.Add({ TEXT("VEREKED\u0150 UDVAR"), TEXT("Fight yard"), EPestiMenuAction::TestFight, bOnFoot });
 		Out.Add({ TEXT("J\u00c1RM\u0170TELEP"), TEXT("Vehicle yard"), EPestiMenuAction::TestVehicles, bOnFoot });
 		Out.Add({ TEXT("VISSZA A V\u00c1ROSBA"), TEXT("Back to the city"), EPestiMenuAction::TestBackToCity, bOnFoot && bOnTestGrounds });
+		const TCHAR* const WeatherHu[] = { TEXT("MAGA J\u00c1R"), TEXT("DER\u0170S"), TEXT("ES\u0150"), TEXT("K\u00d6D") };
+		const TCHAR* const WeatherEn[] = { TEXT("comes and goes"), TEXT("clear"), TEXT("rain"), TEXT("fog") };
+		const int32 Pick = FMath::Clamp(WeatherPick, 0, 3);
+		Out.Add({ FString(TEXT("ID\u0150J\u00c1R\u00c1S: ")) + WeatherHu[Pick], FString(TEXT("Weather: ")) + WeatherEn[Pick], EPestiMenuAction::TestWeather });
 		Out.Add({ TEXT("VISSZA"), TEXT("Back"), EPestiMenuAction::Back });
 	}
 	else if (Page == EPestiMenuPage::Confirm)
@@ -483,6 +492,14 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 	case EPestiMenuAction::TestVehicles:
 		Close(World);
 		ATestGrounds::Go(World, Action == EPestiMenuAction::TestFight ? ETestGround::Fight : ETestGround::Vehicles);
+		break;
+	case EPestiMenuAction::TestWeather:
+		// Stays on the page: each press steps on to the next weather.
+		WeatherPick = (WeatherPick + 1) % static_cast<int32>(ETestWeather::Count);
+		if (AWeather* Sky = AWeather::Get(World))
+		{
+			Sky->SetTestWeather(static_cast<ETestWeather>(WeatherPick));
+		}
 		break;
 	case EPestiMenuAction::TestBackToCity:
 		Close(World);
