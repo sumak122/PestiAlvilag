@@ -91,11 +91,11 @@ namespace PestiStart
 	// Bözsi néni at her flea market stall (gone after the raid).
 	const TCHAR* const BozsiName = TEXT("B\u00f6zsi n\u00e9ni");
 
-	/** Puts up a set of shapes, its lamps and its lettering at At, turned by Yaw. */
-	inline void PutUpShapeSet(UWorld* World, FName Key, const FVector& At, double Yaw, const TArray<MarketModel::FShape>& Shapes,
+	/** Puts up a set of shapes, its lamps and its lettering at At, turned by SetYaw. */
+	inline void PutUpShapeSet(UWorld* World, FName Key, const FVector& At, double SetYaw, const TArray<MarketModel::FShape>& Shapes,
 		const TArray<BozsiHouseModel::FLamp>& Lamps, const TArray<BozsiHouseModel::FSign>& Signs)
 	{
-		AShapeSet* Set = World->SpawnActor<AShapeSet>(AShapeSet::StaticClass(), At, FRotator(0.0, Yaw, 0.0));
+		AShapeSet* Set = World->SpawnActor<AShapeSet>(AShapeSet::StaticClass(), At, FRotator(0.0, SetYaw, 0.0));
 		if (!Set)
 		{
 			return;
