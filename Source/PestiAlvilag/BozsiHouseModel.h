@@ -146,7 +146,7 @@ namespace BozsiHouseModel
 		const FVector Crates(WashX1 + 55.0, -330.0, 160.0);
 		const FVector BackYard(WashX1 + 200.0, -500.0, 0.0);
 		/** The small door in the back wall, on the yard side. */
-		const FVector BackDoor(BackX - 60.0, -880.0, 0.0);
+		const FVector BackDoor(BackX - 100.0, -880.0, 0.0);
 		constexpr double BackDoorHalf = 55.0;
 		/** The middle of the courtyard. */
 		const FVector Court(1300.0, 0.0, 0.0);
@@ -536,16 +536,24 @@ namespace BozsiHouseModel
 			const double Z = 12.0 + (i / 10) * 26.0;
 			Add(Out, MarketModel::Cylinder, Colors::Wood, FVector(BackX - 70 + R.Range(-8.0, 8.0), Y, Z), FVector(24, 24, 90), 0.0, false, 90.0, 0.0);
 		}
-		// The small door through the back wall, with its lamp.
+		// The small door through the back wall, with its lamp. The next
+		// house's wall on the map stands up to 30 cm in front of BackX here,
+		// so the door and its stone frame stand out from DoorFace, in front of it.
 		const FVector Door = Spots::BackDoor;
-		Span(Out, Colors::GateWood, FVector(BackX - 3, Door.Y - Spots::BackDoorHalf, 0), FVector(BackX, Door.Y + Spots::BackDoorHalf, 210), false);
-		Span(Out, Colors::Iron, FVector(BackX - 5, Door.Y - Spots::BackDoorHalf, 60), FVector(BackX - 3, Door.Y + Spots::BackDoorHalf, 66), false);
-		Span(Out, Colors::Iron, FVector(BackX - 5, Door.Y - Spots::BackDoorHalf, 160), FVector(BackX - 3, Door.Y + Spots::BackDoorHalf, 166), false);
-		Span(Out, Colors::Stone, FVector(BackX - 8, Door.Y - Spots::BackDoorHalf - 12, 210), FVector(BackX, Door.Y + Spots::BackDoorHalf + 12, 224), false);
-		Add(Out, MarketModel::Sphere, Colors::Globe, FVector(BackX - 20, Door.Y + Spots::BackDoorHalf + 40, 260), FVector(18, 18, 22), 0.0, false);
-		Lamps.Add({ FVector(BackX - 60, Door.Y, 250), 700.f });
+		const double DoorFace = BackX - 40.0;
+		const double Y0 = Door.Y - Spots::BackDoorHalf, Y1 = Door.Y + Spots::BackDoorHalf;
+		Span(Out, Colors::GateWood, FVector(DoorFace - 4, Y0, 0), FVector(DoorFace + 30, Y1, 210), false);
+		Span(Out, Colors::Iron, FVector(DoorFace - 6, Y0, 60), FVector(DoorFace - 4, Y1, 66), false);
+		Span(Out, Colors::Iron, FVector(DoorFace - 6, Y0, 160), FVector(DoorFace - 4, Y1, 166), false);
+		Span(Out, Colors::Iron, FVector(DoorFace - 9, Y1 - 20, 100), FVector(DoorFace - 6, Y1 - 8, 112), false);
+		Span(Out, Colors::Stone, FVector(DoorFace - 10, Y0 - 22, 0), FVector(DoorFace + 30, Y0, 232), false);
+		Span(Out, Colors::Stone, FVector(DoorFace - 10, Y1, 0), FVector(DoorFace + 30, Y1 + 22, 232), false);
+		Span(Out, Colors::Stone, FVector(DoorFace - 12, Y0 - 30, 210), FVector(DoorFace + 30, Y1 + 30, 232), false);
+		Span(Out, Colors::Stone, FVector(DoorFace - 40, Y0 - 10, 0), FVector(DoorFace, Y1 + 10, 10), false);
+		Add(Out, MarketModel::Sphere, Colors::Globe, FVector(DoorFace - 20, Y1 + 50, 260), FVector(18, 18, 22), 0.0, false);
+		Lamps.Add({ FVector(DoorFace - 50, Door.Y, 250), 700.f });
 		// Dustbins and a broken chair by the door.
-		Add(Out, MarketModel::Cylinder, Colors::Zinc, FVector(BackX - 50, Door.Y + 150, 40), FVector(56, 56, 80));
+		Add(Out, MarketModel::Cylinder, Colors::Zinc, FVector(DoorFace - 35, Door.Y + 160, 40), FVector(56, 56, 80));
 		Add(Out, MarketModel::Cube, Colors::Wood, FVector(BackX - 120, Door.Y - 170, 22), FVector(40, 40, 6), 25.0, false, 0.0, 70.0);
 	}
 
