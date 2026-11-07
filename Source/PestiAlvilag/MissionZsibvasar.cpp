@@ -669,13 +669,13 @@ void AMissionZsibvasar::SpawnRuffians()
 		FVector2D Spot = FVector2D::ZeroVector;
 		double Z = PistaAt.Z;
 		bool bFound = false;
-		for (int32 Ring = 0; Ring < 2 && !bFound; ++Ring)
+		for (int32 Round = 0; Round < 2 && !bFound; ++Round)
 		{
 			for (int32 t = 0; t <= Zsibvasar::TriesAround && !bFound; ++t)
 			{
 				const double Turn = (t % 2 == 0 ? 1.0 : -1.0) * ((t + 1) / 2) * Zsibvasar::TryAround;
 				const double Angle = PistaYaw + Zsibvasar::RuffianAngles[r] + Turn;
-				const double Distance = Zsibvasar::RuffianDistances[r] + Ring * Zsibvasar::FurtherOut;
+				const double Distance = Zsibvasar::RuffianDistances[r] + Round * Zsibvasar::FurtherOut;
 				const FVector2D Try = FVector2D(PistaAt) + FVector2D(FRotator(0.0, Angle, 0.0).RotateVector(FVector::ForwardVector)) * Distance;
 				bool bCrowded = false;
 				for (const FVector2D& Other : Taken)
@@ -849,7 +849,7 @@ void AMissionZsibvasar::TickFight()
 	// Two go for him; the rest stand round him with their fists up, waiting.
 	const double PersonYaw = Person->GetActorRotation().Yaw;
 	const FVector Middle = Person->GetActorLocation();
-	int32 Ring = 0;
+	int32 Round = 0;
 	TArray<ARuffian*> Waiting;
 	for (int32 k = Zsibvasar::AtOnce; k < Standing.Num(); ++k)
 	{
@@ -861,10 +861,10 @@ void AMissionZsibvasar::TickFight()
 	}
 	for (ARuffian* Tough : Waiting)
 	{
-		const double Angle = PersonYaw + Zsibvasar::RingAngles[Ring % static_cast<int32>(UE_ARRAY_COUNT(Zsibvasar::RingAngles))];
+		const double Angle = PersonYaw + Zsibvasar::RingAngles[Round % static_cast<int32>(UE_ARRAY_COUNT(Zsibvasar::RingAngles))];
 		const FVector Spot = Middle + FRotator(0.0, Angle, 0.0).RotateVector(FVector::ForwardVector) * Zsibvasar::RingRadius;
 		Tough->Circle(Person, Spot);
-		++Ring;
+		++Round;
 	}
 	for (int32 k = 0; k < FMath::Min(Zsibvasar::AtOnce, Standing.Num()); ++k)
 	{
