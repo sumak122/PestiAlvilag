@@ -172,7 +172,7 @@ void AMissionUzenet::OnStepDone(int32 Step)
 		SayLater(4.f, Uzenet::PistaName,
 			TEXT("Na, ezt vidd vissza neki. \u00c9s bele ne n\u00e9zz, fiam!"),
 			TEXT("Right, take this back to her. And don't you look inside, son!"));
-		SayLater(10.f, Uzenet::PistaName,
+		SayLater(7.f, Uzenet::PistaName,
 			TEXT("Furcsa... nem is hallottalak j\u00f6nni."),
 			TEXT("Funny... I never heard you coming."));
 	}
@@ -223,8 +223,10 @@ void AMissionUzenet::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AMissionUzenet::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
-	const double Last = Lines.Num() > 0 ? Lines.Last().At : GetWorld()->GetTimeSeconds();
-	Lines.Add(FLater{ FMath::Max(Last, GetWorld()->GetTimeSeconds() + Seconds), Who, LineHu, LineEn });
+	// Seconds after the line before it (or after now, if none is waiting).
+	const double Now = GetWorld()->GetTimeSeconds();
+	const double Last = Lines.Num() > 0 ? Lines.Last().At : Now;
+	Lines.Add({ FMath::Max(Last, Now) + Seconds, Who, LineHu, LineEn });
 }
 
 void AMissionUzenet::PutAway()

@@ -180,7 +180,7 @@ void AMissionKifutofiu::SetUpMission()
 	Talk.Radius = Kifutofiu::TalkRadius;
 	Talk.bPressE = true;
 	Talk.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
-	Talk.SceneSeconds = 14.f;
+	Talk.SceneSeconds = 20.f;
 	Talk.SceneWith = Varga.Get();
 	Steps.Add(Talk);
 	bStartsAtRing = true;
@@ -227,8 +227,10 @@ void AMissionKifutofiu::SetUpMission()
 
 void AMissionKifutofiu::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
-	const double Last = Lines.Num() > 0 ? Lines.Last().At : GetWorld()->GetTimeSeconds();
-	Lines.Add({ FMath::Max(Last, GetWorld()->GetTimeSeconds() + Seconds), Who, LineHu, LineEn });
+	// Seconds after the line before it (or after now, if none is waiting).
+	const double Now = GetWorld()->GetTimeSeconds();
+	const double Last = Lines.Num() > 0 ? Lines.Last().At : Now;
+	Lines.Add({ FMath::Max(Last, Now) + Seconds, Who, LineHu, LineEn });
 }
 
 void AMissionKifutofiu::Hint(const FString& Text) const

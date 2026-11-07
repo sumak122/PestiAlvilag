@@ -98,7 +98,7 @@ void AMissionElsoAuto::SetUpMission()
 	Talk.Radius = ElsoAuto::TalkRadius;
 	Talk.bPressE = true;
 	Talk.Place = TEXT("Szerdahelyi utca");
-	Talk.SceneSeconds = 14.f;
+	Talk.SceneSeconds = 20.f;
 	Talk.SceneWith = Laci.Get();
 	Steps.Add(Talk);
 	bStartsAtRing = true;
@@ -132,7 +132,7 @@ void AMissionElsoAuto::SetUpMission()
 	Deliver.bOnFoot = false;
 	Deliver.bManual = true;
 	Deliver.Place = TEXT("Szerdahelyi utca");
-	Deliver.SceneSeconds = 9.f;
+	Deliver.SceneSeconds = 13.f;
 	Deliver.SceneWith = Laci.Get();
 	Steps.Add(Deliver);
 
@@ -184,8 +184,10 @@ void AMissionElsoAuto::SpawnCarAndConstable()
 
 void AMissionElsoAuto::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
-	const double Last = Lines.Num() > 0 ? Lines.Last().At : GetWorld()->GetTimeSeconds();
-	Lines.Add({ FMath::Max(Last, GetWorld()->GetTimeSeconds() + Seconds), Who, LineHu, LineEn });
+	// Seconds after the line before it (or after now, if none is waiting).
+	const double Now = GetWorld()->GetTimeSeconds();
+	const double Last = Lines.Num() > 0 ? Lines.Last().At : Now;
+	Lines.Add({ FMath::Max(Last, Now) + Seconds, Who, LineHu, LineEn });
 }
 
 void AMissionElsoAuto::Hint(const FString& Text) const
