@@ -140,6 +140,14 @@ namespace LaciYardModel
 		Span(Out, Colors::PlasterDark, FVector(-4, G1 + 30, 0), FVector(0, RightY, 45), false);
 		Span(Out, Colors::PlasterDark, FVector(-6, LeftY, H), FVector(T + 6, G0 - 30, H + 10), false);
 		Span(Out, Colors::PlasterDark, FVector(-6, G1 + 30, H), FVector(T + 6, RightY, H + 10), false);
+		// Side walls along both edges of the lot, from the street wall back to the
+		// shed: the houses either side stand back from the street and have
+		// courtyards opening this way, so without these there are gaps.
+		for (const double Y : { LeftY - 12.0, RightY + 12.0 })
+		{
+			Span(Out, Colors::Plaster, FVector(0, Y - 13, 0), FVector(ShedX + 10, Y + 13, H));
+			Span(Out, Colors::PlasterDark, FVector(0, Y - 16, H), FVector(ShedX + 10, Y + 16, H + 10), false);
+		}
 		// Bare brick where the plaster has come off.
 		Span(Out, Colors::Brick, FVector(-1.5, LeftY + 120, 90), FVector(0, LeftY + 260, 150), false);
 		Span(Out, Colors::Brick, FVector(-1.5, LeftY + 400, 170), FVector(0, LeftY + 470, 230), false);
