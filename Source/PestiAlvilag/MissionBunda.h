@@ -6,6 +6,8 @@
 #include "Mission.h"
 #include "MissionBunda.generated.h"
 
+class APestiHUD;
+
 class APestiCar;
 class APestiPerson;
 class APoliceman;
@@ -94,6 +96,9 @@ private:
 	/** True once he has been arrested since the police came after him. */
 	bool WasArrested() const;
 	void ShowPaper(bool bShow);
+	/** The paper's side column: short news of what he did before (the doctor's car, the ring, Hermann). */
+	void ShowPaperBrief(APestiHUD& Hud) const;
+	FString PaperBriefEnglish() const;
 	EKind KindOf(int32 Step) const { return Kinds.IsValidIndex(Step) ? Kinds[Step] : EKind::Room; }
 
 	UPROPERTY(Transient)

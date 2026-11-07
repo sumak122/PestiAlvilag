@@ -109,6 +109,12 @@ namespace PestiHud
 	constexpr float HeadlineLine = 42.f;
 	constexpr float StoryPx = 21.f;
 	constexpr float StoryLine = 28.f;
+	// The column of short news beside the story: its width, and its print.
+	constexpr float BriefWidth = 240.f;
+	constexpr float BriefTitlePx = 17.f;
+	constexpr float BriefTitleLine = 21.f;
+	constexpr float BriefPx = 16.f;
+	constexpr float BriefLine = 21.f;
 
 	constexpr float CabinetWidth = 1580.f;
 	constexpr float CabinetHeight = 935.f;
@@ -938,8 +944,12 @@ private:
 		const FSlateFontInfo Dateline = Paint.Font(Hud.PaperFont, PestiHud::DatelinePx);
 		const FSlateFontInfo Head = Paint.Font(Hud.PaperFont, PestiHud::HeadlinePx);
 		const FSlateFontInfo Story = Paint.Font(Hud.PaperFont, PestiHud::StoryPx);
-		const float PaperW = PestiHud::ClippingWidth;
-		const float Inner = PaperW - 2.f * PestiHud::ClippingPadX;
+		// With short news, a narrow column more on the right, and the page and plaque move over to make room.
+		const bool bBrief = Hud.BriefTitles.Num() > 0;
+		const float BriefW = bBrief ? PestiHud::BriefWidth : 0.f;
+		const float Shift = BriefW * 0.5f;
+		const float PaperW = PestiHud::ClippingWidth + BriefW;
+		const float Inner = PestiHud::ClippingWidth - 2.f * PestiHud::ClippingPadX;
 		const TArray<FLetterLine> HeadLines = BreakLines(Paint, Hud.ClippingHeadline, Head, Inner);
 		const TArray<FLetterLine> StoryLines = BreakLines(Paint, Hud.ClippingBody, Story, Inner);
 		const float MastH = 62.f;
@@ -950,9 +960,22 @@ private:
 		{
 			StoryH += Row.Words.IsEmpty() ? PestiHud::StoryLine * 0.4f : PestiHud::StoryLine;
 		}
-		const float WantH = HeadTop + HeadLines.Num() * PestiHud::HeadlineLine + 34.f + StoryH + PestiHud::ClippingPadY;
+		// The short news, each a title and its lines, under a heading.
+		const FSlateFontInfo BriefTitleFont = Paint.Font(Hud.PaperFont, PestiHud::BriefTitlePx);
+		const FSlateFontInfo BriefFont = Paint.Font(Hud.PaperFont, PestiHud::BriefPx);
+		const float BriefInner = BriefW - PestiHud::ClippingPadX * 0.5f - 20.f;
+		TArray<TArray<FLetterLine>> BriefHeads;
+		TArray<TArray<FLetterLine>> BriefLines;
+		float BriefH = 40.f;
+		for (int32 i = 0; i < Hud.BriefTitles.Num(); ++i)
+		{
+			BriefHeads.Add(BreakLines(Paint, Hud.BriefTitles[i], BriefTitleFont, BriefInner));
+			BriefLines.Add(BreakLines(Paint, Hud.BriefBodies.IsValidIndex(i) ? Hud.BriefBodies[i] : FString(), BriefFont, BriefInner));
+			BriefH += BriefHeads.Last().Num() * PestiHud::BriefTitleLine + BriefLines.Last().Num() * PestiHud::BriefLine + 24.f;
+		}
+		const float WantH = FMath::Max(HeadTop + HeadLines.Num() * PestiHud::HeadlineLine + 34.f + StoryH, bBrief ? HeadTop + BriefH : 0.f) + PestiHud::ClippingPadY;
 		const float PaperH = FMath::Min(High - 40.f, WantH);
-		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f;
+		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f + Shift;
 		const float PaperY = (High - PaperH) * 0.5f;
 		Paint.Box(PaperX + 10.f, PaperY + 12.f, PaperW, PaperH, PestiHud::PaperShadow, 0);
 		Paint.Box(PaperX, PaperY, PaperW, PaperH, PestiHud::Newsprint, 1);
@@ -960,16 +983,50 @@ private:
 
 		const float Left = PaperX + PestiHud::ClippingPadX;
 		const float Right = Left + Inner;
-		const float Middle = PaperX + PaperW * 0.5f;
+		// The masthead and dateline go right across the page; the story keeps to its column.
+		const float FullRight = PaperX + PaperW - PestiHud::ClippingPadX;
+		const float Middle = PaperX + PestiHud::ClippingWidth * 0.5f;
 		const float MastBase = PaperY + PestiHud::ClippingPadY + 42.f;
-		Paint.Text(TEXT("PESTI NAPI H\u00cdREK"), Mast, Middle, MastBase, PestiHud::PrintInk, 0.5f);
+		Paint.Text(TEXT("PESTI NAPI H\u00cdREK"), Mast, PaperX + PaperW * 0.5f, MastBase, PestiHud::PrintInk, 0.5f);
 		const float RuleY = PaperY + PestiHud::ClippingPadY + MastH - 6.f;
-		Paint.Line(Left, RuleY, Right, RuleY, PestiHud::PrintInk, 1.f);
-		Paint.Line(Left, RuleY + 4.f, Right, RuleY + 4.f, PestiHud::PrintInk, 1.f);
+		Paint.Line(Left, RuleY, FullRight, RuleY, PestiHud::PrintInk, 1.f);
+		Paint.Line(Left, RuleY + 4.f, FullRight, RuleY + 4.f, PestiHud::PrintInk, 1.f);
 		const float DateBase = RuleY + 25.f;
 		Paint.Text(TEXT("Budapest, 1932"), Dateline, Left, DateBase, PestiHud::PrintInk);
-		Paint.Text(TEXT("\u00c1ra 10 fill\u00e9r"), Dateline, Right, DateBase, PestiHud::PrintInk, 1.f);
-		Paint.Line(Left, DateBase + 8.f, Right, DateBase + 8.f, PestiHud::PrintInk, 1.f);
+		Paint.Text(TEXT("\u00c1ra 10 fill\u00e9r"), Dateline, FullRight, DateBase, PestiHud::PrintInk, 1.f);
+		Paint.Line(Left, DateBase + 8.f, FullRight, DateBase + 8.f, PestiHud::PrintInk, 1.f);
+		if (bBrief)
+		{
+			// A rule down between the columns, then "in brief" and its items.
+			const float ColumnX = PaperX + PestiHud::ClippingWidth - PestiHud::ClippingPadX * 0.5f;
+			const float BriefLeft = ColumnX + 20.f;
+			const float BriefMiddle = BriefLeft + BriefInner * 0.5f;
+			const float BriefBottom = PaperY + PaperH - PestiHud::ClippingPadY * 0.5f;
+			Paint.Line(ColumnX, PaperY + HeadTop - 10.f, ColumnX, BriefBottom, PestiHud::PrintInk, 1.f);
+			float BriefBase = PaperY + HeadTop + 14.f;
+			Paint.Text(TEXT("R\u00d6VID H\u00cdREK"), Dateline, BriefMiddle, BriefBase, PestiHud::PrintInk, 0.5f);
+			Paint.Line(BriefLeft, BriefBase + 8.f, BriefLeft + BriefInner, BriefBase + 8.f, PestiHud::PrintInk, 1.f);
+			BriefBase += 40.f;
+			for (int32 i = 0; i < BriefHeads.Num() && BriefBase < BriefBottom; ++i)
+			{
+				for (const FLetterLine& Row : BriefHeads[i])
+				{
+					Paint.Text(Row.Words, BriefTitleFont, BriefMiddle, BriefBase, PestiHud::PrintInk, 0.5f);
+					BriefBase += PestiHud::BriefTitleLine;
+				}
+				for (const FLetterLine& Row : BriefLines[i])
+				{
+					if (BriefBase > BriefBottom)
+					{
+						break;
+					}
+					Paint.Text(Row.Words, BriefFont, BriefLeft, BriefBase, PestiHud::PrintInk);
+					BriefBase += PestiHud::BriefLine;
+				}
+				Paint.Line(BriefMiddle - 30.f, BriefBase - 8.f, BriefMiddle + 30.f, BriefBase - 8.f, PestiHud::PrintInk, 1.f);
+				BriefBase += 24.f;
+			}
+		}
 
 		float Baseline = PaperY + HeadTop + PestiHud::HeadlineLine * 0.75f;
 		for (const FLetterLine& Row : HeadLines)
@@ -998,7 +1055,7 @@ private:
 
 		// The English, on a plaque as tall as its lines.
 		const FSlateFontInfo Plain = Paint.Plain(PestiHud::PlaquePx);
-		const float PlaqueX = Wide * 0.5f + PestiHud::LetterGap * 0.5f;
+		const float PlaqueX = Wide * 0.5f + PestiHud::LetterGap * 0.5f + Shift;
 		const float PlaqueInner = PestiHud::PlaqueWidth - 2.f * PestiHud::PlaquePad;
 		const TArray<FLetterLine> English = BreakLines(Paint, Hud.ClippingEn, Plain, PlaqueInner);
 		const float PlaqueH = 2.f * PestiHud::PlaquePad + 50.f + English.Num() * PestiHud::PlaqueLine + 40.f;
@@ -1962,6 +2019,14 @@ void APestiHUD::SetClipping(const FString& Headline, const FString& Body, const 
 	ClippingHeadline = Headline;
 	ClippingBody = Body;
 	ClippingEn = En;
+	BriefTitles.Reset();
+	BriefBodies.Reset();
+}
+
+void APestiHUD::SetClippingBrief(const TArray<FString>& Titles, const TArray<FString>& Bodies)
+{
+	BriefTitles = Titles;
+	BriefBodies = Bodies;
 }
 
 void APestiHUD::ClearClipping()
@@ -1969,6 +2034,8 @@ void APestiHUD::ClearClipping()
 	ClippingHeadline.Reset();
 	ClippingBody.Reset();
 	ClippingEn.Reset();
+	BriefTitles.Reset();
+	BriefBodies.Reset();
 }
 
 void APestiHUD::SetCabinet(const ALighters* Shown)

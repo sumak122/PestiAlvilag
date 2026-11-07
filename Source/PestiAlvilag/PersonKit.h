@@ -50,6 +50,8 @@ namespace PersonKit
 		/** A cloth sash wound round the waist. */
 		bool bSash = false;
 		bool bBoots = false;
+		/** Beaten up and patched: a gauze band round the head, a plaster on the nose, a bruise by the eye. */
+		bool bBandaged = false;
 		EHeld Held = EHeld::None;
 		/**
 		 * Sitting on a chair: thighs forward, shins down, a lap instead of
@@ -364,6 +366,16 @@ namespace PersonKit
 		if (W)
 		{
 			Blob(B, O.Hair, HeadAt + FVector(-9.0, 0.0, -2.0), FVector(4.0, 5.0, 4.0), 8, 4);
+		}
+		if (O.bBandaged)
+		{
+			// Gauze wound round the brow over the hair, a strip of plaster
+			// across the nose, and a dark bruise under the left eye.
+			const FLinearColor Gauze(0.93f, 0.92f, 0.87f);
+			Blob(B, Gauze, HeadAt + FVector(-0.5, 0.0, 6.5) * Hr, FVector(10.6, 9.8, 2.6) * Hr, 14, 5);
+			Blob(B, Gauze, HeadAt + FVector(-1.5, 0.0, 9.5) * Hr, FVector(9.0, 8.4, 2.2) * Hr, 12, 4);
+			Block(B, Gauze, HeadAt + FVector(10.9, 0.0, -1.0) * Hr, FVector(0.5, 2.3, 0.8));
+			Blob(B, FLinearColor(0.38f, 0.20f, 0.24f), HeadAt + FVector(8.6, -3.3, 0.4) * Hr, FVector(1.1, 1.9, 1.1), 6, 3);
 		}
 
 		// Shirt front, collar and tie in the open neck of a jacket or waistcoat.

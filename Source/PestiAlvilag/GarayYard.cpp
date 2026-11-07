@@ -10,8 +10,13 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
 #include "GarayModel.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
+#include "PestiHud.h"
+#include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace GarayYardPlace
@@ -28,8 +33,19 @@ namespace GarayYardPlace
 	constexpr float LampNight = 14.f;
 	constexpr float LampReach = 900.f;
 	const FLinearColor LampColor(1.f, 0.85f, 0.62f);
-	// How often the lamps follow the time of day (s).
-	constexpr float LampUpdate = 1.f;
+	// How often the lamps follow the time of day, and the people look up (s).
+	constexpr float LampUpdate = 0.25f;
+
+	// After mission 5 ("A felmondás") Hermann is back in his shop, bandaged.
+	const FName HermannBackAfter(TEXT("Felmondas"));
+	// He knows the player again this close (cm), and shouts again once he has gone this far.
+	constexpr double KnowsYouAt = 450.0;
+	constexpr double ForgetsAt = 1400.0;
+	// He turns to watch the player from this far (cm).
+	constexpr double WatchesAt = 900.0;
+	constexpr float ShoutSeconds = 6.f;
+	// He is back only once the player is this far from the shop (cm).
+	constexpr double AppearsBeyond = 4000.0;
 }
 
 AGarayYard::AGarayYard()
@@ -120,6 +136,97 @@ void AGarayYard::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateLamps();
+	TickShopPeople();
+}
+
+void AGarayYard::TickShopPeople()
+{
+	using namespace GarayYardPlace;
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Game || !Game->IsMissionDone(HermannBackAfter))
+	{
+		return;
+	}
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const APawn* Player = PC ? PC->GetPawn() : nullptr;
+	if (!bShopPeopleUp)
+	{
+		// Not while he is near: the men he fought may still be lying in the shop for a while.
+		const FVector ShopAt = GetActorTransform().TransformPosition(GarayModel::Spots::Hermann);
+		if (!Player || FVector::Dist2D(Player->GetActorLocation(), ShopAt) < AppearsBeyond)
+		{
+			return;
+		}
+		// Old Hermann by his counter, his head bandaged, and Lajos by the window.
+		bShopPeopleUp = true;
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		const FTransform Here = GetActorTransform();
+		const double Turn = GetActorRotation().Yaw;
+		const FVector HermannAt = Here.TransformPosition(GarayModel::Spots::Hermann) + FVector(0.0, 0.0, PersonModel::MiddleHeight);
+		Hermann = GetWorld()->SpawnActor<AStoryPerson>(AStoryPerson::StaticClass(), HermannAt, FRotator(0.0, Turn + 135.0, 0.0), Params);
+		if (Hermann)
+		{
+			PersonKit::FOutfit Dress = GarayModel::Hermann();
+			Dress.bBandaged = true;
+			Hermann->SetOutfit(Dress);
+		}
+		const FVector ClerkAt = Here.TransformPosition(GarayModel::Spots::ClerkOne) + FVector(0.0, 0.0, PersonModel::MiddleHeight);
+		Clerk = GetWorld()->SpawnActor<AStoryPerson>(AStoryPerson::StaticClass(), ClerkAt, FRotator(0.0, Turn, 0.0), Params);
+		if (Clerk)
+		{
+			Clerk->SetOutfit(GarayModel::Clerk(0));
+		}
+	}
+
+	if (!Player || !Hermann)
+	{
+		return;
+	}
+	const FVector PlayerAt = Player->GetActorLocation();
+	const double Gap = FVector::Dist2D(PlayerAt, Hermann->GetActorLocation());
+	if (Gap < WatchesAt)
+	{
+		// Both keep an eye on him.
+		Hermann->FaceTowards(PlayerAt);
+		if (Clerk)
+		{
+			Clerk->FaceTowards(PlayerAt);
+		}
+	}
+	if (Gap > ForgetsAt)
+	{
+		bShoutArmed = true;
+	}
+	if (!bShoutArmed || Gap > KnowsYouAt)
+	{
+		return;
+	}
+	bShoutArmed = false;
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Hud)
+	{
+		return;
+	}
+	if (Shouts == 0)
+	{
+		Hud->Say(TEXT("Friedrich Hermann"),
+			TEXT("Maga az! Maga volt az! Lajos, hallja? Ez \u00fct\u00f6tt le a saj\u00e1t boltomban!"),
+			TEXT("It's you! It was you! Lajos, do you hear? This is the one who knocked me down in my own shop!"), ShoutSeconds);
+	}
+	else if (Shouts % 2 == 1)
+	{
+		Hud->Say(TEXT("Lajos, a seg\u00e9d"),
+			TEXT("Menjen innen, uram, am\u00edg sz\u00e9pen mondom. A f\u0151n\u00f6k \u00far feljelent\u00e9st tett."),
+			TEXT("Leave, sir, while I'm asking nicely. The governor has gone to the police."), ShoutSeconds);
+	}
+	else
+	{
+		Hud->Say(TEXT("Friedrich Hermann"),
+			TEXT("M\u00e1r megint itt van? Kifel\u00e9, miel\u0151tt a fiam haza\u00e9r!"),
+			TEXT("You again? Out, before my son gets home!"), ShoutSeconds);
+	}
+	++Shouts;
 }
 
 void AGarayYard::UpdateLamps()

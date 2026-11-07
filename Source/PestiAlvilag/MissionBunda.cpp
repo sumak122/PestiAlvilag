@@ -796,7 +796,74 @@ void AMissionBunda::ShowPaper(bool bShow)
 		TEXT("A rend\u0151rs\u00e9g az \u00e9jjel rajta\u00fct\u00f6tt a N\u00e9psz\u00ednh\u00e1z utca 29. sz\u00e1m\u00fa b\u00e9rh\u00e1zon, \u00e9s \u0151rizetbe vette B. Erzs\u00e9bet \u00f6zvegyasszonyt, akit r\u00e9g\u00f3ta orgazdak\u00e9nt ismernek. Tettest\u00e1rsa a h\u00e1ts\u00f3 udvaron \u00e1t elmenek\u00fclt; a nyomoz\u00e1s folyik."),
 		TEXT("Receiver of stolen goods caught in N\u00e9psz\u00ednh\u00e1z utca.\n\n")
 		TEXT("The wife of police inspector \u00d6d\u00f6n Kardos bought a fur coat yesterday afternoon from a woman in N\u00e9psz\u00ednh\u00e1z utca, and to her astonishment recognised her own mink, which she had left with the furrier B\u00e9la Friedmann of R\u00e1k\u00f3czi \u00fat for the summer. An unknown young man had stolen it from outside the shop that morning.\n\n")
-		TEXT("Last night the police raided the tenement at N\u00e9psz\u00ednh\u00e1z utca 29 and took into custody the widow Mrs Erzs\u00e9bet B., long known as a receiver. Her accomplice escaped through the back yard; inquiries continue."));
+		TEXT("Last night the police raided the tenement at N\u00e9psz\u00ednh\u00e1z utca 29 and took into custody the widow Mrs Erzs\u00e9bet B., long known as a receiver. Her accomplice escaped through the back yard; inquiries continue.")
+		+ PaperBriefEnglish());
+	ShowPaperBrief(*Hud);
+}
+
+namespace BundaBrief
+{
+	/** One short news item about the player's earlier doings, for the paper's side column. */
+	struct FBriefItem
+	{
+		FString TitleHu;
+		FString BodyHu;
+		FString En;
+	};
+
+	/** What the paper's side column tells, by what he has done before: the doctor's car, the ring or the market hall, and Hermann. */
+	TArray<FBriefItem> BriefItems(const APestiAlvilagGameModeBase* Game)
+	{
+		TArray<FBriefItem> Items;
+		Items.Add({ TEXT("Elt\u0171nt a doktor aut\u00f3ja"),
+			TEXT("Dr. Hal\u00e1sz z\u00f6ld Steyr g\u00e9pkocsij\u00e1t f\u00e9nyes nappal hajtott\u00e1k el a Kiss J\u00f3zsef utc\u00e1b\u00f3l, egy rend\u0151r szeme l\u00e1tt\u00e1ra. Az aut\u00f3nak nyoma veszett."),
+			TEXT("THE DOCTOR'S CAR VANISHES. Dr. Hal\u00e1sz's green Steyr was driven off from Kiss J\u00f3zsef utca in broad daylight, under a constable's nose. No trace of it has been found.") });
+		const int32 Wins = Game ? Game->GetBoxingWins() : 0;
+		if (Wins >= 5)
+		{
+			Items.Add({ TEXT("\u00daj bajnok a grundon"),
+				TEXT("A Kis Fuvaros utcai grundon egy ismeretlen fiatalember a f\u00f6ldre k\u00fcldte a r\u00e9g\u00f3ta legy\u0151zhetetlen Vas\u00f6kl\u0171t. A k\u00f6rny\u00e9k napok \u00f3ta m\u00e1st sem besz\u00e9l."),
+				TEXT("A NEW CHAMPION ON THE GRUND. On the lot in Kis Fuvaros utca an unknown young man put down Vas\u00f6kl\u0171, unbeaten for years. The neighbourhood has talked of nothing else for days.") });
+		}
+		else if (Wins > 0)
+		{
+			Items.Add({ TEXT("Buny\u00f3 a Kis Fuvaros utc\u00e1ban"),
+				FString::Printf(TEXT("Egy idegen fiatalember m\u00e1r %d ellenfelet vert meg Bandi grundj\u00e1n. A bajnok, Vas\u00f6kl\u0171 m\u00e9g v\u00e1rja."), Wins),
+				FString::Printf(TEXT("FISTS IN KIS FUVAROS UTCA. A young stranger has already beaten %d men in Bandi's ring. The champion, Vas\u00f6kl\u0171, is still waiting for him."), Wins) });
+		}
+		else
+		{
+			Items.Add({ TEXT("Zsebtolvaj a csarnokban"),
+				TEXT("A R\u00e1k\u00f3czi t\u00e9ri v\u00e1s\u00e1rcsarnokban egy b\u00e1tor fiatalember \u00fct\u00f6tte le az asszonyok p\u00e9nzt\u00e1rc\u00e1ira vad\u00e1sz\u00f3 tolvajt, \u00e9s visszaadta a zs\u00e1km\u00e1nyt."),
+				TEXT("PICKPOCKET IN THE HALL. In the R\u00e1k\u00f3czi t\u00e9r market hall a bold young man knocked down the thief who had been after the women's purses, and handed the money back.") });
+		}
+		Items.Add({ TEXT("\u00dajra a pult m\u00f6g\u00f6tt"),
+			TEXT("Friedrich Hermann Garay utcai nagykeresked\u0151, akit a minap saj\u00e1t boltj\u00e1ban vertek meg, bek\u00f6t\u00f6tt fejjel \u00fajra kiszolg\u00e1l. T\u00e1mad\u00f3it keresik."),
+			TEXT("BACK BEHIND THE COUNTER. Friedrich Hermann, the Garay utca merchant beaten in his own shop the other day, is serving again with his head bandaged. His attackers are being sought.") });
+		return Items;
+	}
+}
+
+FString AMissionBunda::PaperBriefEnglish() const
+{
+	FString En;
+	for (const BundaBrief::FBriefItem& Item : BundaBrief::BriefItems(APestiAlvilagGameModeBase::Get(this)))
+	{
+		En += TEXT("\n\n") + Item.En;
+	}
+	return En;
+}
+
+void AMissionBunda::ShowPaperBrief(APestiHUD& Hud) const
+{
+	TArray<FString> Titles;
+	TArray<FString> Bodies;
+	for (const BundaBrief::FBriefItem& Item : BundaBrief::BriefItems(APestiAlvilagGameModeBase::Get(this)))
+	{
+		Titles.Add(Item.TitleHu);
+		Bodies.Add(Item.BodyHu);
+	}
+	Hud.SetClippingBrief(Titles, Bodies);
 }
 
 void AMissionBunda::TickStep(int32 Step, float DeltaSeconds)
