@@ -372,9 +372,14 @@ namespace PersonKit
 			// Gauze wound round the brow over the hair, a strip of plaster
 			// across the nose, and a dark bruise under the left eye.
 			const FLinearColor Gauze(0.93f, 0.92f, 0.87f);
-			Blob(B, Gauze, HeadAt + FVector(-0.5, 0.0, 6.5) * Hr, FVector(10.6, 9.8, 2.6) * Hr, 14, 5);
-			Blob(B, Gauze, HeadAt + FVector(-1.5, 0.0, 9.5) * Hr, FVector(9.0, 8.4, 2.2) * Hr, 12, 4);
-			Block(B, Gauze, HeadAt + FVector(10.9, 0.0, -1.0) * Hr, FVector(0.5, 2.3, 0.8));
+			// The band hugs the head and hair, a little out from both, from the brow up.
+			auto Up = [&HeadAt, Hr](double Cm) { return HeadAt.Z + Cm * Hr; };
+			Loft(B, Gauze, {
+				Flat(0.65 * Hr, Up(5.0), 10.35 * Hr, 9.1 * Hr),
+				Flat(0.57 * Hr, Up(7.25), 9.2 * Hr, 8.1 * Hr),
+				Flat(0.5 * Hr, Up(9.5), 7.3 * Hr, 6.5 * Hr),
+			}, 14, false, false);
+			Block(B, Gauze, HeadAt + FVector(10.9, 0.0, -1.0) * Hr, FVector(0.4, 1.6, 0.6));
 			Blob(B, FLinearColor(0.38f, 0.20f, 0.24f), HeadAt + FVector(8.6, -3.3, 0.4) * Hr, FVector(1.1, 1.9, 1.1), 6, 3);
 		}
 
