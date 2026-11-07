@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "GarayYard.generated.h"
 
+class AStoryPerson;
 class UInstancedStaticMeshComponent;
 class UPointLightComponent;
 class UMaterialInterface;
@@ -41,6 +42,8 @@ protected:
 private:
 	/** The shop's lamps as bright as the time of day wants them. */
 	void UpdateLamps();
+	/** After mission 5: old Hermann back in his shop, bandaged, and his clerk; they know the player again. */
+	void TickShopPeople();
 	void AddShape(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide);
 
 	UPROPERTY()
@@ -58,4 +61,15 @@ private:
 	/** The light of each of the shop's ceiling lamps. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPointLightComponent>> ShopLights;
+
+	/** Old Hermann, bandaged, and Lajos the clerk (after mission 5). */
+	UPROPERTY(Transient)
+	TObjectPtr<AStoryPerson> Hermann;
+	UPROPERTY(Transient)
+	TObjectPtr<AStoryPerson> Clerk;
+	bool bShopPeopleUp = false;
+	/** He has been out of the shop since Hermann last shouted at him. */
+	bool bShoutArmed = true;
+	/** How many times Hermann has shouted at him (the first time is different). */
+	int32 Shouts = 0;
 };

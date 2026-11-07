@@ -7,11 +7,14 @@
 #include "Cutscene.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/TargetPoint.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HomeDoor.h"
 #include "KeletiStation.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PersonKit.h"
+#include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PestiTaxi.h"
@@ -55,6 +58,31 @@ namespace Prologue
 	constexpr double OpeningBehindUp = 90.0;
 	constexpr double OpeningLookAhead = 2500.0;
 	constexpr double OpeningLookUp = 250.0;
+	// The first shot: high over the platform behind him, gliding in, looking
+	// along the train to the engine steaming by the buffers (station frame, cm).
+	const FVector2D WideFrom(9800.0, 1750.0);
+	const FVector2D WideFromEnd(8900.0, 1700.0);
+	constexpr double WideUp = 650.0;
+	constexpr double WideUpEnd = 560.0;
+	const FVector2D WideLook(2600.0, 1350.0);
+	constexpr double WideLookUp = 260.0;
+	constexpr float WideSeconds = 6.f;
+
+	// The others off the train: where each stands up from the carriage
+	// (station frame), and the way out they all walk to, near the front.
+	const FVector2D PassengerFrom[] = {
+		{ 3600.0, 1480.0 }, { 4300.0, 2000.0 }, { 5700.0, 1500.0 }, { 6100.0, 1980.0 },
+		{ 6800.0, 1600.0 }, { 7400.0, 2040.0 }, { 8000.0, 1480.0 }, { 8700.0, 1900.0 },
+		{ 9300.0, 1560.0 }, { 9900.0, 2020.0 },
+	};
+	constexpr double WayOutX = 250.0;
+	constexpr double PassengerFollow = 60.0;
+	// Gone this near their way out (cm).
+	constexpr double PassengerGone = 120.0;
+	// The guard's call, once the place's name has gone (s after the start).
+	constexpr double GuardCallAfter = 6.5;
+	constexpr float GuardCallSeconds = 4.f;
+
 	constexpr int32 MessageLine = 3;
 	// The keys for the letter and for asking the way, shown once the
 	// station's name has gone (s).
@@ -121,6 +149,9 @@ void AMissionPrologue::SetUpMission()
 		Suitcase->SetVisibility(false);
 	}
 
+	SpawnPassengers();
+	GuardCallsAt = GetWorld()->GetTimeSeconds() + Prologue::GuardCallAfter;
+
 	// The only goal: find the way to Bözsi néni.
 	FMissionStep Home;
 	Home.GoalHu = TEXT("Menj B\u00f6zsi n\u00e9nihez a N\u00e9psz\u00ednh\u00e1z utc\u00e1ba");
@@ -153,6 +184,18 @@ void AMissionPrologue::PlayOpening()
 	const TArray<const AActor*> Ignore = { Player, Gentleman.Get() };
 	double Reach = 0.0;
 	TArray<FSceneShot> Shots;
+	// First the train in, high over the platform: the others getting down and the engine steaming at the buffers.
+	auto InHall = [](const FVector2D& Local, double Up)
+	{
+		return FVector(AKeletiStation::ToCity(Local), Up);
+	};
+	const double Floor = Me.Z - 90.0;
+	FSceneShot Wide;
+	Wide.From = ACutscene::Clear(GetWorld(), Me, InHall(WideFrom, Floor + WideUp), Ignore, Reach);
+	Wide.FromEnd = ACutscene::Clear(GetWorld(), Me, InHall(WideFromEnd, Floor + WideUpEnd), Ignore, Reach);
+	Wide.LookAt = InHall(WideLook, Floor + WideLookUp);
+	Wide.Seconds = WideSeconds;
+	Shots.Add(Wide);
 	FSceneShot Look;
 	Look.From = ACutscene::Clear(GetWorld(), Me, Me + Ahead * OpeningFront + FVector(0.0, 0.0, OpeningUp), Ignore, Reach);
 	Look.FromEnd = ACutscene::Clear(GetWorld(), Me, Me + Ahead * OpeningFrontEnd + FVector(0.0, 0.0, OpeningUp), Ignore, Reach);
@@ -211,6 +254,75 @@ void AMissionPrologue::OnStepDone(int32 Step)
 		{
 			APestiHUD::Show(this, Prologue::MessageLine, 12.f, FColor::Yellow,
 				TEXT("Ez most az otthonod: az ajt\u00f3n\u00e1l E-vel alhatsz \u00e9s menthetsz.  (This is your home now: press E at the door to sleep and save.)"));
+		}
+	}
+}
+
+void AMissionPrologue::SpawnPassengers()
+{
+	using PersonKit::EHat;
+	using PersonKit::EHeld;
+	using PersonKit::ETop;
+	// Dressed for travel, each a little different (always the same crowd).
+	FRandomStream Pick(1932);
+	const FLinearColor Coats[] = {
+		FLinearColor(0.16f, 0.14f, 0.11f), FLinearColor(0.10f, 0.11f, 0.14f), FLinearColor(0.22f, 0.17f, 0.11f),
+		FLinearColor(0.08f, 0.08f, 0.08f), FLinearColor(0.20f, 0.20f, 0.19f), FLinearColor(0.28f, 0.12f, 0.10f),
+	};
+	const EHeld Luggage[] = { EHeld::Briefcase, EHeld::Briefcase, EHeld::Umbrella, EHeld::Newspaper, EHeld::Basket, EHeld::None };
+	const int32 Count = static_cast<int32>(UE_ARRAY_COUNT(Prologue::PassengerFrom));
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FVector2D From = AKeletiStation::ToCity(Prologue::PassengerFrom[i]);
+		const FVector2D To = AKeletiStation::ToCity(FVector2D(Prologue::WayOutX, Prologue::PassengerFrom[i].Y));
+		const double Heading = (FVector(To, 0.0) - FVector(From, 0.0)).Rotation().Yaw;
+		AStoryPerson* Passenger = SpawnForMission<AStoryPerson>(FVector(From, GroundZ(From) + PersonModel::MiddleHeight), Heading);
+		ATargetPoint* WayOut = SpawnForMission<ATargetPoint>(FVector(To, GroundZ(To) + PersonModel::MiddleHeight), Heading);
+		if (!Passenger || !WayOut)
+		{
+			continue;
+		}
+		PersonKit::FOutfit Dress;
+		Dress.bWoman = i % 3 == 1;
+		Dress.Height = Dress.bWoman ? Pick.FRandRange(158.f, 168.f) : Pick.FRandRange(168.f, 184.f);
+		Dress.Build = Pick.FRandRange(0.95f, 1.15f);
+		Dress.Top = ETop::Overcoat;
+		Dress.Coat = Coats[Pick.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Coats)) - 1)];
+		Dress.Hat = Dress.bWoman ? EHat::Cloche : (Pick.FRand() < 0.5f ? EHat::Fedora : EHat::Bowler);
+		Dress.HatColor = Dress.bWoman ? FLinearColor(0.30f, 0.12f, 0.14f) : FLinearColor(0.07f, 0.06f, 0.05f);
+		Dress.bMoustache = !Dress.bWoman && Pick.FRand() < 0.4f;
+		Dress.bScarf = Pick.FRand() < 0.3f;
+		Dress.Held = Luggage[i % static_cast<int32>(UE_ARRAY_COUNT(Luggage))];
+		Dress.HeldColor = FLinearColor(0.25f, 0.13f, 0.06f);
+		Passenger->SetOutfit(Dress);
+		Passenger->WalkSpeed = Pick.FRandRange(125.f, 165.f);
+		Passenger->FollowDistance = Prologue::PassengerFollow;
+		Passenger->Follow(WayOut);
+		Passengers.Add(Passenger);
+		PassengerGoals.Add(WayOut);
+	}
+}
+
+void AMissionPrologue::TickStep(int32 Step, float DeltaSeconds)
+{
+	// The guard calls the station once the place's name has gone.
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (GuardCallsAt > 0.0 && Now >= GuardCallsAt)
+	{
+		GuardCallsAt = -1.0;
+		Say(TEXT("Kalauz"), TEXT("Budapest, Keleti p\u00e1lyaudvar! V\u00e9g\u00e1llom\u00e1s, mindenki kisz\u00e1ll!"),
+			TEXT("Budapest, Keleti station! Last stop, all change!"), Prologue::GuardCallSeconds);
+	}
+	// The others go out of the station (and out of the game) at the way out.
+	for (int32 i = 0; i < Passengers.Num(); ++i)
+	{
+		AStoryPerson* Passenger = Passengers[i];
+		const AActor* WayOut = PassengerGoals.IsValidIndex(i) ? PassengerGoals[i].Get() : nullptr;
+		if (Passenger && WayOut && !Passenger->IsHidden()
+			&& FVector::Dist2D(Passenger->GetActorLocation(), WayOut->GetActorLocation()) < Prologue::PassengerGone)
+		{
+			Passenger->Follow(nullptr);
+			Passenger->SetInWorld(false);
 		}
 	}
 }

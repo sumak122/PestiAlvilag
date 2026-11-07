@@ -36,10 +36,21 @@ protected:
 	virtual void OnStepStarted(int32 Step) override;
 	virtual void OnStepDone(int32 Step) override;
 	virtual bool GetLetter(FString& OutHu, FString& OutEn) const override;
+	virtual void TickStep(int32 Step, float DeltaSeconds) override;
 
 private:
 	/** Off the train: a short scene on the platform with the mission's name. */
 	void PlayOpening();
+	/** The others off the same train, walking up the platform to the way out with their luggage. */
+	void SpawnPassengers();
+
+	/** The other passengers, and the spot by the way out each walks to (gone once there). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AStoryPerson>> Passengers;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> PassengerGoals;
+	/** When the guard calls the station (s, world time). */
+	double GuardCallsAt = -1.0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Gentleman;

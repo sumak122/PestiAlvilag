@@ -84,6 +84,8 @@ public:
 	 * and En, \n breaks a line and an empty line parts paragraphs.
 	 */
 	void SetClipping(const FString& Headline, const FString& Body, const FString& En);
+	/** Short news items in a narrow column right of the story (call after SetClipping): a title and a few lines each. */
+	void SetClippingBrief(const TArray<FString>& Titles, const TArray<FString>& Bodies);
 	void ClearClipping();
 	/**
 	 * For this frame, a key sign under the middle of the screen: the key
@@ -192,6 +194,8 @@ private:
 	FString ClippingHeadline;
 	FString ClippingBody;
 	FString ClippingEn;
+	TArray<FString> BriefTitles;
+	TArray<FString> BriefBodies;
 
 	// The minimap: what it shows this frame (until the time given).
 	FVector2D GoalBlipAt = FVector2D::ZeroVector;
