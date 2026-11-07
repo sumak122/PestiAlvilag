@@ -64,7 +64,7 @@ namespace BundaPlay
 	// The newspaper stays up this long (s).
 	constexpr double PaperSeconds = 14.0;
 	// The lady and Bözsi leave the street door this long after the sale (s).
-	constexpr double LadyStays = 14.0;
+	constexpr double LadyStays = 27.0;
 	constexpr int32 StarsForCoat = 1;
 	constexpr int32 StarsForRaid = 2;
 
@@ -182,7 +182,7 @@ void AMissionBunda::SetUpMission()
 		Back.Target = HouseAt(FVector(-BundaPlay::GroundOut, 0.0, 0.0));
 		Back.Radius = BundaPlay::TalkRadius;
 		Back.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
-		Back.SceneSeconds = 9.f;
+		Back.SceneSeconds = 11.f;
 		Steps.Add(Back);
 		Kinds.Add(EKind::Night);
 		bStartsAtRing = true;
@@ -220,7 +220,7 @@ void AMissionBunda::SetUpMission()
 		Talk.Radius = BundaPlay::TalkRadius;
 		Talk.bPressE = true;
 		Talk.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
-		Talk.SceneSeconds = 14.f;
+		Talk.SceneSeconds = 21.f;
 		Talk.SceneWith = Bozsi.Get();
 		Steps.Add(Talk);
 		Kinds.Add(EKind::Talk);
@@ -254,7 +254,7 @@ void AMissionBunda::SetUpMission()
 		Deliver.Radius = BundaPlay::TalkRadius;
 		Deliver.bPressE = true;
 		Deliver.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
-		Deliver.SceneSeconds = 12.f;
+		Deliver.SceneSeconds = 26.f;
 		Deliver.SceneWith = Lady.Get();
 		Steps.Add(Deliver);
 		Kinds.Add(EKind::Deliver);
@@ -266,7 +266,7 @@ void AMissionBunda::SetUpMission()
 		Night.Radius = BundaPlay::DoorRadius;
 		Night.bPressE = true;
 		Night.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
-		Night.SceneSeconds = 9.f;
+		Night.SceneSeconds = 11.f;
 		Night.SceneWith = Bozsi.Get();
 		Steps.Add(Night);
 		Kinds.Add(EKind::Night);
@@ -301,7 +301,7 @@ void AMissionBunda::SetUpMission()
 	Phone.Radius = BundaPlay::DoorRadius;
 	Phone.bPressE = true;
 	Phone.Place = TEXT("Tisza K\u00e1lm\u00e1n t\u00e9r");
-	Phone.SceneSeconds = 14.f;
+	Phone.SceneSeconds = 19.f;
 	Steps.Add(Phone);
 	Kinds.Add(EKind::Phone);
 
@@ -319,8 +319,10 @@ void AMissionBunda::SetUpMission()
 
 void AMissionBunda::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
-	const double Last = Lines.Num() > 0 ? Lines.Last().At : GetWorld()->GetTimeSeconds();
-	Lines.Add({ FMath::Max(Last, GetWorld()->GetTimeSeconds() + Seconds), Who, LineHu, LineEn });
+	// Seconds after the line before it (or after now, if none is waiting).
+	const double Now = GetWorld()->GetTimeSeconds();
+	const double Last = Lines.Num() > 0 ? Lines.Last().At : Now;
+	Lines.Add({ FMath::Max(Last, Now) + Seconds, Who, LineHu, LineEn });
 }
 
 void AMissionBunda::Hint(const FString& Text) const
@@ -468,8 +470,8 @@ void AMissionBunda::OnStepDone(int32 Step)
 		}
 		Say(BundaPlay::BozsiName,
 			TEXT("Na v\u00e9gre, hogy el\u0151ker\u00fclt\u00e9l. Van egy vev\u0151m, egy \u00fariasszony. Bund\u00e1t akar, de nem boltit, \u00e9s olcs\u00f3n."),
-			TEXT("Well, there you are at last. I've a buyer, a fine lady. She wants a fur coat, not from a shop, and cheap."), 6.f);
-		SayLater(6.f, BundaPlay::BozsiName,
+			TEXT("Well, there you are at last. I've a buyer, a fine lady. She wants a fur coat, not from a shop, and cheap."), 7.f);
+		SayLater(7.f, BundaPlay::BozsiName,
 			TEXT("A R\u00e1k\u00f3czi \u00faton Friedmann sz\u0171cs kint szell\u0151zteti a bund\u00e1kat az asztal\u00e1n. Hozz el egyet, de sz\u00e9pet!"),
 			TEXT("On R\u00e1k\u00f3czi \u00fat, Friedmann the furrier airs his furs out on his table. Bring me one, and a nice one!"));
 		SayLater(7.f, BundaPlay::BozsiName,
@@ -529,17 +531,17 @@ void AMissionBunda::OnStepDone(int32 Step)
 		}
 		Say(BundaPlay::BozsiName,
 			TEXT("N\u00e9zze csak, nagys\u00e1gos asszony! Val\u00f3di nerc, alig hordott."),
-			TEXT("Just look, madam! Real mink, hardly worn."), 4.f);
-		SayLater(4.f, BundaPlay::LadyName,
+			TEXT("Just look, madam! Real mink, hardly worn."), 5.f);
+		SayLater(5.f, BundaPlay::LadyName,
 			TEXT("K\u00fcl\u00f6n\u00f6s... pont olyan, mint az eny\u00e9m volt. Mennyi?"),
 			TEXT("Strange... exactly like the one I had. How much?"));
 		SayLater(4.f, BundaPlay::BozsiName,
 			TEXT("Mag\u00e1nak csak k\u00e9tsz\u00e1z peng\u0151."),
 			TEXT("For you, only two hundred peng\u0151."));
-		SayLater(4.f, BundaPlay::LadyName,
+		SayLater(5.f, BundaPlay::LadyName,
 			TEXT("Megveszem. Majd a f\u00e9rjem is megn\u00e9zi... alaposan."),
 			TEXT("I'll take it. My husband will want a look at it too... a good look."));
-		SayLater(5.f, BundaPlay::BozsiName,
+		SayLater(6.f, BundaPlay::BozsiName,
 			TEXT("Kardos f\u0151fel\u00fcgyel\u0151 feles\u00e9ge volt. Na mindegy, a p\u00e9nz az p\u00e9nz. Gyere fel este, aludj n\u00e1lam."),
 			TEXT("That was Inspector Kardos's wife. Well, never mind, money is money. Come up tonight, you can sleep at mine."));
 		LadyGoesAt = GetWorld()->GetTimeSeconds() + BundaPlay::LadyStays;
@@ -588,11 +590,11 @@ void AMissionBunda::OnStepDone(int32 Step)
 		PaperUntil = -1.0;
 		Say(BundaPlay::VoiceName,
 			TEXT("Hallottam, mi t\u00f6rt\u00e9nt az \u00f6regasszonnyal. Maga legal\u00e1bb nem bukott le. \u00dcgyes."),
-			TEXT("I heard what happened to the old woman. At least you didn't get caught. Well done."), 5.f);
-		SayLater(5.f, BundaPlay::VoiceName,
+			TEXT("I heard what happened to the old woman. At least you didn't get caught. Well done."), 6.f);
+		SayLater(6.f, BundaPlay::VoiceName,
 			TEXT("Kib\u00e9reltem mag\u00e1nak egy padl\u00e1sszob\u00e1t a B\u00e9rkocsis utc\u00e1ban. A kulcs a l\u00e1bt\u00f6rl\u0151 alatt, a p\u00e9nze ott v\u00e1r."),
 			TEXT("I've taken an attic room for you on B\u00e9rkocsis utca. The key is under the mat, your money is waiting there."));
-		SayLater(5.f, BundaPlay::VoiceName,
+		SayLater(7.f, BundaPlay::VoiceName,
 			TEXT("Majd jelentkezem. Addig ne keressen."),
 			TEXT("I'll be in touch. Until then, don't look for me."));
 		break;
