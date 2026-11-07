@@ -2,6 +2,8 @@
 
 #include "OsmGraybox.h"
 
+#include "BozsiHouseModel.h"
+
 #include "DayNight.h"
 #include "GroundSurfaces.h"
 #include "Dom/JsonObject.h"
@@ -74,7 +76,8 @@ namespace OsmGraybox
 	// Bump when the mesh layout changes, so levels saved with an older mesh rebuild it.
 	// 2: picture coordinates (UVs) and tangents for the pack materials.
 	// 3: walls split into ground floor and upper floor sections.
-	constexpr int32 MeshVersion = 3;
+	// 4: Bözsi néni's block left out (BozsiHouseModel builds it with its courtyard).
+	constexpr int32 MeshVersion = 4;
 
 	// Walls below this height (cm) are the ground floor, which gets stone blocks;
 	// above it smooth plaster. Matches the facades' ground floor.
@@ -699,7 +702,8 @@ bool AOsmGraybox::Build()
 		for (const TSharedPtr<FJsonValue>& BuildingValue : *Buildings)
 		{
 			const TSharedPtr<FJsonObject>& Building = BuildingValue->AsObject();
-			if (!Building.IsValid() || !ReadPolygon(*Building, Rings, Triangles))
+			if (!Building.IsValid() || !ReadPolygon(*Building, Rings, Triangles)
+				|| Building->GetStringField(TEXT("id")) == BozsiHouseModel::ReplacesBuilding)
 			{
 				continue;
 			}
@@ -822,7 +826,8 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 	{
 		const TSharedPtr<FJsonObject>& Building = BuildingValue->AsObject();
 		const TArray<TSharedPtr<FJsonValue>>* Front = nullptr;
-		if (!Building.IsValid() || !Building->TryGetArrayField(TEXT("front"), Front) || !ReadPolygon(*Building, Rings, Triangles))
+		if (!Building.IsValid() || !Building->TryGetArrayField(TEXT("front"), Front) || !ReadPolygon(*Building, Rings, Triangles)
+			|| Building->GetStringField(TEXT("id")) == BozsiHouseModel::ReplacesBuilding)
 		{
 			continue;
 		}

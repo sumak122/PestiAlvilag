@@ -33,6 +33,12 @@
 #include "MissionFelmondas.h"
 #include "MissionKifutofiu.h"
 #include "MissionElsoAuto.h"
+#include "MissionBunda.h"
+#include "BozsiHouseModel.h"
+#include "FleaMarket.h"
+#include "FurrierModel.h"
+#include "ShapeSet.h"
+#include "StoryPerson.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
@@ -77,6 +83,34 @@ namespace PestiStart
 	const FName Felmondas(TEXT("Felmondas"));
 	const FName Kifutofiu(TEXT("Kifutofiu"));
 	const FName ElsoAuto(TEXT("ElsoAuto"));
+	const FName Bunda(TEXT("Bunda"));
+
+	// The built houses and shops made of basic shapes, found again by these names.
+	const FName BozsiHouseKey(TEXT("BozsiHouse"));
+	const FName FurrierKey(TEXT("Furrier"));
+	// Bözsi néni at her flea market stall (gone after the raid).
+	const TCHAR* const BozsiName = TEXT("B\u00f6zsi n\u00e9ni");
+
+	/** Puts up a set of shapes, its lamps and its lettering at At, turned by Yaw. */
+	inline void PutUpShapeSet(UWorld* World, FName Key, const FVector& At, double Yaw, const TArray<MarketModel::FShape>& Shapes,
+		const TArray<BozsiHouseModel::FLamp>& Lamps, const TArray<BozsiHouseModel::FSign>& Signs)
+	{
+		AShapeSet* Set = World->SpawnActor<AShapeSet>(AShapeSet::StaticClass(), At, FRotator(0.0, Yaw, 0.0));
+		if (!Set)
+		{
+			return;
+		}
+		Set->SetKey(Key);
+		Set->AddShapes(Shapes);
+		for (const BozsiHouseModel::FLamp& Lamp : Lamps)
+		{
+			Set->AddLamp(Lamp.At, Lamp.Radius);
+		}
+		for (const BozsiHouseModel::FSign& Sign : Signs)
+		{
+			Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
+		}
+	}
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -147,11 +181,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 		}
 	}
 
-	// Bözsi néni's door, the player's home.
+	// The player's home door: Bözsi néni's, and after act 1 the attic room's.
 	if (!TActorIterator<AHomeDoor>(GetWorld()))
 	{
-		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
-		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
+		const FVector2D DoorAt = HomeDoorSpot();
+		const FVector Location(DoorAt, GroundZ(DoorAt));
+		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.0, HomeDoorFacing(), 0.0));
 	}
 
 	// The coffee house beside it, with its terrace on the pavement.
@@ -230,6 +265,7 @@ void APestiAlvilagGameModeBase::StartPlay()
 	// A new game begins with the prologue, a saved one with the first
 	// mission not yet passed (traffic first: the prologue finds its route on the lanes).
 	LoadSaveOnce();
+	PlaceHomeDoor();
 	SpawnNextMission();
 }
 
@@ -268,6 +304,15 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionElsoAuto>();
 	}
+	else if (!IsMissionDone(PestiStart::Bunda))
+	{
+		GetWorld()->SpawnActor<AMissionBunda>();
+	}
+	else if (AStoryPerson* BozsiAtStall = AFleaMarket::FindKeeper(GetWorld(), PestiStart::BozsiName))
+	{
+		// Act 1 is over: Bözsi néni was taken away in the raid.
+		BozsiAtStall->SetInWorld(false);
+	}
 }
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
@@ -277,12 +322,13 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 	// level has. The station must stand first: the player starts inside it.
 	SpawnLandmarks();
 	LoadSaveOnce();
+	PlaceHomeDoor();
 	FVector2D StartAt = AMissionPrologue::StartAt();
 	double StartYaw = AMissionPrologue::StartYaw();
 	if (IsMissionDone(PestiStart::Prologue))
 	{
 		StartAt = HomeStartAt();
-		StartYaw = PestiStart::HomeDoorYaw;
+		StartYaw = HomeDoorFacing();
 	}
 	const FVector PersonLocation(StartAt, GroundZ(StartAt) + 100.0);
 	APawn* Pawn = SpawnDefaultPawnAtTransform(NewPlayer, FTransform(FRotator(0.0, StartYaw, 0.0), PersonLocation));
@@ -371,6 +417,34 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		GetWorld()->SpawnActor<ALaciYard>(ALaciYard::StaticClass(), FVector(LaciYardModel::CityAt, Z), FRotator(0.0, LaciYardModel::CityYaw, 0.0));
 	}
 
+	// And Bözsi néni's house, Népszínház utca 29, built in place of the plain
+	// map block so the player can go into its courtyard (mission 8); its
+	// ground height taken on the pavement in front of the gateway.
+	if (!AShapeSet::Find(GetWorld(), PestiStart::BozsiHouseKey))
+	{
+		const FRotator Turn(0.0, BozsiHouseModel::CityYaw, 0.0);
+		const FVector2D Pavement = BozsiHouseModel::CityAt + FVector2D(Turn.RotateVector(FVector(-150.0, 0.0, 0.0)));
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lamps;
+		TArray<BozsiHouseModel::FSign> Signs;
+		BozsiHouseModel::Build(Shapes, Lamps);
+		BozsiHouseModel::Signs(Signs);
+		PestiStart::PutUpShapeSet(GetWorld(), PestiStart::BozsiHouseKey, FVector(BozsiHouseModel::CityAt, GroundZ(Pavement)), BozsiHouseModel::CityYaw, Shapes, Lamps, Signs);
+	}
+
+	// And Friedmann's furrier's shop on Rákóczi út (mission 8), its ground height taken out on the pavement.
+	if (!AShapeSet::Find(GetWorld(), PestiStart::FurrierKey))
+	{
+		const FRotator Turn(0.0, FurrierModel::CityYaw, 0.0);
+		const FVector2D Pavement = FurrierModel::CityAt + FVector2D(Turn.RotateVector(FVector(400.0, 0.0, 0.0)));
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lamps;
+		TArray<BozsiHouseModel::FSign> Signs;
+		FurrierModel::Build(Shapes, Lamps);
+		FurrierModel::Signs(Signs);
+		PestiStart::PutUpShapeSet(GetWorld(), PestiStart::FurrierKey, FVector(FurrierModel::CityAt, GroundZ(Pavement)), FurrierModel::CityYaw, Shapes, Lamps, Signs);
+	}
+
 	// And the eagle that circles over Keleti.
 	if (!TActorIterator<AKeletiEagle>(GetWorld()))
 	{
@@ -380,10 +454,29 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	}
 }
 
-FVector2D APestiAlvilagGameModeBase::HomeStartAt()
+FVector2D APestiAlvilagGameModeBase::HomeDoorSpot() const
 {
-	const FVector2D Out = FVector2D(FRotator(0.f, PestiStart::HomeDoorYaw, 0.f).Vector()) * 150.0;
-	return PestiStart::HomeDoorAt + Out;
+	return IsMissionDone(PestiStart::Bunda) ? BozsiHouseModel::AtticDoorAt : PestiStart::HomeDoorAt;
+}
+
+double APestiAlvilagGameModeBase::HomeDoorFacing() const
+{
+	return IsMissionDone(PestiStart::Bunda) ? BozsiHouseModel::AtticDoorYaw : static_cast<double>(PestiStart::HomeDoorYaw);
+}
+
+FVector2D APestiAlvilagGameModeBase::HomeStartAt() const
+{
+	const FVector2D Out = FVector2D(FRotator(0.0, HomeDoorFacing(), 0.0).Vector()) * 150.0;
+	return HomeDoorSpot() + Out;
+}
+
+void APestiAlvilagGameModeBase::PlaceHomeDoor()
+{
+	const FVector2D DoorAt = HomeDoorSpot();
+	for (TActorIterator<AHomeDoor> It(GetWorld()); It; ++It)
+	{
+		It->SetActorLocationAndRotation(FVector(DoorAt, GroundZ(DoorAt)), FRotator(0.0, HomeDoorFacing(), 0.0));
+	}
 }
 
 double APestiAlvilagGameModeBase::GroundZ(const FVector2D& At) const
@@ -482,7 +575,7 @@ void APestiAlvilagGameModeBase::UpdateFaint()
 	Health = MaxHealth;
 	const bool bHome = IsMissionDone(PestiStart::Prologue);
 	const FVector2D WakeAt = bHome ? HomeStartAt() : AMissionPrologue::StartAt();
-	const double WakeYaw = bHome ? PestiStart::HomeDoorYaw : AMissionPrologue::StartYaw();
+	const double WakeYaw = bHome ? HomeDoorFacing() : AMissionPrologue::StartYaw();
 	if (PC)
 	{
 		if (APestiPerson* Person = Cast<APestiPerson>(PC->GetPawn()))
@@ -501,7 +594,9 @@ void APestiAlvilagGameModeBase::UpdateFaint()
 		if (bHome)
 		{
 			AddMoney(-PestiStart::DoctorFee);
-			Hud->Announce(TEXT("EL\u00c1JULT\u00c1L"), TEXT("You fainted. B\u00f6zsi n\u00e9ni fetched the doctor: \u22121 peng\u0151"), 6.f);
+			Hud->Announce(TEXT("EL\u00c1JULT\u00c1L"), IsMissionDone(PestiStart::Bunda)
+				? TEXT("You fainted. You came round in your room, the doctor's bill on the table: \u22121 peng\u0151")
+				: TEXT("You fainted. B\u00f6zsi n\u00e9ni fetched the doctor: \u22121 peng\u0151"), 6.f);
 		}
 		else
 		{
@@ -644,6 +739,11 @@ void APestiAlvilagGameModeBase::GiveBaton()
 void APestiAlvilagGameModeBase::MarkMissionDone(FName MissionId)
 {
 	CompletedMissions.AddUnique(MissionId);
+	// After the raid the player's home is the attic room.
+	if (MissionId == PestiStart::Bunda)
+	{
+		PlaceHomeDoor();
+	}
 }
 
 bool APestiAlvilagGameModeBase::CanSaveAtHome() const

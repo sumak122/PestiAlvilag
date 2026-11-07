@@ -2025,7 +2025,7 @@ void APestiHUD::TickMinimap(APlayerController* PC)
 		}
 	}
 
-	if (!bHasHome)
+	// (Looked up every frame: home moves to the attic room at the end of act 1.)
 	{
 		TActorIterator<AHomeDoor> Door(World);
 		if (Door)
