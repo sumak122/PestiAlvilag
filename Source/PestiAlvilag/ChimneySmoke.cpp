@@ -35,10 +35,10 @@ namespace ChimneySmoke
 	// How many smoke: this share, more in the morning and evening.
 	constexpr float SmokingShare = 0.55f;
 	// Smoke only drifts from stacks this near the camera (cm).
-	constexpr double SmokeReach = 9000.0;
+	constexpr double SmokeReach = 7000.0;
 
 	// Puffs in the air at once: coal smoke, steam.
-	constexpr int32 PoolSizes[2] = { 520, 220 };
+	constexpr int32 PoolSizes[2] = { 360, 160 };
 	const FLinearColor Colors[2] = {
 		FLinearColor(0.35f, 0.34f, 0.33f, 0.10f),
 		FLinearColor(0.85f, 0.85f, 0.85f, 0.16f) };
@@ -104,12 +104,24 @@ AChimneySmoke::AChimneySmoke()
 	RootComponent = Mesh;
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCanEverAffectNavigation(false);
+	// Left out of the ray-traced lighting, the distance fields and the shadows:
+	// it changes every frame, and rebuilding it there each time costs the
+	// graphics card far more than it is worth.
 	Mesh->SetCastShadow(false);
+	Mesh->bVisibleInRayTracing = false;
+	Mesh->bAffectDistanceFieldLighting = false;
+	Mesh->bAffectDynamicIndirectLighting = false;
 
 	Stacks = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Stacks"));
 	Stacks->SetupAttachment(Mesh);
 	Stacks->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Stacks->SetCanEverAffectNavigation(false);
+	// Out of the ray tracing and the shadows too: it spans the whole city and
+	// is rebuilt as stacks are added, which would redo the shadows everywhere.
+	Stacks->SetCastShadow(false);
+	Stacks->bVisibleInRayTracing = false;
+	Stacks->bAffectDistanceFieldLighting = false;
+	Stacks->bAffectDynamicIndirectLighting = false;
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
 	SeeThroughMaterial = Translucent.Object;
