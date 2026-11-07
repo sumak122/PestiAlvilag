@@ -3,7 +3,9 @@
 #include "Bicycle.h"
 
 #include "BicycleModel.h"
+#include "BikeBellSound.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "CarBody.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
@@ -12,6 +14,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
 #include "PestiHud.h"
@@ -29,6 +32,27 @@ namespace BicycleRide
 	constexpr float HardBrake = 750.f;
 	// Stopped, S walks it back slowly.
 	constexpr float BackSpeed = 60.f;
+
+	// The sprint (Shift): standing on the pedals up to 38 km/h, pushing harder, for this many
+	// seconds of breath, which comes back in RecoverSeconds riding easy; once spent, not
+	// again until it is back to SprintAgain. He gets up onto the pedals this quickly (1/s).
+	constexpr float SprintTopSpeed = 1050.f;
+	constexpr float SprintPush = 520.f;
+	constexpr float SprintSeconds = 6.f;
+	constexpr float RecoverSeconds = 10.f;
+	constexpr float SprintAgain = 0.3f;
+	constexpr float SprintRise = 3.f;
+	// Standing on the pedals the bicycle rocks from side to side with each stroke (degrees),
+	// and the camera widens a little (degrees of view).
+	constexpr float SprintRock = 5.f;
+	constexpr float CameraView = 90.f;
+	constexpr float SprintView = 9.f;
+
+	// The bell is heard within this distance of the camera (cm), fades out over the second,
+	// and falls silent this long after it was rung (s).
+	constexpr double BellHearing = 3500.0;
+	constexpr float BellFalloff = 3000.f;
+	constexpr float BellLasts = 3.f;
 
 	// The bars turn this far at a walking pace, less at full speed (degrees), this fast (degrees a second).
 	constexpr float MaxSteerSlow = 35.f;
@@ -126,7 +150,7 @@ void ABicycle::BeginPlay()
 {
 	Super::BeginPlay();
 	using namespace BicycleModel;
-	const EKind Kind = bShopBike ? EKind::ShopBike : EKind::Roadster;
+	const EKind Kind = GetKind();
 	const FVector Head = HeadBottom(Kind);
 	const float Tilt = static_cast<float>(SteerTilt(Kind));
 
@@ -165,19 +189,9 @@ void ABicycle::BeginPlay()
 		ParcelMeshes.Add(Mesh);
 	}
 
-	// The rider: the player's figure, his hips on the saddle, leaning forward from them.
-	const PersonKit::FOutfit Outfit = PersonModel::PlayerOutfit();
-	const double HipZ = 92.0 * Outfit.Height / 178.0;
+	// The rider: the player's figure (or the city rider's), his hips on the saddle, leaning forward from them.
 	RiderRoot->SetRelativeLocationAndRotation(RiderHip(), FRotator(static_cast<float>(RiderLean), 0.f, 0.f));
-	RiderBody->SetRelativeLocation(FVector(0.0, 0.0, PersonModel::MiddleHeight - HipZ));
-	PersonModel::Dress(this, RiderBody.Get(), BaseMaterial, Outfit, RiderPieces);
-	for (UProceduralMeshComponent* Piece : RiderPieces)
-	{
-		if (Piece)
-		{
-			Piece->SetVisibility(false);
-		}
-	}
+	DressRider(bOwnRiderLook ? RiderLook : PersonModel::PlayerOutfit());
 
 	SnapToGround();
 	Animate(0.f);
@@ -190,6 +204,10 @@ UProceduralMeshComponent* ABicycle::MakeMesh(USceneComponent* Parent, const Pers
 	Mesh->SetRelativeLocation(At);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCanEverAffectNavigation(false);
+	if (DrawDistance > 0.f)
+	{
+		Mesh->SetCachedMaxDrawDistance(DrawDistance);
+	}
 	Mesh->RegisterComponent();
 	AddInstanceComponent(Mesh);
 	for (int32 i = 0; i < Piece.Sections.Num(); ++i)
@@ -200,7 +218,9 @@ UProceduralMeshComponent* ABicycle::MakeMesh(USceneComponent* Parent, const Pers
 		if (BaseMaterial)
 		{
 			UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-			Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+			// The enamel takes the bicycle's own colour.
+			const bool bEnamel = Section.Color.Equals(BicycleModel::Enamel(), 0.0001f);
+			Paint->SetVectorParameterValue(TEXT("Color"), bEnamel ? FramePaint : Section.Color);
 			Mesh->SetMaterial(i, Paint);
 		}
 	}
@@ -230,6 +250,7 @@ void ABicycle::Tick(float DeltaSeconds)
 	}
 	Move(DeltaSeconds);
 	Animate(DeltaSeconds);
+	UpdateBell(DeltaSeconds);
 }
 
 void ABicycle::Ride(APlayerController* PC, float DeltaSeconds)
@@ -253,6 +274,32 @@ void ABicycle::Ride(APlayerController* PC, float DeltaSeconds)
 	const bool bBack = PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down) || PC->IsInputKeyDown(EKeys::Gamepad_LeftTrigger);
 	const bool bStop = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 	bPedalling = bForward && !bBack && !bStop && Speed >= 0.f;
+
+	// The sprint: Shift while pedalling, as long as his breath lasts.
+	const bool bSprintKey = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Left);
+	const bool bSprint = bPedalling && bSprintKey && !bBreathSpent && Breath > 0.f;
+	SprintBlend = FMath::FInterpConstantTo(SprintBlend, bSprint ? 1.f : 0.f, DeltaSeconds, SprintRise);
+	if (bSprint)
+	{
+		Breath -= DeltaSeconds / SprintSeconds;
+		if (Breath <= 0.f)
+		{
+			Breath = 0.f;
+			bBreathSpent = true;
+		}
+	}
+	else
+	{
+		Breath = FMath::Min(1.f, Breath + DeltaSeconds / RecoverSeconds);
+		bBreathSpent = bBreathSpent && Breath < SprintAgain;
+	}
+	const float Top = FMath::Lerp(TopSpeed, SprintTopSpeed, SprintBlend);
+
+	if (PC->WasInputKeyJustPressed(EKeys::B) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
+	{
+		RingBell();
+	}
+
 	if (bStop)
 	{
 		Speed = FMath::FInterpConstantTo(Speed, 0.f, DeltaSeconds, HardBrake);
@@ -262,11 +309,16 @@ void ABicycle::Ride(APlayerController* PC, float DeltaSeconds)
 		// Braking while it rolls; stopped, walking it back.
 		Speed = Speed > 5.f ? FMath::FInterpConstantTo(Speed, 0.f, DeltaSeconds, Brake) : FMath::FInterpConstantTo(Speed, -BackSpeed, DeltaSeconds, Brake);
 	}
+	else if (bPedalling && Speed > Top)
+	{
+		// Out of a sprint it eases back to a cruising pace.
+		Speed = FMath::FInterpConstantTo(Speed, Top, DeltaSeconds, RollDrag * 2.f);
+	}
 	else if (bPedalling)
 	{
 		// Hardest to push on when it is already going fast.
-		const float Push = PedalPush * (1.f - 0.6f * FMath::Clamp(Speed / TopSpeed, 0.f, 1.f));
-		Speed = FMath::FInterpConstantTo(Speed, TopSpeed, DeltaSeconds, Push);
+		const float Push = FMath::Lerp(PedalPush, SprintPush, SprintBlend) * (1.f - 0.6f * FMath::Clamp(Speed / Top, 0.f, 1.f));
+		Speed = FMath::FInterpConstantTo(Speed, Top, DeltaSeconds, Push);
 	}
 	else
 	{
@@ -280,16 +332,18 @@ void ABicycle::Ride(APlayerController* PC, float DeltaSeconds)
 	SteerAngle = FMath::FInterpConstantTo(SteerAngle, Steer * MaxSteer, DeltaSeconds, SteerRate);
 
 	UpdateFreeLook(PC, DeltaSeconds);
+	ChaseCamera->SetFieldOfView(CameraView + SprintView * SprintBlend);
 
 	const int32 Kmh = FMath::RoundToInt(FMath::Abs(Speed) * 0.036f);
-	APestiHUD::Show(this, 1, 0.f, FColor::White,
-		FString::Printf(TEXT("Ker\u00e9kp\u00e1r / bicycle: %d km/h   (W pedal, S brake, A/D steer, Space stop, F get off)"), Kmh));
+	const int32 BreathLeft = FMath::RoundToInt(Breath * 100.f);
+	APestiHUD::Show(this, 1, 0.f, bBreathSpent ? FColor(255, 170, 120) : FColor::White,
+		FString::Printf(TEXT("Ker\u00e9kp\u00e1r / bicycle: %d km/h   sprint %d%%   (W pedal, Shift sprint, S brake, A/D steer, B bell, Space stop, F get off)"), Kmh, BreathLeft));
 }
 
 void ABicycle::Move(float DeltaSeconds)
 {
 	using namespace BicycleRide;
-	const BicycleModel::EKind Kind = bShopBike ? BicycleModel::EKind::ShopBike : BicycleModel::EKind::Roadster;
+	const BicycleModel::EKind Kind = GetKind();
 	const double Wheelbase = BicycleModel::FrontAxle(Kind).X - BicycleModel::RearAxle().X;
 	const double TurnRate = Speed * FMath::Tan(FMath::DegreesToRadians(SteerAngle)) / Wheelbase;
 
@@ -344,8 +398,10 @@ void ABicycle::Move(float DeltaSeconds)
 void ABicycle::Animate(float DeltaSeconds)
 {
 	using namespace BicycleModel;
-	const EKind Kind = bShopBike ? EKind::ShopBike : EKind::Roadster;
-	Rig->SetRelativeRotation(FRotator(0.f, 0.f, Lean));
+	const EKind Kind = GetKind();
+	// Standing on the pedals in a sprint, it rocks from side to side with each stroke.
+	const float Rock = BicycleRide::SprintRock * SprintBlend * FMath::Sin(FMath::DegreesToRadians(Crank));
+	Rig->SetRelativeRotation(FRotator(0.f, 0.f, Lean + ExtraRoll + Rock));
 	SteerTurn->SetRelativeRotation(FRotator(0.f, SteerAngle, 0.f));
 
 	const float Step = Speed * DeltaSeconds;
@@ -363,7 +419,7 @@ void ABicycle::Animate(float DeltaSeconds)
 		StandMesh->SetRelativeRotation(FRotator(StandPitch, 0.f, 0.f));
 	}
 	UpdateLamp();
-	if (Rider)
+	if (bRiderShown)
 	{
 		PoseRider();
 	}
@@ -410,7 +466,7 @@ void ABicycle::UpdateLamp()
 	const bool bWantBeam = Glow > 0.f && Rider && Clock->AreLampsLit();
 	if (bWantBeam && !Beam)
 	{
-		const BicycleModel::EKind Kind = bShopBike ? BicycleModel::EKind::ShopBike : BicycleModel::EKind::Roadster;
+		const BicycleModel::EKind Kind = GetKind();
 		Beam = NewObject<USpotLightComponent>(this);
 		Beam->SetupAttachment(SteerBody);
 		Beam->SetRelativeLocationAndRotation(BicycleModel::LampAt(Kind) - BicycleModel::HeadBottom(Kind) + FVector(4.0, 0.0, 0.0), FRotator(-BeamDip, 0.f, 0.f));
@@ -437,8 +493,11 @@ void ABicycle::UpdateLamp()
 void ABicycle::PoseRider()
 {
 	using namespace PersonKit;
-	const BicycleModel::EKind Kind = bShopBike ? BicycleModel::EKind::ShopBike : BicycleModel::EKind::Roadster;
-	const BicycleModel::FRiderPose Pose = BicycleModel::RiderPose(Kind, Crank, PersonModel::PlayerOutfit().Height);
+	const BicycleModel::EKind Kind = GetKind();
+	const double HipLift = BicycleModel::SprintLift * SprintBlend;
+	const double BodyLean = FMath::Lerp(BicycleModel::RiderLean, BicycleModel::SprintLean, static_cast<double>(SprintBlend));
+	const BicycleModel::FRiderPose Pose = BicycleModel::RiderPose(Kind, Crank, RiderLook.Height, BodyLean, HipLift);
+	RiderRoot->SetRelativeLocationAndRotation(BicycleModel::RiderHipAt(HipLift), FRotator(static_cast<float>(Pose.Lean), 0.f, 0.f));
 	auto Turn = [this](int32 Piece, double Pitch)
 	{
 		if (RiderPieces.IsValidIndex(Piece) && RiderPieces[Piece])
@@ -494,13 +553,7 @@ void ABicycle::TakeRider(APawn* InRider)
 {
 	Rider = InRider;
 	RiderOnTime = GetWorld()->GetTimeSeconds();
-	for (UProceduralMeshComponent* Piece : RiderPieces)
-	{
-		if (Piece)
-		{
-			Piece->SetVisibility(true);
-		}
-	}
+	ShowRider(true);
 	PoseRider();
 	LookYaw = 0.f;
 	LookPitch = 0.f;
@@ -529,14 +582,10 @@ bool ABicycle::LetRiderOff(APlayerController* PC, bool bForce)
 		{
 			Speed = 0.f;
 			bPedalling = false;
+			SprintBlend = 0.f;
 			Rider = nullptr;
-			for (UProceduralMeshComponent* Piece : RiderPieces)
-			{
-				if (Piece)
-				{
-					Piece->SetVisibility(false);
-				}
-			}
+			ShowRider(false);
+			ChaseCamera->SetFieldOfView(BicycleRide::CameraView);
 			PC->Possess(Person);
 			PC->SetControlRotation(FRotator(-10.f, GetActorRotation().Yaw, 0.f));
 			return true;
@@ -574,5 +623,75 @@ void ABicycle::SnapToGround()
 		FVector Location = Start;
 		Location.Z = Hit.ImpactPoint.Z + BicycleModel::BoxBottom + CollisionBox->GetScaledBoxExtent().Z;
 		SetActorLocation(Location, false);
+	}
+}
+
+void ABicycle::DressRider(const PersonKit::FOutfit& Outfit)
+{
+	RiderLook = Outfit;
+	const double HipZ = 92.0 * Outfit.Height / 178.0;
+	RiderBody->SetRelativeLocation(FVector(0.0, 0.0, PersonModel::MiddleHeight - HipZ));
+	PersonModel::Dress(this, RiderBody.Get(), BaseMaterial, Outfit, RiderPieces);
+	for (UProceduralMeshComponent* Piece : RiderPieces)
+	{
+		if (Piece)
+		{
+			if (DrawDistance > 0.f)
+			{
+				Piece->SetCachedMaxDrawDistance(DrawDistance);
+			}
+			Piece->SetVisibility(bRiderShown);
+		}
+	}
+}
+
+void ABicycle::ShowRider(bool bShow)
+{
+	bRiderShown = bShow;
+	for (UProceduralMeshComponent* Piece : RiderPieces)
+	{
+		if (Piece)
+		{
+			Piece->SetVisibility(bShow);
+		}
+	}
+}
+
+void ABicycle::RingBell()
+{
+	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Camera || FVector::Dist(Camera->GetCameraLocation(), GetActorLocation()) > BicycleRide::BellHearing)
+	{
+		return;
+	}
+	if (!BellSound)
+	{
+		BellSound = NewObject<UBikeBellSound>(this);
+		BellSound->SetupAttachment(SteerBody);
+		BellSound->bAllowSpatialization = true;
+		BellSound->bOverrideAttenuation = true;
+		BellSound->AttenuationOverrides.bAttenuate = true;
+		BellSound->AttenuationOverrides.bSpatialize = true;
+		BellSound->AttenuationOverrides.FalloffDistance = BicycleRide::BellFalloff;
+		BellSound->RegisterComponent();
+		AddInstanceComponent(BellSound);
+	}
+	if (BellQuiet <= 0.f)
+	{
+		BellSound->Start();
+	}
+	BellSound->Ring();
+	BellQuiet = BicycleRide::BellLasts;
+}
+
+void ABicycle::UpdateBell(float DeltaSeconds)
+{
+	if (BellQuiet > 0.f)
+	{
+		BellQuiet -= DeltaSeconds;
+		if (BellQuiet <= 0.f && BellSound)
+		{
+			BellSound->Stop();
+		}
 	}
 }

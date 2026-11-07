@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "BicycleModel.h"
 #include "PersonKit.h"
 #include "Bicycle.generated.h"
 
+class UBikeBellSound;
 class UBoxComponent;
 class UCameraComponent;
 class UMaterialInterface;
@@ -28,7 +30,12 @@ class USpringArmComponent;
  * player's own dress-up figure, his feet on the turning pedals and his
  * hands on the grips. Riding hard into a wall stops it dead. Left alone it
  * leans over onto its kickstand. A dynamo on the rear tyre lights the lamp,
- * brighter the faster it goes.
+ * brighter the faster it goes. Shift (held while pedalling) is a sprint: he
+ * stands on the pedals and it goes faster until he is out of breath, which
+ * comes back when he rides easy. B rings the bell.
+ *
+ * Other kinds (SetKind) and enamel colours (SetPaint) are for the bicycles
+ * of the city (bCityBike): parked ones and those of ATrafficBike riders.
  */
 UCLASS()
 class PESTIALVILAG_API ABicycle : public APawn
@@ -45,8 +52,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Bicycle")
 	bool bShopBike = false;
 
+	/** A bicycle of the city (parked about the streets, or ridden in the traffic), not one of the story's. */
+	UPROPERTY(EditAnywhere, Category = "Bicycle")
+	bool bCityBike = false;
+
+	/** The kind (unless bShopBike) and the enamel colour; set before it is spawned. */
+	void SetKind(BicycleModel::EKind InKind) { BikeKind = InKind; }
+	void SetPaint(const FLinearColor& InPaint) { FramePaint = InPaint; }
+	BicycleModel::EKind GetKind() const { return bShopBike ? BicycleModel::EKind::ShopBike : BikeKind; }
+	/** Who sits on it when someone else than the player rides it (set before it is spawned). */
+	void SetRiderLook(const PersonKit::FOutfit& Outfit) { RiderLook = Outfit; bOwnRiderLook = true; }
+	/** Its pieces are not drawn beyond this (cm; 0 always drawn). Set before it is spawned. */
+	void SetDrawDistance(float Distance) { DrawDistance = Distance; }
+
 	/** Puts a person on the saddle; they get off again with F. */
-	void TakeRider(APawn* InRider);
+	virtual void TakeRider(APawn* InRider);
 	/** Where to get on: beside the saddle (on the ground). */
 	FVector GetSaddleLocation() const;
 	/** Shows this many parcels in the basket (0 to 3). */
@@ -120,43 +140,71 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+	/** The bell, made the first time it is rung. */
+	UPROPERTY(Transient)
+	TObjectPtr<UBikeBellSound> BellSound;
+
 	virtual void BeginPlay() override;
 
-private:
 	UProceduralMeshComponent* MakeMesh(USceneComponent* Parent, const PersonKit::FPiece& Piece, const FVector& At);
-	void Ride(APlayerController* PC, float DeltaSeconds);
-	void Move(float DeltaSeconds);
 	void Animate(float DeltaSeconds);
 	void PoseRider();
-	/** The dynamo lamp: brighter the faster it goes, a beam on the road at night. */
-	void UpdateLamp();
-	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
-	/** He gets off, only when it is nearly stopped unless bForce; false when there was no room. */
-	bool LetRiderOff(APlayerController* PC, bool bForce = false);
+	/** Dresses the figure on the saddle (hidden until ShowRider). */
+	void DressRider(const PersonKit::FOutfit& Outfit);
+	void ShowRider(bool bShow);
+	/** "Rrring-rrring", heard near the camera. */
+	void RingBell();
+	/** Lets the bell fall silent a while after it was rung. */
+	void UpdateBell(float DeltaSeconds);
 	void SnapToGround();
 
 	/** Speed (cm/s, below 0 walking it back) and how far the bars are turned (degrees, right positive). */
 	float Speed = 0.f;
 	float SteerAngle = 0.f;
-	/** How far over it leans (degrees, right positive). */
+	/** How far over it leans (degrees, right positive), and a lean on top of that (a wobble, or lying on its side). */
 	float Lean = 0.f;
+	float ExtraRoll = 0.f;
 	/** How the kickstand is turned about its hinge (degrees: down to prop it, back when ridden). */
 	float StandPitch = 0.f;
+	/** How far the cranks have turned (degrees). */
+	float Crank = 0.f;
+	bool bPedalling = false;
+	/** 0 riding easy, 1 standing on the pedals in a sprint. */
+	float SprintBlend = 0.f;
+	PersonKit::FOutfit RiderLook;
+	bool bOwnRiderLook = false;
+	bool bRiderShown = false;
+	float BellQuiet = 0.f;
+
+	UPROPERTY()
+	TObjectPtr<APawn> Rider;
+
+private:
+	void Ride(APlayerController* PC, float DeltaSeconds);
+	void Move(float DeltaSeconds);
+	/** The dynamo lamp: brighter the faster it goes, a beam on the road at night. */
+	void UpdateLamp();
+	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
+	/** He gets off, only when it is nearly stopped unless bForce; false when there was no room. */
+	bool LetRiderOff(APlayerController* PC, bool bForce = false);
+
 	/** How bright the lamp was last set (0 dark, 1 full), and how dark the evening was then. */
 	float LampGlow = 0.f;
 	float LampDarkness = 0.f;
-	/** How far the cranks and the wheels have turned (degrees, and cm rolled). */
-	float Crank = 0.f;
+	/** How far the wheels have turned (cm rolled). */
 	float Rolled = 0.f;
-	bool bPedalling = false;
 	int32 Parcels = 0;
+	BicycleModel::EKind BikeKind = BicycleModel::EKind::Roadster;
+	FLinearColor FramePaint = BicycleModel::Enamel();
+	float DrawDistance = 0.f;
+	/** Sprint breath (1 full, 0 spent); once spent, no sprint until it is back to SprintAgain. */
+	float Breath = 1.f;
+	bool bBreathSpent = false;
 	int32 HardKnocks = 0;
 
 	float LookYaw = 0.f;
 	float LookPitch = 0.f;
 	float TimeSinceLook = 0.f;
 
-	UPROPERTY()
-	TObjectPtr<APawn> Rider;
 	double RiderOnTime = 0.0;
 };

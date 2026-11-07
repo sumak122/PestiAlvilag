@@ -360,11 +360,12 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.0, CartYaw, 0.0), CarParams);
 	}
 
-	// (Only a roadster counts: the shop bicycles belong to the errand-boy mission.)
+	// (Only a roadster counts: the shop bicycles belong to the errand-boy mission, and the
+	// city's bicycles, parked and ridden, to the streets.)
 	bool bHasRoadster = false;
 	for (TActorIterator<ABicycle> It(GetWorld()); It; ++It)
 	{
-		bHasRoadster = bHasRoadster || !It->bShopBike;
+		bHasRoadster = bHasRoadster || (!It->bShopBike && !It->bCityBike);
 	}
 	if (!bHasRoadster)
 	{
