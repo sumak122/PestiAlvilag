@@ -13,7 +13,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - The matching `.cpp/.h` actor holds behaviour.
 
 ## Areas (files in Source/PestiAlvilag)
-- Player on foot: `PestiPerson` (big, ~1400 lines: moves, camera, F/T keys), `FreeRun` (vault/slide), `Brawl.h` (fist fighting).
+- Player on foot: `PestiPerson` (big, ~1400 lines: moves, camera, F/T keys), `FreeRun` (vault/slide), `Brawl.h` (fist fighting), `FightAnim.h` (fight animation layer: moves melt into each other, hit springs, breathing, planted feet, key-pose helper for new moves; Space sidestep lives in Brawl/PestiPerson).
 - Player car: `PestiCar`, `CarBody`, `CarVisuals`, `CarModel.h` (all car bodies, also Dr. Halász's Steyr for mission 7), `ExhaustSmoke`, `EngineSound`, `Wreck.h`, `CarDamage.h` (crash dents, broken lamps and glass, parts falling off, wear; used by CarVisuals::Knock). Crash effects: `CrashBits` (sparks, glass and grit bits, dust, one mesh like ExhaustSmoke) + `CrashSound`/`CrashSynth.h` (bump, crunch, glass, clang, wall scrape made in code), started from APestiCar::CrashFeedback.
 - Traffic and police: `TrafficManager`, `TrafficCar`, `PoliceCar`, `PoliceModel.h`, `PolicePatrols` (constables, phone boxes), `CarjackedDriver`.
 - Taxis: `PestiTaxi`, `TaxiCompany` (job), `TaxiRides` (ride as passenger), `TaxiPassenger`.

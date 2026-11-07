@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Brawl.h"
+#include "FightAnim.h"
 #include "FightSynth.h"
 #include "FreeRun.h"
 #include "PersonKit.h"
@@ -146,6 +147,10 @@ public:
 	}
 	/** Under his swing and back with a hook, if it is coming; false otherwise. */
 	bool Counter();
+	/** A quick hop aside (or back, with no way given) out of the way of blows and grabs. */
+	bool Dodge(const FVector& Way);
+	/** True while a sidestep still takes him out of the way. */
+	bool IsDodging() const;
 	/** Reaching for his collar; slowly, it can be seen coming. */
 	bool Grab(bool bSlowly = false);
 	/** A knee, while holding him. */
@@ -240,7 +245,8 @@ protected:
 	void StartMove(const FreeRun::FChance& Chance);
 	void TickMove(float DeltaSeconds);
 	void FinishMove();
-	void ApplyPose(const FreeRun::FPose& Pose);
+	/** Puts him in a pose; LegTwist turns the legs back about the hips (degrees) so the feet stay put. */
+	void ApplyPose(const FreeRun::FPose& Pose, float LegTwist = 0.f);
 
 private:
 	void Look(APlayerController* PC, float DeltaSeconds);
@@ -306,4 +312,9 @@ private:
 	int32 BreakRunAfter = Brawl::BreakRunMax;
 	/** Beaten and lying there: when he groans next. */
 	double NextGroanAt = 0.0;
+	/** His fighting body: moves melting into each other, blows pushing him about (FightAnim). */
+	FightAnim::FAnimator FightMotion;
+	/** Sidestepping: which way (world, flat) and to which side of him (1 right, -1 left, 0 back). */
+	FVector DodgeWay = FVector::ZeroVector;
+	float DodgeSide = 0.f;
 };
