@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "LaciYard.generated.h"
 
+class APestiCar;
 class AStoryPerson;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
@@ -34,10 +35,22 @@ public:
 	/** Laci, the mechanic, or null before play begins. */
 	AStoryPerson* GetLaci() const;
 
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
+	/**
+	 * The garage (after mission 7): a car stopped over the pit is mended and
+	 * sprayed a new colour behind a short fade to black, for a fee, and the
+	 * police lose it; Laci says why not when he won't.
+	 */
+	void TickGarage(float DeltaSeconds);
+	void StartWork(APestiCar* Car);
+	void FinishWork();
+	void LaciSays(const FString& Hu, const FString& En) const;
+
 	void AddShape(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide);
 
 	UPROPERTY()
@@ -55,4 +68,16 @@ private:
 	/** Laci, the mechanic. */
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Laci;
+
+	/** The car being mended, while the screen is black. */
+	UPROPERTY(Transient)
+	TObjectPtr<APestiCar> InWork;
+
+	/** How long the car has stood still over the pit (s). */
+	float StoodFor = 0.f;
+	/** Laci has had his say (or done the work): nothing more until the car leaves the pit. */
+	bool bWaitForLeave = false;
+	/** While working: when the car is done (the screen still black), and when the screen clears. */
+	double DoneAt = -1.0;
+	double ClearAt = -1.0;
 };

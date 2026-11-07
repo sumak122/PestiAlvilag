@@ -26,6 +26,17 @@ class UEngineSound;
  * car was last frame, so it works the same for the player's car, traffic
  * and the police.
  */
+namespace CarVisuals
+{
+	/** What a knock did (UCarVisuals::Knock). */
+	enum EKnocked : int32
+	{
+		KnockDented = 1,
+		KnockGlass = 2,
+		KnockPart = 4,
+	};
+}
+
 UCLASS()
 class PESTIALVILAG_API UCarVisuals : public UActorComponent
 {
@@ -99,12 +110,21 @@ public:
 	 * A knock at WorldPoint, pushing the way of WorldInto (into the car), at
 	 * Speed (cm/s, the speed straight into it): dents the body (CarDamage),
 	 * breaks lamps and glass, knocks lamps and bumpers off and wears the car out.
+	 * Returns what happened, as bits of CarVisuals::EKnocked (0 if nothing).
 	 */
-	void Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed);
+	int32 Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed);
+
+	/** Laci's garage: the dents beaten out, lost parts and broken glass put back, the engine like new, and the body in a new Paint. */
+	void Repaint(const FLinearColor& Paint);
+
+	/** The body's paint now. */
+	FLinearColor GetPaint() const { return Style.PaintColor; }
 
 	/** How worn out the car is from its crashes: 0 like new, 1 the engine is dead. */
 	float GetWear() const { return static_cast<float>(Damage.Wear); }
 	bool IsEngineDead() const { return Damage.Wear >= 1.0; }
+	/** Any dent, lost part or wear at all. */
+	bool IsDamaged() const { return Damage.Dents.Num() > 0 || Damage.Fallen != 0 || Damage.Wear > 0.0; }
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -227,6 +247,8 @@ private:
 	bool bBeamsShown = false;
 	/** What the lamps show now: off (-1 unknown, 0 off, 1 lit, 2 braking) and at which darkness they were last tinted. */
 	int32 LampState = -1;
+	/** How many triangles of glass the clean body has: fewer after a knock means a pane broke. */
+	int32 GlassLeft = 0;
 	int32 TailState = -1;
 	float TintDarkness = -1.f;
 };

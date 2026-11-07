@@ -253,6 +253,7 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 
 	const CarModel::FBuilder& Shape = CarVisuals::BodyShape(Style);
 	Fill(Body, Shape);
+	GlassLeft = Shape.Parts[CarModel::Glass].Triangles.Num();
 	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
 	// The headlamp lenses: the middle of the lamp glass on each side of the front.
 	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
@@ -776,11 +777,11 @@ void UCarVisuals::PuffFrom(const FVector& Local, const FVector& Drift, float Siz
 	Smoke->Puff(Owner->GetActorTransform().TransformPosition(Local), Drift + Wander, Size, bDark);
 }
 
-void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed)
+int32 UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed)
 {
 	if (!bShown || !Body || !Body->GetAttachParent())
 	{
-		return;
+		return 0;
 	}
 	// Into the car's own frame (the body's parent: the body itself leans).
 	const FTransform Frame = Body->GetAttachParent()->GetComponentTransform();
@@ -805,8 +806,9 @@ void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, flo
 	const FVector Into = Frame.InverseTransformVectorNoScale(WorldInto);
 	if (!CarDamage::Knock(Damage, At, Into, Speed))
 	{
-		return;
+		return 0;
 	}
+	int32 Happened = CarVisuals::KnockDented;
 
 	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
 	const int32 Fresh = CarDamage::KnockOff(Clean, Layout, Damage);
@@ -815,6 +817,14 @@ void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, flo
 	bool TailBroken[2] = { false, false };
 	CarDamage::Apply(Clean, Layout, Damage, Dented, LampBroken, TailBroken);
 	Refill(Body, Dented);
+
+	// Fewer panes than before, or a lamp newly broken: glass flew.
+	const int32 GlassNow = Dented.Parts[CarModel::Glass].Triangles.Num();
+	if (GlassNow < GlassLeft || (LampBroken[0] && !bLampOut[0]) || (LampBroken[1] && !bLampOut[1]))
+	{
+		Happened |= CarVisuals::KnockGlass;
+	}
+	GlassLeft = GlassNow;
 
 	bLampOut[0] = LampBroken[0];
 	bLampOut[1] = LampBroken[1];
@@ -827,7 +837,25 @@ void UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, flo
 		if ((Fresh & (1 << Which)) != 0)
 		{
 			DropPart(Which);
+			Happened |= CarVisuals::KnockPart;
 		}
+	}
+	return Happened;
+}
+
+void UCarVisuals::Repaint(const FLinearColor& Paint)
+{
+	if (!bShown || !Body || !Body->GetAttachParent())
+	{
+		return;
+	}
+	// Built afresh from the clean body in the new paint: no dents, every part on, no wear.
+	CarModel::FStyle Fresh = Style;
+	Fresh.PaintColor = Paint;
+	Show(Body->GetAttachParent(), Fresh);
+	if (Beams.Num() > 0)
+	{
+		ShowBeams(bBeamsShown);
 	}
 }
 
