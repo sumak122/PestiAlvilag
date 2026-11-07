@@ -45,7 +45,7 @@ namespace CarModel
 		PartCount
 	};
 
-	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). Steyr: Dr. Halász's big four-door Steyr saloon (mission 7), not in traffic. */
+	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). Steyr: Dr. Halász's big four-door Steyr saloon (mission 7), also rare in traffic. */
 	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Steyr, Count };
 	enum class EWheel : uint8 { Artillery, Wire, Disc, Count };
 
@@ -1224,11 +1224,20 @@ namespace CarModel
 		FStyle Style;
 		Style.PaintColor = InPaint;
 		// The best sellers of the early thirties first (the Fiat Balilla and the
-		// Opel 1.2), then saloons, tourers and coupés; fewer vans and limousines.
+		// Opel 1.2), then saloons, tourers and coupés; fewer vans and limousines,
+		// and now and then (3 in 100) a big Steyr saloon like Dr. Halász's.
 		const int32 Pick = Random.RandRange(0, 99);
-		Style.Body = Pick < 22 ? EBody::Balilla : Pick < 40 ? EBody::Opel : Pick < 62 ? EBody::Saloon : Pick < 74 ? EBody::Tourer
-			: Pick < 84 ? EBody::Coupe : Pick < 94 ? EBody::Van : EBody::Limousine;
+		Style.Body = Pick < 22 ? EBody::Balilla : Pick < 40 ? EBody::Opel : Pick < 59 ? EBody::Saloon : Pick < 62 ? EBody::Steyr
+			: Pick < 74 ? EBody::Tourer : Pick < 84 ? EBody::Coupe : Pick < 94 ? EBody::Van : EBody::Limousine;
 		Style.Wheel = static_cast<EWheel>(Random.RandRange(0, static_cast<int32>(EWheel::Count) - 1));
+		if (Style.Body == EBody::Steyr)
+		{
+			// Like the doctor's: disc wheels with rims in the body's paint, black wings.
+			Style.Wheel = EWheel::Disc;
+			Style.GuardColor = FLinearColor(0.008f, 0.008f, 0.009f);
+			Style.SpokeColor = InPaint;
+			return Style;
+		}
 		if (Style.Body == EBody::Balilla)
 		{
 			// Pressed steel disc wheels, black wings, rims in red, black or the body's paint.
