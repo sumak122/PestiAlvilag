@@ -206,6 +206,11 @@ void APestiPerson::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	// Held still (a scene, a menu, fainting): no jumping, vaulting or getting into cars either.
+	if (Act == Brawl::EAct::None && PC->IsMoveInputIgnored())
+	{
+		return;
+	}
 	if (Act != Brawl::EAct::None)
 	{
 		PlayerFight(PC);

@@ -10,6 +10,7 @@
 class UGoalMarkerComponent;
 class UMaterialInterface;
 class URouteGuideComponent;
+class UStartRingComponent;
 class UStaticMeshComponent;
 
 /** One step of a mission: get somewhere, perhaps on foot, perhaps pressing E there. */
@@ -33,6 +34,12 @@ struct FMissionStep
 	bool bManual = false;
 	/** What people in the street call the place, when the player asks them the way (a street, a square); may be empty. */
 	FString Place;
+	/**
+	 * Finishing the step plays a short scene (ACutscene) this long (s): the
+	 * player and SceneWith (or Target, when that is empty) talking. 0 for none.
+	 */
+	float SceneSeconds = 0.f;
+	TWeakObjectPtr<AActor> SceneWith;
 };
 
 /**
@@ -43,6 +50,12 @@ struct FMissionStep
  *
  * A mission can fail (Fail): it says why, and offers E to try again from
  * its start (GetRetrySpot); otherwise it starts over by itself a little later.
+ *
+ * A mission that starts at a ring (bStartsAtRing) waits quietly in a gold
+ * ring by whoever gives it (the first step's SceneWith) until the player
+ * walks in on foot; then its first step is done at once and its scene plays,
+ * ending with the mission's number and name. Steps with SceneSeconds play
+ * a short scene when they are done (a mission's last one: being paid).
  *
  * On-screen lines: 7 the goal, 8 what people say, 9 big announcements.
  */
@@ -64,6 +77,8 @@ public:
 
 	FString TitleHu;
 	FString TitleEn;
+	/** Its place in act 1 (1 the prologue), shown with its name when it starts; 0 for none. */
+	int32 Number = 0;
 
 	/**
 	 * Where the player should head now, and what people call that place
@@ -80,6 +95,18 @@ protected:
 	/** Arrows over the turns on the way to the target. */
 	UPROPERTY(VisibleAnywhere, Category = "Mission")
 	TObjectPtr<URouteGuideComponent> Guide;
+
+	/** Where the mission waits to begin, when it starts at a ring. */
+	UPROPERTY(VisibleAnywhere, Category = "Mission")
+	TObjectPtr<UStartRingComponent> Ring;
+
+	/**
+	 * Set in SetUpMission: the mission waits in a ring by its first step's
+	 * SceneWith (or at its Target) and starts when the player walks in;
+	 * StartLetter (the giver's first letter) shows over the ring and on the maps.
+	 */
+	bool bStartsAtRing = false;
+	FString StartLetter;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
@@ -142,6 +169,10 @@ protected:
 
 private:
 	void StartStep(int32 Step);
+	/** Waiting in the ring: starts the mission when the player walks in. */
+	void TickRing();
+	/** The scene of a step just done, if it has one. */
+	void PlayStepScene(int32 Step);
 	void Pass();
 	/** After failing: the offer to try again, and starting over. */
 	void TickFailed();
@@ -154,6 +185,9 @@ private:
 	TArray<TObjectPtr<AActor>> MissionActors;
 
 	int32 CurrentStep = INDEX_NONE;
+	bool bAtRing = false;
+	/** The player has been outside the ring since it showed (so standing in it from the start doesn't count). */
+	bool bRingArmed = false;
 	bool bFailed = false;
 	double FailedAt = 0.0;
 	bool bLetterOpen = false;

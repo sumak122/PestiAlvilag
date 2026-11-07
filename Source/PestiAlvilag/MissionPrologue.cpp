@@ -4,6 +4,7 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
+#include "Cutscene.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
@@ -40,6 +41,20 @@ namespace Prologue
 	const FLinearColor Leather(0.22f, 0.11f, 0.05f);
 
 	constexpr float IntroFade = 4.f;
+
+	// The opening scene (cm, s): the camera this far ahead of him and up,
+	// gliding closer, for this long; then this far behind him and up, looking
+	// this far ahead towards the arch, while the mission's name shows.
+	constexpr float OpeningLook = 6.f;
+	constexpr float OpeningTitle = 4.f;
+	constexpr double OpeningFront = 650.0;
+	constexpr double OpeningFrontEnd = 500.0;
+	constexpr double OpeningUp = 120.0;
+	constexpr double OpeningBehind = 260.0;
+	constexpr double OpeningBehindEnd = 200.0;
+	constexpr double OpeningBehindUp = 90.0;
+	constexpr double OpeningLookAhead = 2500.0;
+	constexpr double OpeningLookUp = 250.0;
 	constexpr int32 MessageLine = 3;
 	// The keys for the letter and for asking the way, shown once the
 	// station's name has gone (s).
@@ -51,6 +66,7 @@ AMissionPrologue::AMissionPrologue()
 	MissionId = TEXT("Prologue");
 	Reward = 500;
 	TitleHu = TEXT("Meg\u00e9rkez\u00e9s");
+	Number = 1;
 	TitleEn = TEXT("Arrival");
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -88,7 +104,7 @@ void AMissionPrologue::SetUpMission()
 			PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, Prologue::IntroFade, FLinearColor::Black);
 		}
 	}
-	Announce(TEXT("Budapest, 1932 \u0151sze. Keleti p\u00e1lyaudvar."), TEXT("Budapest, autumn 1932. Keleti station."), 8.f);
+	Say(FString(), TEXT("Budapest, 1932 \u0151sze. Keleti p\u00e1lyaudvar."), TEXT("Budapest, autumn 1932. Keleti station."), Prologue::OpeningLook);
 
 	// The gentleman, waiting with his suitcase on the ground beside him.
 	const FVector GentlemanLocation(Prologue::GentlemanAt, GroundZ(Prologue::GentlemanAt) + 90.0);
@@ -114,6 +130,42 @@ void AMissionPrologue::SetUpMission()
 	Home.Radius = 300.f;
 	Home.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
 	Steps.Add(Home);
+
+	PlayOpening();
+}
+
+void AMissionPrologue::PlayOpening()
+{
+	// Off the train: first a look back at him on the platform, then over
+	// his shoulder towards the great arch, with the mission's name.
+	APawn* Player = GetPlayer();
+	if (!Player)
+	{
+		return;
+	}
+	using namespace Prologue;
+	const FVector Me = Player->GetActorLocation();
+	FVector Ahead = Player->GetActorForwardVector().GetSafeNormal2D();
+	if (Ahead.IsNearlyZero())
+	{
+		Ahead = FRotator(0.0, StartYaw(), 0.0).Vector();
+	}
+	const TArray<const AActor*> Ignore = { Player, Gentleman.Get() };
+	double Reach = 0.0;
+	TArray<FSceneShot> Shots;
+	FSceneShot Look;
+	Look.From = ACutscene::Clear(GetWorld(), Me, Me + Ahead * OpeningFront + FVector(0.0, 0.0, OpeningUp), Ignore, Reach);
+	Look.FromEnd = ACutscene::Clear(GetWorld(), Me, Me + Ahead * OpeningFrontEnd + FVector(0.0, 0.0, OpeningUp), Ignore, Reach);
+	Look.LookAt = Me + FVector(0.0, 0.0, 40.0);
+	Look.Seconds = OpeningLook;
+	Shots.Add(Look);
+	FSceneShot Over;
+	Over.From = ACutscene::Clear(GetWorld(), Me, Me - Ahead * OpeningBehind + FVector(0.0, 0.0, OpeningBehindUp), Ignore, Reach);
+	Over.FromEnd = ACutscene::Clear(GetWorld(), Me, Me - Ahead * OpeningBehindEnd + FVector(0.0, 0.0, OpeningBehindUp), Ignore, Reach);
+	Over.LookAt = Me + Ahead * OpeningLookAhead + FVector(0.0, 0.0, OpeningLookUp);
+	Over.Seconds = OpeningTitle;
+	Shots.Add(Over);
+	ACutscene::Play(GetWorld(), Shots, Number, TitleHu, TitleEn, OpeningTitle);
 }
 
 void AMissionPrologue::OnStepStarted(int32 Step)

@@ -103,6 +103,17 @@ public:
 
 	/** For this frame, the goal's diamond on the minimap (UGoalMarkerComponent calls it while it shows). */
 	void MarkGoal(const FVector& At);
+	/** For this frame, where a story mission waits to begin, with the giver's first letter, on the minimap and the big map (UStartRingComponent calls it). */
+	void MarkStart(const FVector& At, const FString& Letter);
+	/**
+	 * A scene (ACutscene): how far the black bars are in, 0 to 1. While they
+	 * show, the rest of the HUD goes, and what people say shows as subtitles
+	 * above the lower bar.
+	 */
+	void SetSceneBars(float Share) { SceneBars = FMath::Clamp(Share, 0.f, 1.f); }
+	bool IsSceneShowing() const { return SceneBars > 0.f; }
+	/** A mission's number and name over a scene, in Hungarian with the English under it; an empty Name takes it away. */
+	void SetSceneTitle(int32 Number, const FString& Name, const FString& NameEn);
 	/** For this frame, the way to the goal on the minimap, or to the player's own mark (URouteGuideComponent calls it). */
 	void ShowRoute(const TArray<FVector>& Points, bool bOwnMark);
 	/** True while the big map is open (the game stands still). */
@@ -187,6 +198,16 @@ private:
 	double GoalRouteUntil = -1.0;
 	TArray<FVector2D> MarkRoute;
 	double MarkRouteUntil = -1.0;
+	/** Where the next story mission waits, and the giver's letter. */
+	FVector2D StartBlipAt = FVector2D::ZeroVector;
+	FString StartLetter;
+	double StartBlipUntil = -1.0;
+
+	// A scene: the bars and the title.
+	float SceneBars = 0.f;
+	int32 SceneNumber = 0;
+	FString SceneName;
+	FString SceneNameEn;
 	/** The player's own mark, set on the big map. */
 	bool bHasMark = false;
 	FVector MarkAt = FVector::ZeroVector;

@@ -56,6 +56,7 @@ AMissionUzenet::AMissionUzenet()
 	MissionId = TEXT("Uzenet");
 	Reward = 580;
 	TitleHu = TEXT("\u00dczenet");
+	Number = 2;
 	TitleEn = TEXT("The message");
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -107,7 +108,11 @@ void AMissionUzenet::SetUpMission()
 	Talk.Target = BozsiLocation;
 	Talk.Radius = Uzenet::TalkRadius;
 	Talk.bPressE = true;
+	Talk.SceneSeconds = 14.f;
+	Talk.SceneWith = Bozsi.Get();
 	Steps.Add(Talk);
+	bStartsAtRing = true;
+	StartLetter = TEXT("B");
 
 	FMissionStep Letter;
 	Letter.GoalHu = TEXT("Vidd el a levelet Pista b\u00e1csinak a Teleki t\u00e9ri piacra");
@@ -123,6 +128,8 @@ void AMissionUzenet::SetUpMission()
 	Back.Target = BozsiLocation;
 	Back.Radius = Uzenet::TalkRadius;
 	Back.bPressE = true;
+	Back.SceneSeconds = 8.f;
+	Back.SceneWith = Bozsi.Get();
 	Steps.Add(Back);
 }
 

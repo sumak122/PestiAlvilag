@@ -126,6 +126,7 @@ AMissionZsibvasar::AMissionZsibvasar()
 	MissionId = TEXT("Zsibvasar2");
 	Reward = 760;
 	TitleHu = TEXT("A zsibv\u00e1s\u00e1r");
+	Number = 4;
 	TitleEn = TEXT("The flea market");
 }
 
@@ -198,7 +199,11 @@ void AMissionZsibvasar::SetUpMission()
 	Talk.Target = PistaAt;
 	Talk.Radius = Zsibvasar::TalkRadius;
 	Talk.bPressE = true;
+	Talk.SceneSeconds = 14.f;
+	Talk.SceneWith = Pista.Get();
 	Steps.Add(Talk);
+	bStartsAtRing = true;
+	StartLetter = TEXT("P");
 
 	FMissionStep GetOn;
 	GetOn.GoalHu = TEXT("\u00dclj fel Pista b\u00e1csi kocsij\u00e1ra az Aur\u00f3ra utcai fuvarosudvarban (F)");
@@ -242,6 +247,8 @@ void AMissionZsibvasar::SetUpMission()
 	Defend.Radius = Zsibvasar::FightRadius;
 	Defend.bGuide = false;
 	Defend.bManual = true;
+	Defend.SceneSeconds = 8.f;
+	Defend.SceneWith = Pista.Get();
 	Steps.Add(Defend);
 }
 
