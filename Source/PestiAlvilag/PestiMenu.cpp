@@ -179,11 +179,41 @@ void FPestiMenu::Close(UWorld* World)
 	}
 }
 
+void FPestiMenu::MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FString& WhereHu, FString& WhereEn)
+{
+	static const TCHAR* const List[MissionCount][4] = {
+		{ TEXT("MEG\u00c9RKEZ\u00c9S"), TEXT("Arrival"), TEXT("Keleti p\u00e1lyaudvar"), TEXT("Keleti station") },
+		{ TEXT("\u00dcZENET"), TEXT("The message"), TEXT("B\u00f6zsi n\u00e9ni, N\u00e9psz\u00ednh\u00e1z utca"), TEXT("Aunt B\u00f6zsi") },
+		{ TEXT("ZSEBTOLVAJ"), TEXT("The pickpocket"), TEXT("B\u00f6zsi n\u00e9ni, R\u00e1k\u00f3czi t\u00e9ri csarnok"), TEXT("Aunt B\u00f6zsi, market hall") },
+		{ TEXT("A ZSIBV\u00c1S\u00c1R"), TEXT("The flea market"), TEXT("Pista b\u00e1csi, Teleki t\u00e9r"), TEXT("Pista b\u00e1csi") },
+		{ TEXT("A FELMOND\u00c1S"), TEXT("The notice"), TEXT("Pista b\u00e1csi, Teleki t\u00e9r"), TEXT("Pista b\u00e1csi") },
+		{ TEXT("KIFUT\u00d3FI\u00da"), TEXT("The errand boy"), TEXT("Varga Lajos, N\u00e9psz\u00ednh\u00e1z utca"), TEXT("Varga the grocer") },
+		{ TEXT("AZ ELS\u0150 AUT\u00d3"), TEXT("The first car"), TEXT("Laci, Szerdahelyi utca"), TEXT("Laci the mechanic") },
+		{ TEXT("A BUNDA"), TEXT("The fur coat"), TEXT("B\u00f6zsi n\u00e9ni, N\u00e9psz\u00ednh\u00e1z utca"), TEXT("Aunt B\u00f6zsi") },
+	};
+	const int32 Row = FMath::Clamp(Index, 0, MissionCount - 1);
+	NameHu = List[Row][0];
+	NameEn = List[Row][1];
+	WhereHu = List[Row][2];
+	WhereEn = List[Row][3];
+}
+
 TArray<FPestiMenuRow> FPestiMenu::Rows() const
 {
 	TArray<FPestiMenuRow> Out;
-	if (Page == EPestiMenuPage::Tests)
+	if (Page == EPestiMenuPage::Missions)
 	{
+		for (int32 i = 0; i < MissionCount; ++i)
+		{
+			FString NameHu, NameEn, WhereHu, WhereEn;
+			MissionInfo(i, NameHu, NameEn, WhereHu, WhereEn);
+			Out.Add({ NameHu, NameEn, EPestiMenuAction::PlayMission });
+		}
+		Out.Add({ TEXT("VISSZA"), TEXT("Back"), EPestiMenuAction::Back });
+	}
+	else if (Page == EPestiMenuPage::Tests)
+	{
+		Out.Add({ TEXT("K\u00dcLDET\u00c9SEK"), TEXT("Missions"), EPestiMenuAction::Missions });
 		Out.Add({ TEXT("VEREKED\u0150 UDVAR"), TEXT("Fight yard"), EPestiMenuAction::TestFight, bOnFoot });
 		Out.Add({ TEXT("J\u00c1RM\u0170TELEP"), TEXT("Vehicle yard"), EPestiMenuAction::TestVehicles, bOnFoot });
 		Out.Add({ TEXT("VISSZA A V\u00c1ROSBA"), TEXT("Back to the city"), EPestiMenuAction::TestBackToCity, bOnFoot && bOnTestGrounds });
@@ -434,13 +464,21 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 	case EPestiMenuAction::TestAreas:
 		BaseChoice = Choice;
 		Page = EPestiMenuPage::Tests;
+		// The mission list, first, can be chosen whether on foot or not.
 		Choice = 0;
-		// Not on foot: straight to "back", the only row that can be chosen.
-		if (!bOnFoot)
-		{
-			Choice = Rows().Num() - 1;
-		}
 		break;
+	case EPestiMenuAction::Missions:
+		Page = EPestiMenuPage::Missions;
+		Choice = 0;
+		break;
+	case EPestiMenuAction::PlayMission:
+	{
+		// The rows are the missions in order: the chosen row is the mission.
+		const int32 Number = Choice + 1;
+		Close(World);
+		APestiAlvilagGameModeBase::JumpToMission(World, Number);
+		break;
+	}
 	case EPestiMenuAction::TestFight:
 	case EPestiMenuAction::TestVehicles:
 		Close(World);
@@ -451,6 +489,13 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 		ATestGrounds::GoBack(World);
 		break;
 	case EPestiMenuAction::Back:
+		if (Page == EPestiMenuPage::Missions)
+		{
+			// Back to the test page, on its mission row.
+			Page = EPestiMenuPage::Tests;
+			Choice = 0;
+			break;
+		}
 		Page = Base;
 		Choice = BaseChoice;
 		break;
@@ -523,6 +568,7 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 	case EPestiMenuPage::Pause:
 	case EPestiMenuPage::Confirm:
 	case EPestiMenuPage::Tests:
+	case EPestiMenuPage::Missions:
 	{
 		if (bUp || (Page == EPestiMenuPage::Confirm && bLeft))
 		{
@@ -546,7 +592,7 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 			{
 				Do(World, PC, EPestiMenuAction::No);
 			}
-			else if (Page == EPestiMenuPage::Tests)
+			else if (Page == EPestiMenuPage::Tests || Page == EPestiMenuPage::Missions)
 			{
 				Do(World, PC, EPestiMenuAction::Back);
 			}

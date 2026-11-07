@@ -87,6 +87,12 @@ public:
 	 */
 	bool GetWayTo(FVector& OutTarget, FString& OutPlace) const;
 
+	/**
+	 * While the mission waits in its start ring: where the ring is, and the
+	 * flat way out of it away from whoever gives the mission. False otherwise.
+	 */
+	bool GetStartSpot(FVector& OutAt, FVector& OutAway) const;
+
 protected:
 	/** The mark over the target; it moves from step to step on its own. */
 	UPROPERTY(VisibleAnywhere, Category = "Mission")

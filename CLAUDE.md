@@ -29,7 +29,7 @@ Read this first. Open only the files your task needs, and grep big files instead
 - Shape sets: `ShapeSet` (AShapeSet: draws a list of MarketModel shapes, lettering and small night lamps; used for Bözsi's house, the furrier, the kiosk, the carried coat).
 - Screen text: `PestiHud` (art deco HUD, menus, minimap and the M big map with your own mark), `PestiMap` (bakes the city plan picture and street names for the maps), `PestiText.h` (Hungarian/English strings).
 - Test grounds: `TestGrounds` + `TestGroundsModel.h` (far west of the city, built on first use from the Esc menu row PRÓBATEREP: fight yard with number keys for the thief/ruffians/shop people, vehicle yard with every car, the horse cart, a wall, wrecks and a track).
-- Menus: `PestiMenu` (title screen "Pesti Mesék", Esc/Tab pause menu, settings, controls, credits; logic and keys, plus PestiSettings: volume, mouse, English subtitles). Painted by `PestiHud`.
+- Menus: `PestiMenu` (title screen "Pesti Mesék", Esc/Tab pause menu, settings, controls, credits; logic and keys, plus PestiSettings: volume, mouse, English subtitles). Painted by `PestiHud` The PRÓBATEREP page also has KÜLDETÉSEK, a list of the 8 act 1 missions: picking one calls `GameMode::JumpToMission` (level restarts with earlier missions done, save on disk untouched, player put by the mission's ring via `AMission::GetStartSpot`).
 
 ## Rules for changes
 - Claude can't build Unreal; Daniel does, and each mistake costs him a failed build. Check carefully before pushing.
