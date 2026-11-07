@@ -274,6 +274,42 @@ void APestiCar::LetDriverOut(APlayerController* PC)
 	}
 }
 
+float APestiCar::GetWear() const
+{
+	return Visuals ? Visuals->GetWear() : 0.f;
+}
+
+bool APestiCar::IsWrecked() const
+{
+	return Visuals && Visuals->IsEngineDead();
+}
+
+bool APestiCar::ForceDriverOut()
+{
+	APestiPerson* Person = Cast<APestiPerson>(Driver);
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!Person || !PC)
+	{
+		return false;
+	}
+	ForwardSpeed = 0.f;
+	SideSpeed = 0.f;
+	const FVector Left = -GetActorRightVector().GetSafeNormal2D();
+	for (const FVector& Side : { Left, -Left })
+	{
+		const FVector At = GetActorLocation() + Side * PestiCar::ExitSideDistance;
+		if (Person->TryStepOutAt(At, GetActorRotation().Yaw))
+		{
+			Driver = nullptr;
+			Visuals->HideDriver();
+			PC->Possess(Person);
+			PC->SetControlRotation(FRotator(-10.f, GetActorRotation().Yaw, 0.f));
+			return true;
+		}
+	}
+	return false;
+}
+
 void APestiCar::ShowBackSeatPassenger(const PersonKit::FOutfit& Outfit)
 {
 	Visuals->ShowPassenger(Outfit);

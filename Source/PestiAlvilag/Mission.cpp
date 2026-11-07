@@ -153,6 +153,14 @@ void AMission::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void AMission::AddMissionActor(AActor* Actor)
+{
+	if (Actor)
+	{
+		MissionActors.Add(Actor);
+	}
+}
+
 void AMission::KeepAfterMission(AActor* Actor)
 {
 	MissionActors.Remove(Actor);

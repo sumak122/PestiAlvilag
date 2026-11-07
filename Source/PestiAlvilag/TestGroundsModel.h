@@ -285,7 +285,7 @@ namespace TestGroundsModel
 		Out.Add({ TEXT("Test ground \u00b7 fighting"), FVector(0, -RingHalf + 10, 215), 90.0, 24.0, Colors::Chalk });
 	}
 
-	/** The cars in a row along the north of the yard, the horse cart and two bicycles at its end, and three old wrecks to ram. */
+	/** The cars in a row along the north of the yard, the horse cart, two bicycles and the doctor's Steyr at its end, and three old wrecks to ram. */
 	inline void Vehicles(TArray<FVehicleSpot>& Out)
 	{
 		using CarModel::EBody;
@@ -305,6 +305,7 @@ namespace TestGroundsModel
 			{ EVehicle::HorseCart, EBody::Saloon, EWheel::Artillery, FLinearColor::Black, FVector(-3400 + 10 * Gap + 300, RowY + 100, 0), Face, false },
 			{ EVehicle::Bicycle, EBody::Saloon, EWheel::Wire, FLinearColor::Black, FVector(-3400 + 10 * Gap + 900, RowY, 0), Face, false },
 			{ EVehicle::ShopBicycle, EBody::Saloon, EWheel::Wire, FLinearColor::Black, FVector(-3400 + 10 * Gap + 1150, RowY, 0), Face, false },
+			{ EVehicle::Car, EBody::Steyr, EWheel::Disc, FLinearColor(0.012f, 0.075f, 0.040f), FVector(-3400 + 10 * Gap + 1550, RowY, 0), Face, false },
 			{ EVehicle::Car, EBody::Saloon, EWheel::Artillery, FLinearColor(0.25f, 0.22f, 0.18f), FVector(1800, 7000, 0), 0.0, true },
 			{ EVehicle::Car, EBody::Van, EWheel::Artillery, FLinearColor(0.18f, 0.20f, 0.15f), FVector(2500, 7000, 0), 0.0, true },
 			{ EVehicle::Car, EBody::Tourer, EWheel::Artillery, FLinearColor(0.22f, 0.12f, 0.08f), FVector(3200, 7000, 0), 0.0, true },

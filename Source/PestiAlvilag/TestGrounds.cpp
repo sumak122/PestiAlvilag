@@ -542,6 +542,11 @@ void ATestGrounds::SpawnVehicles()
 			Kind = APestiTaxi::StaticClass();
 			Look = Spot.Kind == EVehicle::Taxi ? CarModel::TaxiStyle() : CarModel::DeluxeTaxiStyle();
 		}
+		else if (Spot.Body == CarModel::EBody::Steyr)
+		{
+			// Dr. Halász's Steyr (mission 7) in its own colours.
+			Look = CarModel::SteyrStyle();
+		}
 		else
 		{
 			Look.Body = Spot.Body;

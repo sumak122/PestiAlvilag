@@ -104,6 +104,13 @@ public:
 	/** How many times the car has hit something hard enough to jolt a passenger. */
 	int32 GetBumpCount() const { return BumpCount; }
 
+	/** How battered the car is, from 0 (whole) to 1 (wrecked: the engine has died). */
+	float GetWear() const;
+	bool IsWrecked() const;
+
+	/** Stops the car and puts the player who drives it out on foot, whatever its speed (missions that fail). False when he could not get out. */
+	bool ForceDriverOut();
+
 	/** A fare on the back seat (taxis), or nobody. */
 	void ShowBackSeatPassenger(const PersonKit::FOutfit& Outfit);
 	void HideBackSeatPassenger();

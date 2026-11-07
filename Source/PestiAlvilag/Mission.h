@@ -145,6 +145,8 @@ protected:
 		}
 		return Spawned;
 	}
+	/** An actor spawned some other way (say deferred, to set it up first) that goes when the mission ends. */
+	void AddMissionActor(AActor* Actor);
 	/** Keep an actor the mission spawned after it ends (for example a car). */
 	void KeepAfterMission(AActor* Actor);
 
