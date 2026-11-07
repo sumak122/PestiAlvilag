@@ -68,6 +68,7 @@ AMissionKifutofiu::AMissionKifutofiu()
 	Reward = 870;
 	TitleHu = TEXT("Kifut\u00f3fi\u00fa");
 	TitleEn = TEXT("The errand boy");
+	Number = 6;
 }
 
 FVector AMissionKifutofiu::SpotAt(DeliveryModel::EPlace Spot, const FVector& Local) const
@@ -179,7 +180,11 @@ void AMissionKifutofiu::SetUpMission()
 	Talk.Radius = Kifutofiu::TalkRadius;
 	Talk.bPressE = true;
 	Talk.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
+	Talk.SceneSeconds = 14.f;
+	Talk.SceneWith = Varga.Get();
 	Steps.Add(Talk);
+	bStartsAtRing = true;
+	StartLetter = TEXT("V");
 
 	const TCHAR* const GoalsHu[] = {
 		TEXT("Vidd a csomagot az Oppenheim k\u00e1v\u00e9h\u00e1zba"),
@@ -215,6 +220,8 @@ void AMissionKifutofiu::SetUpMission()
 	Pay.Radius = Kifutofiu::TalkRadius;
 	Pay.bPressE = true;
 	Pay.Place = TEXT("N\u00e9psz\u00ednh\u00e1z utca");
+	Pay.SceneSeconds = 8.f;
+	Pay.SceneWith = Varga.Get();
 	Steps.Add(Pay);
 }
 
