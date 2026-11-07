@@ -5,6 +5,9 @@
 #include "Camera/CameraComponent.h"
 #include "CarVisuals.h"
 #include "Components/BoxComponent.h"
+#include "CrashBits.h"
+#include "CrashSound.h"
+#include "CrashSynth.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineSound.h"
@@ -40,6 +43,22 @@ namespace PestiCar
 	constexpr float CrimeImpactSpeed = 500.f;
 	// Hitting anything faster than this jolts a passenger (cm/s).
 	constexpr float BumpSpeed = 300.f;
+
+	// Crash feedback (cm/s straight into what was hit): a thump from here, a crunch with sparks from here,
+	// and a crunch is at full strength this much faster than that.
+	constexpr float ThumpSpeed = 120.f;
+	constexpr float CrunchSpeed = 550.f;
+	constexpr float CrunchRange = 1500.f;
+	// Two crash sounds at least this far apart (s), so one long contact is one crash.
+	constexpr double CrashGap = 0.25;
+	// Sliding along a wall faster than this (cm/s) scrapes, at full grind at ScrapeFull; sparks every ScrapeSparkGap s.
+	constexpr float ScrapeSpeed = 250.f;
+	constexpr float ScrapeFull = 1800.f;
+	constexpr double ScrapeHold = 0.15;
+	constexpr double ScrapeSparkGap = 0.05;
+	// The crash sounds are heard this far (cm) and this loud.
+	constexpr float CrashSoundFalloff = 6000.f;
+	constexpr float CrashSoundVolume = 1.f;
 	// The driver can only get out below this speed (cm/s).
 	constexpr float MaxExitSpeed = 300.f;
 	// How far beside the car the driver steps out (cm from the centre).
@@ -119,6 +138,12 @@ void APestiCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// The scrape grinds on only while the car keeps sliding along the wall.
+	if (CrashNoise)
+	{
+		CrashNoise->SetScrape(GetWorld()->GetTimeSeconds() < ScrapeUntil ? ScrapeAmount : 0.f);
+	}
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	// Nobody at the wheel: the engine is off, and so are the lights. Crashed
 	// too often, the engine dies: the car only rolls on and can be steered.
@@ -164,13 +189,19 @@ void APestiCar::Tick(float DeltaSeconds)
 	{
 		Throttle = ForwardSpeed > 20.f ? FMath::Min(Throttle, 0.f) : 0.f;
 	}
+	// Held still (Laci's garage, a scene): no pedal, and no getting out.
+	const bool bHeld = PC->IsMoveInputIgnored();
+	if (bHeld)
+	{
+		Throttle = 0.f;
+	}
 	const bool bHandbrake = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 
 	if (PC->WasInputKeyJustPressed(EKeys::C) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
 	{
 		ToggleCamera();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
+	if (!bHeld && (PC->WasInputKeyJustPressed(EKeys::F) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right)))
 	{
 		LetDriverOut(PC);
 		return;
@@ -282,6 +313,103 @@ float APestiCar::GetWear() const
 bool APestiCar::IsWrecked() const
 {
 	return Visuals && Visuals->IsEngineDead();
+}
+
+bool APestiCar::IsDamaged() const
+{
+	return Visuals && Visuals->IsDamaged();
+}
+
+void APestiCar::Repaint(const FLinearColor& Paint)
+{
+	Style.PaintColor = Paint;
+	if (Visuals)
+	{
+		Visuals->Repaint(Paint);
+	}
+}
+
+FLinearColor APestiCar::GetPaint() const
+{
+	return Visuals ? Visuals->GetPaint() : Style.PaintColor;
+}
+
+void APestiCar::PlayCrashSound(uint8 Kind, float Strength, float Delay)
+{
+	if (!CrashNoise)
+	{
+		CrashNoise = NewObject<UCrashSound>(this);
+		CrashNoise->SetupAttachment(GetRootComponent());
+		CrashNoise->bAllowSpatialization = true;
+		CrashNoise->bOverrideAttenuation = true;
+		CrashNoise->AttenuationOverrides.bAttenuate = true;
+		CrashNoise->AttenuationOverrides.bSpatialize = true;
+		CrashNoise->AttenuationOverrides.FalloffDistance = PestiCar::CrashSoundFalloff;
+		CrashNoise->RegisterComponent();
+		AddInstanceComponent(CrashNoise);
+		CrashNoise->SetVolumeMultiplier(PestiCar::CrashSoundVolume);
+	}
+	if (!CrashNoise->IsPlaying())
+	{
+		CrashNoise->Start();
+	}
+	if (Kind < static_cast<uint8>(CrashSynth::EKind::Count))
+	{
+		CrashNoise->Queue(static_cast<CrashSynth::EKind>(Kind), Strength, Delay);
+	}
+}
+
+void APestiCar::CrashFeedback(const FVector& At, const FVector& Away, float Into, float Along, int32 Knocked, bool bSoft)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	// Where the bits come to rest: the road under the car.
+	const double Ground = GetActorLocation().Z - CollisionBox->GetScaledBoxExtent().Z - HoverHeight;
+	ACrashBits* Bits = ACrashBits::Get(GetWorld());
+
+	if (Into > PestiCar::ThumpSpeed && Now - LastCrashTime > PestiCar::CrashGap)
+	{
+		LastCrashTime = Now;
+		if (bSoft || Into < PestiCar::CrunchSpeed)
+		{
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Bump),
+				FMath::Clamp(Into / PestiCar::CrunchSpeed, 0.3f, 1.f), 0.f);
+		}
+		else
+		{
+			const float Strength = FMath::Clamp((Into - PestiCar::CrunchSpeed) / PestiCar::CrunchRange, 0.f, 1.f);
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Crunch), 0.6f + 0.5f * Strength, 0.f);
+			if (Bits)
+			{
+				Bits->Burst(At, Away, Strength, (Knocked & CarVisuals::KnockGlass) != 0, Ground);
+			}
+		}
+		if (Knocked & CarVisuals::KnockGlass)
+		{
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Glass), 0.8f, 0.02f);
+		}
+		if (Knocked & CarVisuals::KnockPart)
+		{
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Clang), 0.9f, 0.35f);
+		}
+	}
+
+	// Sliding along a wall: the grind, and a few sparks now and then.
+	if (!bSoft && Along > PestiCar::ScrapeSpeed && Into < PestiCar::CrunchSpeed)
+	{
+		ScrapeUntil = Now + PestiCar::ScrapeHold;
+		ScrapeAmount = FMath::Clamp(Along / PestiCar::ScrapeFull, 0.2f, 1.f);
+		if (!CrashNoise)
+		{
+			// Makes the sound so the scrape can be heard.
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Count), 0.f, 0.f);
+		}
+		if (Bits && Now - LastScrapeSparks > PestiCar::ScrapeSparkGap)
+		{
+			LastScrapeSparks = Now;
+			const FVector Going = GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
+			Bits->Scrape(At, Away, FVector::VectorPlaneProject(Going, Away), Ground);
+		}
+	}
 }
 
 bool APestiCar::ForceDriverOut()
@@ -418,7 +546,11 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 	// The crash dents the car, and the car it hit: by how fast they met, straight on.
 	const FVector Going = GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
 	const float CrashSpeed = static_cast<float>(FMath::Abs(FVector::DotProduct(Going, WallNormal)));
-	Visuals->Knock(Hit.ImpactPoint, WallNormal, CrashSpeed);
+	const int32 Knocked = Visuals->Knock(Hit.ImpactPoint, WallNormal, CrashSpeed);
+	// A person or a horse is a soft knock: a thump, no sparks.
+	const bool bSoft = Rammed && Rammed->IsA<APawn>() && !Rammed->FindComponentByClass<UCarVisuals>();
+	const float AlongSpeed = static_cast<float>(FVector::VectorPlaneProject(Going, WallNormal).Size());
+	CrashFeedback(Hit.ImpactPoint, WallNormal, CrashSpeed, AlongSpeed, Knocked, bSoft);
 	if (Rammed)
 	{
 		if (UCarVisuals* RammedLooks = Rammed->FindComponentByClass<UCarVisuals>())

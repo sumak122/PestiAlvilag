@@ -328,6 +328,72 @@ namespace LaciYardModel
 		Add(Out, MarketModel::Cube, Colors::Iron, FVector(1430, LeftY + 20, 40), FVector(110, 8, 30), 20.0, false, 0.0, -60.0);
 	}
 
+	/** The paints Laci sprays a car in (the tins on his shelf, too): bottle green, maroon, black, cream, navy, slate blue. */
+	const FLinearColor Paints[] = {
+		FLinearColor(0.05f, 0.13f, 0.07f),
+		FLinearColor(0.20f, 0.03f, 0.03f),
+		FLinearColor(0.02f, 0.02f, 0.022f),
+		FLinearColor(0.62f, 0.55f, 0.40f),
+		FLinearColor(0.03f, 0.05f, 0.13f),
+		FLinearColor(0.16f, 0.21f, 0.27f),
+	};
+	constexpr int32 NumPaints = static_cast<int32>(UE_ARRAY_COUNT(Paints));
+
+	/** The paint corner along the right wall, past the drums: tins on a shelf, a board of colour samples, the pressure tank and spray gun. */
+	inline void BuildPaintShop(TArray<FShape>& Out)
+	{
+		const double Wall = RightY - 1.0;
+		// Two shelves on iron brackets, tins of paint on them.
+		for (const double Z : { 115.0, 165.0 })
+		{
+			Span(Out, Colors::Wood, FVector(1080, Wall - 28, Z - 3), FVector(1380, Wall, Z), false);
+			for (const double X : { 1095.0, 1365.0 })
+			{
+				Span(Out, Colors::Iron, FVector(X - 2, Wall - 24, Z - 22), FVector(X + 2, Wall, Z - 3), false);
+			}
+			for (int32 i = 0; i < 7; ++i)
+			{
+				const FLinearColor& Tin = Paints[(i * 5 + (Z > 140.0 ? 3 : 0)) % NumPaints];
+				const FVector At(1110.0 + i * 38.0, Wall - 14.0, Z + 9.0);
+				Add(Out, MarketModel::Cylinder, Colors::Steel, At, FVector(18, 18, 18), 0.0, false);
+				Add(Out, MarketModel::Cylinder, Tin, At + FVector(0, 0, 3), FVector(18.6, 18.6, 8), 0.0, false);
+			}
+		}
+		// The sample board: a plank with painted squares, to choose a colour from.
+		Span(Out, Colors::Wood, FVector(1420, Wall - 3, 120), FVector(1640, Wall, 230), false);
+		for (int32 i = 0; i < NumPaints; ++i)
+		{
+			const double X = 1450.0 + (i % 3) * 64.0;
+			const double Z = 140.0 + (i / 3) * 48.0;
+			Span(Out, Paints[i], FVector(X, Wall - 4, Z), FVector(X + 48, Wall - 3, Z + 34), false);
+		}
+		// The pressure tank on its little two-wheeled cart, the hose up to the spray gun on a hook.
+		const FVector Tank(1520.0, Wall - 70.0, 0.0);
+		Add(Out, MarketModel::Cylinder, Colors::DrumGrey, Tank + FVector(0, 0, 62), FVector(40, 40, 76));
+		Add(Out, MarketModel::Sphere, Colors::DrumGrey, Tank + FVector(0, 0, 100), FVector(40, 40, 16), 0.0, false);
+		Add(Out, MarketModel::Cylinder, Colors::Brass, Tank + FVector(0, 0, 114), FVector(10, 10, 10), 0.0, false);
+		Add(Out, MarketModel::Cylinder, Colors::Iron, Tank + FVector(0, 0, 124), FVector(12, 12, 4), 0.0, false);
+		for (const double Y : { -24.0, 24.0 })
+		{
+			Add(Out, MarketModel::Cylinder, Colors::Rubber, Tank + FVector(0, Y, 14), FVector(28, 28, 5), 0.0, false, 0.0, 90.0);
+		}
+		Span(Out, Colors::Iron, Tank + FVector(-24, -3, 20), Tank + FVector(-20, 3, 120), false);
+		Add(Out, MarketModel::Cylinder, Colors::Rubber, Tank + FVector(10, 30, 120), FVector(3, 3, 80), 0.0, false, 0.0, -40.0);
+		Add(Out, MarketModel::Cube, Colors::Iron, FVector(1568, Wall - 8, 152), FVector(4, 8, 6), 0.0, false);
+		Add(Out, MarketModel::Cube, Colors::Steel, FVector(1568, Wall - 14, 140), FVector(22, 6, 8), 0.0, false);
+		Add(Out, MarketModel::Cylinder, Colors::Brass, FVector(1556, Wall - 14, 128), FVector(10, 10, 16), 0.0, false);
+		// A paint-spattered sheet over a trestle, and drips on the ground.
+		Add(Out, MarketModel::Cube, Colors::Rag, FVector(1220, Wall - 60, 70), FVector(90, 70, 3), 0.0, false, 0.0, 8.0);
+		for (const double X : { 1185.0, 1255.0 })
+		{
+			Span(Out, Colors::Wood, FVector(X - 3, Wall - 90, 0), FVector(X + 3, Wall - 30, 66), false);
+		}
+		for (int32 i = 0; i < NumPaints; ++i)
+		{
+			Add(Out, MarketModel::Cylinder, Paints[i], FVector(1150.0 + i * 70.0, Wall - 110.0 - (i % 2) * 40.0, 3.4), FVector(26, 18, 0.5), i * 40.0, false);
+		}
+	}
+
 	inline void Build(TArray<FShape>& Out)
 	{
 		FRandom R(1932);
@@ -336,12 +402,15 @@ namespace LaciYardModel
 		BuildShed(Out);
 		BuildGantry(Out);
 		BuildClutter(Out, R);
+		BuildPaintShop(Out);
 	}
 
 	inline void Signs(TArray<FSign>& Out)
 	{
 		Out.Add({ TEXT("AUT\u00d3JAV\u00cdT\u00d3"), FVector(-8.0, GateMid, 327.0), 180.0, 30.0, Colors::Lettering });
 		Out.Add({ TEXT("BENZIN \u00b7 OLAJ \u00b7 GUMI"), FVector(-2.0, GateMid + GateHalf + 290.0, 200.0), 180.0, 22.0, Colors::WallLettering });
+		Out.Add({ TEXT("JAV\u00cdT\u00c1S \u00b7 F\u00c9NYEZ\u00c9S"), FVector(-2.0, LeftY + 340.0, 245.0), 180.0, 22.0, Colors::WallLettering });
+		Out.Add({ TEXT("F\u00c9NYEZ\u00c9S"), FVector(1300.0, RightY - 4.0, 255.0), -90.0, 26.0, Colors::Lettering });
 	}
 
 	/** Laci, Bözsi néni's nephew, the mechanic: young, blue bib overalls over a grey shirt, a red neckerchief, a flat cap, boots. */

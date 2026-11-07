@@ -44,6 +44,8 @@ public:
 
 	/** 0 = not wanted; higher means more trouble. */
 	int32 GetWantedLevel() const { return WantedLevel; }
+	/** The police lose the player (Laci's garage gave the car new paint); Message goes on the screen. */
+	void LoseThePolice(const TCHAR* Message) { ClearWanted(Message); }
 	/** How many times the police have caught him (missions tell a getaway from an arrest). */
 	int32 GetArrests() const { return Arrests; }
 	void ReportCrime(int32 CrimeLevel);

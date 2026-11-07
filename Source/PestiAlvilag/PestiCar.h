@@ -10,6 +10,7 @@
 class UBoxComponent;
 class UCameraComponent;
 class UCarVisuals;
+class UCrashSound;
 class UEngineSound;
 class USpringArmComponent;
 
@@ -107,6 +108,12 @@ public:
 	/** How battered the car is, from 0 (whole) to 1 (wrecked: the engine has died). */
 	float GetWear() const;
 	bool IsWrecked() const;
+	/** Any dent, lost part or wear at all. */
+	bool IsDamaged() const;
+	/** Laci's garage: mends everything and sprays the body in Paint. */
+	void Repaint(const FLinearColor& Paint);
+	/** The body's paint now. */
+	FLinearColor GetPaint() const;
 
 	/** Stops the car and puts the player who drives it out on foot, whatever its speed (missions that fail). False when he could not get out. */
 	bool ForceDriverOut();
@@ -148,6 +155,9 @@ private:
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void LetDriverOut(APlayerController* PC);
 	void UpdateEngineNoise(float Throttle);
+	/** Sparks, glass, dust and the crash sounds for a hit at At, Away from what was hit; Into is the speed straight into it, Along the speed along it (cm/s). */
+	void CrashFeedback(const FVector& At, const FVector& Away, float Into, float Along, int32 Knocked, bool bSoft);
+	void PlayCrashSound(uint8 Kind, float Strength, float Delay);
 
 	bool bOverheadCamera = false;
 	// Free look: the camera's turn away from straight behind the car (degrees).
@@ -166,6 +176,14 @@ private:
 	/** The gear the engine is in, from 0. */
 	int32 Gear = 0;
 	double LastBumpTime = -1.0;
+	/** Crash sounds and the scrape, made the first time something is hit. */
+	UPROPERTY(Transient)
+	TObjectPtr<UCrashSound> CrashNoise;
+	double LastCrashTime = -1.0;
+	double LastScrapeSparks = -1.0;
+	/** Scraping along a wall until this time, this hard (0..1). */
+	double ScrapeUntil = -1.0;
+	float ScrapeAmount = 0.f;
 	/** How fast the car is turning now (degrees a second): follows the wheel with a little lag. */
 	float TurnRate = 0.f;
 };
