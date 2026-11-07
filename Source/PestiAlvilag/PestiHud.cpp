@@ -982,7 +982,6 @@ private:
 		Paint.Frame(PaperX, PaperY, PaperW, PaperH, PestiHud::NewsprintEdge, 1.5f, 1);
 
 		const float Left = PaperX + PestiHud::ClippingPadX;
-		const float Right = Left + Inner;
 		// The masthead and dateline go right across the page; the story keeps to its column.
 		const float FullRight = PaperX + PaperW - PestiHud::ClippingPadX;
 		const float Middle = PaperX + PestiHud::ClippingWidth * 0.5f;
