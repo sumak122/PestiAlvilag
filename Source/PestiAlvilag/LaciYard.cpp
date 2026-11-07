@@ -114,6 +114,13 @@ void ALaciYard::BeginPlay()
 void ALaciYard::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// The garage on the maps, once it is open (after mission 7).
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (Game && Hud && Game->IsMissionDone(LaciYardPlace::OpenedBy))
+	{
+		Hud->MarkPlace(GetActorLocation(), TEXT("G"));
+	}
 	TickGarage(DeltaSeconds);
 }
 

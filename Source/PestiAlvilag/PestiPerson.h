@@ -161,6 +161,18 @@ public:
 	/** Held by the collar: a tug to get free. */
 	void TugFree();
 
+	// Bandi's moves (the player, once he has learnt them at the boxing yard).
+	/** Gyomros: down low, a punch into his belly that knocks the breath out of him. */
+	bool BellyPunch();
+	/** Kitérő ütés: a straight right from a sidestep, late in the hop or just after it. */
+	bool SlipPunch();
+	/** Fejelés: holding him, a headbutt. */
+	bool ButtHim();
+	/** Falhoz vágás: holding him, swings round and hurls him at the nearest wall. */
+	bool ThrowAtWall();
+	/** True when the player has learnt this from Bandi (never for anyone else). */
+	bool KnowsLesson(Brawl::ELesson Lesson) const;
+
 	/** Brings Runner down from behind with a dive; both get up to fight. */
 	void TackleDown(APestiPerson* Runner);
 	/** A blow from From lands on him. */
@@ -317,4 +329,12 @@ private:
 	/** Sidestepping: which way (world, flat) and to which side of him (1 right, -1 left, 0 back). */
 	FVector DodgeWay = FVector::ZeroVector;
 	float DodgeSide = 0.f;
+	/** When his last sidestep ended (a punch from it may still come). */
+	double DodgeEndedAt = -10.0;
+	/** Thrown at a wall (Falhoz vágás): hitting it hurts more. */
+	bool bThrownHard = false;
+	/** The nearest wall within reach, its way from him (flat); false when none. */
+	bool FindWall(FVector& OutWay) const;
+	/** Fight points for the player when a blow of his lands on someone else. */
+	void GivePoints(APestiPerson* From, int32 Points) const;
 };

@@ -170,6 +170,11 @@ namespace FightAnim
 		case EAct::Beaten: S.BlendIn = 0.12f; S.Plant = 0.f; break;
 		// A hop: out at once, the feet going with the body.
 		case EAct::Sidestep: S.BlendIn = 0.07f; S.Plant = 0.f; break;
+		// Bandi's moves.
+		case EAct::BodyBlow: S.BlendIn = 0.1f; break;
+		case EAct::SlipCounter: S.BlendIn = 0.06f; break;
+		case EAct::Headbutt: S.BlendIn = 0.08f; break;
+		case EAct::WallThrow: S.BlendIn = 0.1f; break;
 		default: break;
 		}
 		return S;
@@ -192,6 +197,10 @@ namespace FightAnim
 		case EBlow::Slam: return 1.4f;
 		case EBlow::Rising: return 1.5f;
 		case EBlow::Haymaker: return 1.6f;
+		case EBlow::Body: return 0.9f;
+		case EBlow::SlipCounter: return 1.1f;
+		case EBlow::Headbutt: return 1.3f;
+		case EBlow::WallSlam: return 1.6f;
 		default: return 1.f;
 		}
 	}

@@ -51,10 +51,17 @@ namespace Brawl
 		Rising,     // finisher after one or two: a jumping uppercut, down he goes
 		Haymaker,   // finisher after three or four: a big overhand right, he flies back
 		Sidestep,   // a quick hop aside (or back) out of the way of a blow
+		// The moves Bandi teaches, for fight points.
+		BodyBlow,   // Gyomros: down low, a right hook into the belly that takes his breath
+		SlipCounter, // Kitérő ütés: straight back in with a right from the sidestep
+		Headbutt,   // Fejelés: holding him, the head back and then into his face
+		WallThrow,  // Falhoz vágás: holding him, swinging round and hurling him at the wall
 	};
 
 	/** What landed. */
-	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw, Cross, Hook, Uppercut, Rising, Haymaker };
+	enum class EBlow : uint8 { Jab, Heavy, Counter, Knee, Slam, Throw, Cross, Hook, Uppercut, Rising, Haymaker,
+		// Bandi's moves: the belly punch, the punch from the sidestep, the headbutt, a man hurled into a wall.
+		Body, SlipCounter, Headbutt, WallSlam };
 
 	// How long each act lasts (s), and how far into it the blow lands (share).
 	constexpr float JabSeconds = 0.38f;
@@ -168,6 +175,57 @@ namespace Brawl
 	constexpr float RestBefore = 0.7f;
 	constexpr float AfterWinded = 40.f;
 
+	// Bandi's moves (BoxingYard): how long each lasts (s), how far into it
+	// it lands, and the breath it costs.
+	constexpr float BodyBlowSeconds = 0.5f;
+	constexpr float BodyBlowLands = 0.45f;
+	constexpr float BodyBlowCost = 12.f;
+	/** The breath a belly punch knocks out of him. */
+	constexpr float BodyBlowBreath = 35.f;
+	constexpr float SlipCounterSeconds = 0.42f;
+	constexpr float SlipCounterLands = 0.45f;
+	constexpr float SlipCounterCost = 8.f;
+	/** A click this long after a sidestep ends still makes the punch from it (s). */
+	constexpr double SlipWindow = 0.3;
+	/** Late in the hop, from this share of it, the punch can start. */
+	constexpr float SlipFrom = 0.3f;
+	constexpr float HeadbuttSeconds = 0.55f;
+	constexpr float HeadbuttLands = 0.47f;
+	constexpr float HeadbuttCost = 12.f;
+	constexpr float WallThrowSeconds = 0.8f;
+	constexpr float WallThrowLets = 0.55f;
+	constexpr float WallThrowCost = 16.f;
+	/** A wall this near (cm) is found to throw him at, and he flies this fast (cm/s). */
+	constexpr double WallLook = 450.0;
+	constexpr float WallThrowSpeed = 1250.f;
+
+	/** What Bandi teaches: four moves and two ways of standing up to a fight. */
+	enum class ELesson : uint8 { BodyBlow, SlipCounter, Headbutt, WallThrow, Breath, Chin, Count };
+	/** What each lesson costs in fight points. */
+	inline int32 LessonCost(ELesson Lesson)
+	{
+		switch (Lesson)
+		{
+		case ELesson::BodyBlow: return 30;
+		case ELesson::SlipCounter: return 40;
+		case ELesson::Headbutt: return 50;
+		case ELesson::WallThrow: return 90;
+		case ELesson::Breath: return 25;
+		case ELesson::Chin: return 35;
+		default: return 0;
+		}
+	}
+	/** With Kitartás every move costs this share of the breath; with Kemény áll blows take this share of the health. */
+	constexpr float BreathShare = 0.75f;
+	constexpr float ChinShare = 0.75f;
+	// Fight points (bunyópont) the player earns: a blow that lands, a big
+	// one (a finisher, a counter, one of Bandi's), knocking a man down, and
+	// beating him.
+	constexpr int32 PointsHit = 1;
+	constexpr int32 PointsBig = 3;
+	constexpr int32 PointsDown = 5;
+	constexpr int32 PointsWin = 10;
+
 	/** How much health a blow takes (out of 100); a winded man takes more. */
 	inline float Damage(EBlow Blow)
 	{
@@ -184,6 +242,10 @@ namespace Brawl
 		case EBlow::Uppercut: return 14.f;
 		case EBlow::Rising: return 20.f;
 		case EBlow::Haymaker: return 22.f;
+		case EBlow::Body: return 10.f;
+		case EBlow::SlipCounter: return 14.f;
+		case EBlow::Headbutt: return 16.f;
+		case EBlow::WallSlam: return 30.f;
 		default: return 0.f;
 		}
 	}
@@ -872,6 +934,104 @@ namespace Brawl
 		return Mix(Stance(), Hop, Bell(T, 0.18f, 0.7f));
 	}
 
+	/** Gyomros at T: down into the knees, the body turning, a right hook low into his belly, and up again. */
+	inline FPose BodyBlow(float T)
+	{
+		FPose Dip = Stance();
+		Dip.Lift = -24.f;
+		Dip.Pitch = -20.f;
+		Dip.Yaw = 30.f;
+		Dip.LegL = 22.f;
+		Dip.LegR = -12.f;
+		Dip.KneeL = -42.f;
+		Dip.KneeR = -36.f;
+		Dip.ArmR = 20.f;
+		Dip.ArmOutR = 30.f;
+		Dip.ElbowR = 96.f;
+		FPose Dig = Dip;
+		Dig.Yaw = -26.f;
+		Dig.Pitch = -26.f;
+		Dig.Lift = -30.f;
+		Dig.ArmR = 30.f;
+		Dig.ArmOutR = 40.f;
+		Dig.ElbowR = 58.f;
+		// The left fist stays up by the chin.
+		Dig.ArmL = 60.f;
+		Dig.ElbowL = 116.f;
+		const FPose Down = Mix(Stance(), Dip, Smooth(0.f, 0.3f, T));
+		const FPose Dug = Mix(Down, Dig, Smooth(0.3f, 0.5f, T));
+		return Mix(Dug, Stance(), Smooth(0.7f, 1.f, T));
+	}
+
+	/** Kitérő ütés at T: still leaning out from the sidestep (Side), a straight right whipped in past his arm. */
+	inline FPose SlipCounter(float T, float Side = 1.f)
+	{
+		const float Lean = Side > 0.f ? 1.f : -1.f;
+		FPose Slip = Sidestep(0.45f, Lean);
+		FPose Out = Slip;
+		Out.Yaw = -30.f - 6.f * Lean;
+		Out.Pitch = -14.f;
+		Out.Roll = 6.f * Lean;
+		Out.ArmR = 90.f;
+		Out.ArmOutR = -10.f;
+		Out.ElbowR = 4.f;
+		Out.ArmL = 50.f;
+		Out.ElbowL = 118.f;
+		Out.LegL = 20.f;
+		Out.LegR = -14.f;
+		const FPose Base = Mix(Slip, Stance(), Smooth(0.6f, 1.f, T));
+		return Mix(Base, Out, Bell(T, 0.3f, 0.58f));
+	}
+
+	/** Fejelés at T: holding him by the collar, the head drawn back and then brought down into his face. */
+	inline FPose Headbutt(float T)
+	{
+		FPose Back = Holding();
+		Back.Pitch = 14.f;
+		Back.Lift = 2.f;
+		Back.ArmL = 70.f;
+		Back.ArmR = 70.f;
+		Back.ElbowL = 56.f;
+		Back.ElbowR = 56.f;
+		FPose Butt = Back;
+		Butt.Pitch = -30.f;
+		Butt.Lift = -6.f;
+		Butt.LegL = 18.f;
+		Butt.KneeL = -20.f;
+		const FPose Drawn = Mix(Holding(), Back, Smooth(0.f, 0.38f, T));
+		const FPose Struck = Mix(Drawn, Butt, Smooth(0.38f, 0.5f, T));
+		return Mix(Struck, Holding(), Smooth(0.7f, 1.f, T));
+	}
+
+	/** Falhoz vágás at T: holding him, a turn and a step to swing him round, then both arms out to hurl him off. */
+	inline FPose WallThrow(float T)
+	{
+		FPose Swing = Holding();
+		Swing.Yaw = 58.f;
+		Swing.Pitch = -4.f;
+		Swing.Lift = -8.f;
+		Swing.LegL = -10.f;
+		Swing.LegR = 22.f;
+		Swing.KneeL = -26.f;
+		Swing.KneeR = -18.f;
+		FPose Hurl = Holding();
+		Hurl.Yaw = -40.f;
+		Hurl.Pitch = -22.f;
+		Hurl.Lift = -6.f;
+		Hurl.ArmL = 94.f;
+		Hurl.ArmR = 94.f;
+		Hurl.ArmOutL = 6.f;
+		Hurl.ArmOutR = 6.f;
+		Hurl.ElbowL = 6.f;
+		Hurl.ElbowR = 6.f;
+		Hurl.LegL = 36.f;
+		Hurl.KneeL = -24.f;
+		Hurl.LegR = -20.f;
+		const FPose Swung = Mix(Holding(), Swing, Smooth(0.f, 0.38f, T));
+		const FPose Hurled = Mix(Swung, Hurl, Smooth(0.42f, 0.6f, T));
+		return Mix(Hurled, Stance(), Smooth(0.75f, 1.f, T));
+	}
+
 	/** The pose for an act, T being its share done (Seconds, for the ones that go on). */
 	inline FPose PoseFor(EAct Act, float T, float Seconds, float Side = 1.f)
 	{
@@ -902,6 +1062,10 @@ namespace Brawl
 		case EAct::Rising: return Rising(T);
 		case EAct::Haymaker: return Haymaker(T);
 		case EAct::Sidestep: return Sidestep(T, Side);
+		case EAct::BodyBlow: return BodyBlow(T);
+		case EAct::SlipCounter: return SlipCounter(T, Side);
+		case EAct::Headbutt: return Headbutt(T);
+		case EAct::WallThrow: return WallThrow(T);
 		default: return Stance();
 		}
 	}

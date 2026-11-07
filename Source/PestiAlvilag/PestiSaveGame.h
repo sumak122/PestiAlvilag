@@ -42,4 +42,16 @@ public:
 	/** Schwimmer's bamboo baton, the first weapon (mission 5). */
 	UPROPERTY()
 	bool bHasBaton = false;
+
+	/** Fight points not yet spent with Bandi. */
+	UPROPERTY()
+	int32 FightPoints = 0;
+
+	/** Bandi's lessons learnt (bits, Brawl::ELesson order). */
+	UPROPERTY()
+	int32 Lessons = 0;
+
+	/** Men beaten in Bandi's ring, in order. */
+	UPROPERTY()
+	int32 BoxingWins = 0;
 };

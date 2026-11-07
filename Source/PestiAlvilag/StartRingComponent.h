@@ -34,6 +34,8 @@ public:
 	/** Stands the ring on the ground at (or just under) At, with this letter over it. */
 	void ShowAt(const FVector& At, const FString& Letter);
 	void Hide();
+	/** Off for a ring that is not a story mission's (it then leaves the minimap's start mark alone). */
+	void SetOnMap(bool bInOnMap) { bOnMap = bInOnMap; }
 	bool IsShown() const { return bShown; }
 	/** The middle of the ring, on the ground. */
 	FVector GetSpot() const { return GetComponentLocation(); }
@@ -77,4 +79,5 @@ private:
 	FString ShownLetter;
 	float Time = 0.f;
 	bool bShown = false;
+	bool bOnMap = true;
 };

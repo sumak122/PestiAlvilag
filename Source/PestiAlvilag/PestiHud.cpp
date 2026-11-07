@@ -1722,6 +1722,14 @@ private:
 		Above.Text(Letter, Above.Deco(18.f), At.X, At.Y + 7.f, PestiHud::Gold, 0.5f);
 	}
 
+	/** A place to go back to: its letter in cream in a cream-framed dark square (a mission's is gold). */
+	void PaintPlaceBlip(const FPainter& Paint, const FPainter& Above, const FVector2f& At, const FString& Letter, int32 Up) const
+	{
+		Paint.Box(At.X - 12.f, At.Y - 12.f, 24.f, 24.f, PestiHud::Solid, Up);
+		Paint.Frame(At.X - 12.f, At.Y - 12.f, 24.f, 24.f, PestiHud::Cream, 2.f, Up + 1);
+		Above.Text(Letter, Above.Deco(16.f), At.X, At.Y + 6.f, PestiHud::Cream, 0.5f);
+	}
+
 	void PaintMinimap(const FPainter& Paint, const APestiHUD& Hud, float High) const
 	{
 		const PestiMap::FPlan* Plan = PestiMap::Get();
@@ -1760,6 +1768,17 @@ private:
 			if (FMath::Abs(Home.X - Frame.Screen.X) < Half && FMath::Abs(Home.Y - Frame.Screen.Y) < Half)
 			{
 				PaintHouse(Over, Home, 18.f, 6);
+			}
+		}
+		{
+			const FPainter PlaceAbove{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+			for (const APestiHUD::FPlaceMark& Mark : Hud.PlaceMarks)
+			{
+				const FVector2f Spot = Frame.ToScreen(Mark.At);
+				if (Mark.Until >= Now && FMath::Abs(Spot.X - Frame.Screen.X) < Half && FMath::Abs(Spot.Y - Frame.Screen.Y) < Half)
+				{
+					PaintPlaceBlip(Over, PlaceAbove, Spot, Mark.Letter, 6);
+				}
 			}
 		}
 		if (Hud.StartBlipUntil >= Now)
@@ -1835,6 +1854,13 @@ private:
 			PaintHouse(Over, Frame.ToScreen(Hud.HomeAt), 24.f, 6);
 		}
 		const FPainter Above{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		for (const APestiHUD::FPlaceMark& Mark : Hud.PlaceMarks)
+		{
+			if (Mark.Until >= Now)
+			{
+				PaintPlaceBlip(Over, Above, Frame.ToScreen(Mark.At), Mark.Letter, 5);
+			}
+		}
 		if (Hud.StartBlipUntil >= Now)
 		{
 			PaintStartBlip(Over, Above, Frame.ToScreen(Hud.StartBlipAt), FVector2f::ZeroVector, 0.f, Hud.StartLetter, 5);
@@ -1871,7 +1897,7 @@ private:
 			{
 				Paint.Text(En, Paint.Plain(16.f), WordsX, RowY + 18.f, PestiHud::Grey);
 			}
-			RowY += 72.f;
+			RowY += 64.f;
 		};
 		PaintArrow(Over, FVector2f(IconX, RowY - 8.f), 0.f, 13.f, 1);
 		Row(TEXT("Te"), TEXT("You"));
@@ -1883,6 +1909,10 @@ private:
 		Row(TEXT("A saj\u00e1t jeled"), TEXT("Your own mark"));
 		PaintHouse(Over, FVector2f(IconX, RowY - 8.f), 24.f, 1);
 		Row(TEXT("B\u00f6zsi n\u00e9ni h\u00e1za"), TEXT("B\u00f6zsi n\u00e9ni's house"));
+		PaintPlaceBlip(Over, Above, FVector2f(IconX, RowY - 8.f), TEXT("G"), 1);
+		Row(TEXT("Laci gar\u00e1zsa"), TEXT("Laci's garage"));
+		PaintPlaceBlip(Over, Above, FVector2f(IconX, RowY - 8.f), TEXT("\u00d6"), 1);
+		Row(TEXT("Bandi \u00f6k\u00f6lv\u00edv\u00f3 grundja"), TEXT("Bandi's boxing yard"));
 		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::Gold, 5.f, 1);
 		Row(TEXT("Az \u00fat a c\u00e9lhoz"), TEXT("The way to the goal"));
 		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::TramInk, 2.f, 1);
@@ -2018,6 +2048,18 @@ void APestiHUD::MarkStart(const FVector& At, const FString& Letter)
 	StartBlipAt = FVector2D(At.X, At.Y);
 	StartLetter = Letter;
 	StartBlipUntil = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::MarkPlace(const FVector& At, const FString& Letter)
+{
+	FPlaceMark* Mark = PlaceMarks.FindByPredicate([&Letter](const FPlaceMark& Each) { return Each.Letter == Letter; });
+	if (!Mark)
+	{
+		Mark = &PlaceMarks.AddDefaulted_GetRef();
+		Mark->Letter = Letter;
+	}
+	Mark->At = FVector2D(At.X, At.Y);
+	Mark->Until = Now() + PestiHud::MapHold;
 }
 
 void APestiHUD::SetSceneTitle(int32 Number, const FString& Name, const FString& NameEn)
