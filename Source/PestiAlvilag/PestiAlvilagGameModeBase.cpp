@@ -44,6 +44,9 @@
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
+#include "Animals.h"
+#include "ChimneySmoke.h"
+#include "Weather.h"
 #include "PolicePatrols.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
@@ -478,6 +481,21 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		const double Z = GroundZ(At - FVector2D(800.0, 0.0));
 		GetWorld()->SpawnActor<AKeletiEagle>(AKeletiEagle::StaticClass(), FVector(At, Z), FRotator::ZeroRotator);
 	}
+
+	// The cats and dogs of the yards and squares (they settle in once the yards above are up).
+	if (!TActorIterator<AAnimals>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AAnimals>();
+	}
+
+	// Smoke from the chimneys, steam from the engines at Keleti.
+	if (!TActorIterator<AChimneySmoke>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AChimneySmoke>();
+	}
+
+	// The weather: clear, cloud, rain and fog by turns.
+	AWeather::Get(GetWorld());
 }
 
 FVector2D APestiAlvilagGameModeBase::HomeDoorSpot() const
