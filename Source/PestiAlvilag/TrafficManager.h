@@ -7,6 +7,8 @@
 #include "TrafficManager.generated.h"
 
 class APestiCar;
+class ABicycle;
+class ATrafficBike;
 class ATrafficCar;
 class ATram;
 class FJsonObject;
@@ -72,6 +74,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	int32 NumTaxis = 12;
 
+	/** People riding bicycles along the kerb (ATrafficBike), about one for every three cars. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	int32 NumBikes = 40;
+
+	/** Bicycles left leaning on their stands by the house walls, for anyone to take. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	int32 NumParkedBikes = 30;
+
 	/** No two cars start closer than this (cm). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float MinSpawnSpacing = 1000.f;
@@ -93,9 +103,9 @@ public:
 
 	/**
 	 * Distance to the nearest car, tram or player in front, in the same lane
-	 * corridor. bIgnoreAICars counts only trams and the player.
+	 * corridor (this wide each side; 0 for a car's). bIgnoreAICars counts only trams and the player.
 	 */
-	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false) const;
+	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f) const;
 
 	/** True unless a car, tram or the player is within Radius of Location. */
 	bool IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const;
@@ -157,6 +167,8 @@ private:
 	void LoadTramRoutes(const FJsonObject& Root);
 	void LoadRoutes(const FJsonObject& Root, const TCHAR* Field, bool bBuses);
 	void SpawnCars();
+	void SpawnBikes();
+	void SpawnParkedBikes();
 	void SpawnTrams();
 	/** Puts new cars in the traffic, out of the player's sight, for the ones taken. */
 	void ReplaceCars();
@@ -194,6 +206,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ATrafficCar>> Cars;
+
+	/** The bicycles of the city, ridden and parked. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ABicycle>> Bikes;
 
 	/** The trams and the buses (ABus is a kind of ATram). */
 	UPROPERTY(Transient)

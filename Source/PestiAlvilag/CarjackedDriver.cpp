@@ -25,14 +25,15 @@ ACarjackedDriver::ACarjackedDriver()
 	PrimaryActorTick.bCanEverTick = true;
 }
 
-void ACarjackedDriver::RunFrom(const FVector& Danger)
+void ACarjackedDriver::RunFrom(const FVector& Danger, bool bBicycle)
 {
 	const FVector2D Away = FVector2D(GetActorLocation() - Danger);
 	Heading = Away.IsNearlyZero() ? FVector2D(GetActorForwardVector()) : Away.GetSafeNormal();
 	if (GEngine)
 	{
-		APestiHUD::Show(this, CarjackedDriver::ShoutKey, CarjackedDriver::ShoutSeconds, FColor::Orange,
-			TEXT("\u201eH\u00e9! Az aut\u00f3m! Rend\u0151r!\u201d   (Hey! My car! Police!)"));
+		APestiHUD::Show(this, CarjackedDriver::ShoutKey, CarjackedDriver::ShoutSeconds, FColor::Orange, bBicycle
+			? TEXT("\u201eH\u00e9! A biciklim! Tolvaj!\u201d   (Hey! My bicycle! Thief!)")
+			: TEXT("\u201eH\u00e9! Az aut\u00f3m! Rend\u0151r!\u201d   (Hey! My car! Police!)"));
 	}
 }
 

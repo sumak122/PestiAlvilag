@@ -47,13 +47,25 @@ namespace BicycleModel
 	inline FVector SaddleTop() { return FVector(-19.0, 0.0, 90.0); }
 
 	/**
-	 * The two kinds: the shop bicycle with a small front wheel under a basket
-	 * fixed to the frame, and an ordinary roadster with two big wheels and a
-	 * basket on a rack over the front wheel, which turns with the bars.
+	 * The kinds: the shop bicycle with a small front wheel under a basket
+	 * fixed to the frame; an ordinary roadster with two big wheels and a
+	 * basket on a rack over the front wheel, which turns with the bars; a
+	 * ladies' bicycle like the Weiss Manfréd (Csepel) ones of about 1930,
+	 * with no top tube but two curved tubes swooping down from the head, so a
+	 * skirt can step through; and a plain gentleman's roadster. The last two
+	 * have no basket and no shop plate, wooden grips, a white tip on the rear
+	 * mudguard and a brass maker's badge on the head.
 	 */
-	enum class EKind : uint8 { ShopBike, Roadster, Count };
+	enum class EKind : uint8 { ShopBike, Roadster, Ladies, Gents, Count };
 
-	inline bool IsRoadster(EKind Kind) { return Kind == EKind::Roadster; }
+	/** Two big wheels (every kind but the shop bicycle). */
+	inline bool IsRoadster(EKind Kind) { return Kind != EKind::ShopBike; }
+	/** A basket and a shop plate (the shop bicycle and the basket roadster). */
+	inline bool HasBasket(EKind Kind) { return Kind == EKind::ShopBike || Kind == EKind::Roadster; }
+	/** The plain city bicycles: no basket, wooden grips, a white mudguard tip and a badge. */
+	inline bool IsPlain(EKind Kind) { return !HasBasket(Kind); }
+	/** True when the basket (and the parcels in it) belong to the Steer part and turn with the bars. */
+	inline bool BasketTurns(EKind Kind) { return Kind == EKind::Roadster; }
 	inline double FrontRadius(EKind Kind) { return IsRoadster(Kind) ? RearRadius : 26.0; }
 	inline FVector FrontAxle(EKind Kind) { return IsRoadster(Kind) ? FVector(82.0, 0.0, RearRadius) : FVector(80.0, 0.0, 26.0); }
 	inline FVector HeadBottom(EKind Kind) { return IsRoadster(Kind) ? FVector(64.0, 0.0, 76.0) : FVector(64.0, 0.0, 56.0); }
@@ -69,11 +81,11 @@ namespace BicycleModel
 	/** Where the lamp's bracket starts, and the middle of the lamp (its glass faces forward, 3 cm in front). */
 	inline FVector LampFoot(EKind Kind)
 	{
-		return IsRoadster(Kind) ? CarrierTop(Kind) + FVector(BasketHalf().X + 0.5, 0.0, -1.0) : HeadBottom(Kind) + FVector(1.5, 0.0, 1.0);
+		return BasketTurns(Kind) ? CarrierTop(Kind) + FVector(BasketHalf().X + 0.5, 0.0, -1.0) : HeadBottom(Kind) + FVector(1.5, 0.0, 1.0);
 	}
 	inline FVector LampAt(EKind Kind)
 	{
-		return IsRoadster(Kind) ? LampFoot(Kind) + FVector(4.0, 0.0, -5.0) : HeadBottom(Kind) + FVector(8.0, 0.0, 2.0);
+		return BasketTurns(Kind) ? LampFoot(Kind) + FVector(4.0, 0.0, -5.0) : HeadBottom(Kind) + FVector(8.0, 0.0, 2.0);
 	}
 	/**
 	 * The bottle dynamo on the left seat stay: the middle of its roller,
@@ -83,8 +95,6 @@ namespace BicycleModel
 	inline FVector DynamoRoller() { return RearAxle() + FVector(FMath::Cos(PI / 3.0) * 31.0, -3.2, FMath::Sin(PI / 3.0) * 31.0); }
 	inline FVector DynamoDown() { return FVector(-FMath::Cos(PI / 3.0), 0.0, -FMath::Sin(PI / 3.0)); }
 
-	/** True when the basket (and the parcels in it) belong to the Steer part and turn with the bars. */
-	inline bool BasketTurns(EKind Kind) { return IsRoadster(Kind); }
 	/** The middle of the shop plate in the frame. */
 	inline FVector PlateMiddle(EKind Kind) { return IsRoadster(Kind) ? FVector(26.0, 0.0, 79.5) : FVector(28.0, 0.0, 57.5); }
 	/** The height of the tube the plate hangs from, at X: the top tube of a roadster, the lower top tube of a shop bicycle. */
@@ -135,6 +145,46 @@ namespace BicycleModel
 	inline FLinearColor Paper() { return FLinearColor(0.55f, 0.42f, 0.27f); }
 	inline FLinearColor LensGlass() { return FLinearColor(0.80f, 0.78f, 0.66f); }
 	inline FLinearColor Twine() { return FLinearColor(0.80f, 0.74f, 0.60f); }
+	inline FLinearColor WoodGrip() { return FLinearColor(0.20f, 0.08f, 0.03f); }
+	inline FLinearColor GuardWhite() { return FLinearColor(0.80f, 0.79f, 0.75f); }
+
+	/**
+	 * Enamel colours for the frame, fork and mudguards (everything painted
+	 * Enamel() is repainted in the bicycle's colour): black most of all, then
+	 * the dark greens, maroons and blues the Csepel works and the shops sold,
+	 * and now and then a bright one.
+	 */
+	constexpr int32 NumPaints = 10;
+	inline FLinearColor Paint(int32 Index)
+	{
+		switch (((Index % NumPaints) + NumPaints) % NumPaints)
+		{
+		case 0: case 1: case 2: return Enamel();
+		case 3: return FLinearColor(0.012f, 0.06f, 0.025f);   // bottle green
+		case 4: return FLinearColor(0.10f, 0.012f, 0.015f);   // maroon
+		case 5: return FLinearColor(0.012f, 0.02f, 0.09f);    // navy blue
+		case 6: return FLinearColor(0.20f, 0.03f, 0.02f);     // post-box red
+		case 7: return FLinearColor(0.05f, 0.08f, 0.10f);     // grey-blue
+		case 8: return FLinearColor(0.55f, 0.48f, 0.33f);     // cream
+		default: return FLinearColor(0.03f, 0.13f, 0.10f);    // racing green-blue
+		}
+	}
+
+	/** A point on the curve from A to B pulled towards Bend (T 0 at A, 1 at B). */
+	inline FVector Bezier(const FVector& A, const FVector& Bend, const FVector& B, double T)
+	{
+		return A * ((1.0 - T) * (1.0 - T)) + Bend * (2.0 * (1.0 - T) * T) + B * (T * T);
+	}
+
+	/** A tube bent smoothly from A to B, pulled towards Bend, in Pieces straight bits. */
+	inline void Curve(PersonKit::FPiece& P, const FLinearColor& Color, const FVector& A, const FVector& Bend, const FVector& B, double Radius, int32 Pieces)
+	{
+		for (int32 i = 0; i < Pieces; ++i)
+		{
+			PersonKit::Rod(P, Color, Bezier(A, Bend, B, double(i) / Pieces), Bezier(A, Bend, B, double(i + 1) / Pieces), Radius, 8);
+			PersonKit::Blob(P, Color, Bezier(A, Bend, B, double(i + 1) / Pieces), FVector(Radius, Radius, Radius), 8, 3);
+		}
+	}
 
 	/**
 	 * A bent tube round Center in the XZ plane (at Center.Y), from angle From
@@ -272,11 +322,36 @@ namespace BicycleModel
 
 		// The main triangle; the shop bicycle has a second, lower top tube.
 		Rod(F, Enamel(), BB, Seat + FVector(-0.8, 0.0, 4.0), Tube, 8);
-		Rod(F, Enamel(), Seat, HeadTop(Kind) + FVector(0.0, 0.0, -2.0), Tube, 8);
-		Rod(F, Enamel(), BB + FVector(-0.5, 0.0, 0.0), HeadBottom(Kind), Tube * 1.15, 8);
+		if (Kind == EKind::Ladies)
+		{
+			// No top tube: two tubes curve down from the head, the upper one into
+			// the seat tube, the lower one to the bottom bracket, braced by two struts.
+			const FVector UpperEnd = BB + (Seat - BB) * 0.36;
+			const FVector UpperBend(46.0, 0.0, 47.0);
+			const FVector LowerBend(48.0, 0.0, 27.0);
+			const FVector UpperTop = HeadTop(Kind) - SteerAxis(Kind) * 4.0;
+			const FVector LowerTop = HeadBottom(Kind) + SteerAxis(Kind) * 1.0;
+			Curve(F, Enamel(), UpperTop, UpperBend, UpperEnd, Tube, 10);
+			Curve(F, Enamel(), LowerTop, LowerBend, BB + FVector(1.5, 0.0, 0.5), Tube * 1.1, 10);
+			for (const double T : { 0.38, 0.62 })
+			{
+				Rod(F, Enamel(), Bezier(UpperTop, UpperBend, UpperEnd, T), Bezier(LowerTop, LowerBend, BB, T + 0.08), Tube * 0.6, 6);
+			}
+		}
+		else
+		{
+			Rod(F, Enamel(), Seat, HeadTop(Kind) + FVector(0.0, 0.0, -2.0), Tube, 8);
+			Rod(F, Enamel(), BB + FVector(-0.5, 0.0, 0.0), HeadBottom(Kind), Tube * 1.15, 8);
+		}
 		if (!IsRoadster(Kind))
 		{
 			Rod(F, Enamel(), FVector(-11.0, 0.0, 66.0), FVector(62.0, 0.0, 64.0), Tube * 0.85, 8);
+		}
+		if (IsPlain(Kind))
+		{
+			// The maker's brass badge on the front of the head tube.
+			const FVector Badge = (HeadBottom(Kind) + HeadTop(Kind)) * 0.5 + FVector(2.6, 0.0, 0.0);
+			Blob(F, Brass(), Badge, FVector(0.6, 2.0, 3.2), 8, 3);
 		}
 		Rod(F, Enamel(), HeadBottom(Kind) - SteerAxis(Kind) * 2.0, HeadTop(Kind) + SteerAxis(Kind) * 1.5, 2.4, 10);
 		Loft(F, Enamel(), {
@@ -293,14 +368,17 @@ namespace BicycleModel
 		Rod(F, Nickel(), Rear + FVector(0.0, -8.0, 0.0), Rear + FVector(0.0, 8.0, 0.0), 0.8, 6);
 
 		// The shop plate in the frame, cream with a red border, on both sides.
-		const FVector Plate = PlateMiddle(Kind);
-		Block(F, PlateRed(), Plate, FVector(17.0, 0.45, 5.6));
-		Block(F, PlateCream(), Plate, FVector(15.6, 0.6, 4.4));
-		Block(F, PlateRed(), Plate, FVector(11.0, 0.7, 0.7));
-		// Two clips hang it from the tube above.
-		for (const double ClipX : { Plate.X - 11.0, Plate.X + 11.0 })
+		if (HasBasket(Kind))
 		{
-			Rod(F, Nickel(), FVector(ClipX, 0.0, Plate.Z + 4.0), FVector(ClipX, 0.0, PlateTubeZ(Kind, ClipX) + 0.5), 0.55, 5);
+			const FVector Plate = PlateMiddle(Kind);
+			Block(F, PlateRed(), Plate, FVector(17.0, 0.45, 5.6));
+			Block(F, PlateCream(), Plate, FVector(15.6, 0.6, 4.4));
+			Block(F, PlateRed(), Plate, FVector(11.0, 0.7, 0.7));
+			// Two clips hang it from the tube above.
+			for (const double ClipX : { Plate.X - 11.0, Plate.X + 11.0 })
+			{
+				Rod(F, Nickel(), FVector(ClipX, 0.0, Plate.Z + 4.0), FVector(ClipX, 0.0, PlateTubeZ(Kind, ClipX) + 0.5), 0.55, 5);
+			}
 		}
 
 		// The seat post and the saddle: a leather top on two coil springs.
@@ -329,6 +407,11 @@ namespace BicycleModel
 
 		// The rear mudguard, the chain guard and a little rear rack.
 		Arc(F, Enamel(), Rear, RearRadius + 3.0, PI * 0.08, PI * 0.95, 0.5, 3.4, 4);
+		if (IsPlain(Kind))
+		{
+			// Its tail painted white, to be seen from behind at night.
+			Arc(F, GuardWhite(), Rear, RearRadius + 3.05, PI * 0.78, PI * 0.955, 0.56, 3.45, 4);
+		}
 		Rod(F, Enamel(), Rear + FVector(-RearRadius - 2.0, 0.0, 6.0), Rear + FVector(-RearRadius + 4.0, 0.0, RearRadius - 2.0), 0.6, 4);
 		Block(F, PlateRed(), Rear + FVector(-RearRadius - 2.6, 0.0, 8.0), FVector(0.4, 2.0, 1.4));
 		{
@@ -370,10 +453,14 @@ namespace BicycleModel
 			const FLinearColor Wire(0.05f, 0.04f, 0.03f);
 			Rod(F, Wire, BodyEnd + Down * 0.8, StayAt + FVector(0.0, -0.8, 0.0), 0.25, 3);
 			Rod(F, Wire, StayAt + FVector(0.0, -0.8, 0.0), Seat + FVector(0.0, -2.2, -1.0), 0.25, 3);
-			Rod(F, Wire, Seat + FVector(0.0, -2.2, -1.0), HeadTop(Kind) + FVector(1.0, -2.6, -3.0), 0.25, 3);
+			// (The ladies' bicycle has no top tube for it to run along, so it leaves that bit out.)
+			if (Kind != EKind::Ladies)
+			{
+				Rod(F, Wire, Seat + FVector(0.0, -2.2, -1.0), HeadTop(Kind) + FVector(1.0, -2.6, -3.0), 0.25, 3);
+			}
 		}
 
-		if (!BasketTurns(Kind))
+		if (HasBasket(Kind) && !BasketTurns(Kind))
 		{
 			BuildBasket(F, Kind);
 		}
@@ -404,7 +491,7 @@ namespace BicycleModel
 		const FVector Clamp = StemTop + FVector(4.0, 0.0, 1.0);
 		Rod(P, Nickel(), HeadTop(Kind) - SteerAxis(Kind) * 1.0, StemTop, 1.1, 8);
 		Rod(P, Nickel(), StemTop, Clamp, 1.1, 8);
-		const FLinearColor GripColor(0.70f, 0.66f, 0.56f);
+		const FLinearColor GripColor = IsPlain(Kind) ? WoodGrip() : FLinearColor(0.70f, 0.66f, 0.56f);
 		for (const double Side : { -1.0, 1.0 })
 		{
 			const FVector G = Grip(Kind, Side);
@@ -552,13 +639,20 @@ namespace BicycleModel
 	/**
 	 * The rider's pose with the cranks turned to CrankDegrees, for a kit
 	 * person of Height cm. Thighs and upper arms are relative to the leaning
-	 * body; shins and forearms to their thighs and upper arms.
+	 * body; shins and forearms to their thighs and upper arms. Pedalling hard
+	 * (a sprint) he leans further (BodyLean) and lifts off the saddle by
+	 * HipLift, a little forward too: RiderHipAt(HipLift) is where his hips are then.
 	 */
-	inline FRiderPose RiderPose(EKind Kind, double CrankDegrees, double Height)
+	inline FVector RiderHipAt(double HipLift) { return RiderHip() + FVector(HipLift * 0.6, 0.0, HipLift); }
+	/** Sprinting: the lean from the hips and how far off the saddle he gets. */
+	constexpr double SprintLean = -50.0;
+	constexpr double SprintLift = 7.0;
+	inline FRiderPose RiderPose(EKind Kind, double CrankDegrees, double Height, double BodyLean = RiderLean, double HipLift = 0.0)
 	{
 		const double H = Height / 178.0;
 		FRiderPose P;
-		const FVector Hip = RiderHip();
+		P.Lean = BodyLean;
+		const FVector Hip = RiderHipAt(HipLift);
 		const double LeanRad = FMath::DegreesToRadians(-P.Lean);
 		// The kit's hip, knee, ankle, shoulder and hand heights.
 		const double Thigh = (92.0 - 50.0) * H;

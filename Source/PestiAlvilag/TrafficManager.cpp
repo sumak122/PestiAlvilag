@@ -3,6 +3,8 @@
 #include "TrafficManager.h"
 
 #include "Algo/BinarySearch.h"
+#include "Bicycle.h"
+#include "BicycleModel.h"
 #include "Camera/PlayerCameraManager.h"
 #include "CarjackedDriver.h"
 #include "Dom/JsonObject.h"
@@ -20,6 +22,7 @@
 #include "PersonModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "TrafficBike.h"
 #include "TrafficCar.h"
 #include "PoliceCar.h"
 #include "PolicePatrols.h"
@@ -47,6 +50,19 @@ namespace Traffic
 
 	// Half the width of the corridor a car watches for others (cm).
 	constexpr float CorridorHalfWidth = 220.f;
+
+	// Bicycles: none start closer than this to each other or the player (cm).
+	constexpr double BikeSpacing = 700.0;
+	constexpr double BikeFromPlayer = 2500.0;
+	// A parked bicycle stands this far out from a house wall (cm) that is at least WallBeyond
+	// from the lane (so there is a pavement), looked for up to WallSearch across; none
+	// closer than ParkedSpacing to another; its pieces drawn up to ParkedDrawDistance.
+	constexpr double ParkedOut = 45.0;
+	constexpr double WallBeyond = 350.0;
+	constexpr double WallSearch = 1500.0;
+	constexpr double WallFacing = 0.8;
+	constexpr double ParkedSpacing = 1500.0;
+	constexpr float ParkedDrawDistance = 8000.f;
 	// Free track a tram needs around it to be placed at the start (cm).
 	constexpr float TramSpawnRoom = 2000.f;
 	// A bus needs this much room among the cars to be placed, and tries this
@@ -109,6 +125,8 @@ void ATrafficManager::BeginPlay()
 	if (LoadLanes(*Root))
 	{
 		SpawnCars();
+		SpawnBikes();
+		SpawnParkedBikes();
 	}
 	LoadTramRoutes(*Root);
 	SpawnTrams();
@@ -634,6 +652,144 @@ void ATrafficManager::SpawnCars()
 	UE_LOG(LogTraffic, Log, TEXT("Spawned %d traffic cars"), Cars.Num());
 }
 
+void ATrafficManager::SpawnBikes()
+{
+	UWorld* World = GetWorld();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const FVector PlayerLocation = Player ? Player->GetActorLocation() : FVector::ZeroVector;
+	FRandomStream Random(FMath::Rand());
+	auto IsRoomFor = [this](const FVector& Spot)
+	{
+		for (const ABicycle* Other : Bikes)
+		{
+			if (Other && FVector::Dist2D(Other->GetActorLocation(), Spot) < Traffic::BikeSpacing)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	int32 Made = 0;
+	for (int32 Attempt = 0; Attempt < NumBikes * 20 && Made < NumBikes; ++Attempt)
+	{
+		const int32 LaneIdx = Random.RandRange(0, Lanes.Num() - 1);
+		const FTrafficLane& Lane = Lanes[LaneIdx];
+		if (Lane.Points.Num() < 2)
+		{
+			continue;
+		}
+		const int32 PointIdx = Random.RandRange(0, Lane.Points.Num() - 2);
+		const FVector Spot = Lane.Points[PointIdx];
+		if (FVector::Dist2D(Spot, PlayerLocation) < Traffic::BikeFromPlayer || !IsRoomFor(Spot))
+		{
+			continue;
+		}
+		// On the road under the lane point (started low, under any bridge).
+		FVector Location = Spot;
+		FHitResult Hit;
+		if (World->LineTraceSingleByChannel(Hit, Spot + FVector(0.0, 0.0, 200.0), Spot - FVector(0.0, 0.0, 1000.0), ECC_Visibility))
+		{
+			Location.Z = Hit.ImpactPoint.Z;
+		}
+		Location.Z += BicycleModel::BoxBottom + BicycleModel::BoxHalf().Z + 5.0;
+		const FTransform Place((Lane.Points[PointIdx + 1] - Spot).GetSafeNormal2D().Rotation(), Location);
+		ATrafficBike* Bike = World->SpawnActorDeferred<ATrafficBike>(ATrafficBike::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Bike)
+		{
+			continue;
+		}
+		Bike->PickRider(Random);
+		Bike->FinishSpawning(Place);
+		Bike->StartOnLane(this, LaneIdx, PointIdx + 1);
+		Bikes.Add(Bike);
+		++Made;
+	}
+	UE_LOG(LogTraffic, Log, TEXT("Spawned %d bicycle riders"), Made);
+}
+
+void ATrafficManager::SpawnParkedBikes()
+{
+	UWorld* World = GetWorld();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const FVector PlayerLocation = Player ? Player->GetActorLocation() : FVector::ZeroVector;
+	FRandomStream Random(FMath::Rand());
+	const BicycleModel::EKind Kinds[] = { BicycleModel::EKind::Ladies, BicycleModel::EKind::Gents, BicycleModel::EKind::Gents, BicycleModel::EKind::Roadster };
+	TArray<FVector> Parked;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ParkedBike), false, this);
+
+	for (int32 Attempt = 0; Attempt < NumParkedBikes * 20 && Parked.Num() < NumParkedBikes; ++Attempt)
+	{
+		const int32 LaneIdx = Random.RandRange(0, Lanes.Num() - 1);
+		const FTrafficLane& Lane = Lanes[LaneIdx];
+		if (Lane.Points.Num() < 2)
+		{
+			continue;
+		}
+		const int32 PointIdx = Random.RandRange(0, Lane.Points.Num() - 2);
+		const FVector A = Lane.Points[PointIdx];
+		const FVector B = Lane.Points[PointIdx + 1];
+		const FVector Along = (B - A).GetSafeNormal2D();
+		if (Along.IsNearlyZero())
+		{
+			continue;
+		}
+		// The kerb side is to the left (traffic keeps left); look across the pavement for a house wall.
+		const FVector Left(Along.Y, -Along.X, 0.0);
+		FVector Middle = FMath::Lerp(A, B, static_cast<double>(Random.FRandRange(0.2f, 0.8f)));
+		FHitResult Hit;
+		if (!World->LineTraceSingleByChannel(Hit, Middle + FVector(0.0, 0.0, 200.0), Middle - FVector(0.0, 0.0, 1000.0), ECC_Visibility, Params))
+		{
+			continue;
+		}
+		Middle.Z = Hit.ImpactPoint.Z + 120.0;
+		if (!World->LineTraceSingleByObjectType(Hit, Middle, Middle + Left * Traffic::WallSearch, FCollisionObjectQueryParams(ECC_WorldStatic), Params)
+			|| Hit.Distance < Traffic::WallBeyond)
+		{
+			continue;
+		}
+		const FVector WallNormal = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.0).GetSafeNormal();
+		if (FVector::DotProduct(WallNormal, -Left) < Traffic::WallFacing)
+		{
+			continue;
+		}
+		FVector Spot = Hit.ImpactPoint + WallNormal * Traffic::ParkedOut;
+		if (FVector::Dist2D(Spot, PlayerLocation) < Traffic::BikeSpacing)
+		{
+			continue;
+		}
+		bool bTooClose = false;
+		for (const FVector& Other : Parked)
+		{
+			bTooClose = bTooClose || FVector::Dist2D(Other, Spot) < Traffic::ParkedSpacing;
+		}
+		if (bTooClose || !World->LineTraceSingleByChannel(Hit, Spot, Spot - FVector(0.0, 0.0, 500.0), ECC_Visibility, Params))
+		{
+			continue;
+		}
+		Spot.Z = Hit.ImpactPoint.Z + BicycleModel::BoxBottom + BicycleModel::BoxHalf().Z + 5.0;
+
+		// Along the wall, leaning on its stand towards it (its left side to the wall).
+		const FVector Facing(WallNormal.Y, -WallNormal.X, 0.0);
+		const FTransform Place(Facing.Rotation(), Spot);
+		ABicycle* Bike = World->SpawnActorDeferred<ABicycle>(ABicycle::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Bike)
+		{
+			continue;
+		}
+		Bike->SetKind(Kinds[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Kinds)) - 1)]);
+		Bike->SetPaint(BicycleModel::Paint(Random.RandRange(0, BicycleModel::NumPaints - 1)));
+		Bike->SetDrawDistance(Traffic::ParkedDrawDistance);
+		Bike->bCityBike = true;
+		Bike->FinishSpawning(Place);
+		Bikes.Add(Bike);
+		Parked.Add(Spot);
+	}
+	UE_LOG(LogTraffic, Log, TEXT("Parked %d bicycles"), Parked.Num());
+}
+
 int32 ATrafficManager::NearestNode(const FVector& Location) const
 {
 	int32 Best = INDEX_NONE;
@@ -832,8 +988,9 @@ bool ATrafficManager::HasRoomOnLane(int32 LaneIndex, float Room, const AActor* A
 	return !Player || FVector::Dist2D(Player->GetActorLocation(), Start) >= Room;
 }
 
-float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars) const
+float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars, float HalfWidth) const
 {
+	const float Corridor = HalfWidth > 0.f ? HalfWidth : Traffic::CorridorHalfWidth;
 	const FVector Origin = Car->GetActorLocation();
 	const FVector Forward = Car->GetActorForwardVector().GetSafeNormal2D();
 	const FVector Right = FVector(-Forward.Y, Forward.X, 0.f);
@@ -844,7 +1001,7 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 		const FVector Offset = Point - Origin;
 		const float Ahead = static_cast<float>(FVector::DotProduct(Offset, Forward));
 		const float Side = static_cast<float>(FMath::Abs(FVector::DotProduct(Offset, Right)));
-		if (Ahead > 0.f && Ahead < Clear && Side < Traffic::CorridorHalfWidth)
+		if (Ahead > 0.f && Ahead < Clear && Side < Corridor)
 		{
 			Clear = Ahead;
 		}

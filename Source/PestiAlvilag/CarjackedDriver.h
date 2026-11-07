@@ -20,8 +20,8 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Runs off away from Danger (the player). */
-	void RunFrom(const FVector& Danger);
+	/** Runs off away from Danger (the player), shouting after his car (or his bicycle). */
+	void RunFrom(const FVector& Danger, bool bBicycle = false);
 
 private:
 	FVector2D Heading = FVector2D(1.0, 0.0);
