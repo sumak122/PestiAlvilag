@@ -99,6 +99,10 @@ namespace PestiStart
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
 	const FName FurrierKey(TEXT("Furrier"));
+	// The street door the raid's escape comes out of, on Tisza Kálmán tér.
+	const FName ExitDoorKey(TEXT("ExitDoor"));
+	// A plain door where the home door is not: the attic before the end of act 1, Bözsi's street door after.
+	const FName SpareDoorKey(TEXT("SpareDoor"));
 	// Bözsi néni at her flea market stall (gone after the raid).
 	const TCHAR* const BozsiName = TEXT("B\u00f6zsi n\u00e9ni");
 
@@ -457,6 +461,16 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		PestiStart::PutUpShapeSet(GetWorld(), PestiStart::FurrierKey, FVector(FurrierModel::CityAt, GroundZ(Pavement)), FurrierModel::CityYaw, Shapes, Lamps, Signs);
 	}
 
+	// And the street door on Tisza Kálmán tér that the raid's escape comes out of, its ground height taken in front of it.
+	if (!AShapeSet::Find(GetWorld(), PestiStart::ExitDoorKey))
+	{
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lamps;
+		BozsiHouseModel::StreetDoor(Shapes, Lamps, true);
+		PestiStart::PutUpShapeSet(GetWorld(), PestiStart::ExitDoorKey, FVector(BozsiHouseModel::ExitDoorAt, GroundZ(BozsiHouseModel::ExitAt)),
+			BozsiHouseModel::ExitDoorYaw, Shapes, Lamps, TArray<BozsiHouseModel::FSign>());
+	}
+
 	// And the eagle that circles over Keleti.
 	if (!TActorIterator<AKeletiEagle>(GetWorld()))
 	{
@@ -489,6 +503,21 @@ void APestiAlvilagGameModeBase::PlaceHomeDoor()
 	{
 		It->SetActorLocationAndRotation(FVector(DoorAt, GroundZ(DoorAt)), FRotator(0.0, HomeDoorFacing(), 0.0));
 	}
+
+	// A plain door stands at the other one, so the attic has its door before
+	// the end of act 1 and Bözsi's street door is not left a bare wall after.
+	if (AShapeSet* OldSpare = AShapeSet::Find(GetWorld(), PestiStart::SpareDoorKey))
+	{
+		OldSpare->Destroy();
+	}
+	const bool bInAttic = IsMissionDone(PestiStart::Bunda);
+	const FVector2D SpareAt = bInAttic ? PestiStart::HomeDoorAt : BozsiHouseModel::AtticDoorAt;
+	const double SpareYaw = bInAttic ? static_cast<double>(PestiStart::HomeDoorYaw) : BozsiHouseModel::AtticDoorYaw;
+	TArray<MarketModel::FShape> SpareShapes;
+	TArray<BozsiHouseModel::FLamp> SpareLamps;
+	BozsiHouseModel::StreetDoor(SpareShapes, SpareLamps, false);
+	PestiStart::PutUpShapeSet(GetWorld(), PestiStart::SpareDoorKey, FVector(SpareAt, GroundZ(SpareAt)), SpareYaw,
+		SpareShapes, SpareLamps, TArray<BozsiHouseModel::FSign>());
 }
 
 double APestiAlvilagGameModeBase::GroundZ(const FVector2D& At) const
