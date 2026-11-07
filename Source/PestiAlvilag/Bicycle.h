@@ -53,6 +53,10 @@ public:
 	void SetParcels(int32 Count);
 	int32 GetParcels() const { return Parcels; }
 	float GetSpeed() const { return Speed; }
+	/** How many times it has been ridden hard into something and stopped dead. */
+	int32 GetHardKnocks() const { return HardKnocks; }
+	/** Puts the player down beside it at once, whatever its speed (a mission that is ending). */
+	void PutRiderOff();
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Bicycle")
@@ -127,7 +131,8 @@ private:
 	/** The dynamo lamp: brighter the faster it goes, a beam on the road at night. */
 	void UpdateLamp();
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
-	void LetRiderOff(APlayerController* PC);
+	/** He gets off, only when it is nearly stopped unless bForce; false when there was no room. */
+	bool LetRiderOff(APlayerController* PC, bool bForce = false);
 	void SnapToGround();
 
 	/** Speed (cm/s, below 0 walking it back) and how far the bars are turned (degrees, right positive). */
@@ -145,6 +150,7 @@ private:
 	float Rolled = 0.f;
 	bool bPedalling = false;
 	int32 Parcels = 0;
+	int32 HardKnocks = 0;
 
 	float LookYaw = 0.f;
 	float LookPitch = 0.f;
