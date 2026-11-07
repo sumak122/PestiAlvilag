@@ -10,6 +10,7 @@ class APestiCar;
 class ABicycle;
 class ATrafficBike;
 class ATrafficCar;
+class ATrafficCart;
 class ATram;
 class FJsonObject;
 
@@ -82,6 +83,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	int32 NumParkedBikes = 30;
 
+	/** Carriers' horse carts (ATrafficCart: milk, coal, beer) that the cars queue up behind. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	int32 NumCarts = 10;
+
 	/** No two cars start closer than this (cm). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float MinSpawnSpacing = 1000.f;
@@ -102,7 +107,7 @@ public:
 	int32 PickNextLane(int32 LaneIndex) const;
 
 	/**
-	 * Distance to the nearest car, tram or player in front, in the same lane
+	 * Distance to the nearest car, horse cart, tram or player in front, in the same lane
 	 * corridor (this wide each side; 0 for a car's). bIgnoreAICars counts only trams and the player.
 	 */
 	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f) const;
@@ -169,6 +174,7 @@ private:
 	void SpawnCars();
 	void SpawnBikes();
 	void SpawnParkedBikes();
+	void SpawnCarts();
 	void SpawnTrams();
 	/** Puts new cars in the traffic, out of the player's sight, for the ones taken. */
 	void ReplaceCars();
@@ -210,6 +216,10 @@ private:
 	/** The bicycles of the city, ridden and parked. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ABicycle>> Bikes;
+
+	/** The carriers' horse carts. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ATrafficCart>> Carts;
 
 	/** The trams and the buses (ABus is a kind of ATram). */
 	UPROPERTY(Transient)

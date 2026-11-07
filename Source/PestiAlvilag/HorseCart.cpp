@@ -142,8 +142,12 @@ void AHorseCart::BeginPlay()
 	Super::BeginPlay();
 	using namespace HorseCartModel;
 
+	// The cart in its owner's colours: Pista bácsi's green and red, or a carrier's.
+	FLinearColor Boards;
+	FLinearColor Wheels;
+	LoadPaints(CartLoad, Boards, Wheels);
 	FCart Cart;
-	BuildCart(Cart);
+	BuildCart(Cart, Boards, Wheels);
 	const FVector Hinge(HingeX, 0.0, 0.0);
 	for (int32 p = 0; p < NumCartParts; ++p)
 	{
@@ -151,9 +155,9 @@ void AHorseCart::BeginPlay()
 		CartParts.Add(MakeMesh(bFront ? ForecartPivot.Get() : Rig.Get(), Cart.Parts[p], bFront ? Cart.Parts[p].Pivot - Hinge : Cart.Parts[p].Pivot));
 	}
 
-	// Pista bácsi's horse: a bay with a white blaze.
+	// Pista bácsi's horse is a bay with a white blaze; the carriers' are what they are.
 	FHorse Horse;
-	BuildHorse(Horse, ECoat::Bay, true);
+	BuildHorse(Horse, HorseCoat, bBlaze);
 	HorseParts.SetNum(NumHorseParts);
 	for (int32 p = 0; p < NumHorseParts; ++p)
 	{
@@ -171,25 +175,38 @@ void AHorseCart::BeginPlay()
 		}
 	}
 
-	for (int32 c = 0; c < MaxCrates; ++c)
+	if (CartLoad == ELoad::None)
 	{
-		PersonKit::FPiece Crate;
-		BuildCrate(Crate, FVector::ZeroVector);
-		UProceduralMeshComponent* Mesh = MakeMesh(Rig.Get(), Crate, CrateSpot(c));
-		Mesh->SetVisibility(false);
-		CrateMeshes.Add(Mesh);
+		for (int32 c = 0; c < MaxCrates; ++c)
+		{
+			PersonKit::FPiece Crate;
+			BuildCrate(Crate, FVector::ZeroVector);
+			UProceduralMeshComponent* Mesh = MakeMesh(Rig.Get(), Crate, CrateSpot(c));
+			Mesh->SetVisibility(false);
+			CrateMeshes.Add(Mesh);
+		}
+	}
+	else
+	{
+		for (int32 i = 0; i < NumLoadItems(CartLoad); ++i)
+		{
+			PersonKit::FPiece Item;
+			BuildLoadItem(Item, CartLoad, i);
+			LoadMeshes.Add(MakeMesh(Rig.Get(), Item, LoadSpot(CartLoad, i)));
+		}
 	}
 
-	TArray<PersonKit::FSection> Seated;
-	CarModel::BuildSeatedPerson(PersonModel::PlayerOutfit(), DriverHip(), HorseCart::DriverArmPitch, HorseCart::DriverLegPitch, Seated);
 	DriverMesh = MakeMesh(Rig.Get(), PersonKit::FPiece(), FVector::ZeroVector);
-	Fill(DriverMesh, Seated);
+	DressDriver(bOwnDriverLook ? DriverLook : PersonModel::PlayerOutfit());
 	DriverMesh->SetVisibility(false);
 
 	Reins = MakeMesh(Rig.Get(), PersonKit::FPiece(), FVector::ZeroVector);
 	Reins->SetCastShadow(false);
 
-	Sound->Start();
+	if (!bSoundWhenNear)
+	{
+		Sound->Start();
+	}
 	NextSnort = GetWorld()->GetTimeSeconds() + FMath::FRandRange(HorseCart::MinSnortWait, HorseCart::MaxSnortWait);
 	SnapToGround();
 	Animate(0.f);
@@ -203,10 +220,24 @@ UProceduralMeshComponent* AHorseCart::MakeMesh(USceneComponent* Parent, const Pe
 	Mesh->SetRelativeLocation(At);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCanEverAffectNavigation(false);
+	// It moves: kept out of the ray-traced lighting and the distance fields (it still casts its shadow).
+	Mesh->bVisibleInRayTracing = false;
+	Mesh->bAffectDistanceFieldLighting = false;
+	if (DrawDistance > 0.f)
+	{
+		Mesh->SetCachedMaxDrawDistance(DrawDistance);
+	}
 	Mesh->RegisterComponent();
 	AddInstanceComponent(Mesh);
 	Fill(Mesh, Piece.Sections);
 	return Mesh;
+}
+
+void AHorseCart::DressDriver(const PersonKit::FOutfit& Look)
+{
+	TArray<PersonKit::FSection> Seated;
+	CarModel::BuildSeatedPerson(Look, HorseCartModel::DriverHip(), HorseCart::DriverArmPitch, HorseCart::DriverLegPitch, Seated);
+	Fill(DriverMesh, Seated);
 }
 
 void AHorseCart::Fill(UProceduralMeshComponent* Mesh, const TArray<PersonKit::FSection>& Sections)
@@ -428,7 +459,8 @@ void AHorseCart::Animate(float DeltaSeconds)
 
 void AHorseCart::UpdateReins()
 {
-	if (!Driver || !Reins)
+	// Held while someone sits on the bench.
+	if (!DriverMesh || !DriverMesh->IsVisible() || !Reins)
 	{
 		if (Reins && Reins->GetNumSections() > 0)
 		{

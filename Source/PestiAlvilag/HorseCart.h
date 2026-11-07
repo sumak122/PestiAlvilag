@@ -39,7 +39,10 @@ public:
 	virtual FVector GetVelocity() const override;
 
 	/** Puts a person on the bench; they get down again with F. */
-	void TakeDriver(APawn* InDriver);
+	virtual void TakeDriver(APawn* InDriver);
+
+	/** One of the city's carriers' carts (ATrafficCart), not Pista bácsi's. */
+	virtual bool IsCityCart() const { return false; }
 	/** Where to climb up: by the bench (on the ground). */
 	FVector GetBenchLocation() const;
 
@@ -98,6 +101,10 @@ protected:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> CrateMeshes;
 
+	/** A carrier's load on the bed (churns, sacks, barrels), one mesh each. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> LoadMeshes;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> DriverMesh;
 
@@ -109,7 +116,21 @@ protected:
 
 	virtual void BeginPlay() override;
 
-private:
+	// How it is built; a city cart sets these before it is spawned (deferred).
+	HorseCartModel::ECoat HorseCoat = HorseCartModel::ECoat::Bay;
+	bool bBlaze = true;
+	HorseCartModel::ELoad CartLoad = HorseCartModel::ELoad::None;
+	/** Who sits on the bench when nobody drives it (bOwnDriverLook), else the player's look. */
+	PersonKit::FOutfit DriverLook;
+	bool bOwnDriverLook = false;
+	/** Its pieces are not drawn beyond this (cm; 0 always). */
+	float DrawDistance = 0.f;
+	/** The sound is left to be started by whoever moves it (a city cart, only when near). */
+	bool bSoundWhenNear = false;
+
+	/** Seats this person on the bench (who is seen there while it is driven). */
+	void DressDriver(const PersonKit::FOutfit& Look);
+
 	UProceduralMeshComponent* MakeMesh(USceneComponent* Parent, const PersonKit::FPiece& Piece, const FVector& At);
 	void Fill(UProceduralMeshComponent* Mesh, const TArray<PersonKit::FSection>& Sections);
 	void Drive(APlayerController* PC, float DeltaSeconds);

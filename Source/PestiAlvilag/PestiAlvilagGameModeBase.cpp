@@ -365,7 +365,13 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 	const FVector CarLocation(PestiStart::CarAt, GroundZ(PestiStart::CarAt) + 150.0);
 	GetWorld()->SpawnActor<APestiCar>(APestiCar::StaticClass(), CarLocation, Facing, CarParams);
 
-	if (!TActorIterator<AHorseCart>(GetWorld()))
+	bool bHasPistasCart = false;
+	for (TActorIterator<AHorseCart> It(GetWorld()); It; ++It)
+	{
+		// (Not the carriers' carts in the traffic.)
+		bHasPistasCart = bHasPistasCart || !It->IsCityCart();
+	}
+	if (!bHasPistasCart)
 	{
 		// Pista bácsi's horse and cart wait in the carters' yard on Auróra utca.
 		const FVector2D CartAt(AStableYard::ToCity(StableYardModel::Spots::Cart, 0.0));

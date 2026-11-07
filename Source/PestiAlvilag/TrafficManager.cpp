@@ -23,6 +23,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficBike.h"
+#include "TrafficCart.h"
 #include "TrafficCar.h"
 #include "PoliceCar.h"
 #include "PolicePatrols.h"
@@ -127,6 +128,7 @@ void ATrafficManager::BeginPlay()
 		SpawnCars();
 		SpawnBikes();
 		SpawnParkedBikes();
+		SpawnCarts();
 	}
 	LoadTramRoutes(*Root);
 	SpawnTrams();
@@ -790,6 +792,71 @@ void ATrafficManager::SpawnParkedBikes()
 	UE_LOG(LogTraffic, Log, TEXT("Parked %d bicycles"), Parked.Num());
 }
 
+void ATrafficManager::SpawnCarts()
+{
+	// Away from the player and from the cars and other carts (cm), on the road under the lane point.
+	static constexpr double CartFromPlayer = 3000.0;
+	static constexpr double CartSpacing = 1500.0;
+	static constexpr double CartLift = 20.0;
+	UWorld* World = GetWorld();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const FVector PlayerLocation = Player ? Player->GetActorLocation() : FVector::ZeroVector;
+	FRandomStream Random(FMath::Rand());
+	auto IsRoomFor = [this](const FVector& Spot)
+	{
+		for (const ATrafficCar* Other : Cars)
+		{
+			if (Other && FVector::Dist2D(Other->GetActorLocation(), Spot) < CartSpacing)
+			{
+				return false;
+			}
+		}
+		for (const ATrafficCart* Other : Carts)
+		{
+			if (Other && FVector::Dist2D(Other->GetActorLocation(), Spot) < CartSpacing)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	for (int32 Attempt = 0; Attempt < NumCarts * 20 && Carts.Num() < NumCarts; ++Attempt)
+	{
+		const int32 LaneIdx = Random.RandRange(0, Lanes.Num() - 1);
+		const FTrafficLane& Lane = Lanes[LaneIdx];
+		if (Lane.Points.Num() < 2)
+		{
+			continue;
+		}
+		const int32 PointIdx = Random.RandRange(0, Lane.Points.Num() - 2);
+		const FVector Spot = Lane.Points[PointIdx];
+		if (FVector::Dist2D(Spot, PlayerLocation) < CartFromPlayer || !IsRoomFor(Spot))
+		{
+			continue;
+		}
+		FVector Location = Spot;
+		FHitResult Hit;
+		if (World->LineTraceSingleByChannel(Hit, Spot + FVector(0.0, 0.0, 200.0), Spot - FVector(0.0, 0.0, 1000.0), ECC_Visibility))
+		{
+			Location.Z = Hit.ImpactPoint.Z;
+		}
+		Location.Z += HorseCartModel::RigHalf().Z + CartLift;
+		const FTransform Place((Lane.Points[PointIdx + 1] - Spot).GetSafeNormal2D().Rotation(), Location);
+		ATrafficCart* Cart = World->SpawnActorDeferred<ATrafficCart>(ATrafficCart::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Cart)
+		{
+			continue;
+		}
+		Cart->PickLoad(Random);
+		Cart->FinishSpawning(Place);
+		Cart->StartOnLane(this, LaneIdx, PointIdx + 1);
+		Carts.Add(Cart);
+	}
+	UE_LOG(LogTraffic, Log, TEXT("Spawned %d horse carts"), Carts.Num());
+}
+
 int32 ATrafficManager::NearestNode(const FVector& Location) const
 {
 	int32 Best = INDEX_NONE;
@@ -1023,6 +1090,17 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 			}
 		}
 	}
+	// The horse carts are long: the horse in front, the bed behind.
+	for (const ATrafficCart* Other : Carts)
+	{
+		if (Other && Other != Car && !IsOncoming(Other))
+		{
+			const FVector Along = Other->GetActorForwardVector().GetSafeNormal2D() * 250.f;
+			ConsiderPoint(Other->GetActorLocation());
+			ConsiderPoint(Other->GetActorLocation() + Along);
+			ConsiderPoint(Other->GetActorLocation() - Along);
+		}
+	}
 	// Two trams that meet where lines join must not both wait for the other:
 	// a tram only waits for trams whose middle is ahead of its own.
 	const bool bAskerIsTram = Car->IsA<ATram>();
@@ -1073,6 +1151,13 @@ bool ATrafficManager::IsAreaClear(const FVector& Location, float Radius, const A
 		}
 	}
 	for (const ATram* Other : Trams)
+	{
+		if (IsNear(Other))
+		{
+			return false;
+		}
+	}
+	for (const ATrafficCart* Other : Carts)
 	{
 		if (IsNear(Other))
 		{
