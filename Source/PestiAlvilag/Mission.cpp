@@ -3,6 +3,7 @@
 #include "Mission.h"
 
 #include "CarBody.h"
+#include "Cutscene.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -16,6 +17,7 @@
 #include "PestiPerson.h"
 #include "PestiText.h"
 #include "RouteGuideComponent.h"
+#include "StartRingComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace Mission
@@ -30,6 +32,15 @@ namespace Mission
 	constexpr double RetryOffer = 20.0;
 	constexpr float RetryStart = 0.5f;
 	constexpr float RetryFade = 1.0f;
+
+	// The ring stands this far in front of whoever gives the mission (cm),
+	// and counts only once the player has been this much further out.
+	constexpr double RingAhead = 170.0;
+	constexpr double RingArmGap = 80.0;
+
+	// The opening scenes seen in this play (a mission tried again skips its own).
+	TWeakObjectPtr<UWorld> SeenWorld;
+	TSet<FName> SeenOpenings;
 }
 
 AMission::AMission()
@@ -46,6 +57,9 @@ AMission::AMission()
 
 	Guide = CreateDefaultSubobject<URouteGuideComponent>(TEXT("Guide"));
 	Guide->SetupAttachment(Root);
+
+	Ring = CreateDefaultSubobject<UStartRingComponent>(TEXT("Ring"));
+	Ring->SetupAttachment(Root);
 }
 
 void AMission::BeginPlay()
@@ -53,10 +67,75 @@ void AMission::BeginPlay()
 	Super::BeginPlay();
 
 	SetUpMission();
-	if (Steps.Num() > 0)
+	if (Steps.Num() == 0)
+	{
+		return;
+	}
+	if (!bStartsAtRing)
 	{
 		StartStep(0);
+		return;
 	}
+	// Wait in a ring in front of whoever gives the mission.
+	const FMissionStep& First = Steps[0];
+	FVector Spot = First.Target;
+	if (const AActor* Giver = First.SceneWith.Get())
+	{
+		Spot = Giver->GetActorLocation() + Giver->GetActorForwardVector().GetSafeNormal2D() * Mission::RingAhead;
+	}
+	Ring->ShowAt(Spot, StartLetter);
+	bAtRing = true;
+	bRingArmed = false;
+}
+
+void AMission::TickRing()
+{
+	const APawn* Player = GetPlayer();
+	if (!Player)
+	{
+		return;
+	}
+	const double Distance = FVector::Dist2D(Player->GetActorLocation(), Ring->GetSpot());
+	if (Distance > UStartRingComponent::Radius() + Mission::RingArmGap)
+	{
+		bRingArmed = true;
+		return;
+	}
+	if (!bRingArmed || Distance > UStartRingComponent::Radius() || !Player->IsA<APestiPerson>())
+	{
+		return;
+	}
+	// In he walks: the first step (talking to the giver) is done there and then.
+	bAtRing = false;
+	Ring->Hide();
+	StartStep(0);
+	FinishStep();
+}
+
+void AMission::PlayStepScene(int32 Step)
+{
+	if (!Steps.IsValidIndex(Step) || Steps[Step].SceneSeconds <= 0.f || !GetPlayer() || !GetPlayer()->IsA<APestiPerson>())
+	{
+		return;
+	}
+	const FMissionStep& Done = Steps[Step];
+	// The opening scene, with the mission's name; once only in a play.
+	const bool bOpening = Step == 0 && bStartsAtRing;
+	if (bOpening)
+	{
+		if (Mission::SeenWorld.Get() != GetWorld())
+		{
+			Mission::SeenWorld = GetWorld();
+			Mission::SeenOpenings.Reset();
+		}
+		if (Mission::SeenOpenings.Contains(MissionId))
+		{
+			return;
+		}
+		Mission::SeenOpenings.Add(MissionId);
+	}
+	ACutscene::PlayTalk(GetWorld(), Done.SceneWith.Get(), Done.Target, Done.SceneSeconds,
+		bOpening ? Number : 0, bOpening ? TitleHu : FString(), bOpening ? TitleEn : FString());
 }
 
 void AMission::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -124,6 +203,11 @@ void AMission::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	TickLetter();
+	if (bAtRing)
+	{
+		TickRing();
+		return;
+	}
 	if (bFailed)
 	{
 		TickFailed();
@@ -194,6 +278,7 @@ void AMission::FinishStep()
 	}
 	const int32 Done = CurrentStep;
 	OnStepDone(Done);
+	PlayStepScene(Done);
 	if (Done + 1 < Steps.Num())
 	{
 		StartStep(Done + 1);
@@ -223,6 +308,7 @@ void AMission::Fail(const FString& WhyHu, const FString& WhyEn)
 	FailedAt = GetWorld()->GetTimeSeconds();
 	Marker->Hide();
 	Guide->Stop();
+	ACutscene::StopAll(this);
 	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
 		Hud->ClearGoal();

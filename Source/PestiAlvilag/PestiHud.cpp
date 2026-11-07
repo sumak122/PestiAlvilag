@@ -64,6 +64,13 @@ namespace PestiHud
 	constexpr float SpeechWidth = 1180.f;
 	constexpr float SpeechFromBottom = 150.f;
 	constexpr float AnnounceY = 330.f;
+	// A scene (ACutscene): each black bar is this share of the screen's
+	// height, the subtitles stand this far over the lower bar, and the
+	// mission's title this far down the screen (share of its height).
+	constexpr float SceneBar = 0.11f;
+	constexpr float SceneSpeechUp = 70.f;
+	constexpr float SceneTitleDown = 0.26f;
+	const FLinearColor SceneBlack = FLinearColor(0.f, 0.f, 0.f, 1.f);
 	// The key sign for a move: this far down the screen (share of its height).
 	constexpr float PromptDown = 0.68f;
 	// A fist fight: the other man's plaque across the top; the breath bar
@@ -285,6 +292,12 @@ public:
 		if (Hud->bMapOpen)
 		{
 			PaintBigMap(Paint, *Hud, Wide, High);
+			return LayerId + 14;
+		}
+		// A scene: only the bars, what people say, announcements and the title.
+		if (Hud->SceneBars > 0.f)
+		{
+			PaintScene(Paint, *Hud, Wide, High, Now);
 			return LayerId + 14;
 		}
 
@@ -531,6 +544,57 @@ private:
 			}
 		}
 	};
+
+	void PaintScene(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High, double Now) const
+	{
+		const float Bar = High * PestiHud::SceneBar * Hud.SceneBars;
+		Paint.Box(0.f, 0.f, Wide, Bar, PestiHud::SceneBlack);
+		Paint.Box(0.f, High - Bar, Wide, Bar, PestiHud::SceneBlack);
+		Paint.Line(0.f, Bar, Wide, Bar, PestiHud::Dim, 1.f);
+		Paint.Line(0.f, High - Bar, Wide, High - Bar, PestiHud::Dim, 1.f);
+		if (Hud.Speech.Until >= Now)
+		{
+			PaintSpeech(Paint, Hud.Speech, Wide * 0.5f, High - Bar - PestiHud::SceneSpeechUp);
+		}
+		if (Hud.Big.Until >= Now)
+		{
+			PaintAnnounce(Paint, Hud.Big, Wide * 0.5f);
+		}
+		if (!Hud.SceneName.IsEmpty())
+		{
+			PaintSceneTitle(Paint, Hud, Wide * 0.5f, High * PestiHud::SceneTitleDown);
+		}
+		// While the bars are fully in: Space skips.
+		if (Hud.SceneBars >= 1.f)
+		{
+			const FString Skip = PestiSettings::English()
+				? FString(TEXT("SZ\u00d3K\u00d6Z \u00b7 \u00e1tugr\u00e1s   /   SPACE \u00b7 skip"))
+				: FString(TEXT("SZ\u00d3K\u00d6Z \u00b7 \u00e1tugr\u00e1s"));
+			Paint.Text(Skip, Paint.Plain(18.f, 1.f), Wide - PestiHud::Margin, High - Bar * 0.4f, PestiHud::Brass, 1.f);
+		}
+	}
+
+	/** A mission's number, its name large, and the English, over a scene. */
+	void PaintSceneTitle(const FPainter& Paint, const APestiHUD& Hud, float CentreX, float Y) const
+	{
+		Paint.Band(CentreX, Y - 60.f, 1000.f, 250.f);
+		if (Hud.SceneNumber > 0)
+		{
+			const FString Small = FString::Printf(TEXT("%d. K\u00dcLDET\u00c9S"), Hud.SceneNumber);
+			const FSlateFontInfo SmallFont = Paint.Deco(30.f, 10.f);
+			const float SmallW = Paint.Measure(Small, SmallFont).X;
+			Paint.Text(Small, SmallFont, CentreX, Y, PestiHud::Gold, 0.5f);
+			Paint.Diamond(CentreX - SmallW * 0.5f - 26.f, Y - 11.f, 12.f, PestiHud::Gold, 2);
+			Paint.Diamond(CentreX + SmallW * 0.5f + 26.f, Y - 11.f, 12.f, PestiHud::Gold, 2);
+		}
+		Paint.Text(Hud.SceneName.ToUpper(), Paint.Deco(Hud.SceneName.Len() > 12 ? 72.f : 92.f, 6.f), CentreX, Y + 96.f, PestiHud::Gold, 0.5f);
+		Paint.Line(CentreX - 260.f, Y + 124.f, CentreX + 260.f, Y + 124.f, PestiHud::Gold, 2.f);
+		Paint.Line(CentreX - 200.f, Y + 130.f, CentreX + 200.f, Y + 130.f, PestiHud::Dim, 1.f);
+		if (!Hud.SceneNameEn.IsEmpty())
+		{
+			Paint.Text(Hud.SceneNameEn, Paint.Plain(30.f, 4.f), CentreX, Y + 170.f, PestiHud::Cream, 0.5f);
+		}
+	}
 
 	void PaintGoal(const FPainter& Paint, const APestiHUD& Hud) const
 	{
@@ -1579,6 +1643,26 @@ private:
 		Paint.Diamond(At.X, At.Y, 6.f, PestiHud::Cream, Up);
 	}
 
+	/**
+	 * Where a story mission waits: the giver's letter in a gold-framed dark
+	 * square; with Half over 0, one further off than that waits on the rim.
+	 * Above paints the letter over the square.
+	 */
+	void PaintStartBlip(const FPainter& Paint, const FPainter& Above, const FVector2f& Spot, const FVector2f& Middle, float Half,
+		const FString& Letter, int32 Up) const
+	{
+		FVector2f At = Spot;
+		const FVector2f Away = Spot - Middle;
+		const float Most = FMath::Max(FMath::Abs(Away.X), FMath::Abs(Away.Y));
+		if (Half > 0.f && Most > Half)
+		{
+			At = Middle + Away * (Half / Most);
+		}
+		Paint.Box(At.X - 13.f, At.Y - 13.f, 26.f, 26.f, PestiHud::Solid, Up);
+		Paint.Frame(At.X - 13.f, At.Y - 13.f, 26.f, 26.f, PestiHud::Gold, 2.f, Up + 1);
+		Above.Text(Letter, Above.Deco(18.f), At.X, At.Y + 7.f, PestiHud::Gold, 0.5f);
+	}
+
 	void PaintMinimap(const FPainter& Paint, const APestiHUD& Hud, float High) const
 	{
 		const PestiMap::FPlan* Plan = PestiMap::Get();
@@ -1618,6 +1702,11 @@ private:
 			{
 				PaintHouse(Over, Home, 18.f, 6);
 			}
+		}
+		if (Hud.StartBlipUntil >= Now)
+		{
+			const FPainter StartAbove{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+			PaintStartBlip(Over, StartAbove, Frame.ToScreen(Hud.StartBlipAt), Frame.Screen, Half, Hud.StartLetter, 6);
 		}
 		if (Hud.GoalBlipUntil >= Now)
 		{
@@ -1686,6 +1775,11 @@ private:
 		{
 			PaintHouse(Over, Frame.ToScreen(Hud.HomeAt), 24.f, 6);
 		}
+		const FPainter Above{ Paint.Geometry, Paint.Out, Paint.Layer + 9, Paint.Hud, Paint.DecoFace, Paint.BoldFace, Paint.TextFace };
+		if (Hud.StartBlipUntil >= Now)
+		{
+			PaintStartBlip(Over, Above, Frame.ToScreen(Hud.StartBlipAt), FVector2f::ZeroVector, 0.f, Hud.StartLetter, 5);
+		}
 		if (Hud.GoalBlipUntil >= Now)
 		{
 			PaintGem(Over, Frame.ToScreen(Hud.GoalBlipAt), 20.f, PestiHud::Gold, PestiHud::GoalDark, 6);
@@ -1724,6 +1818,8 @@ private:
 		Row(TEXT("Te"), TEXT("You"));
 		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::Gold, PestiHud::GoalDark, 1);
 		Row(TEXT("A feladat c\u00e9lja"), TEXT("Mission goal"));
+		PaintStartBlip(Over, Above, FVector2f(IconX, RowY - 8.f), FVector2f(IconX, RowY - 8.f), 0.f, TEXT("B"), 1);
+		Row(TEXT("Itt kezd\u0151dik egy feladat"), TEXT("A mission starts here"));
 		PaintGem(Over, FVector2f(IconX, RowY - 8.f), 18.f, PestiHud::RedHi, PestiHud::MarkDark, 1);
 		Row(TEXT("A saj\u00e1t jeled"), TEXT("Your own mark"));
 		PaintHouse(Over, FVector2f(IconX, RowY - 8.f), 24.f, 1);
@@ -1856,6 +1952,20 @@ void APestiHUD::MarkGoal(const FVector& At)
 {
 	GoalBlipAt = FVector2D(At.X, At.Y);
 	GoalBlipUntil = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::MarkStart(const FVector& At, const FString& Letter)
+{
+	StartBlipAt = FVector2D(At.X, At.Y);
+	StartLetter = Letter;
+	StartBlipUntil = Now() + PestiHud::MapHold;
+}
+
+void APestiHUD::SetSceneTitle(int32 Number, const FString& Name, const FString& NameEn)
+{
+	SceneNumber = Number;
+	SceneName = Name;
+	SceneNameEn = NameEn;
 }
 
 void APestiHUD::ShowRoute(const TArray<FVector>& Points, bool bOwnMark)
