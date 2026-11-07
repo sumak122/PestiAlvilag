@@ -53,6 +53,8 @@ enum class EPestiMenuAction : uint8
 	TestFight,
 	TestVehicles,
 	TestBackToCity,
+	/** Steps the weather on: by itself, clear, rain, fog (AWeather). */
+	TestWeather,
 	// The mission list on the test page, and starting the chosen mission.
 	Missions,
 	PlayMission,
@@ -141,6 +143,8 @@ private:
 	/** On foot when the menu opened, and out on the test grounds then. */
 	bool bOnFoot = false;
 	bool bOnTestGrounds = false;
+	/** The weather the test page has set (an ETestWeather: 0 by itself, 1 clear, 2 rain, 3 fog). */
+	int32 WeatherPick = 0;
 	/** The title screen stops the game a moment after the level starts, once everything has had a frame to set itself up. */
 	bool bStopSoon = false;
 };

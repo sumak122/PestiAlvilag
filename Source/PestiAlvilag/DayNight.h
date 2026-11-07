@@ -93,6 +93,12 @@ public:
 	/** Whether the street lamps are lit. */
 	bool AreLampsLit() const { return bLampsLit; }
 
+	/**
+	 * The weather (from AWeather): Overcast 0..1 dims the sun and greys the
+	 * fog, Mist 0..1 thickens the fog until the far end of a street is lost.
+	 */
+	void SetWeather(float InOvercast, float InMist);
+
 	/** Moves the clock on an hour. */
 	void SkipHour();
 
@@ -210,6 +216,14 @@ private:
 	FLinearColor DaySunColor = FLinearColor::White;
 	float DaySkyIntensity = 1.f;
 	FLinearColor DayFogColor = FLinearColor::White;
+	float DayFogDensity = 0.02f;
+	float DayFogFalloff = 0.2f;
+
+	/** The weather just now (see SetWeather), and the fog as last set for it. */
+	float Overcast = 0.f;
+	float Mist = 0.f;
+	float ShownFogDensity = -1.f;
+	float ShownFogFalloff = -1.f;
 
 	FRotator LastSunRotation = FRotator::ZeroRotator;
 	float LastGlowDarkness = -1.f;

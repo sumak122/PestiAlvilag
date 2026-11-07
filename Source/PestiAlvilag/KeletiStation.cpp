@@ -1284,6 +1284,32 @@ FVector2D AKeletiStation::ToCity(const FVector2D& Local)
 	return FrontAt() + Local;
 }
 
+void AKeletiStation::SteamSpots(TArray<FVector>& OutChimneys, TArray<FVector>& OutCylinders)
+{
+	using namespace Keleti;
+	// As BuildTrains places them: the arrival engine against the buffers, the departure engine at the outer end.
+	struct FEngine
+	{
+		double FrontX;
+		double Y;
+		double Dir;
+	};
+	const double DepartureX = 2400.0;
+	const FEngine Engines[] = {
+		{ BufferX + 60.0, TrackY[0], 1.0 },
+		{ DepartureX + CarriagePitch * 4.0 + CarriageLength + 70.0 + 2050.0, TrackY[3], -1.0 },
+	};
+	for (const FEngine& Engine : Engines)
+	{
+		// The chimney (see Locomotive): 150 back from the front, its top 445 up.
+		OutChimneys.Add(FVector(Engine.FrontX + Engine.Dir * 150.0, Engine.Y, 450.0));
+		for (const double Side : { -1.0, 1.0 })
+		{
+			OutCylinders.Add(FVector(Engine.FrontX + Engine.Dir * 200.0, Engine.Y + Side * 150.0, 110.0));
+		}
+	}
+}
+
 void AKeletiStation::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
