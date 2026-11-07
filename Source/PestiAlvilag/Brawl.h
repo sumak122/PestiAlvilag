@@ -50,6 +50,7 @@ namespace Brawl
 		Uppercut,   // fourth: a right uppercut that rocks him back
 		Rising,     // finisher after one or two: a jumping uppercut, down he goes
 		Haymaker,   // finisher after three or four: a big overhand right, he flies back
+		Sidestep,   // a quick hop aside (or back) out of the way of a blow
 	};
 
 	/** What landed. */
@@ -93,6 +94,12 @@ namespace Brawl
 	constexpr float RisingLands = 0.36f;
 	constexpr float HaymakerSeconds = 0.9f;
 	constexpr float HaymakerLands = 0.42f;
+	/** A sidestep: how long, how far aside (or back), what it costs, and for what share of it blows and grabs miss him. */
+	constexpr float SidestepSeconds = 0.34f;
+	constexpr double SidestepAside = 120.0;
+	constexpr double SidestepBack = 90.0;
+	constexpr float SidestepCost = 6.f;
+	constexpr float DodgeShare = 0.65f;
 	/** Punches in the chain before it starts again from the jab. */
 	constexpr int32 ChainLength = 4;
 	/** A click this long after a punch ends still carries the chain on (s). */
@@ -208,6 +215,12 @@ namespace Brawl
 	inline bool IsChainPunch(EAct Act)
 	{
 		return IsLightPunch(Act) || Act == EAct::Uppercut || Act == EAct::Rising || Act == EAct::Haymaker;
+	}
+
+	/** True while a sidestep (T its share done) still takes him out of the way of blows and grabs. */
+	inline bool IsDodging(EAct Act, float T)
+	{
+		return Act == EAct::Sidestep && T < DodgeShare;
 	}
 
 	using FreeRun::FPose;
@@ -830,6 +843,35 @@ namespace Brawl
 		return P;
 	}
 
+	/**
+	 * A sidestep at T: a low quick hop to his right (Side 1) or left (-1),
+	 * or back (0), knees bent, the guard kept tight, leaning the way he goes.
+	 */
+	inline FPose Sidestep(float T, float Side = 1.f)
+	{
+		FPose Hop = Guard();
+		Hop.Lift = -14.f;
+		Hop.KneeL = -38.f;
+		Hop.KneeR = -42.f;
+		if (Side > 0.5f || Side < -0.5f)
+		{
+			Hop.Roll = 11.f * Side;
+			Hop.Yaw = 8.f - 10.f * Side;
+			Hop.Pitch = -10.f;
+			Hop.LegL = 14.f;
+			Hop.LegR = -4.f;
+		}
+		else
+		{
+			// Back: the weight on the back foot, leaning away.
+			Hop.Pitch = 10.f;
+			Hop.LegL = 22.f;
+			Hop.LegR = -22.f;
+			Hop.KneeR = -30.f;
+		}
+		return Mix(Stance(), Hop, Bell(T, 0.18f, 0.7f));
+	}
+
 	/** The pose for an act, T being its share done (Seconds, for the ones that go on). */
 	inline FPose PoseFor(EAct Act, float T, float Seconds, float Side = 1.f)
 	{
@@ -859,6 +901,7 @@ namespace Brawl
 		case EAct::Uppercut: return Uppercut(T);
 		case EAct::Rising: return Rising(T);
 		case EAct::Haymaker: return Haymaker(T);
+		case EAct::Sidestep: return Sidestep(T, Side);
 		default: return Stance();
 		}
 	}

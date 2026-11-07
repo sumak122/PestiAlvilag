@@ -145,15 +145,17 @@ namespace PersonModel
 		}
 	}
 
-	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee, float RightKnee)
+	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee, float RightKnee, float Twist)
 	{
 		const float Pitches[] = { Left, Right, LeftKnee, RightKnee, Left * SkirtFollow, Right * SkirtFollow };
+		// The shins hang from the thighs, so they turn with them already.
+		const float Turns[] = { Twist, Twist, 0.f, 0.f, Twist * 0.5f, Twist * 0.5f };
 		const EPiece Parts[] = { LegLeft, LegRight, ShinLeft, ShinRight, SkirtLeft, SkirtRight };
 		for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Parts)); ++i)
 		{
 			if (Pieces.IsValidIndex(Parts[i]) && Pieces[Parts[i]])
 			{
-				Pieces[Parts[i]]->SetRelativeRotation(FRotator(Pitches[i], 0.f, 0.f));
+				Pieces[Parts[i]]->SetRelativeRotation(FRotator(Pitches[i], Turns[i], 0.f));
 			}
 		}
 	}
