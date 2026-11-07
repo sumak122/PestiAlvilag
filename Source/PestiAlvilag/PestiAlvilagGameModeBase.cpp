@@ -29,6 +29,7 @@
 #include "MissionZsebtolvaj.h"
 #include "MissionZsibvasar.h"
 #include "MissionFelmondas.h"
+#include "MissionKifutofiu.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
@@ -71,6 +72,7 @@ namespace PestiStart
 	// ruffians fight was in it; a new name has those saves play it again whole.
 	const FName Zsibvasar(TEXT("Zsibvasar2"));
 	const FName Felmondas(TEXT("Felmondas"));
+	const FName Kifutofiu(TEXT("Kifutofiu"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -254,6 +256,10 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionFelmondas>();
 	}
+	else if (!IsMissionDone(PestiStart::Kifutofiu))
+	{
+		GetWorld()->SpawnActor<AMissionKifutofiu>();
+	}
 }
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
@@ -289,7 +295,13 @@ APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController
 		GetWorld()->SpawnActor<AHorseCart>(AHorseCart::StaticClass(), CartLocation, FRotator(0.0, CartYaw, 0.0), CarParams);
 	}
 
-	if (!TActorIterator<ABicycle>(GetWorld()))
+	// (Only a roadster counts: the shop bicycles belong to the errand-boy mission.)
+	bool bHasRoadster = false;
+	for (TActorIterator<ABicycle> It(GetWorld()); It; ++It)
+	{
+		bHasRoadster = bHasRoadster || !It->bShopBike;
+	}
+	if (!bHasRoadster)
 	{
 		// A bicycle against the house wall a few steps along from Bözsi néni's door.
 		const FRotator DoorFacing(0.0, PestiStart::HomeDoorYaw, 0.0);

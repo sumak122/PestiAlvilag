@@ -63,6 +63,11 @@ namespace BicycleRide
 	constexpr float MaxExitSpeed = 80.f;
 	constexpr double ExitSide = 80.0;
 	constexpr double MinTimeOnSaddle = 0.3;
+	// Put down at once (a mission ending): beside it, else behind it (cm).
+	constexpr double ExitBehind = 150.0;
+
+	// Riding into something head on faster than this (cm/s, about 14 km/h) is a hard knock.
+	constexpr float HardKnockSpeed = 400.f;
 
 	constexpr float ArmLength = 520.f;
 	constexpr float ChasePitch = -12.f;
@@ -321,6 +326,10 @@ void ABicycle::Move(float DeltaSeconds)
 		const float Impact = static_cast<float>(FMath::Abs(FVector::DotProduct(GetActorForwardVector(), WallNormal)));
 		if (Impact > 0.6f)
 		{
+			if (FMath::Abs(Speed) > HardKnockSpeed)
+			{
+				++HardKnocks;
+			}
 			Speed = 0.f;
 		}
 		else
@@ -497,19 +506,26 @@ void ABicycle::TakeRider(APawn* InRider)
 	LookPitch = 0.f;
 }
 
-void ABicycle::LetRiderOff(APlayerController* PC)
+bool ABicycle::LetRiderOff(APlayerController* PC, bool bForce)
 {
 	APestiPerson* Person = Cast<APestiPerson>(Rider);
 	const bool bJustOn = GetWorld()->GetTimeSeconds() - RiderOnTime < BicycleRide::MinTimeOnSaddle;
-	if (!Person || bJustOn || FMath::Abs(Speed) > BicycleRide::MaxExitSpeed)
+	if (!Person || !PC || (!bForce && (bJustOn || FMath::Abs(Speed) > BicycleRide::MaxExitSpeed)))
 	{
-		return;
+		return false;
 	}
 	const FTransform ToWorld = Rig->GetComponentTransform();
-	for (const double Side : { -1.0, 1.0 })
+	const double SaddleX = BicycleModel::RiderHip().X;
+	TArray<FVector, TInlineAllocator<3>> Spots;
+	Spots.Add(FVector(SaddleX, -BicycleRide::ExitSide, 0.0));
+	Spots.Add(FVector(SaddleX, BicycleRide::ExitSide, 0.0));
+	if (bForce)
 	{
-		const FVector At = ToWorld.TransformPosition(FVector(BicycleModel::RiderHip().X, Side * BicycleRide::ExitSide, 0.0));
-		if (Person->TryStepOutAt(At, GetActorRotation().Yaw))
+		Spots.Add(FVector(SaddleX - BicycleRide::ExitBehind, 0.0, 0.0));
+	}
+	for (const FVector& Spot : Spots)
+	{
+		if (Person->TryStepOutAt(ToWorld.TransformPosition(Spot), GetActorRotation().Yaw))
 		{
 			Speed = 0.f;
 			bPedalling = false;
@@ -523,9 +539,15 @@ void ABicycle::LetRiderOff(APlayerController* PC)
 			}
 			PC->Possess(Person);
 			PC->SetControlRotation(FRotator(-10.f, GetActorRotation().Yaw, 0.f));
-			return;
+			return true;
 		}
 	}
+	return false;
+}
+
+void ABicycle::PutRiderOff()
+{
+	LetRiderOff(Cast<APlayerController>(GetController()), true);
 }
 
 FVector ABicycle::GetSaddleLocation() const
