@@ -45,8 +45,8 @@ namespace CarModel
 		PartCount
 	};
 
-	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). */
-	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Count };
+	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). Steyr: Dr. Halász's big four-door Steyr saloon (mission 7), not in traffic. */
+	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Steyr, Count };
 	enum class EWheel : uint8 { Artillery, Wire, Disc, Count };
 
 	struct FStyle
@@ -186,6 +186,20 @@ namespace CarModel
 			L.SeatTop = Waist - 50.0;
 			L.DriverSide = -28.0;
 			L.PassengerSide = 26.0;
+			break;
+		case EBody::Steyr:
+			// The Steyr XII / XXX saloon: a long bonnet, a tall four-door body
+			// and a trunk on a rack behind, about 4.6 m long over the bumpers.
+			L.FrontAxle = 150.0;
+			L.RearAxle = -132.0;
+			L.Nose = 160.0;
+			L.Tail = -200.0;
+			L.Cowl = 30.0;
+			L.RoofTop = 80.0;
+			L.SeatX = -32.0;
+			L.RearSeatX = -112.0;
+			L.RearDoorX = -68.0;
+			L.Exhaust = FVector(-238.0, 40.0, -62.0);
 			break;
 		default:
 			break;
@@ -954,6 +968,112 @@ namespace CarModel
 		BuildRearSpare(B, Back - 9.0, Waist - 34.0);
 	}
 
+	/** The Steyr's front: a tall narrow radiator, the bonnet as wide, big headlamps close by it, a double bumper with overriders. */
+	inline void BuildSteyrFront(FBuilder& B, const FLayout& L)
+	{
+		const double BonnetHalf = 33.0;
+		const double Shell = L.Nose - 10.0;
+		const double Top = Waist - 1.0;
+		B.FrontOutline(Paint, { FVector2D(-BonnetHalf, -40.0), FVector2D(BonnetHalf, -40.0), FVector2D(BonnetHalf, Top - 8.0),
+			FVector2D(BonnetHalf - 8.0, Top), FVector2D(-BonnetHalf + 8.0, Top), FVector2D(-BonnetHalf, Top - 8.0) }, L.Cowl - 2.0, Shell);
+		B.Bar(Chrome, FVector(L.Cowl, 0.0, Top + 0.5), FVector(Shell, 0.0, Top + 0.5), 1.5);
+		for (double X = L.Cowl + 34.0; X < Shell - 20.0; X += 6.0)
+		{
+			B.BothSides(Guards, FVector(X, BonnetHalf, -20.0), FVector(X + 2.0, BonnetHalf + 0.6, 4.0));
+		}
+		// Radiator: a tall chrome shell, the dark core with close upright slats, the round badge on top, the cap and its mascot.
+		const double Half = BonnetHalf - 1.0;
+		B.Box(Chrome, FVector(Shell, -Half, -50.0), FVector(L.Nose, Half, Top + 5.0));
+		B.Box(Guards, FVector(L.Nose, -Half + 5.0, -44.0), FVector(L.Nose + 0.6, Half - 5.0, Top - 1.0));
+		for (double Y = -Half + 7.0; Y < Half - 6.0; Y += 3.5)
+		{
+			B.Box(Chrome, FVector(L.Nose + 0.6, Y - 0.6, -44.0), FVector(L.Nose + 1.2, Y + 0.6, Top - 1.0));
+		}
+		B.Cylinder(Chrome, FVector(L.Nose + 1.6, 0.0, Top - 7.0), 5.5, 1.6, 0, 14);
+		B.Cylinder(Guards, FVector(L.Nose + 2.5, 0.0, Top - 7.0), 3.6, 0.6, 0, 14);
+		B.Cylinder(Chrome, FVector(Shell + 5.0, 0.0, Top + 8.0), 2.6, 6.0, 2, 8);
+		B.Bar(Chrome, FVector(Shell + 5.0, 0.0, Top + 10.0), FVector(Shell + 6.0, 0.0, Top + 19.0), 2.0);
+		B.Ball(Chrome, FVector(Shell + 6.0, 0.0, Top + 21.0), 2.6, 1.3);
+		// Big headlamps on a bar just outside the radiator.
+		const double LampX = L.Nose - 2.0;
+		B.Bar(Chrome, FVector(LampX, -L.TrackY + 8.0, -12.0), FVector(LampX, L.TrackY - 8.0, -12.0), 3.0);
+		for (const double S : { -1.0, 1.0 })
+		{
+			const FVector Drum(LampX + 3.0, S * (Half + 17.0), 4.0);
+			B.Bar(Chrome, Drum - FVector(0.0, 0.0, 16.0), Drum - FVector(0.0, 0.0, 8.0), 2.5);
+			B.Ball(Chrome, Drum - FVector(4.0, 0.0, 0.0), 13.0, 1.0);
+			B.Cylinder(Chrome, Drum + FVector(3.0, 0.0, 0.0), 13.5, 3.0, 0, 16);
+			B.Cylinder(Lamp, Drum + FVector(4.8, 0.0, 0.0), 12.0, 1.0, 0, 16);
+		}
+		// The double bumper on its irons, with two overriders.
+		const double BumperX = L.Nose + 20.0;
+		B.Bar(Chrome, FVector(BumperX, -(L.HalfWidth + 6.0), -60.0), FVector(BumperX, L.HalfWidth + 6.0, -60.0), 4.0);
+		B.Bar(Chrome, FVector(BumperX, -(L.HalfWidth + 6.0), -51.0), FVector(BumperX, L.HalfWidth + 6.0, -51.0), 4.0);
+		B.BarBothSides(Chrome, FVector(BumperX + 1.0, 32.0, -66.0), FVector(BumperX + 1.0, 32.0, -44.0), 3.4);
+		B.BarBothSides(Guards, FVector(L.Nose - 8.0, 40.0, -56.0), FVector(BumperX, 40.0, -56.0), 3.0);
+	}
+
+	/**
+	 * Dr. Halász's Steyr (the XII / XXX saloon of about 1930): a tall upright
+	 * radiator with a round badge and a mascot on the cap, big headlamps, a
+	 * long louvred bonnet, a spare wheel standing in each front wing, four
+	 * doors under a roof rounded all round, a black belt below the windows,
+	 * a sun visor, a spotlight by the windscreen, a double bumper with
+	 * overriders, and a brown trunk on a braced rack at the back.
+	 */
+	inline void BuildSteyr(FBuilder& B, const FLayout& L)
+	{
+		BuildSteyrFront(B, L);
+		const double Back = L.Tail;
+		const double W = L.HalfWidth;
+		BuildClosedBody(B, L, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Waist), FVector2D(Back + 12.0, Waist), FVector2D(Back + 2.0, Waist - 12.0),
+			FVector2D(Back, Waist - 44.0), FVector2D(Back + 4.0, -44.0) }, Back + 10.0, Back + 14.0, { -31.0, -100.0 }, true);
+		// The small back window: paint below and above it; the broad panel behind the
+		// quarter windows.
+		const double GlassTop = L.RoofTop - 10.0;
+		const double QuarterBack = -164.0;
+		B.BothSides(Paint, FVector(Back + 2.0, W - 6.0, Waist - 1.0), FVector(QuarterBack, W, GlassTop + 1.0));
+		B.Bar(Paint, FVector(Back + 10.5, -(W - 4.0), Waist + 9.0), FVector(Back + 10.5, W - 4.0, Waist + 9.0), 16.0);
+		B.Bar(Paint, FVector(Back + 14.0, -(W - 4.0), GlassTop - 4.0), FVector(Back + 14.0, W - 4.0, GlassTop - 4.0), 8.0);
+		B.BothSides(Paint, FVector(Back + 8.0, W - 42.0, Waist), FVector(Back + 14.0, W - 20.0, GlassTop));
+		// The black belt under the windows, from the back to the windscreen.
+		B.BothSides(Guards, FVector(Back + 4.0, W, Waist - 7.0), FVector(L.Cowl, W + 0.6, Waist - 1.0));
+		B.Box(Guards, FVector(Back - 0.6, -(W - 6.0), Waist - 7.0), FVector(Back + 4.0, W - 6.0, Waist - 1.0));
+		// The sun visor over the windscreen, and the spotlight on the right pillar.
+		const double VisorX = L.Cowl - 16.0;
+		B.Box(Paint, FVector(VisorX - 2.0, -(W - 2.0), L.RoofTop - 11.0), FVector(VisorX + 16.0, W - 2.0, L.RoofTop - 9.0));
+		const FVector Spot(L.Cowl + 4.0, W + 6.0, Waist + 16.0);
+		B.Bar(Chrome, FVector(L.Cowl - 1.0, W - 2.0, Waist + 10.0), Spot - FVector(2.0, 0.0, 0.0), 1.6);
+		B.Cylinder(Chrome, Spot, 6.5, 9.0, 0, 12);
+		B.Cylinder(Lamp, Spot + FVector(4.8, 0.0, 0.0), 5.5, 1.0, 0, 12);
+		// Seat backs inside.
+		B.Box(Leather, FVector(Back + 40.0, -(W - 10.0), Waist - 4.0), FVector(Back + 48.0, W - 10.0, Waist + 18.0));
+		B.Box(Leather, FVector(L.SeatX - 76.0, -(W - 10.0), L.SeatTop), FVector(L.SeatX - 70.0, W - 10.0, Waist + 12.0));
+		// The trunk on its rack, braced up to the body's sides.
+		const double TrunkFront = Back - 3.0;
+		const double TrunkBack = Back - 33.0;
+		B.SideOutline(Leather, { FVector2D(TrunkFront, -50.0), FVector2D(TrunkFront, 8.0), FVector2D(TrunkFront - 3.0, 12.0), FVector2D(TrunkBack + 3.0, 12.0),
+			FVector2D(TrunkBack, 8.0), FVector2D(TrunkBack, -50.0) }, -(W - 6.0), W - 6.0);
+		B.Box(Guards, FVector(TrunkBack - 0.6, -(W - 5.0), -22.0), FVector(TrunkFront + 0.6, W - 5.0, -19.0));
+		for (const double Y : { -34.0, 34.0 })
+		{
+			B.Box(Chrome, FVector(TrunkBack - 1.2, Y - 4.0, -6.0), FVector(TrunkBack - 0.2, Y + 4.0, 0.0));
+		}
+		B.Box(Guards, FVector(TrunkBack - 2.0, -(W - 4.0), -54.0), FVector(Back, W - 4.0, -50.0));
+		B.BarBothSides(Chrome, FVector(TrunkBack + 2.0, W - 5.0, -52.0), FVector(Back + 2.0, W - 2.0, Waist - 20.0), 1.4);
+		BuildRunningGear(B, L, Back - 28.0);
+		// The spare wheels, standing in the front wings before the doors.
+		for (const double S : { -1.0, 1.0 })
+		{
+			const FVector At(L.Cowl + 38.0, S * (L.TrackY + 6.0), -26.0);
+			B.Ring(Rubber, At, WheelRadius - 1.0, 24.0, 13.0, 1, 18);
+			B.Cylinder(Paint, At, 24.5, 8.0, 1, 18);
+			B.Cylinder(Guards, At + FVector(0.0, S * 1.0, 0.0), 19.0, 8.4, 1, 18);
+			B.Cylinder(Chrome, At + FVector(0.0, S * 5.0, 0.0), 9.0, 2.0, 1, 12);
+			B.Box(Guards, FVector(At.X - 3.0, S > 0.0 ? W - 1.0 : -(L.TrackY + 1.0), At.Z - 2.0), FVector(At.X + 3.0, S > 0.0 ? L.TrackY + 1.0 : -(W - 1.0), At.Z + 2.0));
+		}
+	}
+
 	inline void BuildTourer(FBuilder& B, const FLayout& L)
 	{
 		BuildFront(B, L, 38.0);
@@ -999,6 +1119,7 @@ namespace CarModel
 		case EBody::Van: BuildVan(B, L); break;
 		case EBody::Balilla: BuildBalilla(B, L); break;
 		case EBody::Opel: BuildOpel(B, L); break;
+		case EBody::Steyr: BuildSteyr(B, L); break;
 		default: BuildSaloon(B, L, Style); break;
 		}
 	}
@@ -1130,6 +1251,18 @@ namespace CarModel
 			// The tradesman's sign panel: cream, or white.
 			Style.AccentColor = Random.FRand() < 0.5f ? FLinearColor(0.70f, 0.62f, 0.42f) : FLinearColor(0.78f, 0.78f, 0.74f);
 		}
+		return Style;
+	}
+
+	/** Dr. Halász's Steyr: deep green with black wings, disc wheels with green rims (mission 7). */
+	inline FStyle SteyrStyle()
+	{
+		FStyle Style;
+		Style.Body = EBody::Steyr;
+		Style.PaintColor = FLinearColor(0.012f, 0.075f, 0.040f);
+		Style.GuardColor = FLinearColor(0.008f, 0.008f, 0.009f);
+		Style.Wheel = EWheel::Disc;
+		Style.SpokeColor = FLinearColor(0.012f, 0.075f, 0.040f);
 		return Style;
 	}
 

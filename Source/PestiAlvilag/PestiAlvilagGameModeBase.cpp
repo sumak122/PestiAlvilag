@@ -13,6 +13,8 @@
 #include "GarayYard.h"
 #include "StableYard.h"
 #include "StableYardModel.h"
+#include "LaciYard.h"
+#include "LaciYardModel.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "Bicycle.h"
@@ -30,6 +32,7 @@
 #include "MissionZsibvasar.h"
 #include "MissionFelmondas.h"
 #include "MissionKifutofiu.h"
+#include "MissionElsoAuto.h"
 #include "Nepszinhaz.h"
 #include "Pedestrians.h"
 #include "Pigeons.h"
@@ -73,6 +76,7 @@ namespace PestiStart
 	const FName Zsibvasar(TEXT("Zsibvasar2"));
 	const FName Felmondas(TEXT("Felmondas"));
 	const FName Kifutofiu(TEXT("Kifutofiu"));
+	const FName ElsoAuto(TEXT("ElsoAuto"));
 
 	// The next story mission starts a little after the last one is passed.
 	constexpr float NextMissionDelay = 8.f;
@@ -260,6 +264,10 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionKifutofiu>();
 	}
+	else if (!IsMissionDone(PestiStart::ElsoAuto))
+	{
+		GetWorld()->SpawnActor<AMissionElsoAuto>();
+	}
 }
 
 APawn* APestiAlvilagGameModeBase::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* StartSpot)
@@ -353,6 +361,14 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(FVector2D(AStableYard::ToCity(FVector(1500.0, 0.0, 0.0), 0.0)));
 		GetWorld()->SpawnActor<AStableYard>(AStableYard::StaticClass(), FVector(StableYardModel::CityAt, Z), FRotator(0.0, StableYardModel::CityYaw, 0.0));
+	}
+
+	// And Laci's motor workshop on Szerdahelyi utca (mission 7), its ground
+	// height taken in the middle of the yard.
+	if (!TActorIterator<ALaciYard>(GetWorld()))
+	{
+		const double Z = GroundZ(FVector2D(ALaciYard::ToCity(LaciYardModel::Spots::Park, 0.0)));
+		GetWorld()->SpawnActor<ALaciYard>(ALaciYard::StaticClass(), FVector(LaciYardModel::CityAt, Z), FRotator(0.0, LaciYardModel::CityYaw, 0.0));
 	}
 
 	// And the eagle that circles over Keleti.
