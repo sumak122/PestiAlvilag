@@ -4,6 +4,7 @@
 
 #include "AudioDevice.h"
 #include "CoreGlobals.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/GameUserSettings.h"
@@ -28,6 +29,7 @@ namespace PestiSettings
 		int32 MouseSteps = 5;
 		bool bInvert = false;
 		bool bEnglishOn = true;
+		bool bRayTracingOn = false;
 
 		void Load()
 		{
@@ -40,6 +42,7 @@ namespace PestiSettings
 			GConfig->GetInt(Section, TEXT("MouseSpeed"), MouseSteps, GGameUserSettingsIni);
 			GConfig->GetBool(Section, TEXT("InvertMouse"), bInvert, GGameUserSettingsIni);
 			GConfig->GetBool(Section, TEXT("English"), bEnglishOn, GGameUserSettingsIni);
+			GConfig->GetBool(Section, TEXT("RayTracing"), bRayTracingOn, GGameUserSettingsIni);
 			VolumeSteps = FMath::Clamp(VolumeSteps, 0, Steps);
 			MouseSteps = FMath::Clamp(MouseSteps, 1, Steps);
 		}
@@ -54,6 +57,7 @@ namespace PestiSettings
 			GConfig->SetInt(Section, TEXT("MouseSpeed"), MouseSteps, GGameUserSettingsIni);
 			GConfig->SetBool(Section, TEXT("InvertMouse"), bInvert, GGameUserSettingsIni);
 			GConfig->SetBool(Section, TEXT("English"), bEnglishOn, GGameUserSettingsIni);
+			GConfig->SetBool(Section, TEXT("RayTracing"), bRayTracingOn, GGameUserSettingsIni);
 			GConfig->Flush(false, GGameUserSettingsIni);
 		}
 	}
@@ -62,6 +66,7 @@ namespace PestiSettings
 	int32 MouseSpeed() { Store::Load(); return Store::MouseSteps; }
 	bool InvertMouse() { Store::Load(); return Store::bInvert; }
 	bool English() { Store::Load(); return Store::bEnglishOn; }
+	bool RayTracing() { Store::Load(); return Store::bRayTracingOn; }
 
 	void SetVolume(UWorld* World, int32 Value)
 	{
@@ -90,6 +95,28 @@ namespace PestiSettings
 		Store::Load();
 		Store::bEnglishOn = bOn;
 		Store::Write();
+	}
+
+	void SetRayTracing(bool bOn)
+	{
+		Store::Load();
+		Store::bRayTracingOn = bOn;
+		Store::Write();
+		ApplyRayTracing();
+	}
+
+	void ApplyRayTracing()
+	{
+		// Lumen's hardware ray tracing, and the engine's ray tracing as a whole where it can be
+		// switched while playing. Off, Lumen lights the scene with its cheaper software tracing.
+		const int32 On = RayTracing() ? 1 : 0;
+		for (const TCHAR* Name : { TEXT("r.Lumen.HardwareRayTracing"), TEXT("r.RayTracing.Enable") })
+		{
+			if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Name))
+			{
+				Var->Set(On, ECVF_SetByCode);
+			}
+		}
 	}
 
 	void ApplyVolume(UWorld* World)
@@ -143,6 +170,7 @@ void FPestiMenu::SkipTitleOnce()
 void FPestiMenu::Start(UWorld* World)
 {
 	PestiSettings::ApplyVolume(World);
+	PestiSettings::ApplyRayTracing();
 	if (PestiMenu::bSkipTitle)
 	{
 		PestiMenu::bSkipTitle = false;
@@ -342,10 +370,15 @@ void FPestiMenu::Setting(int32 Row, FString& Hu, FString& En, int32& Bars, FStri
 		ValueEn = bWindow ? TEXT("Window") : TEXT("Full screen");
 		break;
 	}
-	default:
+	case 6:
 		Hu = TEXT("F\u00fcgg\u0151leges szinkron");
 		En = TEXT("V-sync (no tearing)");
 		OnOff(Look && Look->IsVSyncEnabled());
+		break;
+	default:
+		Hu = TEXT("Sug\u00e1rk\u00f6vet\u00e9s");
+		En = TEXT("ray tracing (slow on older cards)");
+		OnOff(PestiSettings::RayTracing());
 		break;
 	}
 }
@@ -366,6 +399,9 @@ void FPestiMenu::ChangeSetting(UWorld* World, int32 Row, int32 By)
 		return;
 	case 3:
 		PestiSettings::SetEnglish(!PestiSettings::English());
+		return;
+	case 7:
+		PestiSettings::SetRayTracing(!PestiSettings::RayTracing());
 		return;
 	default:
 		break;

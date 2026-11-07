@@ -248,6 +248,9 @@ void AAnimals::AddPet(AnimalModel::EKind Kind, const FVector& Near, double Roam,
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Mesh->SetCanEverAffectNavigation(false);
 		Mesh->SetCachedMaxDrawDistance(ShowWithin);
+		// Moved every frame: kept out of the ray-traced lighting and distance fields (it still casts its shadow).
+		Mesh->bVisibleInRayTracing = false;
+		Mesh->bAffectDistanceFieldLighting = false;
 		for (int32 s = 0; s < Piece.Sections.Num(); ++s)
 		{
 			const PersonKit::FSection& Section = Piece.Sections[s];

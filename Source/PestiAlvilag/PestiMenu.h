@@ -22,14 +22,19 @@ namespace PestiSettings
 	int32 MouseSpeed();
 	bool InvertMouse();
 	bool English();
+	/** Ray-traced lighting (the graphics card's ray tracing for Lumen): off unless switched on, as it costs a lot. */
+	bool RayTracing();
 
 	void SetVolume(UWorld* World, int32 Value);
 	void SetMouseSpeed(int32 Value);
 	void SetInvertMouse(bool bOn);
 	void SetEnglish(bool bOn);
+	void SetRayTracing(bool bOn);
 
 	/** Sets the sound loudness from the saved volume (each time a level starts). */
 	void ApplyVolume(UWorld* World);
+	/** Switches the ray-traced lighting on or off as saved (each time a level starts, and when changed). */
+	void ApplyRayTracing();
 	/** The mouse movement of a frame, sped up or slowed and turned over as set. */
 	void AdjustMouse(float& X, float& Y);
 }
@@ -121,7 +126,7 @@ public:
 	static void MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FString& WhereHu, FString& WhereEn);
 
 	/** The settings rows. */
-	static constexpr int32 SettingCount = 7;
+	static constexpr int32 SettingCount = 8;
 	/** A settings row: its name, and either Bars (0 to 10) or a value to pick. */
 	static void Setting(int32 Row, FString& Hu, FString& En, int32& Bars, FString& ValueHu, FString& ValueEn);
 

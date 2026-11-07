@@ -1433,7 +1433,7 @@ private:
 	{
 		const bool bEnglish = PestiSettings::English();
 		const float W = 980.f;
-		const float H = 680.f;
+		const float H = 700.f;
 		const float X = CentreX - W * 0.5f;
 		const float Y = Y0 + 170.f;
 		Paint.Panel(X, Y, W, H);
@@ -1447,7 +1447,7 @@ private:
 		const float ValueW = 330.f;
 		for (int32 i = 0; i < FPestiMenu::SettingCount; ++i)
 		{
-			const float RowY = Y + 120.f + 80.f * i;
+			const float RowY = Y + 120.f + 72.f * i;
 			const bool bOn = i == Shown.GetChoice();
 			if (bOn)
 			{

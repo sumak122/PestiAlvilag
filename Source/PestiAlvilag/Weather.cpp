@@ -50,7 +50,13 @@ AWeather::AWeather()
 	RootComponent = Mesh;
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCanEverAffectNavigation(false);
+	// Left out of the ray-traced lighting, the distance fields and the shadows:
+	// it changes every frame, and rebuilding it there each time costs the
+	// graphics card far more than it is worth.
 	Mesh->SetCastShadow(false);
+	Mesh->bVisibleInRayTracing = false;
+	Mesh->bAffectDistanceFieldLighting = false;
+	Mesh->bAffectDynamicIndirectLighting = false;
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
 	SeeThroughMaterial = Translucent.Object;
