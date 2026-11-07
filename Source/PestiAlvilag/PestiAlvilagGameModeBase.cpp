@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "StartRingComponent.h"
 #include "Cafe.h"
 #include "SoundSpots.h"
 #include "GarayModel.h"
@@ -84,6 +86,15 @@ namespace PestiStart
 	const FName Kifutofiu(TEXT("Kifutofiu"));
 	const FName ElsoAuto(TEXT("ElsoAuto"));
 	const FName Bunda(TEXT("Bunda"));
+
+	// Act 1 in order, for the menu's mission list (JumpToMission).
+	const FName* const ActOne[] = { &Prologue, &Uzenet, &Zsebtolvaj, &Zsibvasar, &Felmondas, &Kifutofiu, &ElsoAuto, &Bunda };
+	// The mission the next level start jumps to (1 to 8), or 0 for none.
+	int32 PendingJump = 0;
+	// After a jump: how long to wait for the mission's ring (s), and how far
+	// out from the ring the player stands (cm), so it counts when he walks in.
+	constexpr double RingWait = 10.0;
+	constexpr double RingStandOff = 260.0;
 
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
@@ -521,6 +532,7 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 
 	UpdateWanted(DeltaSeconds);
 	UpdateFaint();
+	TickPlaceAtRing();
 
 	if (NextMissionAt > 0.0 && GetWorld()->GetTimeSeconds() >= NextMissionAt)
 	{
@@ -717,6 +729,76 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		TriedDishes = Save->TriedDishes;
 		FoundLighters = Save->FoundLighters;
 		bHasBaton = Save->bHasBaton;
+	}
+
+	// A jump from the menu's mission list: the missions before it count as done.
+	const int32 Jump = PestiStart::PendingJump;
+	PestiStart::PendingJump = 0;
+	if (Jump >= 1 && Jump <= static_cast<int32>(UE_ARRAY_COUNT(PestiStart::ActOne)))
+	{
+		CompletedMissions.Reset();
+		for (int32 i = 0; i < Jump - 1; ++i)
+		{
+			CompletedMissions.Add(*PestiStart::ActOne[i]);
+		}
+		// Schwimmer's baton comes with mission 5.
+		bHasBaton = Jump > 5;
+		// Mission 1 starts at Keleti like a new game; the others at their ring.
+		bPlaceAtRing = Jump > 1;
+		PlaceAtRingUntil = -1.0;
+	}
+}
+
+void APestiAlvilagGameModeBase::JumpToMission(UWorld* World, int32 Number)
+{
+	if (!World)
+	{
+		return;
+	}
+	PestiStart::PendingJump = Number;
+	FPestiMenu::SkipTitleOnce();
+	UGameplayStatics::OpenLevel(World, FName(*UGameplayStatics::GetCurrentLevelName(World)));
+}
+
+void APestiAlvilagGameModeBase::TickPlaceAtRing()
+{
+	if (!bPlaceAtRing)
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (PlaceAtRingUntil < 0.0)
+	{
+		PlaceAtRingUntil = Now + PestiStart::RingWait;
+	}
+	if (Now > PlaceAtRingUntil)
+	{
+		// No ring came up: leave him at the home door.
+		bPlaceAtRing = false;
+		return;
+	}
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	APestiPerson* Person = PC ? Cast<APestiPerson>(PC->GetPawn()) : nullptr;
+	if (!Person)
+	{
+		return;
+	}
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		FVector RingAt;
+		FVector Away;
+		if (!It->GetStartSpot(RingAt, Away))
+		{
+			continue;
+		}
+		bPlaceAtRing = false;
+		const FVector2D StandAt(RingAt + Away * (UStartRingComponent::Radius() + PestiStart::RingStandOff));
+		const double FaceYaw = (-Away).Rotation().Yaw;
+		const FVector At(StandAt, GroundZ(StandAt) + 100.0);
+		Person->SetActorLocationAndRotation(At, FRotator(0.0, FaceYaw, 0.0), false, nullptr, ETeleportType::TeleportPhysics);
+		Person->GetCharacterMovement()->StopMovementImmediately();
+		PC->SetControlRotation(FRotator(0.0, FaceYaw, 0.0));
+		return;
 	}
 }
 

@@ -136,7 +136,7 @@ namespace PestiHud
 	const FLinearColor MenuShade = FLinearColor(FColor(8, 6, 4, 150));
 	const FLinearColor MenuGlow = FLinearColor(FColor(214, 178, 94, 30));
 	constexpr float MenuSidesFrom = 1700.f;
-	constexpr int32 MenuActOneMissions = 7;
+	constexpr int32 MenuActOneMissions = 8;
 
 	/** A key along the bottom of a menu and what it does. */
 	struct FMenuKey
@@ -1159,6 +1159,11 @@ private:
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
 				{ TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
 			break;
+		case EPestiMenuPage::Missions:
+			PaintMissions(Paint, Shown, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("ind\u00edt\u00e1s"), TEXT("start") },
+				{ TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
+			break;
 		case EPestiMenuPage::Confirm:
 			PaintConfirm(Paint, Shown, CentreX, Y0);
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
@@ -1353,6 +1358,60 @@ private:
 			Paint.Text(Row[2], Paint.Deco(24.f, 1.f), RX + SideW - 32.f, RowY, PestiHud::Gold, 1.f);
 			Paint.Line(RX + 32.f, RowY + 16.f, RX + SideW - 32.f, RowY + 16.f, PestiHud::Dim, 1.f);
 			RowY += 54.f;
+		}
+	}
+
+	/** The act 1 missions, numbered, each with who gives it where, and Back under them. */
+	void PaintMissions(const FPainter& Paint, const FPestiMenu& Shown, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const TArray<FPestiMenuRow> List = Shown.Rows();
+		constexpr float RowStep = 70.f;
+		const float W = 1000.f;
+		const float H = 130.f + RowStep * FPestiMenu::MissionCount + 70.f;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + 120.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("K\u00dcLDET\u00c9SEK"), CentreX, Y);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Missions"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+		}
+		float RowY = Y + 125.f;
+		for (int32 i = 0; i < FPestiMenu::MissionCount; ++i)
+		{
+			const bool bOn = i == Shown.GetChoice();
+			FString NameHu, NameEn, WhereHu, WhereEn;
+			FPestiMenu::MissionInfo(i, NameHu, NameEn, WhereHu, WhereEn);
+			if (bOn)
+			{
+				Paint.Box(X + 30.f, RowY - 40.f, W - 60.f, 64.f, PestiHud::MenuGlow);
+				Paint.Line(X + 30.f, RowY - 40.f, X + W - 30.f, RowY - 40.f, PestiHud::Gold, 1.5f);
+				Paint.Line(X + 30.f, RowY + 24.f, X + W - 30.f, RowY + 24.f, PestiHud::Gold, 1.5f);
+			}
+			// The mission's number in a small diamond.
+			Paint.Diamond(X + 80.f, RowY - 9.f, 40.f, bOn ? PestiHud::Gold : PestiHud::MenuGlow, 1);
+			Paint.Text(FString::FromInt(i + 1), Paint.Deco(28.f), X + 80.f, RowY + 2.f, bOn ? PestiHud::Solid : PestiHud::Gold, 0.5f);
+			Paint.Text(NameHu, Paint.Deco(30.f, 3.f), X + 130.f, RowY - 4.f, bOn ? PestiHud::Gold : PestiHud::Cream);
+			Paint.Text(WhereHu, Paint.Bold(20.f), X + W - 60.f, RowY - 6.f, bOn ? PestiHud::Cream : PestiHud::Brass, 1.f);
+			if (bEnglish)
+			{
+				Paint.Text(NameEn, Paint.Plain(16.f, 1.f), X + 130.f, RowY + 17.f, PestiHud::Grey);
+				Paint.Text(WhereEn, Paint.Plain(15.f, 1.f), X + W - 60.f, RowY + 16.f, PestiHud::Grey, 1.f);
+			}
+			RowY += RowStep;
+		}
+		if (List.IsValidIndex(FPestiMenu::MissionCount))
+		{
+			PaintMenuRow(Paint, CentreX, RowY + 6.f, List[FPestiMenu::MissionCount], Shown.GetChoice() == FPestiMenu::MissionCount, FString());
+		}
+		Paint.Text(TEXT("A kor\u00e1bbi k\u00fcldet\u00e9sek k\u00e9sznek sz\u00e1m\u00edtanak. A ment\u00e9sed csak akkor v\u00e1ltozik, ha otthon mentesz."),
+			Paint.Bold(19.f), CentreX, Y + H + 46.f, PestiHud::Cream, 0.5f);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Earlier missions count as done. Your save only changes if you save at home."),
+				Paint.Plain(16.f, 1.f), CentreX, Y + H + 72.f, PestiHud::Grey, 0.5f);
 		}
 	}
 

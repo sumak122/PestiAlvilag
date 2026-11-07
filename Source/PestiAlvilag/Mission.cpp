@@ -88,6 +88,25 @@ void AMission::BeginPlay()
 	bRingArmed = false;
 }
 
+bool AMission::GetStartSpot(FVector& OutAt, FVector& OutAway) const
+{
+	if (!bAtRing || !Ring || Steps.Num() == 0)
+	{
+		return false;
+	}
+	OutAt = Ring->GetSpot();
+	OutAway = FVector::ForwardVector;
+	if (const AActor* Giver = Steps[0].SceneWith.Get())
+	{
+		const FVector Out = (OutAt - Giver->GetActorLocation()).GetSafeNormal2D();
+		if (!Out.IsNearlyZero())
+		{
+			OutAway = Out;
+		}
+	}
+	return true;
+}
+
 void AMission::TickRing()
 {
 	const APawn* Player = GetPlayer();

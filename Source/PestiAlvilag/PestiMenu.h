@@ -53,6 +53,9 @@ enum class EPestiMenuAction : uint8
 	TestFight,
 	TestVehicles,
 	TestBackToCity,
+	// The mission list on the test page, and starting the chosen mission.
+	Missions,
+	PlayMission,
 	Back,
 };
 
@@ -67,6 +70,8 @@ enum class EPestiMenuPage : uint8
 	Confirm,
 	/** The test grounds: the fight yard, the vehicle yard, back to the city. */
 	Tests,
+	/** The act 1 missions, to start any of them for testing. */
+	Missions,
 };
 
 struct FPestiMenuRow
@@ -107,6 +112,11 @@ public:
 	TArray<FPestiMenuRow> Rows() const;
 	/** The question being asked, in both languages. */
 	void Question(FString& Hu, FString& En) const;
+
+	/** The act 1 missions in the mission list. */
+	static constexpr int32 MissionCount = 8;
+	/** A mission in the list (0 for the first): its name (in capitals), and who gives it where. */
+	static void MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FString& WhereHu, FString& WhereEn);
 
 	/** The settings rows. */
 	static constexpr int32 SettingCount = 7;

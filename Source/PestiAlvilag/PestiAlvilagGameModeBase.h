@@ -120,6 +120,13 @@ public:
 	int32 GetMissionsDone() const { return CompletedMissions.Num(); }
 	/** Throws the save away and starts the city again from the prologue (F9, the menu's New game). */
 	void StartNewGame();
+	/**
+	 * For testing (the menu's mission list): starts the city again with the
+	 * act 1 missions before Number (1 to 8) counted as done, and puts the
+	 * player by the gold ring of mission Number. The save on disk is left
+	 * as it is, until the player saves at home.
+	 */
+	static void JumpToMission(UWorld* World, int32 Number);
 
 	/** Home can be slept at once the prologue has led the player there. */
 	bool CanSaveAtHome() const;
@@ -147,6 +154,8 @@ private:
 	double GroundZ(const FVector2D& At) const;
 	/** Reads the save slot the first time it is needed. */
 	void LoadSaveOnce();
+	/** After a jump to a mission: puts the player by its ring once it shows. */
+	void TickPlaceAtRing();
 
 	int32 WantedLevel = 0;
 	int32 Arrests = 0;
@@ -162,6 +171,9 @@ private:
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;
 	bool bSaveRead = false;
+	/** A jump to a mission is waiting to put the player by its ring, until this time. */
+	bool bPlaceAtRing = false;
+	double PlaceAtRingUntil = 0.0;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
 	double LastPoliceNearTime = -1.0;
