@@ -38,9 +38,12 @@ namespace PersonModel
 	/**
 	 * Swings the legs of a dressed person: each thigh to its pitch (forward
 	 * is positive), each knee bent by its own (negative takes the foot back),
-	 * and the skirts after the thighs (PersonKit::SkirtFollow).
+	 * and the skirts after the thighs (PersonKit::SkirtFollow). Twist turns
+	 * both legs about the hips (degrees, as a yaw; the skirts half as much),
+	 * so the feet can stay put while the body above turns.
 	 */
-	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee = 0.f, float RightKnee = 0.f);
+	void PoseLegs(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right, float LeftKnee = 0.f, float RightKnee = 0.f,
+		float Twist = 0.f);
 
 	/**
 	 * Walking legs at this point of the stride: the left thigh at
