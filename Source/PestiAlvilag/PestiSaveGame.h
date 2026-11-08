@@ -58,4 +58,12 @@ public:
 	/** Men beaten in Bandi's ring, in order. */
 	UPROPERTY()
 	int32 BoxingWins = 0;
+
+	/** Street name points (StreetName.h). */
+	UPROPERTY()
+	int32 Renown = 0;
+
+	/** The employer's letters opened (bits, StreetName::Letters order). */
+	UPROPERTY()
+	int32 LettersRead = 0;
 };

@@ -134,7 +134,8 @@ int32 ATaxiRides::FareTo(const FVector& From, const FPlace& Place) const
 	{
 		Fare = FMath::RoundToInt(Fare * 0.5f / 10.f) * 10;
 	}
-	return Fare;
+	// And his street name may take something off.
+	return APestiAlvilagGameModeBase::PriceFor(this, Fare);
 }
 
 void ATaxiRides::Say(const FString& Text, float Seconds) const

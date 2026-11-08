@@ -28,6 +28,7 @@
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
 #include "RouteGuideComponent.h"
+#include "StreetName.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBackgroundBlur.h"
 #include "Widgets/SLeafWidget.h"
@@ -58,7 +59,8 @@ namespace PestiHud
 	constexpr float GoalHeight = 104.f;
 	constexpr float GoalMinWidth = 420.f;
 	constexpr float StatusWidth = 330.f;
-	constexpr float StatusHeight = 150.f;
+	// The status plaque: money and clock, health, and under them the street name.
+	constexpr float StatusHeight = 214.f;
 	constexpr int32 HealthBars = 10;
 	constexpr int32 WantedDiamonds = 3;
 	constexpr float SpeechWidth = 1180.f;
@@ -96,6 +98,29 @@ namespace PestiHud
 	constexpr float PlaquePad = 32.f;
 	constexpr float PlaquePx = 19.f;
 	constexpr float PlaqueLine = 28.f;
+	// The employer's typed letter: typewriter print, a heading over it and a burnt match under it.
+	const FLinearColor TypeInk = FLinearColor(FColor(29, 27, 26));
+	const FLinearColor MatchWood = FLinearColor(FColor(107, 74, 42));
+	const FLinearColor MatchHead = FLinearColor(FColor(23, 18, 16));
+	constexpr float TypePx = 23.f;
+	constexpr float TypeLine = 36.f;
+	constexpr float TypeHead = 46.f;
+	constexpr float MatchRoom = 80.f;
+	// His wall (APestiHUD::SetWall), laid out on a 1920 by 1080 frame in the middle of the screen.
+	const FLinearColor Wallpaper = FLinearColor(FColor(44, 44, 28));
+	const FLinearColor WallStripe = FLinearColor(FColor(0, 0, 0, 46));
+	const FLinearColor WallBeam = FLinearColor(FColor(46, 33, 20));
+	const FLinearColor Leather = FLinearColor(FColor(110, 58, 32));
+	const FLinearColor LeatherDark = FLinearColor(FColor(62, 31, 16));
+	const FLinearColor Silver = FLinearColor(FColor(205, 205, 205));
+	const FLinearColor ShelfWood = FLinearColor(FColor(78, 52, 29));
+	const FLinearColor PostcardBlue = FLinearColor(FColor(178, 198, 192));
+	const FLinearColor CardInk = FLinearColor(FColor(42, 34, 20));
+	const FLinearColor SealRed = FLinearColor(FColor(140, 32, 26));
+	constexpr float FrameWide = 1920.f;
+	constexpr float FrameHigh = 1080.f;
+	constexpr float ClipW = 250.f;
+	constexpr float ClipH = 230.f;
 	// A newspaper cutting: old print on yellowed newsprint, the same plaque beside it.
 	const FLinearColor Newsprint = FLinearColor(FColor(230, 220, 195));
 	const FLinearColor NewsprintEdge = FLinearColor(FColor(184, 166, 126));
@@ -336,6 +361,12 @@ public:
 		{
 			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
 			PaintCabinet(Over, *Collection, Wide, High);
+			return LayerId + 18;
+		}
+		if (Hud->bWallOpen)
+		{
+			const FPainter Over{ Geometry, Out, LayerId + 14, *Hud, Hud->DecoFont, Hud->BoldFont, Hud->TextFont };
+			PaintWall(Over, *Hud, Wide, High);
 			return LayerId + 18;
 		}
 		if (!Hud->LetterHu.IsEmpty())
@@ -708,6 +739,23 @@ private:
 			}
 		}
 
+		// Street name: its rank, five diamonds for the five ranks, and a thin bar on to the next.
+		Paint.Line(X + 28.f, Y + 150.f, X + W - 28.f, Y + 150.f, PestiHud::Dim, 1.f);
+		const int32 Points = Game->GetRenown();
+		const int32 Rank = StreetName::RankOf(Points);
+		Paint.Text(TEXT("H\u00cdRN\u00c9V"), Paint.Bold(15.f, 3.f), X + 28.f, Y + 176.f, PestiHud::Grey);
+		Paint.Text(StreetName::Ranks[Rank].Hu, Paint.Deco(20.f, 1.f), X + W - 28.f, Y + 178.f, PestiHud::Gold, 1.f);
+		for (int32 i = 0; i < StreetName::NumRanks; ++i)
+		{
+			const float DX = X + 36.f + i * 20.f;
+			Paint.Diamond(DX, Y + 196.f, 12.f, PestiHud::Gold, 1);
+			Paint.Diamond(DX, Y + 196.f, 8.f, i <= Rank ? PestiHud::Gold : PestiHud::Solid, 2);
+		}
+		const float RX = X + 150.f;
+		const float RW = W - 178.f;
+		Paint.Box(RX, Y + 193.f, RW, 6.f, PestiHud::Dim, 1);
+		Paint.Box(RX, Y + 193.f, RW * StreetName::ToNextRank(Points), 6.f, PestiHud::Gold, 2);
+
 		// Wanted: a small plaque under the panel, its diamonds lit red one by one.
 		const int32 Wanted = Game->GetWantedLevel();
 		if (Wanted <= 0)
@@ -890,25 +938,40 @@ private:
 	{
 		Paint.Box(0.f, 0.f, Wide, High, PestiHud::LetterShade);
 
-		// The page, as tall as its writing.
-		const FSlateFontInfo Hand = Paint.Font(Hud.HandFont, PestiHud::HandPx);
+		// The page, as tall as its writing: handwritten, or the employer's typed one
+		// with a heading over the words and a burnt match for a name under them.
+		const bool bTyped = Hud.LetterTyped > 0;
+		const FSlateFontInfo Hand = bTyped ? Paint.Font(Hud.TypeFont, PestiHud::TypePx) : Paint.Font(Hud.HandFont, PestiHud::HandPx);
+		const float WriteLine = bTyped ? PestiHud::TypeLine : PestiHud::HandLine;
+		const float Head = bTyped ? PestiHud::TypeHead : 0.f;
+		const float Foot = bTyped ? PestiHud::MatchRoom : 0.f;
 		const float PaperW = PestiHud::PaperWidth;
 		const TArray<FLetterLine> Written = BreakLines(Paint, Hud.LetterHu, Hand, PaperW - 2.f * PestiHud::PaperPad);
-		const float PaperH = FMath::Min(High - 40.f, 2.f * PestiHud::PaperPad + Written.Num() * PestiHud::HandLine);
+		const float PaperH = FMath::Min(High - 40.f, 2.f * PestiHud::PaperPad + Head + Foot + Written.Num() * WriteLine);
 		const float PaperX = Wide * 0.5f - PaperW - PestiHud::LetterGap * 0.5f;
 		const float PaperY = (High - PaperH) * 0.5f;
 		Paint.Box(PaperX + 8.f, PaperY + 10.f, PaperW, PaperH, PestiHud::PaperShadow, 0);
 		Paint.Box(PaperX, PaperY, PaperW, PaperH, PestiHud::Paper, 1);
 		Paint.Frame(PaperX, PaperY, PaperW, PaperH, PestiHud::PaperEdge, 1.5f, 1);
-		float Baseline = PaperY + PestiHud::PaperPad + PestiHud::HandLine * 0.6f;
+		if (bTyped)
+		{
+			Paint.Text(TEXT("\u2014  MEGB\u00cdZ\u00d3J\u00c1T\u00d3L  \u2014"), Paint.Plain(17.f, 6.f), PaperX + PaperW * 0.5f, PaperY + PestiHud::PaperPad + 10.f, PestiHud::Brass, 0.5f);
+			// The match: a thin stick with its head burnt black.
+			const float MX = PaperX + PaperW - PestiHud::PaperPad - 130.f;
+			const float MY = PaperY + PaperH - PestiHud::PaperPad - 10.f;
+			Paint.Line(MX, MY, MX + 110.f, MY - 26.f, PestiHud::MatchWood, 5.f);
+			Paint.Diamond(MX + 116.f, MY - 27.f, 13.f, PestiHud::MatchHead, 2);
+		}
+		const FLinearColor WordInk = bTyped ? PestiHud::TypeInk : PestiHud::LetterInk;
+		float Baseline = PaperY + PestiHud::PaperPad + Head + WriteLine * 0.6f;
 		for (const FLetterLine& Row : Written)
 		{
 			if (!Row.Words.IsEmpty())
 			{
 				const float X = Row.bRight ? PaperX + PaperW - PestiHud::PaperPad : PaperX + PestiHud::PaperPad;
-				Paint.Text(Row.Words, Hand, X, Baseline, PestiHud::LetterInk, Row.bRight ? 1.f : 0.f);
+				Paint.Text(Row.Words, Hand, X, Baseline, WordInk, Row.bRight ? 1.f : 0.f);
 			}
-			Baseline += PestiHud::HandLine;
+			Baseline += WriteLine;
 		}
 
 		// The English, on a plaque as tall as its lines.
@@ -920,8 +983,9 @@ private:
 		const float PlaqueY = (High - PlaqueH) * 0.5f;
 		Paint.Panel(PlaqueX, PlaqueY, PestiHud::PlaqueWidth, PlaqueH);
 		const float TextLeft = PlaqueX + PestiHud::PlaquePad;
-		Paint.Text(TEXT("LEV\u00c9L"), Paint.Deco(24.f, 3.f), TextLeft, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Gold);
-		Paint.Text(TEXT("the letter"), Paint.Plain(15.f, 1.f), PlaqueX + PestiHud::PlaqueWidth - PestiHud::PlaquePad, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Grey, 1.f);
+		const FString PlaqueTitle = bTyped ? FString::Printf(TEXT("LEV\u00c9L  %d / %d"), Hud.LetterTyped, StreetName::NumLetters) : FString(TEXT("LEV\u00c9L"));
+		Paint.Text(PlaqueTitle, Paint.Deco(24.f, 3.f), TextLeft, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Gold);
+		Paint.Text(bTyped ? TEXT("from your employer") : TEXT("the letter"), Paint.Plain(15.f, 1.f), PlaqueX + PestiHud::PlaqueWidth - PestiHud::PlaquePad, PlaqueY + PestiHud::PlaquePad + 22.f, PestiHud::Grey, 1.f);
 		float EnglishBaseline = PlaqueY + PestiHud::PlaquePad + 50.f + PestiHud::PlaqueLine * 0.7f;
 		for (const FLetterLine& Said : English)
 		{
@@ -931,7 +995,7 @@ private:
 			}
 			EnglishBaseline += PestiHud::PlaqueLine;
 		}
-		Paint.Text(TEXT("R  \u00b7  elrak\u00e1s  \u00b7  put away"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
+		Paint.Text(bTyped ? TEXT("G  \u00b7  elrak\u00e1s  \u00b7  put away") : TEXT("R  \u00b7  elrak\u00e1s  \u00b7  put away"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
 	}
 
 	/** A newspaper cutting held up: the page left of the middle, the English on a plaque to its right. */
@@ -1073,6 +1137,174 @@ private:
 			EnglishBaseline += PestiHud::PlaqueLine;
 		}
 		Paint.Text(TEXT("E  \u00b7  tov\u00e1bb  \u00b7  continue"), Paint.Plain(14.f, 1.f), TextLeft, PlaqueY + PlaqueH - PestiHud::PlaquePad, PestiHud::Grey);
+	}
+
+	/** A gold label over a part of the wall, its English small after it. */
+	void PaintWallLabel(const FPainter& Paint, const FString& Hu, const FString& En, float X, float Baseline) const
+	{
+		const FSlateFontInfo Big = Paint.Bold(15.f, 3.f);
+		const float Across = Paint.Text(Hu, Big, X, Baseline, PestiHud::Gold);
+		Paint.Text(En, Paint.Plain(14.f), X + Across + 10.f, Baseline, PestiHud::Grey);
+	}
+
+	/**
+	 * His wall: the clippings of the act 1 missions he has done, the
+	 * employer's letters he has opened, his street name on a card, Bandi's
+	 * belt once all five are beaten, the lighters found on a shelf, and
+	 * Bözsi néni's postcard after he moves out.
+	 */
+	void PaintWall(const FPainter& Paint, const APestiHUD& Hud, float Wide, float High) const
+	{
+		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Paint.Hud);
+		if (!Game)
+		{
+			return;
+		}
+		// The papered wall, striped, a beam along the top.
+		Paint.Box(0.f, 0.f, Wide, High, PestiHud::Wallpaper, 0);
+		for (float StripeX = 58.f; StripeX < Wide; StripeX += 120.f)
+		{
+			Paint.Box(StripeX, 0.f, 5.f, High, PestiHud::WallStripe, 0);
+		}
+		Paint.Box(0.f, 0.f, Wide, 66.f, PestiHud::WallBeam, 1);
+		const float X0 = (Wide - PestiHud::FrameWide) * 0.5f;
+		const float Y0 = FMath::Max(0.f, (High - PestiHud::FrameHigh) * 0.5f);
+		const bool bMovedOut = Game->IsActOneDone(7);
+
+		// The title.
+		Paint.Panel(X0 + 660.f, Y0 + 28.f, 600.f, 92.f);
+		Paint.Text(TEXT("A FALAM"), Paint.Deco(40.f, 3.f), X0 + 960.f, Y0 + 80.f, PestiHud::Gold, 0.5f);
+		Paint.Text(bMovedOut ? TEXT("My wall  \u00b7  padl\u00e1sszoba, B\u00e9rkocsis utca") : TEXT("My wall  \u00b7  szoba B\u00f6zsi n\u00e9nin\u00e9l"),
+			Paint.Plain(17.f), X0 + 960.f, Y0 + 106.f, PestiHud::Grey, 0.5f);
+
+		// The clippings, one place for each act 1 mission.
+		int32 Clipped = 0;
+		for (int32 i = 0; i < StreetName::NumClippings; ++i)
+		{
+			Clipped += Game->IsActOneDone(i) ? 1 : 0;
+		}
+		PaintWallLabel(Paint, TEXT("\u00daJS\u00c1GKIV\u00c1G\u00c1SOK"), FString::Printf(TEXT("\u00b7  clippings %d / %d"), Clipped, StreetName::NumClippings), X0 + 180.f, Y0 + 158.f);
+		const FSlateFontInfo Mast = Paint.Font(Hud.PaperFont, 13.f, 4.f);
+		const FSlateFontInfo Headline = Paint.Font(Hud.PaperFont, 23.f);
+		for (int32 i = 0; i < StreetName::NumClippings; ++i)
+		{
+			const float CX = X0 + 180.f + (i % 4) * 290.f;
+			const float CY = Y0 + 190.f + (i / 4) * 280.f + ((i * 7) % 3) * 8.f;
+			if (!Game->IsActOneDone(i))
+			{
+				Paint.Frame(CX, CY, PestiHud::ClipW, PestiHud::ClipH, PestiHud::Dim, 1.5f, 0);
+				Paint.Text(FString::Printf(TEXT("%d."), i + 1), Paint.Deco(40.f), CX + PestiHud::ClipW * 0.5f, CY + PestiHud::ClipH * 0.5f + 14.f, PestiHud::Dim, 0.5f);
+				continue;
+			}
+			Paint.Box(CX + 4.f, CY + 8.f, PestiHud::ClipW, PestiHud::ClipH, PestiHud::PaperShadow, 0);
+			Paint.Box(CX, CY, PestiHud::ClipW, PestiHud::ClipH, PestiHud::Newsprint, 1);
+			Paint.Diamond(CX + PestiHud::ClipW * 0.5f, CY + 10.f, 12.f, PestiHud::Gold, 2);
+			Paint.Text(TEXT("PESTI NAPI H\u00cdREK"), Mast, CX + PestiHud::ClipW * 0.5f, CY + 40.f, PestiHud::PrintInk, 0.5f);
+			Paint.Line(CX + 18.f, CY + 48.f, CX + PestiHud::ClipW - 18.f, CY + 48.f, PestiHud::PrintInk, 1.f, 2);
+			const float LastLine = Paint.Wrapped(StreetName::Clippings[i].Hu, Headline, CX + PestiHud::ClipW * 0.5f, CY + 78.f, PestiHud::ClipW - 30.f, 26.f, PestiHud::PrintInk);
+			for (float RowY = LastLine + 18.f; RowY < CY + PestiHud::ClipH - 40.f; RowY += 8.f)
+			{
+				Paint.Line(CX + 22.f, RowY, CX + PestiHud::ClipW - 22.f, RowY, PestiHud::NewsprintEdge, 1.f, 2);
+			}
+			Paint.Text(StreetName::Clippings[i].En, Paint.Plain(14.f), CX + PestiHud::ClipW * 0.5f, CY + PestiHud::ClipH - 16.f, PestiHud::PrintInk, 0.5f);
+		}
+
+		// The employer's letters, pinned up with their red seals.
+		PaintWallLabel(Paint, TEXT("A MEGB\u00cdZ\u00d3 LEVELEI"), FString::Printf(TEXT("\u00b7  letters %d / %d"), Game->GetLettersRead(), StreetName::NumLetters), X0 + 1380.f, Y0 + 158.f);
+		for (int32 i = 0; i < StreetName::NumLetters; ++i)
+		{
+			const float NX = X0 + 1380.f + (i % 5) * 92.f;
+			const float NY = Y0 + 190.f + (i / 5) * 122.f;
+			if (!Game->HasReadLetter(i))
+			{
+				Paint.Frame(NX, NY, 80.f, 100.f, PestiHud::Dim, 1.f, 0);
+				continue;
+			}
+			Paint.Box(NX + 3.f, NY + 6.f, 80.f, 100.f, PestiHud::PaperShadow, 0);
+			Paint.Box(NX, NY, 80.f, 100.f, PestiHud::Paper, 1);
+			Paint.Diamond(NX + 40.f, NY + 10.f, 10.f, PestiHud::Gold, 2);
+			Paint.Diamond(NX + 40.f, NY + 66.f, 24.f, PestiHud::SealRed, 2);
+		}
+
+		// His street name on a card.
+		const int32 Rank = Game->GetRenownRank();
+		const float KX = X0 + 1390.f;
+		const float KY = Y0 + 500.f;
+		PaintWallLabel(Paint, TEXT("H\u00cdRN\u00c9V"), TEXT("\u00b7  street name"), KX, KY - 18.f);
+		Paint.Box(KX + 4.f, KY + 8.f, 290.f, 170.f, PestiHud::PaperShadow, 0);
+		Paint.Box(KX, KY, 290.f, 170.f, PestiHud::Paper, 1);
+		Paint.Frame(KX + 5.f, KY + 5.f, 280.f, 160.f, PestiHud::Gold, 3.f, 2);
+		Paint.Frame(KX + 12.f, KY + 12.f, 266.f, 146.f, PestiHud::Gold, 1.f, 2);
+		Paint.Text(StreetName::Ranks[Rank].Hu, Paint.Deco(32.f), KX + 145.f, KY + 76.f, PestiHud::CardInk, 0.5f);
+		Paint.Text(StreetName::Ranks[Rank].En, Paint.Plain(16.f), KX + 145.f, KY + 102.f, PestiHud::Brass, 0.5f);
+		for (int32 i = 0; i < StreetName::NumRanks; ++i)
+		{
+			const float DX = KX + 145.f + (i - 2) * 30.f;
+			Paint.Diamond(DX, KY + 132.f, 16.f, PestiHud::Gold, 2);
+			if (i > Rank)
+			{
+				Paint.Diamond(DX, KY + 132.f, 11.f, PestiHud::Paper, 3);
+			}
+		}
+
+		// Bandi's belt, hung on two nails once all five rivals are beaten.
+		const float BX = X0 + 1390.f;
+		const float BY = Y0 + 760.f;
+		const int32 Wins = Game->GetBoxingWins();
+		PaintWallLabel(Paint, TEXT("BANDI \u00d6VE"), FString::Printf(TEXT("\u00b7  belt, %d / 5 wins"), Wins), BX, BY - 18.f);
+		if (Wins >= 5)
+		{
+			TArray<FVector2f> Strap;
+			for (int32 i = 0; i <= 12; ++i)
+			{
+				const float T = i / 12.f;
+				Strap.Add(FVector2f(BX + 20.f + 250.f * T, BY + 20.f + 90.f * 4.f * T * (1.f - T)));
+			}
+			Paint.Lines(Strap, PestiHud::LeatherDark, 34.f, 1);
+			Paint.Lines(Strap, PestiHud::Leather, 24.f, 2);
+			Paint.Diamond(BX + 20.f, BY + 18.f, 10.f, PestiHud::Silver, 3);
+			Paint.Diamond(BX + 270.f, BY + 18.f, 10.f, PestiHud::Silver, 3);
+			Paint.Box(BX + 85.f, BY + 72.f, 120.f, 70.f, PestiHud::Gold, 3);
+			Paint.Frame(BX + 91.f, BY + 78.f, 108.f, 58.f, PestiHud::Brass, 2.f, 3);
+			Paint.Text(TEXT("BAJNOK"), Paint.Deco(20.f, 1.f), BX + 145.f, BY + 115.f, PestiHud::CardInk, 0.5f);
+		}
+		else
+		{
+			Paint.Diamond(BX + 20.f, BY + 18.f, 10.f, PestiHud::Silver, 1);
+			Paint.Text(TEXT("A sz\u00f6g m\u00e9g \u00fcres  \u00b7  the nail is still bare"), Paint.Plain(16.f), BX + 40.f, BY + 24.f, PestiHud::Grey);
+		}
+
+		// The lighters found, along a shelf.
+		const int32 Found = Game->GetLightersFound();
+		const int32 Total = LighterModel::All().Num();
+		PaintWallLabel(Paint, TEXT("\u00d6NGY\u00daJT\u00d3K"), FString::Printf(TEXT("\u00b7  lighters %d / %d   (L)"), Found, Total), X0 + 180.f, Y0 + 780.f);
+		Paint.Box(X0 + 180.f, Y0 + 850.f, 840.f, 16.f, PestiHud::ShelfWood, 1);
+		for (int32 i = 0; i < Found && i < Total; ++i)
+		{
+			Paint.Box(X0 + 196.f + i * 27.f, Y0 + 812.f, 20.f, 38.f, PestiHud::Silver, 2);
+			Paint.Box(X0 + 196.f + i * 27.f, Y0 + 812.f, 20.f, 6.f, PestiHud::Brass, 3);
+		}
+
+		// Bözsi néni's postcard, once he has moved out.
+		if (bMovedOut)
+		{
+			const float PX = X0 + 1060.f;
+			const float PY = Y0 + 740.f;
+			Paint.Box(PX + 4.f, PY + 8.f, 240.f, 150.f, PestiHud::PaperShadow, 0);
+			Paint.Box(PX, PY, 240.f, 150.f, PestiHud::PostcardBlue, 1);
+			const FSlateFontInfo Script = Paint.Font(Hud.HandFont, 21.f);
+			const TArray<FLetterLine> Written = BreakLines(Paint, StreetName::Postcard.Hu, Script, 210.f);
+			float Baseline = PY + 32.f;
+			for (const FLetterLine& Row : Written)
+			{
+				Paint.Text(Row.Words, Script, Row.bRight ? PX + 222.f : PX + 16.f, Baseline, PestiHud::LetterInk, Row.bRight ? 1.f : 0.f);
+				Baseline += 27.f;
+			}
+			PaintWallLabel(Paint, TEXT("B\u00d6ZSI N\u00c9NI K\u00c9PESLAPJA"), TEXT(""), PX, PY + 176.f);
+			Paint.Wrapped(StreetName::Postcard.En, Paint.Plain(14.f), PX + 120.f, PY + 198.f, 280.f, 19.f, PestiHud::Grey);
+		}
+
+		Paint.Text(TEXT("G  \u00b7  vissza  \u00b7  back"), Paint.Plain(18.f, 1.f), X0 + 960.f, Y0 + 1046.f, PestiHud::Grey, 0.5f);
 	}
 
 	void PaintCabinet(const FPainter& Paint, const ALighters& Collection, float Wide, float High) const
@@ -2001,16 +2233,23 @@ APestiHUD* APestiHUD::Get(const UObject* WorldContextObject)
 	return PC ? Cast<APestiHUD>(PC->GetHUD()) : nullptr;
 }
 
-void APestiHUD::SetLetter(const FString& Hu, const FString& En)
+void APestiHUD::SetLetter(const FString& Hu, const FString& En, int32 Typed)
 {
 	LetterHu = Hu;
 	LetterEn = En;
+	LetterTyped = Typed;
 }
 
 void APestiHUD::ClearLetter()
 {
 	LetterHu.Reset();
 	LetterEn.Reset();
+	LetterTyped = 0;
+}
+
+bool APestiHUD::IsShowingPaper() const
+{
+	return !LetterHu.IsEmpty() || !ClippingHeadline.IsEmpty() || Cabinet.IsValid() || bWallOpen;
 }
 
 void APestiHUD::SetClipping(const FString& Headline, const FString& Body, const FString& En)
@@ -2064,6 +2303,7 @@ void APestiHUD::BeginPlay()
 	TextFont = PestiHud::LoadFont(TEXT("JosefinSans-Regular.ttf"));
 	HandFont = PestiHud::LoadFont(TEXT("Parisienne-Regular.ttf"));
 	PaperFont = PestiHud::LoadFont(TEXT("OldStandardTT-Regular.ttf"));
+	TypeFont = PestiHud::LoadFont(TEXT("CourierPrime-Regular.ttf"));
 
 	if (GEngine && GEngine->GameViewport)
 	{
@@ -2091,7 +2331,7 @@ void APestiHUD::Tick(float DeltaSeconds)
 	{
 		TickMap(PC);
 	}
-	else if (PC && !Menu.IsOpen() && !Cabinet.IsValid()
+	else if (PC && !Menu.IsOpen() && !Cabinet.IsValid() && !bWallOpen
 		&& (PC->WasInputKeyJustPressed(EKeys::M) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left)))
 	{
 		OpenMap();

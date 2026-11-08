@@ -75,9 +75,16 @@ public:
 	 * A handwritten letter held up over the screen, with the English on a
 	 * plaque beside it, until ClearLetter. In Hu, \n breaks a line, an empty
 	 * line parts paragraphs and a line starting with > sits on the right.
+	 * Typed above 0 makes it the employer's typed letter of that number
+	 * (StreetName::Letters, counted from 1), signed with a burnt match.
 	 */
-	void SetLetter(const FString& Hu, const FString& En);
+	void SetLetter(const FString& Hu, const FString& En, int32 Typed = 0);
 	void ClearLetter();
+	/** The wall of his room (AHomeDoor): clippings, the employer's letters, his street name, Bandi's belt, the lighters, Bözsi's postcard. */
+	void SetWall(bool bOpen) { bWallOpen = bOpen; }
+	bool IsWallOpen() const { return bWallOpen; }
+	/** True while a letter, a cutting, the lighter cabinet or the wall is held up over the city. */
+	bool IsShowingPaper() const;
 	/**
 	 * A newspaper cutting held up over the screen: the headline over the
 	 * story, the English on a plaque beside it, until ClearClipping. In Body
@@ -178,6 +185,7 @@ private:
 	TSharedPtr<const FCompositeFont> BoldFont;
 	TSharedPtr<const FCompositeFont> HandFont;
 	TSharedPtr<const FCompositeFont> PaperFont;
+	TSharedPtr<const FCompositeFont> TypeFont;
 
 	TMap<int32, FNote> Notes;
 	FString GoalHu;
@@ -191,6 +199,8 @@ private:
 	TWeakObjectPtr<const ALighters> Cabinet;
 	FString LetterHu;
 	FString LetterEn;
+	int32 LetterTyped = 0;
+	bool bWallOpen = false;
 	FString ClippingHeadline;
 	FString ClippingBody;
 	FString ClippingEn;
