@@ -28,6 +28,10 @@ int32 UHorseSound::OnGenerateAudio(float* OutAudio, int32 NumSamples)
 	{
 		Voice.Snort();
 	}
+	if (Whinnies.exchange(0) > 0)
+	{
+		Voice.Whinny();
+	}
 	Voice.Generate(OutAudio, NumSamples, FMath::Clamp(Roll.load(), 0.f, 1.f), SampleRateHz);
 	return NumSamples;
 }

@@ -31,6 +31,9 @@ public:
 
 	void Snort() { Snorts.fetch_add(1); }
 
+	/** A frightened horse's cry. */
+	void Whinny() { Whinnies.fetch_add(1); }
+
 	/** 0 standing to 1 at a canter. */
 	void SetRoll(float InRoll) { Roll.store(InRoll); }
 
@@ -42,6 +45,7 @@ private:
 	std::atomic<int32> Clops { 0 };
 	std::atomic<float> ClopStrength { 0.f };
 	std::atomic<int32> Snorts { 0 };
+	std::atomic<int32> Whinnies { 0 };
 	std::atomic<float> Roll { 0.f };
 
 	// Sound thread only.

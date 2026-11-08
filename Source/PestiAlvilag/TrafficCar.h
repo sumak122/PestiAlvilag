@@ -8,6 +8,7 @@
 #include "TrafficCar.generated.h"
 
 class ATrafficManager;
+struct FTrafficLane;
 class UBoxComponent;
 class UCarVisuals;
 class UMaterialInterface;
@@ -40,6 +41,9 @@ public:
 
 	/** What it looks like: the kind of car, its paint and wheels. */
 	const CarModel::FStyle& GetStyle() const { return Style; }
+
+	/** Out on the other side of the street, passing a horse cart: oncoming traffic slows for it. */
+	bool IsPassing() const { return PassShift > 50.f; }
 
 	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
 	void LeaveTraffic() { ReleaseAllJunctions(); }
@@ -111,8 +115,22 @@ private:
 	void UpdateTrafficators(float DistToJunction);
 	/** Fraction of lane speed for a bend of this many degrees. */
 	static float CornerFraction(float TurnDegrees);
+	/**
+	 * Behind a slow horse cart for a while on a two-way street, the car pulls
+	 * out to the other side when nothing is coming, drives past and pulls back
+	 * in; it backs off if something comes before it is level with the cart.
+	 * Sets PassShift, how far to the right of its lane it drives (cm).
+	 */
+	void UpdatePassing(const FVector& Location, const FVector& LaneDir, const FTrafficLane& Lane, float Clear, float DeltaSeconds);
 
 	float JunctionWaitTime = 0.f;
+	/** The cart it is passing, how long it has been held up behind one, and how far out it drives. */
+	TWeakObjectPtr<const AActor> PassingCart;
+	float BehindCartTime = 0.f;
+	float PassingTime = 0.f;
+	float PassShift = 0.f;
+	float PassShiftWanted = 0.f;
+	float PassGap = 0.f;
 	/** Seconds the passenger in the back still rides. */
 	float PassengerTime = 0.f;
 	TArray<int32> HeldNodes;

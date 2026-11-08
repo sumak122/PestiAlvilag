@@ -140,8 +140,12 @@ void AMissionZsibvasar::SetUpMission()
 	// His cart, empty to start with.
 	for (TActorIterator<AHorseCart> It(GetWorld()); It; ++It)
 	{
-		Cart = *It;
-		break;
+		// (Not one of the carriers' carts in the traffic.)
+		if (!It->IsCityCart())
+		{
+			Cart = *It;
+			break;
+		}
 	}
 	if (!Cart)
 	{

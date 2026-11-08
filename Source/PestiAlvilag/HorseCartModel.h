@@ -377,7 +377,7 @@ namespace HorseCartModel
 	}
 
 	/** A wooden wheel round its hub (its middle), turning about Y: hub, spokes, felloe and iron tyre. */
-	inline void BuildWheel(PersonKit::FPiece& W, double Radius)
+	inline void BuildWheel(PersonKit::FPiece& W, double Radius, const FLinearColor& Paint = WheelPaint())
 	{
 		using namespace PersonKit;
 		const double Felloe = Radius - 5.0;
@@ -395,9 +395,9 @@ namespace HorseCartModel
 			const double A = 2.0 * PI * s / Spokes;
 			const FVector Out(FMath::Cos(A), 0.0, FMath::Sin(A));
 			// Dished a little, as cart wheels are.
-			Rod(W, WheelPaint(), Out * 7.0 + FVector(0.0, 2.0, 0.0), Out * (Felloe - 2.0), 1.8, 5);
+			Rod(W, Paint, Out * 7.0 + FVector(0.0, 2.0, 0.0), Out * (Felloe - 2.0), 1.8, 5);
 		}
-		Hoop(W, WheelPaint(), FVector::ZeroVector, FVector(Felloe, 0.0, 0.0), FVector(0.0, 0.0, Felloe), 3.4, 28);
+		Hoop(W, Paint, FVector::ZeroVector, FVector(Felloe, 0.0, 0.0), FVector(0.0, 0.0, Felloe), 3.4, 28);
 		Hoop(W, Iron(), FVector::ZeroVector, FVector(Radius - 1.6, 0.0, 0.0), FVector(0.0, 0.0, Radius - 1.6), 2.0, 32);
 	}
 
@@ -434,7 +434,8 @@ namespace HorseCartModel
 		Slat(FLinearColor(0.55f, 0.46f, 0.22f), FVector(0.0, 0.0, CrateHeight - 6.0), FVector(HX - 2.5, HY - 2.5, 2.0));
 	}
 
-	inline void BuildCart(FCart& Out)
+	/** The cart, its side boards and wheels painted as given (a carrier's own colours). */
+	inline void BuildCart(FCart& Out, const FLinearColor& Boards = BoardPaint(), const FLinearColor& Wheels = WheelPaint())
 	{
 		using namespace PersonKit;
 		FPiece& B = Out.Parts[Bed];
@@ -456,7 +457,7 @@ namespace HorseCartModel
 		// Low side boards, painted, with stakes; the tailboard hangs on chains.
 		for (const double Side : { -1.0, 1.0 })
 		{
-			Block(B, BoardPaint(), FVector((BedFront + BedBack) * 0.5 - 6.0, (BedHalfWidth - 2.0) * Side, BedTop + SideBoard * 0.5),
+			Block(B, Boards, FVector((BedFront + BedBack) * 0.5 - 6.0, (BedHalfWidth - 2.0) * Side, BedTop + SideBoard * 0.5),
 				FVector((BedFront - BedBack) * 0.5 - 6.0, 2.0, SideBoard * 0.5));
 			Block(B, Frame(), FVector((BedFront + BedBack) * 0.5 - 6.0, (BedHalfWidth - 1.5) * Side, BedTop + SideBoard + 1.5),
 				FVector((BedFront - BedBack) * 0.5 - 6.0, 2.5, 1.5));
@@ -466,7 +467,7 @@ namespace HorseCartModel
 			}
 			Rod(B, Iron(), FVector(BedBack + 3.0, (BedHalfWidth - 4.0) * Side, BedTop + SideBoard - 2.0), FVector(BedBack - 1.0, (BedHalfWidth - 10.0) * Side, BedTop + 8.0), 0.8);
 		}
-		Block(B, BoardPaint(), FVector(BedBack + 2.0, 0.0, BedTop + SideBoard * 0.4), FVector(2.0, BedHalfWidth - 4.0, SideBoard * 0.4));
+		Block(B, Boards, FVector(BedBack + 2.0, 0.0, BedTop + SideBoard * 0.4), FVector(2.0, BedHalfWidth - 4.0, SideBoard * 0.4));
 
 		// The bench at the front on its box, a back rail, the sloping footboard.
 		Block(B, Frame(), FVector(BenchX, 0.0, (BedTop + BenchTop) * 0.5 - 2.0), FVector(16.0, BedHalfWidth - 6.0, (BenchTop - BedTop) * 0.5 - 2.0));
@@ -523,12 +524,12 @@ namespace HorseCartModel
 		Rod(F, Iron(), FVector(HingeX + 70.0, 0.0, 74.0), FVector(HingeX + 112.0, 0.0, 78.0), 1.6);
 
 		// The wheels, each round its hub.
-		auto Wheel = [&Out](int32 Part, const FVector& Hub, double Radius)
+		auto Wheel = [&Out, &Wheels](int32 Part, const FVector& Hub, double Radius)
 		{
 			FPiece& W = Out.Parts[Part];
 			W.Pivot = Hub;
 			FPiece Round;
-			BuildWheel(Round, Radius);
+			BuildWheel(Round, Radius, Wheels);
 			// Turned so the hub cap faces outward on both sides.
 			const bool bLeft = Hub.Y < 0.0;
 			for (const FSection& From : Round.Sections)
@@ -554,6 +555,253 @@ namespace HorseCartModel
 		Wheel(WheelFrontRight, FVector(HingeX, FrontWheelY, FrontWheelRadius), FrontWheelRadius);
 		Wheel(WheelBackLeft, FVector(BackWheelX, -BackWheelY, BackWheelRadius), BackWheelRadius);
 		Wheel(WheelBackRight, FVector(BackWheelX, BackWheelY, BackWheelRadius), BackWheelRadius);
+	}
+
+	/**
+	 * What a carrier's cart in the city's traffic carries (ATrafficCart): milk
+	 * churns from the dairy, sacks of coal, or beer barrels from the Kőbánya
+	 * breweries. None is Pista bácsi's market cart, with its crates.
+	 */
+	enum class ELoad : uint8 { None, Milk, Coal, Beer, Count };
+	constexpr int32 MaxLoadItems = 14;
+
+	inline int32 NumLoadItems(ELoad Load)
+	{
+		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : 0;
+	}
+
+	// A churn, a sack and a barrel (cm).
+	constexpr double ChurnRadius = 15.0;
+	constexpr double ChurnHeight = 62.0;
+	constexpr double SackHeight = 70.0;
+	constexpr double BarrelRadius = 27.0;
+	constexpr double BarrelEnd = 23.0;
+	constexpr double BarrelHalfLength = 30.0;
+
+	/** Where load item Index stands on the bed: the middle of its bottom, in the cart's frame. */
+	inline FVector LoadSpot(ELoad Load, int32 Index)
+	{
+		if (Load == ELoad::Milk)
+		{
+			// Three abreast, four rows.
+			return FVector(-120.0 + (Index / 3) * 50.0, ((Index % 3) - 1) * 46.0, BedTop);
+		}
+		if (Load == ELoad::Coal)
+		{
+			// Two abreast, five rows, standing.
+			return FVector(-124.0 + (Index / 2) * 44.0, (Index % 2 == 0 ? -1.0 : 1.0) * 33.0, BedTop);
+		}
+		if (Load == ELoad::Beer)
+		{
+			// Lying across, two abreast: four rows below, three more in the hollows on top.
+			const double Side = Index % 2 == 0 ? -1.0 : 1.0;
+			if (Index < 8)
+			{
+				return FVector(-122.0 + (Index / 2) * 56.0, Side * 33.0, BedTop);
+			}
+			const double Rise = FMath::Sqrt(4.0 * BarrelRadius * BarrelRadius - 28.0 * 28.0);
+			return FVector(-94.0 + ((Index - 8) / 2) * 56.0, Side * 33.0, BedTop + Rise);
+		}
+		return FVector(0.0, 0.0, BedTop);
+	}
+
+	/**
+	 * Fallen on the road: how far it rolls over onto its side about X
+	 * (degrees), and how far its bottom middle is then off the ground (cm).
+	 */
+	inline double LyingRoll(ELoad Load) { return Load == ELoad::Beer ? 0.0 : 90.0; }
+	inline double LyingLift(ELoad Load) { return Load == ELoad::Milk ? ChurnRadius : Load == ELoad::Coal ? 19.0 : 0.0; }
+
+	inline FLinearColor Tin() { return FLinearColor(0.50f, 0.52f, 0.54f); }
+	inline FLinearColor Jute() { return FLinearColor(0.085f, 0.075f, 0.06f); }
+	inline FLinearColor Coal() { return FLinearColor(0.025f, 0.025f, 0.03f); }
+	inline FLinearColor Oak() { return FLinearColor(0.36f, 0.22f, 0.11f); }
+
+	/** The carrier's own colours on the side boards and the wheels. */
+	inline void LoadPaints(ELoad Load, FLinearColor& OutBoards, FLinearColor& OutWheels)
+	{
+		switch (Load)
+		{
+		case ELoad::Milk:
+			// The dairy's: white boards, blue wheels.
+			OutBoards = FLinearColor(0.62f, 0.62f, 0.58f);
+			OutWheels = FLinearColor(0.08f, 0.15f, 0.32f);
+			break;
+		case ELoad::Coal:
+			// The coal merchant's: black, and red wheels the dust has dulled.
+			OutBoards = FLinearColor(0.03f, 0.03f, 0.03f);
+			OutWheels = FLinearColor(0.20f, 0.05f, 0.03f);
+			break;
+		case ELoad::Beer:
+			// The brewery's: deep red boards, yellow wheels.
+			OutBoards = FLinearColor(0.30f, 0.05f, 0.03f);
+			OutWheels = FLinearColor(0.55f, 0.38f, 0.06f);
+			break;
+		default:
+			OutBoards = BoardPaint();
+			OutWheels = WheelPaint();
+			break;
+		}
+	}
+
+	/** One churn, sack or barrel, from the middle of its bottom; Index makes each a little different. */
+	inline void BuildLoadItem(PersonKit::FPiece& P, ELoad Load, int32 Index)
+	{
+		using namespace PersonKit;
+		if (Load == ELoad::Milk)
+		{
+			// A tinned milk churn: banded body, shoulder, neck, a mushroom lid, two handles.
+			const FLinearColor Band(0.30f, 0.31f, 0.33f);
+			const double R = ChurnRadius;
+			Loft(P, Tin(), {
+				Flat(0.0, 0.0, R - 1.5, R - 1.5),
+				Flat(0.0, 2.0, R, R),
+				Flat(0.0, 40.0, R, R),
+				Flat(0.0, 48.0, R - 3.0, R - 3.0),
+				Flat(0.0, 53.0, 9.0, 9.0),
+				Flat(0.0, 57.0, 9.5, 9.5),
+			}, 14, true, true);
+			Loft(P, Tin() * 0.9f, { Flat(0.0, 56.0, 10.5, 10.5), Flat(0.0, 59.5, 10.5, 10.5) }, 14, true, true);
+			Blob(P, Tin() * 0.9f, FVector(0.0, 0.0, 59.5), FVector(6.0, 6.0, 2.5), 10, 3, 0.0);
+			for (const double Z : { 4.0, 38.0 })
+			{
+				Hoop(P, Band, FVector(0.0, 0.0, Z), FVector(R + 0.3, 0.0, 0.0), FVector(0.0, R + 0.3, 0.0), 0.9, 16);
+			}
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Hoop(P, Band, FVector(0.0, (R - 1.0) * Side, 47.0), FVector(0.0, 3.5 * Side, 0.0), FVector(0.0, 0.0, 4.0), 0.8, 8, -0.5 * PI, 0.5 * PI);
+			}
+			return;
+		}
+		if (Load == ELoad::Coal)
+		{
+			// A full sack of coal, blackened, its neck tied with string, a lump or two on top.
+			const double S = 1.0 + 0.06 * ((Index * 7) % 3 - 1);
+			const double H = SackHeight * S;
+			// Each slumps a little its own way.
+			const double Slump = ((Index * 5) % 5 - 2) * 2.0;
+			Loft(P, Jute(), {
+				Flat(0.0, 0.0, 17.0, 21.0),
+				Flat(0.0, 5.0, 21.0, 26.0),
+				Flat(Slump * 0.5, H * 0.45, 21.5, 26.5),
+				Flat(Slump, H * 0.78, 19.0, 23.0),
+				Flat(Slump, H * 0.9, 12.0, 14.0),
+				Flat(Slump, H * 0.95, 4.0, 4.0),
+			}, 12, true, true);
+			Loft(P, FLinearColor(0.22f, 0.18f, 0.11f), { Flat(Slump, H * 0.92, 4.8, 4.8), Flat(Slump, H * 0.96, 4.8, 4.8) }, 8, true, true);
+			Blob(P, Jute(), FVector(Slump, 0.0, H * 0.98), FVector(6.0, 8.0, 4.5), 8, 4);
+			Blob(P, Coal(), FVector(Slump + 4.0, -6.0, H * 0.84), FVector(5.0, 4.0, 3.5), 6, 3);
+			return;
+		}
+		if (Load == ELoad::Beer)
+		{
+			// An oak barrel lying across the cart: bellied staves, iron hoops, the bung on top.
+			const double R = BarrelRadius;
+			const double E = BarrelEnd;
+			const double L = BarrelHalfLength;
+			auto Ring = [R](double Y, double Radius) { return FRing{ FVector(0.0, Y, R), FVector(0.0, 0.0, Radius), FVector(Radius, 0.0, 0.0) }; };
+			Loft(P, Oak(), { Ring(-L, E), Ring(-L * 0.66, R - 1.5), Ring(-L * 0.22, R), Ring(L * 0.22, R), Ring(L * 0.66, R - 1.5), Ring(L, E) }, 16, true, true);
+			for (const double Y : { -0.88, -0.45, 0.45, 0.88 })
+			{
+				const double At = FMath::Abs(Y) > 0.6 ? E + (R - 1.5 - E) * 0.55 : R - 0.6;
+				Hoop(P, Iron(), FVector(0.0, Y * L, R), FVector(0.0, 0.0, At + 0.5), FVector(At + 0.5, 0.0, 0.0), 1.0, 18);
+			}
+			Blob(P, FLinearColor(0.12f, 0.07f, 0.03f), FVector(0.0, 0.0, 2.0 * R), FVector(3.0, 3.0, 1.5), 8, 3);
+			// The brewery's red mark on each end.
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Hoop(P, FLinearColor(0.45f, 0.05f, 0.03f), FVector(0.0, (L + 0.4) * Side, R), FVector(0.0, 0.0, 10.0), FVector(10.0, 0.0, 0.0), 1.4, 14);
+			}
+		}
+	}
+
+	/** What runs out on the road where one fell: spilt milk, a heap of coal, beer and its froth (from the middle, on the ground). */
+	inline void BuildSpill(PersonKit::FPiece& P, ELoad Load, int32 Index)
+	{
+		using namespace PersonKit;
+		const double Turn = Index * 2.1;
+		auto Around = [Turn](double R, double A) { return FVector(R * FMath::Cos(A + Turn), R * FMath::Sin(A + Turn), 0.0); };
+		if (Load == ELoad::Milk)
+		{
+			const FLinearColor Milk(0.82f, 0.82f, 0.78f);
+			Blob(P, Milk, Around(0.0, 0.0), FVector(55.0, 42.0, 0.7), 14, 2, 0.0);
+			Blob(P, Milk, Around(50.0, 0.7), FVector(36.0, 24.0, 0.6), 12, 2, 0.0);
+			Blob(P, Milk, Around(42.0, 3.4), FVector(26.0, 30.0, 0.6), 12, 2, 0.0);
+		}
+		else if (Load == ELoad::Coal)
+		{
+			Blob(P, Coal(), FVector::ZeroVector, FVector(38.0, 30.0, 9.0), 12, 4, 0.0);
+			for (int32 k = 0; k < 9; ++k)
+			{
+				const double Size = 3.0 + (k * 5 % 4);
+				Blob(P, Coal(), Around(40.0 + (k * 13 % 30), k * 0.71), FVector(Size, Size * 0.8, Size * 0.7), 6, 3, 0.0);
+			}
+		}
+		else if (Load == ELoad::Beer)
+		{
+			const FLinearColor Beer(0.30f, 0.17f, 0.04f);
+			const FLinearColor Froth(0.75f, 0.72f, 0.62f);
+			Blob(P, Beer, Around(0.0, 0.0), FVector(70.0, 50.0, 0.7), 14, 2, 0.0);
+			Blob(P, Beer, Around(60.0, 2.0), FVector(40.0, 28.0, 0.6), 12, 2, 0.0);
+			for (int32 k = 0; k < 5; ++k)
+			{
+				Blob(P, Froth, Around(20.0 + k * 9.0, k * 1.3), FVector(9.0 - k, 7.0 - k * 0.8, 1.2), 8, 2, 0.0);
+			}
+		}
+	}
+
+	/** The carrier who drives it: a dairy's milkman, a coal heaver under his sack hood, a brewery's stout drayman. */
+	inline PersonKit::FOutfit CarterLook(ELoad Load, int32 Pick)
+	{
+		using namespace PersonKit;
+		FOutfit O;
+		O.Height = 170.f + (Pick % 4) * 3.f;
+		O.bTie = false;
+		O.bMoustache = Pick % 3 != 1;
+		O.bBoots = true;
+		O.Hair = Pick % 2 == 0 ? FLinearColor(0.10f, 0.07f, 0.05f) : FLinearColor(0.25f, 0.18f, 0.10f);
+		O.Trousers = FLinearColor(0.07f, 0.07f, 0.08f);
+		switch (Load)
+		{
+		case ELoad::Milk:
+			// A white linen coat, a blue apron, the dairy's dark blue peaked cap.
+			O.Hat = EHat::FlatCap;
+			O.HatColor = FLinearColor(0.05f, 0.07f, 0.16f);
+			O.Top = ETop::Jacket;
+			O.Coat = FLinearColor(0.72f, 0.72f, 0.68f);
+			O.Shirt = FLinearColor(0.80f, 0.80f, 0.78f);
+			O.bApron = true;
+			O.Apron = FLinearColor(0.12f, 0.20f, 0.42f);
+			break;
+		case ELoad::Coal:
+			// Black with the dust, a folded sack over his head and shoulders, a leather apron.
+			O.Hat = EHat::Hood;
+			O.HatColor = FLinearColor(0.10f, 0.09f, 0.07f);
+			O.Top = ETop::Jacket;
+			O.Coat = FLinearColor(0.04f, 0.04f, 0.04f);
+			O.Shirt = FLinearColor(0.20f, 0.19f, 0.17f);
+			O.Skin = FLinearColor(0.42f, 0.31f, 0.25f);
+			O.bApron = true;
+			O.Apron = FLinearColor(0.06f, 0.04f, 0.03f);
+			O.Build = 1.08f;
+			break;
+		case ELoad::Beer:
+			// Big and red-faced, in shirt sleeves and a green waistcoat, a long leather apron.
+			O.Hat = EHat::FlatCap;
+			O.HatColor = FLinearColor(0.12f, 0.10f, 0.08f);
+			O.Top = ETop::Waistcoat;
+			O.Waistcoat = FLinearColor(0.06f, 0.14f, 0.07f);
+			O.Shirt = FLinearColor(0.78f, 0.76f, 0.68f);
+			O.Skin = FLinearColor(0.78f, 0.48f, 0.36f);
+			O.bApron = true;
+			O.Apron = FLinearColor(0.24f, 0.12f, 0.05f);
+			O.Build = 1.22f;
+			O.bMoustache = true;
+			break;
+		default:
+			break;
+		}
+		return O;
 	}
 
 	/** The front wheels' hubs are on the forecart, so they turn with it. */

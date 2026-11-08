@@ -10,7 +10,8 @@
  * sound files): the clop of each iron-shod hoof as it lands, a hollow knock
  * with a click and a faint ring of the shoe, and under it the rumble of the
  * iron tyres over the setts, with the odd rattle of the cart, louder the
- * faster it goes; and now and then, standing, the horse's snort.
+ * faster it goes; and now and then, standing, the horse's snort. A
+ * frightened horse whinnies: a shrill call that rises, shakes and falls.
  *
  * Plain C++ with no engine objects, so UHorseSound can run it on the sound
  * thread and the same code can be tried outside the game.
@@ -22,6 +23,7 @@ namespace HorseSynth
 	constexpr int32 MaxClops = 6;
 	constexpr float ClopLasts = 0.12f;
 	constexpr float SnortLasts = 0.55f;
+	constexpr float WhinnyLasts = 1.4f;
 	constexpr float Volume = 0.22f;
 
 	struct FClop
@@ -64,6 +66,7 @@ namespace HorseSynth
 		}
 
 		void Snort() { SnortAge = 0.f; }
+		void Whinny() { WhinnyAge = 0.f; }
 
 		/** Roll: the cart's speed, 0 standing to 1 at a canter. */
 		void Generate(float* Out, int32 NumSamples, float Roll, float SampleRate)
@@ -126,6 +129,23 @@ namespace HorseSynth
 					SnortAge += Dt;
 				}
 
+				// A whinny: up to a shrill cry, then down in a shaking, ever faster whicker.
+				if (WhinnyAge < WhinnyLasts)
+				{
+					const float T = WhinnyAge / WhinnyLasts;
+					const float Rise = FMath::Min(1.f, WhinnyAge / 0.18f);
+					const float Shake = (0.02f + 0.1f * T) * FMath::Sin(2.f * PI * (8.f + 10.f * T) * WhinnyAge);
+					const float Pitch = (520.f + 520.f * Rise - 620.f * T * T) * (1.f + Shake);
+					WhinnyPhase += Pitch * Dt;
+					WhinnyPhase -= FMath::FloorToFloat(WhinnyPhase);
+					const float W = 2.f * PI * WhinnyPhase;
+					const float Cry = 0.6f * FMath::Sin(W) + 0.35f * FMath::Sin(2.f * W) + 0.2f * FMath::Sin(3.f * W) + 0.08f * FMath::Sin(5.f * W);
+					const float Envelope = FMath::Min(1.f, WhinnyAge / 0.06f) * (1.f - T) * (0.75f + 0.25f * FMath::Sin(2.f * PI * 3.f * WhinnyAge));
+					const float Air = Whine.Run(NextNoise(), Pitch * 2.f, 900.f, SampleRate) * 0.8f;
+					Sample += (Cry + Air) * Envelope * 1.6f;
+					WhinnyAge += Dt;
+				}
+
 				Sample *= Volume;
 				Out[i] = Sample / (1.f + FMath::Abs(Sample));
 			}
@@ -147,6 +167,9 @@ namespace HorseSynth
 		FResonator Rattle;
 		FResonator Breath;
 		float SnortAge = SnortLasts + 1.f;
+		FResonator Whine;
+		float WhinnyAge = WhinnyLasts + 1.f;
+		float WhinnyPhase = 0.f;
 		uint32 Seed = 1896u;
 	};
 }

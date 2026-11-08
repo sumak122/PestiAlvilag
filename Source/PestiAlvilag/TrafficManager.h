@@ -10,6 +10,7 @@ class APestiCar;
 class ABicycle;
 class ATrafficBike;
 class ATrafficCar;
+class ATrafficCart;
 class ATram;
 class FJsonObject;
 
@@ -82,6 +83,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	int32 NumParkedBikes = 30;
 
+	/** Carriers' horse carts (ATrafficCart: milk, coal, beer) that the cars queue up behind. */
+	UPROPERTY(EditAnywhere, Category = "Traffic")
+	int32 NumCarts = 10;
+
 	/** No two cars start closer than this (cm). */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float MinSpawnSpacing = 1000.f;
@@ -102,10 +107,23 @@ public:
 	int32 PickNextLane(int32 LaneIndex) const;
 
 	/**
-	 * Distance to the nearest car, tram or player in front, in the same lane
+	 * Distance to the nearest car, horse cart, tram or player in front, in the same lane
 	 * corridor (this wide each side; 0 for a car's). bIgnoreAICars counts only trams and the player.
 	 */
-	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f) const;
+	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f, const AActor* Ignore = nullptr) const;
+
+	/** How far across the street the lane the other way is (cm), or 0 on a one-way street. */
+	float OncomingLaneGap(int32 LaneIndex) const;
+
+	/** The nearest horse cart in front of this car in its lane, within Range (cm), going its way; null if none. */
+	const AActor* FindCartAhead(const AActor* Car, float Range, float& OutDistance) const;
+
+	/**
+	 * True if no car, horse cart, tram or the player is in the strip from From
+	 * along Dir, Length long and HalfWidth each side (cm), whichever way they
+	 * go; Asker and Ignore do not count.
+	 */
+	bool IsStripClear(const FVector& From, const FVector& Dir, float Length, float HalfWidth, const AActor* Asker, const AActor* Ignore) const;
 
 	/** True unless a car, tram or the player is within Radius of Location. */
 	bool IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const;
@@ -169,6 +187,7 @@ private:
 	void SpawnCars();
 	void SpawnBikes();
 	void SpawnParkedBikes();
+	void SpawnCarts();
 	void SpawnTrams();
 	/** Puts new cars in the traffic, out of the player's sight, for the ones taken. */
 	void ReplaceCars();
@@ -210,6 +229,10 @@ private:
 	/** The bicycles of the city, ridden and parked. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<ABicycle>> Bikes;
+
+	/** The carriers' horse carts. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<ATrafficCart>> Carts;
 
 	/** The trams and the buses (ABus is a kind of ATram). */
 	UPROPERTY(Transient)
