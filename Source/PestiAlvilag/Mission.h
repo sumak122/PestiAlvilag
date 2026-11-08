@@ -93,6 +93,9 @@ public:
 	 */
 	bool GetStartSpot(FVector& OutAt, FVector& OutAway) const;
 
+	/** True from the first step until passed, and while failed (E then means try again). */
+	bool IsUnderway() const { return bFailed || CurrentStep != INDEX_NONE; }
+
 protected:
 	/** The mark over the target; it moves from step to step on its own. */
 	UPROPERTY(VisibleAnywhere, Category = "Mission")

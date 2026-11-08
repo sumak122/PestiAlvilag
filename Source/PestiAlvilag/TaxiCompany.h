@@ -28,7 +28,9 @@ enum class ETaxiShift : uint8
 /**
  * The Budapesti Autótaxi kiosk, where the player can work as a taxi driver.
  *
- * Walk up to the kiosk and press E to start a shift (E again ends it). On a
+ * Walk up to the kiosk and press E to start a shift (E again ends it), or
+ * press E in any taxi (one of the company's, or one taken from a cabbie)
+ * when no mission is going on; E in the taxi, or getting out, ends it. On a
  * shift, drive one of the company's black and yellow taxis: a fare waves
  * from the kerb somewhere nearby under a yellow light. Stop beside them to
  * pick them up, then take them to the street they name and stop there. The
@@ -118,7 +120,10 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	void ToggleShift();
+	/** bFromTaxi: started or ended with E in a taxi, not at the kiosk. */
+	void ToggleShift(bool bFromTaxi);
+	/** A mission is going on (or waits to be tried again); E belongs to it then. */
+	bool IsMissionUnderway() const;
 	void UpdateFare(APestiTaxi* Taxi, float DeltaSeconds);
 	bool StartFare(const FVector& From);
 	void StartBoarding(APestiTaxi* Taxi);
@@ -135,6 +140,10 @@ private:
 
 	ETaxiShift Shift = ETaxiShift::Off;
 	bool bDeluxeTaxiOut = false;
+	/** The player has driven a taxi on this shift; getting out of it then ends the shift. */
+	bool bShiftInTaxi = false;
+	/** When the player last got into a taxi (for how long the E sign shows). */
+	double TaxiEnteredAt = -1.0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ATaxiPassenger> Passenger;
