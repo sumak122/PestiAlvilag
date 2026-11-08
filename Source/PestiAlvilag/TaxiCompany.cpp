@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Mission.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PestiText.h"
@@ -55,6 +56,8 @@ namespace TaxiCompany
 	constexpr float DriveOffSpeed = 150.f;
 	// The actor's location is a person's middle, this far above the ground (cm).
 	constexpr double Middle = 90.0;
+	// The E sign shows this long after getting into a taxi (s), then only while it stands still.
+	constexpr double TaxiSignSeconds = 8.0;
 
 	// The kiosk: a green wooden booth with a roof and a sign (cm, X out the front).
 	struct FKioskPart
@@ -230,7 +233,25 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 	const bool bAtKiosk = Player->IsA<APestiPerson>() && FVector::Dist2D(Player->GetActorLocation(), GetActorLocation()) < SignOnRange;
 	if (bAtKiosk && PC->WasInputKeyJustPressed(EKeys::E))
 	{
-		ToggleShift();
+		ToggleShift(false);
+	}
+
+	// Or in any taxi: E starts a shift there, and ends it, unless a mission
+	// is going on (E is the mission's key then).
+	APestiTaxi* Taxi = Cast<APestiTaxi>(Player);
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (!Taxi)
+	{
+		TaxiEnteredAt = -1.0;
+	}
+	else if (TaxiEnteredAt < 0.0)
+	{
+		TaxiEnteredAt = Now;
+	}
+	const bool bMissionOn = Taxi && IsMissionUnderway();
+	if (Taxi && !bMissionOn && PC->WasInputKeyJustPressed(EKeys::E))
+	{
+		ToggleShift(true);
 	}
 
 	if (Shift == ETaxiShift::Off)
@@ -240,12 +261,22 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 			APestiHUD::Show(this, TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60),
 				TEXT("Budapesti Aut\u00f3taxi   E: start a taxi shift"));
 		}
+		// The sign shows for a while after getting in, and whenever the taxi stands still.
+		const bool bShowSign = Taxi && !bMissionOn
+			&& (Now - TaxiEnteredAt < TaxiCompany::TaxiSignSeconds || Taxi->GetVelocity().Size2D() < StopSpeed);
+		if (bShowSign)
+		{
+			if (APestiHUD* Hud = APestiHUD::Get(this))
+			{
+				Hud->Prompt(TEXT("E"), TEXT("Taxiz\u00e1s: utasok felv\u00e9tele"), TEXT("Work as a taxi driver: pick up fares"), false);
+			}
+		}
 		return;
 	}
 
-	APestiTaxi* Taxi = Cast<APestiTaxi>(Player);
 	if (Taxi)
 	{
+		bShiftInTaxi = true;
 		UpdateFare(Taxi, DeltaSeconds);
 	}
 	else
@@ -262,28 +293,61 @@ void ATaxiCompany::Tick(float DeltaSeconds)
 			LetPassengerOut(FareTaxi.Get(), false);
 			EndFare();
 		}
+		// Getting out of the taxi ends the shift (one started at the kiosk
+		// goes on until the player reaches a taxi).
+		if (bShiftInTaxi)
+		{
+			ToggleShift(true);
+			return;
+		}
 		if (GEngine)
 		{
 			APestiHUD::Show(this, TaxiCompany::StatusLine, 0.f, FColor(255, 200, 60), bAtKiosk
 				? FString(TEXT("Taxi shift   E: end the shift"))
-				: FString(TEXT("Taxi shift: get into one of the company's black and yellow taxis")));
+				: FString(TEXT("Taxi shift: get into a taxi")));
 		}
 	}
 }
 
-void ATaxiCompany::ToggleShift()
+bool ATaxiCompany::IsMissionUnderway() const
+{
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		if (It->IsUnderway())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ATaxiCompany::ToggleShift(bool bFromTaxi)
 {
 	if (Shift == ETaxiShift::Off)
 	{
 		Shift = ETaxiShift::Waiting;
 		Fares = 0;
+		bShiftInTaxi = false;
 		NextFareTime = GetWorld()->GetTimeSeconds() + TaxiCompany::FirstFareDelay;
-		Say(TEXT("\u201eIndulhat, a kocsik ott \u00e1llnak.\u201d  (Off you go, the cars are over there.)"));
+		Say(bFromTaxi
+			? FString(TEXT("Taxi shift: a fare will wave from the kerb soon. E or getting out ends the shift."))
+			: FString(TEXT("\u201eIndulhat, a kocsik ott \u00e1llnak.\u201d  (Off you go, the cars are over there.)")));
 	}
 	else
 	{
+		// A fare aboard gets out first (E pressed in the taxi mid-ride).
+		if (Shift == ETaxiShift::ToDropoff && FareTaxi.IsValid())
+		{
+			LetPassengerOut(FareTaxi.Get(), false);
+		}
+		if (Shift == ETaxiShift::Boarding)
+		{
+			CancelBoarding();
+		}
 		EndFare();
 		Shift = ETaxiShift::Off;
+		bShiftInTaxi = false;
+		Guide->Stop();
 		Say(FString::Printf(TEXT("Shift over: %d fares."), Fares));
 	}
 }
