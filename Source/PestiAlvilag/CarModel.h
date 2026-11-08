@@ -45,8 +45,8 @@ namespace CarModel
 		PartCount
 	};
 
-	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). Steyr: Dr. Halász's big four-door Steyr saloon (mission 7), also rare in traffic. */
-	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Steyr, Count };
+	/** Balilla: the little two-door Fiat 508 Balilla (1932), upright, with a trunk on the back. Opel: the boxy two-door Opel 1.2 Liter (1931). Steyr: Dr. Halász's big four-door Steyr saloon (mission 7), also rare in traffic. Ssk: the black Mercedes-Benz SSK two-seater of the car show (never in traffic). */
+	enum class EBody : uint8 { Saloon, Tourer, Coupe, Limousine, Van, Balilla, Opel, Steyr, Ssk, Count };
 	enum class EWheel : uint8 { Artillery, Wire, Disc, Count };
 
 	struct FStyle
@@ -204,6 +204,27 @@ namespace CarModel
 			L.RearDoorX = -43.0;
 			L.Exhaust = FVector(-213.0, 40.0, -62.0);
 			break;
+		case EBody::Ssk:
+			// The Mercedes-Benz SSK "Black Prince" roadster: the radiator just
+			// behind the front axle, a long bonnet, a low two-seater far back
+			// and a long pointed tail between the rear wings; centred on the
+			// collision box like the others, a little longer than it.
+			L.FrontAxle = 168.0;
+			L.RearAxle = -102.0;
+			L.Nose = 160.0;
+			L.Tail = -205.0;
+			L.Cowl = 0.0;
+			L.RoofTop = 28.0;
+			L.SeatX = -78.0;
+			L.SeatTop = Waist - 52.0;
+			L.RearSeatX = -78.0;
+			L.RearDoorX = -60.0;
+			L.HalfWidth = 44.0;
+			L.TrackY = 72.0;
+			L.DriverSide = -20.0;
+			L.PassengerSide = 20.0;
+			L.Exhaust = FVector(-44.0, 52.0, -70.0);
+			break;
 		default:
 			break;
 		}
@@ -246,6 +267,25 @@ namespace CarModel
 				{
 					P.Triangles.Add(First + I);
 				}
+			}
+		}
+
+		/** A quad with its own normal at each corner, for smooth shading over a curved skin. */
+		void SmoothQuad(EPart Part, const FVector& A, const FVector& B, const FVector& C, const FVector& D,
+			const FVector& NA, const FVector& NB, const FVector& NC, const FVector& ND)
+		{
+			FPart& P = Parts[Part];
+			const int32 First = P.Vertices.Num();
+			P.Vertices.Append({ A, B, C, D });
+			P.Normals.Append({ NA, NB, NC, ND });
+			const FVector Facing = FVector::CrossProduct(C - A, D - B);
+			if (FVector::DotProduct(Facing, NA + NB + NC + ND) < 0.0)
+			{
+				P.Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3 });
+			}
+			else
+			{
+				P.Triangles.Append({ First, First + 2, First + 1, First, First + 3, First + 2 });
 			}
 		}
 
@@ -1077,6 +1117,343 @@ namespace CarModel
 		}
 	}
 
+	/**
+	 * A smooth skin through rings of points: Rings[i][j] is point j of ring
+	 * i, every ring has the same count and runs round the same way. Normals
+	 * are smoothed over the neighbours, so a glossy body shades softly; a
+	 * ring shrunk to one point closes that end.
+	 */
+	inline void Loft(FBuilder& B, EPart Part, const TArray<TArray<FVector>>& Rings)
+	{
+		const int32 NumRings = Rings.Num();
+		if (NumRings < 2)
+		{
+			return;
+		}
+		const int32 N = Rings[0].Num();
+		TArray<FVector> Mids;
+		for (const TArray<FVector>& R : Rings)
+		{
+			FVector Sum = FVector::ZeroVector;
+			for (const FVector& P : R)
+			{
+				Sum += P;
+			}
+			Mids.Add(Sum / static_cast<double>(FMath::Max(N, 1)));
+		}
+		auto NormalAt = [&](int32 i, int32 j)
+		{
+			const FVector& P = Rings[i][j];
+			const FVector Round = Rings[i][(j + 1) % N] - Rings[i][(j + N - 1) % N];
+			const FVector Along = Rings[FMath::Min(i + 1, NumRings - 1)][j] - Rings[FMath::Max(i - 1, 0)][j];
+			FVector Out = FVector::CrossProduct(Round, Along).GetSafeNormal();
+			const FVector Away = P - Mids[i];
+			if (Away.SizeSquared() < 0.01 || Out.IsNearlyZero())
+			{
+				// A closed tip: face straight out along the loft.
+				const FVector Tip = (Mids[i] - Mids[i == 0 ? 1 : i - 1]).GetSafeNormal();
+				return i == 0 ? -Tip : Tip;
+			}
+			return FVector::DotProduct(Out, Away) < 0.0 ? -Out : Out;
+		};
+		for (int32 i = 0; i + 1 < NumRings; ++i)
+		{
+			for (int32 j = 0; j < N; ++j)
+			{
+				const int32 k = (j + 1) % N;
+				B.SmoothQuad(Part, Rings[i][j], Rings[i][k], Rings[i + 1][k], Rings[i + 1][j],
+					NormalAt(i, j), NormalAt(i, k), NormalAt(i + 1, k), NormalAt(i + 1, j));
+			}
+		}
+	}
+
+	/**
+	 * One rounded cross-section ring of Count points round Centre, in the
+	 * plane of Side (across) and Up: HalfW to each side, Above over the
+	 * centre and Below under it. Square 2 is an ellipse; more is boxier.
+	 */
+	inline TArray<FVector> RoundRing(const FVector& Centre, const FVector& Side, const FVector& Up, double HalfW, double Above, double Below, double Square, int32 Count = 16)
+	{
+		TArray<FVector> Out;
+		const double Power = 2.0 / Square;
+		for (int32 j = 0; j < Count; ++j)
+		{
+			const double A = 2.0 * PI * j / Count;
+			const double C = FMath::Cos(A);
+			const double S = FMath::Sin(A);
+			const double U = (C < 0.0 ? -1.0 : 1.0) * FMath::Pow(FMath::Abs(C), Power) * HalfW;
+			const double V = (S < 0.0 ? -1.0 : 1.0) * FMath::Pow(FMath::Abs(S), Power) * (S > 0.0 ? Above : Below);
+			Out.Add(Centre + Side * U + Up * V);
+		}
+		return Out;
+	}
+
+	/**
+	 * The black Mercedes-Benz SSK of the car show, after the one-off
+	 * "Black Prince" roadster: a pointed (vee) radiator behind the front
+	 * axle with the big headlamps on a bar before it; a long louvred bonnet
+	 * with three flexible chrome exhaust pipes out of its right side; long
+	 * swooping front wings; a low open two-seater with two small screens;
+	 * a pointed tail between two great pointed rear wings that hide the
+	 * back wheels; copper-spoked wire wheels.
+	 */
+	inline void BuildSsk(FBuilder& B, const FLayout& L)
+	{
+		const double W = L.HalfWidth;
+		const double Floor = -42.0;
+		const double Sill = -66.0;
+		const double BonnetHalf = 25.0;
+		const double Shell = L.Nose - 8.0;
+		const double Top = 8.0;
+		const double DeckFront = L.SeatX - 26.0;
+
+		// The bonnet, long and narrow, with louvres along its top and a vent panel down each side.
+		B.FrontOutline(Paint, { FVector2D(-BonnetHalf, -46.0), FVector2D(BonnetHalf, -46.0), FVector2D(BonnetHalf, Top - 6.0),
+			FVector2D(BonnetHalf - 6.0, Top), FVector2D(-BonnetHalf + 6.0, Top), FVector2D(-BonnetHalf, Top - 6.0) }, L.Cowl - 2.0, Shell);
+		B.Bar(Chrome, FVector(L.Cowl, 0.0, Top + 0.4), FVector(Shell, 0.0, Top + 0.4), 1.2);
+		for (double X = L.Cowl + 30.0; X < Shell - 10.0; X += 5.0)
+		{
+			for (const double S : { -1.0, 1.0 })
+			{
+				B.Box(Guards, FVector(X, S > 0.0 ? 4.0 : -BonnetHalf + 7.0, Top - 0.2), FVector(X + 1.8, S > 0.0 ? BonnetHalf - 7.0 : -4.0, Top + 0.5));
+			}
+		}
+		for (double X = L.Cowl + 45.0; X < Shell - 20.0; X += 4.0)
+		{
+			B.BothSides(Guards, FVector(X, BonnetHalf, -32.0), FVector(X + 2.0, BonnetHalf + 0.6, -4.0));
+		}
+		// The radiator: a tall chrome shell drawn forward to a vee, the dark core behind upright slats.
+		const double Vee = L.Nose + 7.0;
+		const double Foot = -42.0;
+		const double Crown = Top + 3.0;
+		B.Box(Chrome, FVector(Shell, -BonnetHalf, Foot), FVector(L.Nose - 4.0, BonnetHalf, Crown));
+		for (const double S : { -1.0, 1.0 })
+		{
+			const FVector Edge(L.Nose - 4.0, S * BonnetHalf, 0.0);
+			const FVector Ridge(Vee, 0.0, 0.0);
+			B.Pane(Guards, FVector(Edge.X + 0.3, S * (BonnetHalf - 3.0), Foot + 4.0), FVector(Ridge.X - 1.0, 0.0, Foot + 4.0),
+				FVector(Ridge.X - 1.0, 0.0, Crown - 4.0), FVector(Edge.X + 0.3, S * (BonnetHalf - 3.0), Crown - 4.0));
+			for (double T = 0.08; T < 0.97; T += 0.075)
+			{
+				const double SlatX = FMath::Lerp(Edge.X, Ridge.X, T) + 0.4;
+				const double SlatY = S * FMath::Lerp(BonnetHalf - 3.0, 0.0, T);
+				B.Bar(Chrome, FVector(SlatX, SlatY, Foot + 4.0), FVector(SlatX, SlatY, Crown - 4.0), 0.6);
+			}
+			for (double Z = Foot + 8.0; Z < Crown - 4.0; Z += 4.0)
+			{
+				B.Bar(Chrome, FVector(Edge.X + 0.6, S * (BonnetHalf - 3.0), Z), FVector(Ridge.X - 0.4, 0.0, Z), 0.4);
+			}
+			B.Bar(Chrome, FVector(Edge.X, S * BonnetHalf, Foot), FVector(Edge.X, S * BonnetHalf, Crown), 2.6);
+			B.Bar(Chrome, FVector(Edge.X, S * BonnetHalf, Crown), FVector(Ridge.X, 0.0, Crown), 2.6);
+			B.Bar(Chrome, FVector(Edge.X, S * BonnetHalf, Foot), FVector(Ridge.X, 0.0, Foot), 2.6);
+		}
+		B.Bar(Chrome, FVector(Vee, 0.0, Foot), FVector(Vee, 0.0, Crown), 2.6);
+		// The cap, and the star in its ring on the shell's crown.
+		B.Cylinder(Chrome, FVector(L.Nose - 4.0, 0.0, Crown + 2.5), 3.5, 5.0, 2, 10);
+		const FVector Star(Vee + 1.5, 0.0, Crown - 6.0);
+		B.Ring(Chrome, Star, 3.6, 2.8, 0.8, 0, 14);
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const double A = FMath::DegreesToRadians(90.0 + 120.0 * i);
+			B.Bar(Chrome, Star, Star + FVector(0.0, FMath::Cos(A) * 3.0, FMath::Sin(A) * 3.0), 0.6);
+		}
+		// Below the radiator: the dark apron between the dumb irons.
+		B.Box(Guards, FVector(Shell - 10.0, -BonnetHalf + 2.0, -62.0), FVector(L.Nose + 4.0, BonnetHalf - 2.0, Foot));
+		B.BarBothSides(Guards, FVector(Shell - 20.0, 22.0, -56.0), FVector(L.Nose + 12.0, 22.0, -52.0), 6.0);
+
+		// The great headlamps on a bar across the front, just outside the radiator.
+		const double LampX = L.Nose + 12.0;
+		B.Bar(Chrome, FVector(LampX - 5.0, -46.0, -22.0), FVector(LampX - 5.0, 46.0, -22.0), 2.4);
+		for (const double S : { -1.0, 1.0 })
+		{
+			const FVector Drum(LampX, S * 40.0, -6.0);
+			B.Bar(Chrome, Drum - FVector(5.0, 0.0, 16.0), Drum - FVector(4.0, 0.0, 9.0), 2.4);
+			B.Ball(Chrome, Drum - FVector(8.0, 0.0, 0.0), 11.0, 1.0);
+			B.Cylinder(Chrome, Drum + FVector(2.5, 0.0, 0.0), 13.0, 3.0, 0, 18);
+			B.Cylinder(Lamp, Drum + FVector(4.2, 0.0, 0.0), 11.5, 1.0, 0, 18);
+		}
+
+		// The front wings: from the point ahead of the wheel, over it, sweeping long and low back to the body side.
+		{
+			TArray<FVector2D> Path;
+			const FVector2D Hub(L.FrontAxle, HubZ);
+			Arc(Path, Hub, WheelRadius + 9.0, -14.0, 112.0, 14);
+			for (const FVector2D& P : { FVector2D(132.0, -18.0), FVector2D(114.0, -27.0), FVector2D(96.0, -38.0), FVector2D(78.0, -48.0),
+				FVector2D(60.0, -56.0), FVector2D(42.0, -62.0), FVector2D(24.0, -65.0), FVector2D(8.0, -66.0) })
+			{
+				Path.Add(P);
+			}
+			const int32 Count = Path.Num();
+			for (const double S : { -1.0, 1.0 })
+			{
+				TArray<TArray<FVector>> Rings;
+				TArray<TArray<FVector>> Lip;
+				for (int32 i = 0; i < Count; ++i)
+				{
+					const FVector2D Tangent = (Path[FMath::Min(i + 1, Count - 1)] - Path[FMath::Max(i - 1, 0)]).GetSafeNormal();
+					// The path runs over the wheel anticlockwise, so this side of it is outwards.
+					const FVector Up = FVector(Tangent.Y, 0.0, -Tangent.X);
+					const double T = static_cast<double>(i) / (Count - 1);
+					const double Ends = FMath::Min(1.0, FMath::Min(T * 7.0 + 0.25, (1.0 - T) * 4.0 + 0.15));
+					const double Half = 17.0 * Ends;
+					const double Centre = FMath::Lerp(L.TrackY + 1.0, W + 7.0, FMath::Clamp((T - 0.55) / 0.45, 0.0, 1.0));
+					Rings.Add(RoundRing(FVector(Path[i].X, S * Centre, Path[i].Y), FVector(0.0, S, 0.0), Up, Half, 8.0 * Ends + 1.0, 2.5, 2.6));
+					// The deep rounded lip down its outer edge, which makes the wing look full from the front.
+					Lip.Add(RoundRing(FVector(Path[i].X, S * (Centre + Half - 3.0 * Ends), Path[i].Y) - Up * (3.0 * Ends), FVector(0.0, S, 0.0), Up,
+						3.5 * Ends + 0.3, 5.0 * Ends + 0.3, 8.0 * Ends + 0.3, 2.2, 12));
+				}
+				Loft(B, Guards, Rings);
+				Loft(B, Guards, Lip);
+			}
+		}
+
+		// The rear wings: great pointed teardrops, skirted down over the back wheels, their tips past the tail.
+		const double WingFront = -36.0;
+		const double WingPeak = L.RearAxle + 4.0;
+		const double WingTip = L.Tail - 14.0;
+		for (const double S : { -1.0, 1.0 })
+		{
+			TArray<TArray<FVector>> Rings;
+			const int32 Count = 26;
+			for (int32 i = 0; i <= Count; ++i)
+			{
+				const double X = FMath::Lerp(WingFront, WingTip, static_cast<double>(i) / Count);
+				double Crest;
+				if (X > WingPeak)
+				{
+					const double T = (X - WingPeak) / (WingFront - WingPeak);
+					Crest = -3.0 - 50.0 * T * T;
+				}
+				else
+				{
+					const double T = (WingPeak - X) / (WingPeak - WingTip);
+					Crest = -3.0 - 58.0 * FMath::Pow(T, 1.5);
+				}
+				const double Front = FMath::Clamp((WingFront - X) / 16.0, 0.0, 1.0);
+				const double Back = FMath::Clamp((X - WingTip) / 70.0, 0.0, 1.0);
+				const double Size = FMath::Sqrt(Front) * FMath::Pow(Back, 0.6);
+				const double Bottom = FMath::Min(Sill + 4.0 * FMath::Pow(1.0 - Back, 2.0), Crest - 2.0);
+				const double Mid = (Crest + Bottom) * 0.5;
+				const double Half = 16.0 * Size + 0.5;
+				const double Centre = L.TrackY + 1.0 - 4.0 * (1.0 - Back);
+				Rings.Add(RoundRing(FVector(X, S * Centre, Mid), FVector(0.0, S, 0.0), FVector(0.0, 0.0, 1.0), Half,
+					(Crest - Mid) * FMath::Max(Size, 0.15), (Mid - Bottom) * FMath::Max(Size, 0.15), 3.0, 18));
+			}
+			Loft(B, Guards, Rings);
+			// The star on the wheel spat.
+			const FVector Badge(L.RearAxle, S * (L.TrackY + 17.4), HubZ + 1.0);
+			B.Ring(Chrome, Badge, 4.0, 3.2, 0.8, 1, 14);
+			for (int32 i = 0; i < 3; ++i)
+			{
+				const double A = FMath::DegreesToRadians(90.0 + 120.0 * i);
+				B.Bar(Chrome, Badge, Badge + FVector(FMath::Cos(A) * 3.4, 0.0, FMath::Sin(A) * 3.4), 0.6);
+			}
+		}
+
+		// The body: a low tub from the scuttle back, the open cockpit in it, a narrow sill joining the wings.
+		B.Box(Paint, FVector(DeckFront, -W, Sill), FVector(L.Cowl, W, Floor));
+		// The doors: rounded sides bulging out, their top line dipping in a long curve between the scuttle and the tail.
+		for (const double S : { -1.0, 1.0 })
+		{
+			TArray<TArray<FVector>> Rings;
+			const int32 Count = 14;
+			for (int32 i = 0; i <= Count; ++i)
+			{
+				const double T = static_cast<double>(i) / Count;
+				const double X = FMath::Lerp(L.Cowl + 1.0, DeckFront - 1.0, T);
+				const double Crest = Top + 2.0 - 11.0 * FMath::Pow(FMath::Sin(PI * FMath::Clamp(T * 1.1 - 0.05, 0.0, 1.0)), 1.6);
+				const double Mid = (Crest + Sill) * 0.5;
+				Rings.Add(RoundRing(FVector(X, S * (W - 3.0), Mid), FVector(0.0, S, 0.0), FVector(0.0, 0.0, 1.0), 4.5, Crest - Mid, Mid - Sill, 2.3, 16));
+			}
+			Loft(B, Paint, Rings);
+		}
+		B.Box(Paint, FVector(L.Cowl - 16.0, -W, Floor), FVector(L.Cowl, W, Top + 2.0));
+		B.Box(Chrome, FVector(L.Cowl - 17.0, -W + 8.0, Top - 12.0), FVector(L.Cowl - 16.0, W - 8.0, Top - 2.0));
+		B.Bar(Leather, FVector(L.Cowl - 16.0, -W + 2.0, Top + 3.0), FVector(L.Cowl - 16.0, W - 2.0, Top + 3.0), 3.5);
+		B.BothSides(Paint, FVector(WingFront - 6.0, W - 2.0, Sill - 1.0), FVector(12.0, W + 10.0, Sill + 2.0));
+		for (const double S : { -1.0, 1.0 })
+		{
+			// The slanting vent on each side of the scuttle.
+			B.Pane(Guards, FVector(L.Cowl - 4.0, S * (W + 1.7), -10.0), FVector(L.Cowl - 12.0, S * (W + 1.7), -10.0),
+				FVector(L.Cowl - 30.0, S * (W + 1.7), -36.0), FVector(L.Cowl - 22.0, S * (W + 1.7), -36.0));
+		}
+
+		// The tail: a smooth hump behind the seats, narrowing and sloping down to a point between the wings.
+		{
+			TArray<TArray<FVector>> Rings;
+			const int32 Count = 18;
+			for (int32 i = 0; i <= Count; ++i)
+			{
+				const double T = static_cast<double>(i) / Count;
+				const double X = FMath::Lerp(DeckFront + 2.0, L.Tail, T);
+				const double Half = W * FMath::Pow(FMath::Max(1.0 - T * T, 0.0), 0.55) + 0.3;
+				const double Crest = FMath::Lerp(Top + 6.0, -50.0, FMath::Pow(T, 1.4));
+				const double Bottom = FMath::Lerp(Sill, -58.0, T);
+				const double Mid = FMath::Max((Crest + Bottom) * 0.5, Bottom + 0.5);
+				const double Shrink = FMath::Max(1.0 - T * T * T, 0.08);
+				Rings.Add(RoundRing(FVector(X, 0.0, Mid), FVector(0.0, 1.0, 0.0), FVector(0.0, 0.0, 1.0), Half,
+					(Crest - Mid) * Shrink + 0.3, (Mid - Bottom) * Shrink + 0.3, 3.2, 18));
+			}
+			Loft(B, Paint, Rings);
+		}
+		// The padded leather roll behind the seats.
+		B.Cylinder(Leather, FVector(DeckFront + 2.0, 0.0, Top + 6.0), 6.0, 2.0 * W - 10.0, 1, 12);
+		// The number plate and the little lamps under the tail's point.
+		const FVector Plate(L.Tail + 10.0, 0.0, -60.0);
+		B.Box(Guards, Plate + FVector(-1.0, -14.0, -7.0), Plate + FVector(1.0, 14.0, 7.0));
+		B.Box(Chrome, Plate + FVector(-1.5, -14.5, -7.5), Plate + FVector(-1.1, 14.5, 7.5));
+		for (const double S : { -1.0, 1.0 })
+		{
+			B.Cylinder(Chrome, Plate + FVector(1.0, S * 5.0, 11.0), 3.0, 3.0, 0, 10);
+			B.Cylinder(TailLamp, Plate + FVector(-0.8, S * 5.0, 11.0), 2.4, 1.0, 0, 10);
+		}
+
+		// The three flexible exhaust pipes out of the bonnet's right side, curling down into the wing, ribbed in chrome.
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const double X = L.Cowl + 52.0 + i * 28.0;
+			const FVector P0(X, BonnetHalf, -6.0);
+			const FVector P1(X + 2.0, BonnetHalf + 14.0, -8.0);
+			const FVector P2(X - 8.0, BonnetHalf + 22.0, -34.0);
+			const FVector P3(X - 26.0 - i * 4.0, W + 10.0, -56.0);
+			FVector Last = P0;
+			for (int32 Step = 1; Step <= 12; ++Step)
+			{
+				const double T = Step / 12.0;
+				const double U = 1.0 - T;
+				const FVector P = P0 * (U * U * U) + P1 * (3.0 * U * U * T) + P2 * (3.0 * U * T * T) + P3 * (T * T * T);
+				B.Bar(Chrome, Last, P, 6.0);
+				B.Bar(Rubber, (Last + P) * 0.5 - (P - Last) * 0.08, (Last + P) * 0.5 + (P - Last) * 0.08, 6.8);
+				Last = P;
+			}
+			B.Cylinder(Chrome, FVector(X, BonnetHalf + 0.4, -6.0), 4.6, 2.0, 1, 10);
+		}
+		// Under the right side, the one pipe they join runs back to the rear wing.
+		B.Cylinder(Guards, FVector((WingFront - 6.0 + 30.0) * 0.5, W + 8.0, -70.0), 4.0, 30.0 - WingFront + 6.0, 0, 10);
+
+		// The small vee screen in two panes, the seat and wheel, and the axles and rails under it all.
+		const double Screen = L.Cowl - 12.0;
+		for (const double S : { -1.0, 1.0 })
+		{
+			B.Pane(Glass, FVector(Screen + 4.0, S * 2.0, Top + 3.0), FVector(Screen, S * (W - 8.0), Top + 3.0),
+				FVector(Screen - 5.0, S * (W - 8.0), L.RoofTop), FVector(Screen - 1.0, S * 2.0, L.RoofTop));
+			B.Bar(Chrome, FVector(Screen, S * (W - 8.0), Top + 2.0), FVector(Screen - 5.0, S * (W - 8.0), L.RoofTop), 1.4);
+			B.Bar(Chrome, FVector(Screen - 5.0, S * (W - 8.0), L.RoofTop), FVector(Screen - 1.0, S * 2.0, L.RoofTop), 1.4);
+			B.Bar(Chrome, FVector(Screen + 4.0, S * 2.0, Top + 2.0), FVector(Screen - 1.0, S * 2.0, L.RoofTop), 1.4);
+		}
+		// The seat sits low, its back hardly over the body side; the wheel stands where BuildSeatedDriver holds it.
+		B.Box(Leather, FVector(L.SeatX - 12.0, -W + 8.0, Floor), FVector(L.SeatX + 20.0, W - 8.0, L.SeatTop));
+		B.Box(Leather, FVector(L.SeatX - 18.0, -W + 6.0, L.SeatTop), FVector(L.SeatX - 10.0, W - 6.0, Top + 6.0));
+		const FVector Wheel(L.SeatX + 54.0, L.DriverSide, L.SeatTop + 35.0);
+		B.Ring(Rubber, Wheel, 19.0, 16.5, 2.5, 0, 16);
+		B.Bar(Rubber, Wheel - FVector(0.0, 16.5, 0.0), Wheel + FVector(0.0, 16.5, 0.0), 1.6);
+		B.Bar(Rubber, Wheel, Wheel + FVector(30.0, 0.0, -26.0), 3.0);
+		B.Box(Guards, FVector(L.Tail + 30.0, -34.0, -66.0), FVector(L.Nose - 10.0, 34.0, -50.0));
+		B.Bar(Guards, FVector(L.FrontAxle, -L.TrackY + 8.0, HubZ), FVector(L.FrontAxle, L.TrackY - 8.0, HubZ), 5.0);
+		B.Bar(Guards, FVector(L.RearAxle, -L.TrackY + 8.0, HubZ), FVector(L.RearAxle, L.TrackY - 8.0, HubZ), 7.0);
+		B.Cylinder(Guards, FVector(L.RearAxle, 0.0, HubZ), 11.0, 18.0, 1, 10);
+	}
+
 	inline void BuildTourer(FBuilder& B, const FLayout& L)
 	{
 		BuildFront(B, L, 38.0);
@@ -1123,6 +1500,7 @@ namespace CarModel
 		case EBody::Balilla: BuildBalilla(B, L); break;
 		case EBody::Opel: BuildOpel(B, L); break;
 		case EBody::Steyr: BuildSteyr(B, L); break;
+		case EBody::Ssk: BuildSsk(B, L); break;
 		default: BuildSaloon(B, L, Style); break;
 		}
 	}
@@ -1275,6 +1653,18 @@ namespace CarModel
 		Style.GuardColor = FLinearColor(0.008f, 0.008f, 0.009f);
 		Style.Wheel = EWheel::Disc;
 		Style.SpokeColor = FLinearColor(0.012f, 0.075f, 0.040f);
+		return Style;
+	}
+
+	/** The car show's Mercedes-Benz SSK: black all over, copper-spoked wire wheels. */
+	inline FStyle SskStyle()
+	{
+		FStyle Style;
+		Style.Body = EBody::Ssk;
+		Style.PaintColor = FLinearColor(0.006f, 0.006f, 0.007f);
+		Style.GuardColor = FLinearColor(0.006f, 0.006f, 0.007f);
+		Style.Wheel = EWheel::Wire;
+		Style.SpokeColor = FLinearColor(0.32f, 0.12f, 0.045f);
 		return Style;
 	}
 

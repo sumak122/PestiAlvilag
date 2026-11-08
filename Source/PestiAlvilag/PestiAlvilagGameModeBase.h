@@ -84,6 +84,30 @@ public:
 	const TArray<int32>& GetLaciCars() const { return LaciCars; }
 	void AddLaciCar(int32 Car) { LaciCars.Add(Car); }
 
+	/** Pista bácsi's cart runs done (APistaRuns). */
+	int32 GetCartRuns() const { return CartRuns; }
+	void AddCartRun() { ++CartRuns; }
+
+	/** Varga's delivery rounds (AVargaRuns): the best time in tenths of a second (0 for none) and the best medal (0 none, 1 bronze, 2 silver, 3 gold). */
+	int32 GetBestRoundTenths() const { return BestRoundTenths; }
+	int32 GetBestMedal() const { return BestMedal; }
+	void NoteRound(int32 Tenths, int32 Medal)
+	{
+		BestRoundTenths = BestRoundTenths <= 0 ? Tenths : FMath::Min(BestRoundTenths, Tenths);
+		BestMedal = FMath::Max(BestMedal, Medal);
+	}
+
+	/** Laci's night races won (bits, ANightRaces order). */
+	bool HasWonRace(int32 Index) const { return Index >= 0 && Index < 31 && (RacesWon & (1 << Index)) != 0; }
+	void MarkRaceWon(int32 Index)
+	{
+		if (Index >= 0 && Index < 31)
+		{
+			RacesWon |= 1 << Index;
+		}
+	}
+	int32 GetRacesWon() const { return RacesWon; }
+
 	/** Dishes eaten at least once; true the first time. */
 	bool TryDish(FName DishId)
 	{
@@ -211,6 +235,10 @@ private:
 	TArray<FName> CompletedMissions;
 	int32 TaxiJobs = 0;
 	TArray<int32> LaciCars;
+	int32 CartRuns = 0;
+	int32 BestRoundTenths = 0;
+	int32 BestMedal = 0;
+	int32 RacesWon = 0;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;

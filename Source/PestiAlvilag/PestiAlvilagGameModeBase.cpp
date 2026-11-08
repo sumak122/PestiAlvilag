@@ -19,6 +19,9 @@
 #include "BoxingYard.h"
 #include "BoxingYardModel.h"
 #include "LaciOrders.h"
+#include "NightRaces.h"
+#include "PistaRuns.h"
+#include "VargaRuns.h"
 #include "LaciYard.h"
 #include "LaciYardModel.h"
 #include "DayNight.h"
@@ -478,6 +481,20 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		GetWorld()->SpawnActor<ALaciOrders>(ALaciOrders::StaticClass(), FVector(LaciYardModel::CityAt, 0.0), FRotator::ZeroRotator);
 	}
+	// The other side jobs: Pista bácsi's cart runs (after mission 4), Varga's
+	// delivery rounds (after mission 6), Laci's night races (after mission 7).
+	if (!TActorIterator<APistaRuns>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<APistaRuns>(APistaRuns::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
+	if (!TActorIterator<AVargaRuns>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AVargaRuns>(AVargaRuns::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
+	if (!TActorIterator<ANightRaces>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ANightRaces>(ANightRaces::StaticClass(), FVector(LaciYardModel::CityAt, 0.0), FRotator::ZeroRotator);
+	}
 
 	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).
 	if (!TActorIterator<ABoxingYard>(GetWorld()))
@@ -834,6 +851,10 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		BoxingWins = Save->BoxingWins;
 		RenownPoints = FMath::Clamp(Save->Renown, 0, StreetName::MaxPoints);
 		LettersRead = Save->LettersRead;
+		CartRuns = Save->CartRuns;
+		BestRoundTenths = Save->BestRoundTenths;
+		BestMedal = Save->BestMedal;
+		RacesWon = Save->RacesWon;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
@@ -991,6 +1012,10 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->BoxingWins = BoxingWins;
 	Save->Renown = RenownPoints;
 	Save->LettersRead = LettersRead;
+	Save->CartRuns = CartRuns;
+	Save->BestRoundTenths = BestRoundTenths;
+	Save->BestMedal = BestMedal;
+	Save->RacesWon = RacesWon;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 
