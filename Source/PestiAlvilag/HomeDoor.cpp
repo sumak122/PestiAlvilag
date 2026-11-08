@@ -15,6 +15,7 @@
 #include "PestiPerson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "PestiHud.h"
+#include "StreetName.h"
 
 namespace HomeDoor
 {
@@ -31,6 +32,7 @@ namespace HomeDoor
 	const FLinearColor Stone(0.45f, 0.42f, 0.36f);
 	const FLinearColor Iron(0.03f, 0.03f, 0.03f);
 	const FLinearColor Lamp(1.f, 0.8f, 0.45f);
+	const FLinearColor EnvelopeColor(0.78f, 0.72f, 0.58f);
 	const FDoorPart DoorSpecs[] = {
 		{ TEXT("Door"), FVector(7.f, 0.f, 150.f), FVector(0.12f, 1.6f, 3.0f), Wood },
 		{ TEXT("FrameLeft"), FVector(12.f, -95.f, 160.f), FVector(0.2f, 0.3f, 3.2f), Stone },
@@ -66,6 +68,16 @@ AHomeDoor::AHomeDoor()
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Parts.Add(Part);
 	}
+
+	// A small white envelope lying on the step.
+	Envelope = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Envelope"));
+	Envelope->SetupAttachment(Root);
+	Envelope->SetStaticMesh(CubeMesh.Object);
+	Envelope->SetRelativeLocation(FVector(40.f, 30.f, 11.5f));
+	Envelope->SetRelativeRotation(FRotator(0.f, 18.f, 0.f));
+	Envelope->SetRelativeScale3D(FVector(0.16f, 0.24f, 0.01f));
+	Envelope->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Envelope->SetVisibility(false);
 }
 
 void AHomeDoor::BeginPlay()
@@ -82,6 +94,9 @@ void AHomeDoor::BeginPlay()
 		Paintwork->SetVectorParameterValue(TEXT("Color"), HomeDoor::DoorSpecs[i].Color);
 		Parts[i]->SetMaterial(0, Paintwork);
 	}
+	UMaterialInstanceDynamic* EnvelopePaper = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+	EnvelopePaper->SetVectorParameterValue(TEXT("Color"), HomeDoor::EnvelopeColor);
+	Envelope->SetMaterial(0, EnvelopePaper);
 }
 
 FVector AHomeDoor::GetStandSpot() const
@@ -103,6 +118,17 @@ void AHomeDoor::Tick(float DeltaSeconds)
 	const APawn* Player = PC ? PC->GetPawn() : nullptr;
 	if (!Game || !Player || !Player->IsA<APestiPerson>() || !Game->CanSaveAtHome())
 	{
+		return;
+	}
+
+	// The envelope shows on the step while a letter waits.
+	const int32 Waiting = Game->GetWaitingLetter();
+	Envelope->SetVisibility(Waiting != INDEX_NONE && ReadingLetter == INDEX_NONE);
+
+	// A letter or the wall held up.
+	if (ReadingLetter != INDEX_NONE || bWallShown)
+	{
+		TickReading(PC);
 		return;
 	}
 
@@ -130,8 +156,26 @@ void AHomeDoor::Tick(float DeltaSeconds)
 	}
 	if (GEngine)
 	{
-		APestiHUD::Show(this, 4, 0.f, FColor(255, 200, 60),
-			TEXT("Otthon  (Home)   E: alv\u00e1s \u00e9s ment\u00e9s  (sleep and save)"));
+		APestiHUD::Show(this, 4, 0.f, FColor(255, 200, 60), Waiting != INDEX_NONE
+			? TEXT("Otthon \u00b7 E: alv\u00e1s \u00e9s ment\u00e9s \u00b7 G: lev\u00e9l a k\u00fcsz\u00f6b\u00f6n  (Home \u00b7 E: sleep and save \u00b7 G: a letter on the step)")
+			: TEXT("Otthon \u00b7 E: alv\u00e1s \u00e9s ment\u00e9s \u00b7 G: a falam  (Home \u00b7 E: sleep and save \u00b7 G: my wall)"));
+	}
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (PC->WasInputKeyJustPressed(EKeys::G) && Hud && !Hud->IsShowingPaper() && !Hud->IsMenuOpen())
+	{
+		PC->SetIgnoreMoveInput(true);
+		if (Waiting != INDEX_NONE)
+		{
+			ReadingLetter = Waiting;
+			const StreetName::FLetter& Letter = StreetName::Letters[Waiting];
+			Hud->SetLetter(Letter.Hu, Letter.En, Waiting + 1);
+		}
+		else
+		{
+			bWallShown = true;
+			Hud->SetWall(true);
+		}
+		return;
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::E))
 	{
@@ -140,5 +184,44 @@ void AHomeDoor::Tick(float DeltaSeconds)
 			PC->PlayerCameraManager->StartCameraFade(0.f, 1.f, HomeDoor::SleepFade, FLinearColor::Black, false, true);
 		}
 		FadeDoneTime = Now + HomeDoor::SleepFade + 0.5;
+	}
+}
+
+void AHomeDoor::TickReading(APlayerController* PC)
+{
+	if (PC->WasInputKeyJustPressed(EKeys::G) || PC->WasInputKeyJustPressed(EKeys::BackSpace) || PC->WasInputKeyJustPressed(EKeys::Q)
+		|| PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
+	{
+		StopReading(PC);
+	}
+}
+
+void AHomeDoor::StopReading(APlayerController* PC)
+{
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (ReadingLetter != INDEX_NONE)
+	{
+		// The money in the envelope goes in his pocket as he puts it away.
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			Game->ReadLetter(ReadingLetter);
+		}
+		if (Hud)
+		{
+			Hud->ClearLetter();
+		}
+		ReadingLetter = INDEX_NONE;
+	}
+	if (bWallShown)
+	{
+		if (Hud)
+		{
+			Hud->SetWall(false);
+		}
+		bWallShown = false;
+	}
+	if (PC)
+	{
+		PC->SetIgnoreMoveInput(false);
 	}
 }

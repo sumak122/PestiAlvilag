@@ -55,6 +55,9 @@
 #include "PestiHud.h"
 #include "PestiMenu.h"
 #include "PestiPerson.h"
+#include "CarjackedDriver.h"
+#include "LighterModel.h"
+#include "StreetName.h"
 #include "PestiSaveGame.h"
 #include "PestiTaxi.h"
 #include "StreetFurniture.h"
@@ -106,6 +109,19 @@ namespace PestiStart
 	constexpr int32 PointsNoteKey = 61;
 	constexpr float PointsNoteSeconds = 4.f;
 	constexpr double PointsNoteGap = 6.0;
+	// The street name note (AddRenown): its key and how long it stays.
+	constexpr int32 RenownNoteKey = 63;
+	constexpr float RenownNoteSeconds = 4.f;
+	// Passers-by greet him now and then (s between, at the least and most),
+	// from this near (cm); Bözsi néni speaks up when he comes this near her
+	// stall, at most this often (s).
+	constexpr double GreetGapMin = 25.0;
+	constexpr double GreetGapMax = 50.0;
+	constexpr double GreetReach = 400.0;
+	constexpr double BozsiReach = 300.0;
+	constexpr double BozsiGap = 120.0;
+	// A new rank is announced this long after it is reached (s).
+	constexpr double RankAnnounceDelay = 6.5;
 
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
@@ -607,6 +623,7 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 	UpdateWanted(DeltaSeconds);
 	UpdateFaint();
 	TickPlaceAtRing();
+	TickGreetings();
 
 	if (NextMissionAt > 0.0 && GetWorld()->GetTimeSeconds() >= NextMissionAt)
 	{
@@ -807,6 +824,8 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		FightPoints = Save->FightPoints;
 		Lessons = Save->Lessons;
 		BoxingWins = Save->BoxingWins;
+		RenownPoints = FMath::Clamp(Save->Renown, 0, StreetName::MaxPoints);
+		LettersRead = Save->LettersRead;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
@@ -928,7 +947,11 @@ bool APestiAlvilagGameModeBase::LearnLesson(int32 Lesson, int32 Cost)
 
 void APestiAlvilagGameModeBase::MarkMissionDone(FName MissionId)
 {
-	CompletedMissions.AddUnique(MissionId);
+	if (!CompletedMissions.Contains(MissionId))
+	{
+		CompletedMissions.Add(MissionId);
+		AddRenown(StreetName::ForMission, TEXT("k\u00fcldet\u00e9s"), TEXT("mission passed"));
+	}
 	// After the raid the player's home is the attic room.
 	if (MissionId == PestiStart::Bunda)
 	{
@@ -958,6 +981,8 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->FightPoints = FightPoints;
 	Save->Lessons = Lessons;
 	Save->BoxingWins = BoxingWins;
+	Save->Renown = RenownPoints;
+	Save->LettersRead = LettersRead;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 
@@ -967,4 +992,229 @@ void APestiAlvilagGameModeBase::StartNewGame()
 	FPestiMenu::SkipTitleOnce();
 	UGameplayStatics::DeleteGameInSlot(UPestiSaveGame::SlotName(), 0);
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
+}
+
+void APestiAlvilagGameModeBase::AddTaxiJob()
+{
+	++TaxiJobs;
+	AddRenown(StreetName::ForTaxiFare, TEXT("taxi fuvar"), TEXT("taxi fare"));
+}
+
+void APestiAlvilagGameModeBase::AddFoundLighter(int32 Index)
+{
+	if (FoundLighters.Contains(Index))
+	{
+		return;
+	}
+	FoundLighters.Add(Index);
+	AddRenown(StreetName::ForLighter, TEXT("\u00f6ngy\u00fajt\u00f3"), TEXT("lighter found"));
+}
+
+void APestiAlvilagGameModeBase::AddBoxingWin()
+{
+	BoxingWins = FMath::Min(BoxingWins + 1, 5);
+	AddRenown(StreetName::ForBoxingWin, TEXT("gy\u0151zelem Bandi ringj\u00e9ben"), TEXT("won in Bandi's ring"));
+}
+
+int32 APestiAlvilagGameModeBase::GetRenownRank() const
+{
+	return StreetName::RankOf(RenownPoints);
+}
+
+void APestiAlvilagGameModeBase::AddRenown(int32 Points, const FString& WhyHu, const FString& WhyEn)
+{
+	const int32 OldRank = GetRenownRank();
+	const int32 OldPoints = RenownPoints;
+	RenownPoints = FMath::Clamp(RenownPoints + Points, 0, StreetName::MaxPoints);
+	const int32 Change = RenownPoints - OldPoints;
+	if (Change == 0)
+	{
+		return;
+	}
+	const TCHAR* Sign = Change > 0 ? TEXT("+") : TEXT("");
+	APestiHUD::Show(this, PestiStart::RenownNoteKey, PestiStart::RenownNoteSeconds, Change > 0 ? FColor(255, 210, 60) : FColor(224, 87, 63),
+		FString::Printf(TEXT("%s%d H\u00cdRN\u00c9V \u00b7 %s  (%s%d street name \u00b7 %s)"), Sign, Change, *WhyHu, Sign, Change, *WhyEn));
+
+	const int32 NewRank = GetRenownRank();
+	if (NewRank == OldRank)
+	{
+		return;
+	}
+	const StreetName::FRank& Rank = StreetName::Ranks[NewRank];
+	if (NewRank > OldRank)
+	{
+		// A little later, so a mission's own big line has had its time.
+		RankAnnounceAt = GetWorld()->GetTimeSeconds() + PestiStart::RankAnnounceDelay;
+	}
+	else
+	{
+		APestiHUD::Show(this, PestiStart::RenownNoteKey, 6.f, FColor(224, 87, 63),
+			FString::Printf(TEXT("A h\u00edrneve csorbult: %s  (Your street name fell: %s)"), Rank.Hu, Rank.En));
+	}
+}
+
+int32 APestiAlvilagGameModeBase::PriceFor(const UObject* WorldContextObject, int32 Filler)
+{
+	const APestiAlvilagGameModeBase* Game = Get(WorldContextObject);
+	const int32 Cut = Game ? StreetName::Ranks[Game->GetRenownRank()].PriceCut : 0;
+	if (Cut <= 0 || Filler <= 0)
+	{
+		return Filler;
+	}
+	return FMath::Max(10, FMath::RoundToInt(Filler * (100 - Cut) / 1000.f) * 10);
+}
+
+bool APestiAlvilagGameModeBase::IsActOneDone(int32 Index) const
+{
+	return Index >= 0 && Index < static_cast<int32>(UE_ARRAY_COUNT(PestiStart::ActOne)) && IsMissionDone(*PestiStart::ActOne[Index]);
+}
+
+int32 APestiAlvilagGameModeBase::GetWaitingLetter() const
+{
+	for (int32 i = 0; i < StreetName::NumLetters; ++i)
+	{
+		if (HasReadLetter(i))
+		{
+			continue;
+		}
+		const bool bEarned = i == StreetName::LighterLetter
+			? GetLightersFound() >= LighterModel::All().Num()
+			: IsActOneDone(i);
+		if (bEarned)
+		{
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+int32 APestiAlvilagGameModeBase::GetLettersRead() const
+{
+	int32 Count = 0;
+	for (int32 i = 0; i < StreetName::NumLetters; ++i)
+	{
+		Count += HasReadLetter(i) ? 1 : 0;
+	}
+	return Count;
+}
+
+void APestiAlvilagGameModeBase::ReadLetter(int32 Index)
+{
+	if (Index < 0 || Index >= StreetName::NumLetters || HasReadLetter(Index))
+	{
+		return;
+	}
+	LettersRead |= 1 << Index;
+	const int32 Enclosed = StreetName::Letters[Index].Filler;
+	AddMoney(Enclosed);
+	APestiHUD::Show(this, PestiStart::RenownNoteKey, 5.f, FColor(255, 210, 60),
+		FString::Printf(TEXT("+%s a bor\u00edt\u00e9kban  (+%s in the envelope)"), *FormatMoney(Enclosed), *FormatMoney(Enclosed)));
+}
+
+void APestiAlvilagGameModeBase::TickGreetings()
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (RankAnnounceAt > 0.0 && Now >= RankAnnounceAt)
+	{
+		RankAnnounceAt = -1.0;
+		const StreetName::FRank& Reached = StreetName::Ranks[GetRenownRank()];
+		APestiHUD* Herald = APestiHUD::Get(this);
+		if (Herald && GetRenownRank() > 0)
+		{
+			Herald->Announce(FString::Printf(TEXT("\u00daj rang: %s"), Reached.Hu),
+				FString::Printf(TEXT("%s  \u00b7  New street name: %s. %s"), Reached.GiftHu, Reached.En, Reached.GiftEn), 7.f);
+		}
+	}
+	if (Now < NextGreetAt && Now < NextBozsiAt)
+	{
+		return;
+	}
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const APestiPerson* Person = PC ? Cast<APestiPerson>(PC->GetPawn()) : nullptr;
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Person || !Hud || Person->IsHidden() || Person->IsFighting() || IsFainted() || WantedLevel > 0
+		|| Hud->IsSaying() || Hud->IsSceneShowing() || Hud->IsMenuOpen())
+	{
+		return;
+	}
+	const FVector Here = Person->GetActorLocation();
+
+	// Bözsi néni at her stall, when no mission is under way: warmer the more he has done.
+	if (Now >= NextBozsiAt)
+	{
+		const AStoryPerson* Bozsi = AFleaMarket::FindKeeper(GetWorld(), TEXT("B\u00f6zsi n\u00e9ni"));
+		bool bMissionOn = false;
+		for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+		{
+			bMissionOn = bMissionOn || It->IsUnderway();
+		}
+		if (Bozsi && !Bozsi->IsHidden() && !bMissionOn && FVector::Dist2D(Bozsi->GetActorLocation(), Here) < PestiStart::BozsiReach)
+		{
+			int32 Done = 0;
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(PestiStart::ActOne)); ++i)
+			{
+				Done += IsActOneDone(i) ? 1 : 0;
+			}
+			const StreetName::FBozsiLine* Said = &StreetName::BozsiLines[0];
+			for (const StreetName::FBozsiLine& Line : StreetName::BozsiLines)
+			{
+				if (Done >= Line.FromMissions)
+				{
+					Said = &Line;
+				}
+			}
+			Hud->Say(TEXT("B\u00f6zsi n\u00e9ni"), Said->Hu, Said->En, 6.f);
+			NextBozsiAt = Now + PestiStart::BozsiGap;
+			NextGreetAt = FMath::Max(NextGreetAt, Now + PestiStart::GreetGapMin);
+			return;
+		}
+	}
+
+	// A passer-by close by greets him, once he has a name in the street.
+	const int32 Rank = GetRenownRank();
+	if (Now < NextGreetAt || Rank <= 0)
+	{
+		return;
+	}
+	const APedestrian* Nearest = nullptr;
+	double NearestDistance = PestiStart::GreetReach;
+	for (TActorIterator<APedestrian> It(GetWorld()); It; ++It)
+	{
+		const APedestrian* Walker = *It;
+		if (Walker->IsHidden() || Walker->IsA<APoliceman>() || Walker->IsA<ACarjackedDriver>())
+		{
+			continue;
+		}
+		const double Distance = FVector::Dist2D(Walker->GetActorLocation(), Here);
+		if (Distance < NearestDistance)
+		{
+			Nearest = Walker;
+			NearestDistance = Distance;
+		}
+	}
+	if (!Nearest)
+	{
+		return;
+	}
+	NextGreetAt = Now + FMath::FRandRange(PestiStart::GreetGapMin, PestiStart::GreetGapMax);
+
+	// From a local up, now and then one has heard of his latest deed.
+	int32 LastDeed = INDEX_NONE;
+	for (int32 i = 0; i < StreetName::NumClippings; ++i)
+	{
+		if (IsActOneDone(i))
+		{
+			LastDeed = i;
+		}
+	}
+	const TCHAR* Who = TEXT("J\u00e1r\u00f3kel\u0151");
+	if (Rank >= 2 && LastDeed > 0 && FMath::RandRange(0, 2) == 0)
+	{
+		const StreetName::FLine& Place = StreetName::DeedPlaces[LastDeed];
+		Hud->Say(Who, FString::Printf(TEXT("Hallottam \u00e1m, mit tett %s!"), Place.Hu),
+			FString::Printf(TEXT("I heard what you did %s!"), Place.En), 4.f);
+		return;
+	}
+	const StreetName::FLine& Line = StreetName::Greetings[FMath::Clamp(Rank, 1, 4) - 1][FMath::RandRange(0, 2)];
+	Hud->Say(Who, Line.Hu, Line.En, 4.f);
 }

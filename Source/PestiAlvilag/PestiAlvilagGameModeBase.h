@@ -78,7 +78,7 @@ public:
 
 	/** Taxi fares driven for the company, over all shifts. */
 	int32 GetTaxiJobs() const { return TaxiJobs; }
-	void AddTaxiJob() { ++TaxiJobs; }
+	void AddTaxiJob();
 
 	/** Cars brought to Laci on his orders, each as Body * 100 + paint (ALaciOrders), oldest first. */
 	const TArray<int32>& GetLaciCars() const { return LaciCars; }
@@ -100,7 +100,7 @@ public:
 	/** The hidden lighters found so far, by number. */
 	bool HasFoundLighter(int32 Index) const { return FoundLighters.Contains(Index); }
 	int32 GetLightersFound() const { return FoundLighters.Num(); }
-	void AddFoundLighter(int32 Index) { FoundLighters.AddUnique(Index); }
+	void AddFoundLighter(int32 Index);
 
 	void MarkMissionDone(FName MissionId);
 
@@ -116,7 +116,28 @@ public:
 	bool LearnLesson(int32 Lesson, int32 Cost);
 	/** The men beaten in Bandi's ring so far, in order (0 to 5). */
 	int32 GetBoxingWins() const { return BoxingWins; }
-	void AddBoxingWin() { BoxingWins = FMath::Min(BoxingWins + 1, 5); }
+	void AddBoxingWin();
+
+	/**
+	 * Street name (hírnév, StreetName.h): points from 0 to 100. Missions,
+	 * boxing wins, lighters found and taxi fares earn them; running people
+	 * down costs them. Each rank has passers-by greet him, and the higher
+	 * ones make food and taxi rides cheaper (PriceFor). A note shows each
+	 * change, and a big line a new rank.
+	 */
+	int32 GetRenown() const { return RenownPoints; }
+	int32 GetRenownRank() const;
+	void AddRenown(int32 Points, const FString& WhyHu, const FString& WhyEn);
+	/** A price in fillér after what his street name takes off (to whole 10 fillér). */
+	static int32 PriceFor(const UObject* WorldContextObject, int32 Filler);
+	/** Whether act 1 mission Index (0 for the prologue to 7 for the fur coat) is done. */
+	bool IsActOneDone(int32 Index) const;
+	/** The employer's letter waiting at the home door (StreetName::Letters), or INDEX_NONE. */
+	int32 GetWaitingLetter() const;
+	bool HasReadLetter(int32 Index) const { return Index >= 0 && Index < 32 && (LettersRead & (1 << Index)) != 0; }
+	int32 GetLettersRead() const;
+	/** He opens the employer's letter Index: the money in it goes in his pocket. */
+	void ReadLetter(int32 Index);
 
 	/** Whether he has Schwimmer's bamboo baton (it makes his blows harder). */
 	bool HasBaton();
@@ -176,6 +197,8 @@ private:
 	void LoadSaveOnce();
 	/** After a jump to a mission: puts the player by its ring once it shows. */
 	void TickPlaceAtRing();
+	/** Passers-by greet him by his street name, and Bözsi néni has a word at her stall. */
+	void TickGreetings();
 
 	int32 WantedLevel = 0;
 	int32 Arrests = 0;
@@ -194,6 +217,14 @@ private:
 	int32 FightPoints = 0;
 	int32 Lessons = 0;
 	int32 BoxingWins = 0;
+	int32 RenownPoints = 0;
+	/** The employer's letters opened (bits, StreetName::Letters order). */
+	int32 LettersRead = 0;
+	/** When a passer-by may next greet him, and Bözsi néni next speak. */
+	double NextGreetAt = 0.0;
+	double NextBozsiAt = 0.0;
+	/** When to announce the rank he has just reached, or below 0. */
+	double RankAnnounceAt = -1.0;
 	/** The points of the fight going on, and when the last came (for the note). */
 	int32 RecentPoints = 0;
 	double RecentPointsAt = -100.0;

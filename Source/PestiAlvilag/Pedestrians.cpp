@@ -2,6 +2,7 @@
 
 #include "Pedestrians.h"
 
+#include "StreetName.h"
 #include "Camera/PlayerCameraManager.h"
 #include "CarBody.h"
 #include "Components/SceneComponent.h"
@@ -711,6 +712,12 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 	if (APestiCar* Car = Cast<APestiCar>(LastPlayer.Get()))
 	{
 		Car->ForwardSpeed *= Pedestrians::CarSlowOnHit;
+	}
+
+	// Word gets round: it costs him some of his street name.
+	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+	{
+		Game->AddRenown(bKilled ? StreetName::ForRunningOver : StreetName::ForKnockingDown, TEXT("elg\u00e1zolt valakit"), TEXT("ran someone down"));
 	}
 
 	// A police car or a constable close by sees it.

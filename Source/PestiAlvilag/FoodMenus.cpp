@@ -304,18 +304,20 @@ void AFoodMenus::Order()
 {
 	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
 	const Food::FDish& Dish = Food::Dishes()[DishAt(Selected)];
-	if (!Game || Game->GetMoney() < Dish.Price)
+	// His street name may take something off.
+	const int32 Price = APestiAlvilagGameModeBase::PriceFor(this, Dish.Price);
+	if (!Game || Game->GetMoney() < Price)
 	{
 		Say(FString::Printf(TEXT("\u201eSajnos ez t\u00f6bbe ker\u00fcl.\u201d  (I'm afraid that costs more.)   %s is %s"),
-			Dish.Name, *APestiAlvilagGameModeBase::FormatMoney(Dish.Price)));
+			Dish.Name, *APestiAlvilagGameModeBase::FormatMoney(Price)));
 		return;
 	}
-	Game->AddMoney(-Dish.Price);
+	Game->AddMoney(-Price);
 	Game->HealPlayer(FoodMenus::Heal);
 	const bool bNew = Game->TryDish(FName(Dish.Id));
 	Close();
 	FString Text = FString::Printf(TEXT("\u201eJ\u00f3 \u00e9tv\u00e1gyat!\u201d  (Enjoy your meal!)   %s, %s"),
-		Dish.Name, *APestiAlvilagGameModeBase::FormatMoney(Dish.Price));
+		Dish.Name, *APestiAlvilagGameModeBase::FormatMoney(Price));
 	if (bNew)
 	{
 		Text += FString::Printf(TEXT("   New dish tried: %d of %d"), Game->GetDishesTried(), Food::Dishes().Num());
@@ -382,7 +384,7 @@ TSharedRef<SWidget> AFoodMenus::BuildMenuWidget()
 				.Padding(16.f, 0.f, 0.f, 0.f)
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(APestiAlvilagGameModeBase::FormatMoney(Dish.Price)))
+					.Text(FText::FromString(APestiAlvilagGameModeBase::FormatMoney(APestiAlvilagGameModeBase::PriceFor(this, Dish.Price))))
 					.Font(NameFont)
 					.ColorAndOpacity_Lambda(RowColor(Ink, Gold))
 				]
@@ -518,7 +520,7 @@ TSharedRef<SWidget> AFoodMenus::BuildMenuWidget()
 								.Padding(0.f, 10.f, 0.f, 0.f)
 								[
 									SNew(STextBlock)
-									.Text_Lambda([Chosen]() { return FText::FromString(APestiAlvilagGameModeBase::FormatMoney(Chosen().Price)); })
+									.Text_Lambda([this, Chosen]() { return FText::FromString(APestiAlvilagGameModeBase::FormatMoney(APestiAlvilagGameModeBase::PriceFor(this, Chosen().Price))); })
 									.Font(BigFont)
 									.ColorAndOpacity(Gold)
 								]
