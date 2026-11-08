@@ -77,7 +77,11 @@ namespace OsmGraybox
 	// 2: picture coordinates (UVs) and tangents for the pack materials.
 	// 3: walls split into ground floor and upper floor sections.
 	// 4: Bözsi néni's block left out (BozsiHouseModel builds it with its courtyard).
-	constexpr int32 MeshVersion = 4;
+	// 5: the city details' blocks (open gateways, the taller Corvin) from city_details.json.
+	constexpr int32 MeshVersion = 5;
+
+	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
+	const TCHAR* const DetailsFile = TEXT("city_details.json");
 
 	// Walls below this height (cm) are the ground floor, which gets stone blocks;
 	// above it smooth plaster. Matches the facades' ground floor.
@@ -546,6 +550,52 @@ TSharedPtr<FJsonObject> AOsmGraybox::LoadData() const
 	{
 		UE_LOG(LogOsmGraybox, Error, TEXT("%s is not valid JSON"), *Path);
 		return nullptr;
+	}
+
+	// The blocks the city details build differently (city_details.py): the
+	// houses with an open gateway, cut in pieces with a bridge over the
+	// gateway, and the taller Corvin department store. Their pieces take the
+	// place of the blocks they replace.
+	FString DetailsText;
+	TSharedPtr<FJsonObject> Details;
+	const FString DetailsPath = FPaths::Combine(FPaths::GetPath(Path), OsmGraybox::DetailsFile);
+	const TArray<TSharedPtr<FJsonValue>>* Pieces = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Blocks = nullptr;
+	if (FFileHelper::LoadFileToString(DetailsText, *DetailsPath)
+		&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(DetailsText), Details) && Details.IsValid()
+		&& Details->TryGetArrayField(TEXT("buildings"), Pieces) && Root->TryGetArrayField(TEXT("buildings"), Blocks))
+	{
+		TSet<FString> Replaced;
+		for (const TSharedPtr<FJsonValue>& PieceValue : *Pieces)
+		{
+			const TSharedPtr<FJsonObject> Piece = PieceValue->AsObject();
+			if (Piece.IsValid())
+			{
+				Replaced.Add(Piece->GetStringField(TEXT("replaces")));
+			}
+		}
+		TArray<TSharedPtr<FJsonValue>> Merged;
+		Merged.Reserve(Blocks->Num() + Pieces->Num());
+		for (const TSharedPtr<FJsonValue>& BlockValue : *Blocks)
+		{
+			const TSharedPtr<FJsonObject> Block = BlockValue->AsObject();
+			if (!Block.IsValid() || !Replaced.Contains(Block->GetStringField(TEXT("id"))))
+			{
+				Merged.Add(BlockValue);
+			}
+		}
+		int32 PieceIndex = 0;
+		for (const TSharedPtr<FJsonValue>& PieceValue : *Pieces)
+		{
+			const TSharedPtr<FJsonObject> Piece = PieceValue->AsObject();
+			if (Piece.IsValid())
+			{
+				// Each piece its own id, so its colours and facade are its own.
+				Piece->SetStringField(TEXT("id"), FString::Printf(TEXT("%s-%d"), *Piece->GetStringField(TEXT("replaces")), PieceIndex++));
+				Merged.Add(PieceValue);
+			}
+		}
+		Root->SetArrayField(TEXT("buildings"), Merged);
 	}
 	return Root;
 }

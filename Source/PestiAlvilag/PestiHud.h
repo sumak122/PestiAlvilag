@@ -109,6 +109,16 @@ public:
 	void MarkStart(const FVector& At, const FString& Letter);
 	/** For this frame, a place to go back to (Laci's garage, Bandi's boxing yard), with its letter, on the minimap and the big map. */
 	void MarkPlace(const FVector& At, const FString& Letter);
+
+	/** The kinds of little pictures the maps show for places (ACityDetails sends them). */
+	enum class EMapIcon : uint8 { Cafe, Market, Tram, Phone, Yard, Theatre, Station, Store, Church };
+	struct FMapIcon
+	{
+		FVector2D At = FVector2D::ZeroVector;
+		EMapIcon Kind = EMapIcon::Cafe;
+	};
+	/** The places shown with a little picture on the minimap and the big map, for good. */
+	void SetMapIcons(const TArray<FMapIcon>& InIcons) { MapIcons = InIcons; }
 	/**
 	 * A scene (ACutscene): how far the black bars are in, 0 to 1. While they
 	 * show, the rest of the HUD goes, and what people say shows as subtitles
@@ -216,6 +226,8 @@ private:
 		double Until = -1.0;
 	};
 	TArray<FPlaceMark> PlaceMarks;
+	/** The little pictures of places on the maps. */
+	TArray<FMapIcon> MapIcons;
 
 	// A scene: the bars and the title.
 	float SceneBars = 0.f;
