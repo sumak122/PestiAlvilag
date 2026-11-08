@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "StartRingComponent.h"
 #include "Cafe.h"
+#include "CityDetails.h"
 #include "SoundSpots.h"
 #include "GarayModel.h"
 #include "GarayYard.h"
@@ -441,6 +442,13 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(AMarketHall::ToCity(FVector2D(-800.0, 0.0)));
 		GetWorld()->SpawnActor<AMarketHall>(AMarketHall::StaticClass(), FVector(AMarketHall::FrontAt(), Z), FRotator(0.0, AMarketHall::Yaw(), 0.0));
+	}
+
+	// And the city's smaller details: the Corvin department store, the open
+	// courtyards, the wall adverts, the kiosks and the street clocks.
+	if (!TActorIterator<ACityDetails>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ACityDetails>(ACityDetails::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
 	}
 
 	// And Garay utca 13: Hermann's shop and Schwimmer's timber yard (mission 5).

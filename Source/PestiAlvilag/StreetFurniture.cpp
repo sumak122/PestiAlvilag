@@ -23,6 +23,7 @@
 #include "Misc/Paths.h"
 #include "OsmGraybox.h"
 #include "BozsiHouseModel.h"
+#include "CityDetails.h"
 #include "ParkKeeper.h"
 #include "ParkModel.h"
 #include "PersonModel.h"
@@ -955,7 +956,9 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			}
 			TArray<ParkModel::FPart> Model;
 			TArray<ShopModel::FLettering> Lettering;
-			ShopModel::BuildGate(Model, Lettering, Gate->GetNumberField(TEXT("width")));
+			// A few gates stand open onto their courtyards (ACityDetails).
+			const bool bOpen = ACityDetails::IsOpenGate(FVector2D(Foot.X, Foot.Y));
+			ShopModel::BuildGate(Model, Lettering, Gate->GetNumberField(TEXT("width")), bOpen);
 			Put(Model, Foot, Yaw);
 			for (const ShopModel::FLettering& Line : Lettering)
 			{

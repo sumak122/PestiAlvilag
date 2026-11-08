@@ -214,6 +214,10 @@ namespace PestiHud
 	const FLinearColor GoalDark = FLinearColor(FColor(92, 74, 30));
 	const FLinearColor MarkDark = FLinearColor(FColor(122, 31, 25));
 	const FLinearColor TramInk = FLinearColor(FColor(150, 62, 48));
+	const FLinearColor YardGreen = FLinearColor(FColor(111, 138, 74));
+	// The little pictures of places: their size on the big map and on the minimap.
+	constexpr float MapIconSize = 22.f;
+	constexpr float MiniIconSize = 17.f;
 	const FLinearColor PlaceInk = FLinearColor(FColor(244, 232, 204, 220));
 
 	/** A few names written over the big map, where they belong (world cm). */
@@ -2011,6 +2015,94 @@ private:
 	}
 
 	/** A place to go back to: its letter in cream in a cream-framed dark square (a mission's is gold). */
+	/**
+	 * A place's little picture on a dark tile S across: a cup for a cafe, a
+	 * striped awning for a market, a tram on a red tile for a stop, a phone
+	 * box, a gateway arch for an open courtyard, a portico for the theatre,
+	 * the station's arch, a shopping bag for the department store, a cross
+	 * for a church. Drawn with the HUD's boxes and lines only.
+	 */
+	void PaintMapIcon(const FPainter& Paint, const FVector2f& At, APestiHUD::EMapIcon Kind, float S, int32 Up) const
+	{
+		using EIcon = APestiHUD::EMapIcon;
+		const float H = S * 0.5f;
+		const float U = S / 22.f;
+		const float X = At.X;
+		const float Y = At.Y;
+		const FLinearColor& C = PestiHud::Cream;
+		Paint.Box(X - H, Y - H, S, S, Kind == EIcon::Tram ? PestiHud::TramInk : PestiHud::Solid, Up);
+		Paint.Frame(X - H, Y - H, S, S, C, 1.5f, Up + 1);
+		const int32 On = Up + 1;
+		switch (Kind)
+		{
+		case EIcon::Cafe:
+			Paint.Box(X - 6.f * U, Y - 3.f * U, 9.f * U, 8.f * U, C, On);
+			Paint.Frame(X + 3.f * U, Y - 1.f * U, 3.f * U, 4.f * U, C, 1.4f * U, On);
+			Paint.Line(X - 8.f * U, Y + 6.f * U, X + 5.f * U, Y + 6.f * U, C, 1.6f * U, On);
+			Paint.Line(X - 4.f * U, Y - 8.f * U, X - 3.f * U, Y - 5.f * U, C, 1.2f * U, On);
+			Paint.Line(X, Y - 8.f * U, X + 1.f * U, Y - 5.f * U, C, 1.2f * U, On);
+			break;
+		case EIcon::Market:
+			for (int32 i = 0; i < 3; ++i)
+			{
+				Paint.Box(X - 8.f * U + i * 6.f * U, Y - 6.f * U, (i % 2 ? 5.f : 6.f) * U, 5.f * U, i % 2 ? PestiHud::TramInk : C, On);
+			}
+			Paint.Line(X - 8.f * U, Y - 1.f * U, X + 8.f * U, Y - 1.f * U, C, 1.4f * U, On);
+			Paint.Line(X - 6.f * U, Y, X - 6.f * U, Y + 7.f * U, C, 1.4f * U, On);
+			Paint.Line(X + 6.f * U, Y, X + 6.f * U, Y + 7.f * U, C, 1.4f * U, On);
+			Paint.Line(X - 7.f * U, Y + 3.f * U, X + 7.f * U, Y + 3.f * U, C, 1.4f * U, On);
+			break;
+		case EIcon::Tram:
+			Paint.Box(X - 6.f * U, Y - 3.f * U, 12.f * U, 8.f * U, C, On);
+			Paint.Box(X - 4.f * U, Y - 1.f * U, 3.f * U, 3.f * U, PestiHud::TramInk, On + 1);
+			Paint.Box(X + 1.f * U, Y - 1.f * U, 3.f * U, 3.f * U, PestiHud::TramInk, On + 1);
+			Paint.Line(X, Y - 3.f * U, X + 3.f * U, Y - 8.f * U, C, 1.2f * U, On);
+			Paint.Line(X - 6.f * U, Y + 7.f * U, X + 6.f * U, Y + 7.f * U, C, 1.2f * U, On);
+			break;
+		case EIcon::Phone:
+			Paint.Frame(X - 4.f * U, Y - 8.f * U, 8.f * U, 15.f * U, C, 1.6f * U, On);
+			Paint.Box(X - 4.f * U, Y - 8.f * U, 8.f * U, 3.f * U, C, On);
+			Paint.Diamond(X, Y + 1.f * U, 5.f * U, C, On);
+			break;
+		case EIcon::Yard:
+			Paint.Lines({ FVector2f(X - 6.f * U, Y + 7.f * U), FVector2f(X - 6.f * U, Y - 3.f * U), FVector2f(X, Y - 7.f * U),
+				FVector2f(X + 6.f * U, Y - 3.f * U), FVector2f(X + 6.f * U, Y + 7.f * U) }, C, 2.f * U, On);
+			Paint.Box(X - 3.f * U, Y + 1.f * U, 6.f * U, 6.f * U, PestiHud::YardGreen, On);
+			break;
+		case EIcon::Theatre:
+			Paint.Lines({ FVector2f(X - 8.f * U, Y - 3.f * U), FVector2f(X, Y - 8.f * U), FVector2f(X + 8.f * U, Y - 3.f * U), FVector2f(X - 8.f * U, Y - 3.f * U) }, C, 1.6f * U, On);
+			for (const float K : { -5.f, 0.f, 5.f })
+			{
+				Paint.Line(X + K * U, Y - 2.f * U, X + K * U, Y + 6.f * U, C, 1.8f * U, On);
+			}
+			Paint.Line(X - 8.f * U, Y + 7.f * U, X + 8.f * U, Y + 7.f * U, C, 1.6f * U, On);
+			break;
+		case EIcon::Station:
+		{
+			TArray<FVector2f> Arch;
+			Arch.Add(FVector2f(X - 7.f * U, Y + 7.f * U));
+			for (int32 i = 0; i <= 8; ++i)
+			{
+				const float A = UE_PI * i / 8.f;
+				Arch.Add(FVector2f(X - FMath::Cos(A) * 7.f * U, Y + 1.f * U - FMath::Sin(A) * 7.f * U));
+			}
+			Arch.Add(FVector2f(X + 7.f * U, Y + 7.f * U));
+			Paint.Lines(Arch, C, 1.8f * U, On);
+			Paint.Line(X - 8.f * U, Y + 7.f * U, X + 8.f * U, Y + 7.f * U, C, 1.6f * U, On);
+			Paint.Line(X, Y + 1.f * U, X, Y + 7.f * U, C, 1.2f * U, On);
+			break;
+		}
+		case EIcon::Store:
+			Paint.Box(X - 6.f * U, Y - 2.f * U, 12.f * U, 9.f * U, C, On);
+			Paint.Lines({ FVector2f(X - 3.f * U, Y - 2.f * U), FVector2f(X - 3.f * U, Y - 6.f * U), FVector2f(X + 3.f * U, Y - 6.f * U), FVector2f(X + 3.f * U, Y - 2.f * U) }, C, 1.4f * U, On);
+			break;
+		case EIcon::Church:
+			Paint.Line(X, Y - 8.f * U, X, Y + 8.f * U, C, 2.2f * U, On);
+			Paint.Line(X - 5.f * U, Y - 3.f * U, X + 5.f * U, Y - 3.f * U, C, 2.2f * U, On);
+			break;
+		}
+	}
+
 	void PaintPlaceBlip(const FPainter& Paint, const FPainter& Above, const FVector2f& At, const FString& Letter, int32 Up) const
 	{
 		Paint.Box(At.X - 12.f, At.Y - 12.f, 24.f, 24.f, PestiHud::Solid, Up);
@@ -2056,6 +2148,15 @@ private:
 			if (FMath::Abs(Home.X - Frame.Screen.X) < Half && FMath::Abs(Home.Y - Frame.Screen.Y) < Half)
 			{
 				PaintHouse(Over, Home, 18.f, 6);
+			}
+		}
+		for (const APestiHUD::FMapIcon& Icon : Hud.MapIcons)
+		{
+			const FVector2f Spot = Frame.ToScreen(Icon.At);
+			const float Room = Half - PestiHud::MiniIconSize * 0.5f;
+			if (FMath::Abs(Spot.X - Frame.Screen.X) < Room && FMath::Abs(Spot.Y - Frame.Screen.Y) < Room)
+			{
+				PaintMapIcon(Over, Spot, Icon.Kind, PestiHud::MiniIconSize, 4);
 			}
 		}
 		{
@@ -2137,6 +2238,10 @@ private:
 			Over.Text(Place.Name, Over.Bold(17.f, 3.f), At.X, At.Y, PestiHud::PlaceInk, 0.5f);
 		}
 		PaintRoutes(Over, Hud, Frame, Now, 3);
+		for (const APestiHUD::FMapIcon& Icon : Hud.MapIcons)
+		{
+			PaintMapIcon(Over, Frame.ToScreen(Icon.At), Icon.Kind, PestiHud::MapIconSize, 4);
+		}
 		if (Hud.bHasHome)
 		{
 			PaintHouse(Over, Frame.ToScreen(Hud.HomeAt), 24.f, 6);
@@ -2175,7 +2280,7 @@ private:
 		const float LW = PestiHud::MapLegendWidth;
 		Paint.Panel(LX, Y, LW, H);
 		Paint.Tab(TEXT("JELMAGYAR\u00c1ZAT"), LX + LW * 0.5f, Y);
-		float RowY = Y + 80.f;
+		float RowY = Y + 70.f;
 		const float IconX = LX + 46.f;
 		const float WordsX = LX + 80.f;
 		auto Row = [&](const TCHAR* Hu, const TCHAR* En)
@@ -2185,7 +2290,7 @@ private:
 			{
 				Paint.Text(En, Paint.Plain(16.f), WordsX, RowY + 18.f, PestiHud::Grey);
 			}
-			RowY += 64.f;
+			RowY += 54.f;
 		};
 		PaintArrow(Over, FVector2f(IconX, RowY - 8.f), 0.f, 13.f, 1);
 		Row(TEXT("Te"), TEXT("You"));
@@ -2206,6 +2311,41 @@ private:
 		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::TramInk, 2.f, 1);
 		Row(TEXT("Villamos"), TEXT("Tram line"));
 
+		// The places' little pictures, in two columns.
+		using EIcon = APestiHUD::EMapIcon;
+		struct FIconRow
+		{
+			EIcon Kind;
+			const TCHAR* Hu;
+			const TCHAR* En;
+		};
+		static const FIconRow Places[] = {
+			{ EIcon::Cafe, TEXT("K\u00e1v\u00e9h\u00e1z"), TEXT("Caf\u00e9") },
+			{ EIcon::Market, TEXT("Piac"), TEXT("Market") },
+			{ EIcon::Tram, TEXT("Meg\u00e1ll\u00f3"), TEXT("Tram stop") },
+			{ EIcon::Phone, TEXT("Rend\u0151rtelefon"), TEXT("Police phone") },
+			{ EIcon::Yard, TEXT("Nyitott udvar"), TEXT("Open courtyard") },
+			{ EIcon::Church, TEXT("Templom"), TEXT("Church") },
+			{ EIcon::Theatre, TEXT("Sz\u00ednh\u00e1z"), TEXT("Theatre") },
+			{ EIcon::Station, TEXT("P\u00e1lyaudvar"), TEXT("Station") },
+			{ EIcon::Store, TEXT("\u00c1ruh\u00e1z"), TEXT("Department store") },
+		};
+		Over.Line(LX + 30.f, RowY - 22.f, LX + LW - 30.f, RowY - 22.f, PestiHud::Brass, 1.f, 1);
+		Paint.Text(bEnglish ? TEXT("HELYEK  \u00b7  PLACES") : TEXT("HELYEK"), Paint.Deco(17.f), LX + LW * 0.5f, RowY, PestiHud::Gold, 0.5f);
+		RowY += 34.f;
+		for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Places)); ++i)
+		{
+			const float PX = LX + 40.f + (i % 2) * 180.f;
+			const float PY = RowY + (i / 2) * 46.f;
+			PaintMapIcon(Over, FVector2f(PX, PY), Places[i].Kind, PestiHud::MapIconSize, 1);
+			Paint.Text(Places[i].Hu, Paint.Bold(18.f), PX + 22.f, PY + 2.f, PestiHud::Cream);
+			if (bEnglish)
+			{
+				Paint.Text(Places[i].En, Paint.Plain(14.f), PX + 22.f, PY + 19.f, PestiHud::Grey);
+			}
+		}
+
+		// The keys in one line under the map.
 		static const TCHAR* const Keys[][3] = {
 			{ TEXT("Eg\u00e9r / W A S D"), TEXT("mozgat\u00e1s"), TEXT("move") },
 			{ TEXT("G\u00f6rg\u0151 / Q E"), TEXT("nagy\u00edt\u00e1s"), TEXT("zoom") },
@@ -2213,13 +2353,15 @@ private:
 			{ TEXT("Jobb klikk / Del"), TEXT("jel t\u00f6rl\u00e9se"), TEXT("clear the mark") },
 			{ TEXT("M / Esc"), TEXT("bez\u00e1r\u00e1s"), TEXT("close") },
 		};
-		RowY += 20.f;
+		const float KeysY = Y + H + 22.f;
+		float KeyX = X + 30.f;
 		for (const auto& Key : Keys)
 		{
-			Paint.Text(Key[0], Paint.Bold(18.f), LX + 30.f, RowY, PestiHud::Gold);
-			const FString Says = bEnglish ? FString::Printf(TEXT("%s  (%s)"), Key[1], Key[2]) : FString(Key[1]);
-			Paint.Text(Says, Paint.Plain(17.f), LX + 30.f, RowY + 24.f, PestiHud::Grey);
-			RowY += 58.f;
+			Paint.Text(Key[0], Paint.Bold(18.f), KeyX, KeysY, PestiHud::Gold);
+			KeyX += Paint.Measure(Key[0], Paint.Bold(18.f)).X + 10.f;
+			const FString Says = bEnglish ? FString::Printf(TEXT("%s (%s)"), Key[1], Key[2]) : FString(Key[1]);
+			Paint.Text(Says, Paint.Plain(17.f), KeyX, KeysY, PestiHud::Grey);
+			KeyX += Paint.Measure(Says, Paint.Plain(17.f)).X + 40.f;
 		}
 	}
 
