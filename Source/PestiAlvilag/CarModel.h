@@ -1352,17 +1352,30 @@ namespace CarModel
 
 		// The body: a low tub from the scuttle back, the open cockpit in it, a narrow sill joining the wings.
 		B.Box(Paint, FVector(DeckFront, -W, Sill), FVector(L.Cowl, W, Floor));
-		B.BothSides(Paint, FVector(DeckFront, W - 4.0, Floor), FVector(L.Cowl, W, Top));
+		// The doors: rounded sides bulging out, their top line dipping in a long curve between the scuttle and the tail.
+		for (const double S : { -1.0, 1.0 })
+		{
+			TArray<TArray<FVector>> Rings;
+			const int32 Count = 14;
+			for (int32 i = 0; i <= Count; ++i)
+			{
+				const double T = static_cast<double>(i) / Count;
+				const double X = FMath::Lerp(L.Cowl + 1.0, DeckFront - 1.0, T);
+				const double Crest = Top + 2.0 - 11.0 * FMath::Pow(FMath::Sin(PI * FMath::Clamp(T * 1.1 - 0.05, 0.0, 1.0)), 1.6);
+				const double Mid = (Crest + Sill) * 0.5;
+				Rings.Add(RoundRing(FVector(X, S * (W - 3.0), Mid), FVector(0.0, S, 0.0), FVector(0.0, 0.0, 1.0), 4.5, Crest - Mid, Mid - Sill, 2.3, 16));
+			}
+			Loft(B, Paint, Rings);
+		}
 		B.Box(Paint, FVector(L.Cowl - 16.0, -W, Floor), FVector(L.Cowl, W, Top + 2.0));
 		B.Box(Chrome, FVector(L.Cowl - 17.0, -W + 8.0, Top - 12.0), FVector(L.Cowl - 16.0, W - 8.0, Top - 2.0));
-		B.BarBothSides(Leather, FVector(DeckFront, W - 2.0, Top + 1.5), FVector(L.Cowl - 16.0, W - 2.0, Top + 1.5), 3.5);
 		B.Bar(Leather, FVector(L.Cowl - 16.0, -W + 2.0, Top + 3.0), FVector(L.Cowl - 16.0, W - 2.0, Top + 3.0), 3.5);
-		B.BothSides(Paint, FVector(WingFront - 6.0, W - 2.0, Sill - 4.0), FVector(12.0, L.TrackY - 4.0, Sill + 3.0));
+		B.BothSides(Paint, FVector(WingFront - 6.0, W - 2.0, Sill - 1.0), FVector(12.0, W + 10.0, Sill + 2.0));
 		for (const double S : { -1.0, 1.0 })
 		{
 			// The slanting vent on each side of the scuttle.
-			B.Pane(Guards, FVector(L.Cowl - 4.0, S * (W + 0.3), -10.0), FVector(L.Cowl - 12.0, S * (W + 0.3), -10.0),
-				FVector(L.Cowl - 30.0, S * (W + 0.3), -36.0), FVector(L.Cowl - 22.0, S * (W + 0.3), -36.0));
+			B.Pane(Guards, FVector(L.Cowl - 4.0, S * (W + 1.7), -10.0), FVector(L.Cowl - 12.0, S * (W + 1.7), -10.0),
+				FVector(L.Cowl - 30.0, S * (W + 1.7), -36.0), FVector(L.Cowl - 22.0, S * (W + 1.7), -36.0));
 		}
 
 		// The tail: a smooth hump behind the seats, narrowing and sloping down to a point between the wings.
