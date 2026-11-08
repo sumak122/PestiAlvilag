@@ -2,8 +2,11 @@
 
 #include "CityDetails.h"
 
+#include "ChurchModel.h"
 #include "CityDetailsModel.h"
+#include "CityLifeModel.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "DayNight.h"
 #include "Dom/JsonObject.h"
@@ -14,10 +17,13 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "PersonKit.h"
+#include "PersonModel.h"
 #include "PestiHud.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "ShapeSet.h"
+#include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCityDetails, Log, All);
@@ -37,6 +43,13 @@ namespace CityDetailsPlace
 	constexpr float HandsStep = 1.f / 120.f;
 	// The ground height is taken this far out in front of a wall (cm).
 	constexpr double OutFromWall = 120.0;
+	// The street's life is gathered into one shape set per square patch this wide (cm).
+	constexpr double LifePatch = 12000.0;
+	constexpr float LifeDrawDistance = 12000.f;
+	constexpr float ChurchDrawDistance = 80000.f;
+	// The coal man stands this far out from the wall and along it from the hatch (cm), and is not drawn beyond this.
+	const FVector2D CoalManAt(110.0, -60.0);
+	constexpr float CoalManDistance = 9000.f;
 
 	FVector2D Pair(const TArray<TSharedPtr<FJsonValue>>& Values, int32 First = 0)
 	{
@@ -167,6 +180,8 @@ void ACityDetails::BeginPlay()
 		BuildKiosks(*Root);
 		BuildClocks(*Root);
 		ReadMapIcons(*Root);
+		BuildChurches(*Root);
+		BuildStreetLife(*Root);
 	}
 }
 
@@ -419,6 +434,177 @@ void ACityDetails::ReadMapIcons(const FJsonObject& Root)
 				break;
 			}
 		}
+	}
+}
+
+void ACityDetails::BuildChurches(const FJsonObject& Root)
+{
+	using namespace ChurchModel;
+	const TArray<TSharedPtr<FJsonValue>>* Churches = nullptr;
+	if (!Root.TryGetArrayField(TEXT("churches"), Churches))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& ChurchValue : *Churches)
+	{
+		// [kind, x, y, yaw, width, depth]
+		const TArray<TSharedPtr<FJsonValue>>& C = ChurchValue->AsArray();
+		if (C.Num() < 6)
+		{
+			continue;
+		}
+		const FVector2D Front = CityDetailsPlace::Pair(C, 1);
+		const double FrontYaw = C[3]->AsNumber();
+		const EChurch Which = C[0]->AsString() == TEXT("rokus") ? EChurch::Rokus : EChurch::JezusSzive;
+		const double Ground = GroundAt(Front + CityDetailsPlace::Ahead(FrontYaw, 300.0));
+		AShapeSet* Set = PutUp(FVector(Front, Ground), FrontYaw, CityDetailsPlace::ChurchDrawDistance);
+		if (!Set)
+		{
+			continue;
+		}
+		TArray<FShape> Shapes;
+		TArray<FLamp> Lights;
+		Church(Which, C[4]->AsNumber(), C[5]->AsNumber(), Shapes, Lights);
+		Set->AddShapes(Shapes);
+		for (const FLamp& Light : Lights)
+		{
+			Set->AddLamp(Light.At, Light.Radius);
+		}
+	}
+}
+
+void ACityDetails::BuildStreetLife(const FJsonObject& Root)
+{
+	using namespace CityLifeModel;
+
+	// Everything goes into its patch's list, in world space round the patch's middle.
+	TMap<FIntPoint, TArray<FShape>> Patches;
+	auto PatchOf = [](const FVector2D& Spot)
+	{
+		return FIntPoint(FMath::FloorToInt(Spot.X / CityDetailsPlace::LifePatch), FMath::FloorToInt(Spot.Y / CityDetailsPlace::LifePatch));
+	};
+	auto MiddleOf = [](const FIntPoint& Patch)
+	{
+		return FVector((Patch.X + 0.5) * CityDetailsPlace::LifePatch, (Patch.Y + 0.5) * CityDetailsPlace::LifePatch, 0.0);
+	};
+	auto DropShapes = [&](const TArray<FShape>& Local, const FVector& Spot, double SpotYaw)
+	{
+		const FIntPoint Patch = PatchOf(FVector2D(Spot.X, Spot.Y));
+		CityLifeModel::Place(Local, Spot - MiddleOf(Patch), SpotYaw, Patches.FindOrAdd(Patch));
+	};
+	// Each list in the file is of [x, y, yaw, ...] entries.
+	auto ForEachEntry = [&Root](const TCHAR* Field, int32 MinCount, TFunctionRef<void(const TArray<TSharedPtr<FJsonValue>>&)> Use)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
+		if (!Root.TryGetArrayField(Field, Entries))
+		{
+			return;
+		}
+		for (const TSharedPtr<FJsonValue>& EntryValue : *Entries)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& E = EntryValue->AsArray();
+			if (E.Num() >= MinCount)
+			{
+				Use(E);
+			}
+		}
+	};
+
+	ForEachEntry(TEXT("hydrants"), 3, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		Hydrant(Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	ForEachEntry(TEXT("manholes"), 4, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		Manhole(static_cast<int32>(E[3]->AsNumber()), Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	ForEachEntry(TEXT("hatches"), 4, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		const double HatchYaw = E[2]->AsNumber();
+		TArray<FShape> Local;
+		CellarHatch(static_cast<int32>(E[3]->AsNumber()), Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot + CityDetailsPlace::Ahead(HatchYaw, CityDetailsPlace::OutFromWall))), HatchYaw);
+	});
+	ForEachEntry(TEXT("troughs"), 3, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		Trough(Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	ForEachEntry(TEXT("coal_drops"), 4, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		const double DropYaw = E[2]->AsNumber();
+		const uint32 Seed = static_cast<uint32>(E[3]->AsNumber());
+		const FVector Foot(Spot, GroundAt(Spot + CityDetailsPlace::Ahead(DropYaw, CityDetailsPlace::OutFromWall)));
+		TArray<FShape> Local;
+		CoalDrop(Seed, Local);
+		DropShapes(Local, Foot, DropYaw);
+		PutCoalMan(Foot, DropYaw, Seed);
+	});
+	// The people at the windows: the facades stand on the flat ground, so the sill's height is the height in the world.
+	ForEachEntry(TEXT("window_folk"), 6, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		TArray<FShape> Local;
+		WindowFolk(static_cast<int32>(E[4]->AsNumber()), static_cast<uint32>(E[5]->AsNumber()), Local);
+		DropShapes(Local, FVector(CityDetailsPlace::Pair(E), E[2]->AsNumber()), E[3]->AsNumber());
+	});
+
+	int32 Count = 0;
+	for (const TPair<FIntPoint, TArray<FShape>>& Patch : Patches)
+	{
+		if (AShapeSet* Set = PutUp(MiddleOf(Patch.Key), 0.0, CityDetailsPlace::LifeDrawDistance))
+		{
+			Set->AddShapes(Patch.Value);
+			Count += Patch.Value.Num();
+		}
+	}
+	UE_LOG(LogCityDetails, Log, TEXT("Street life: %d shapes in %d sets"), Count, Patches.Num());
+}
+
+void ACityDetails::PutCoalMan(const FVector& Foot, double FacingYaw, uint32 Seed)
+{
+	// The coal man by the chute, turned to the hatch: dark, dusty clothes,
+	// a flat cap and a leather apron.
+	const FRotator Turn(0.0, FacingYaw, 0.0);
+	const FVector Spot = Foot + Turn.RotateVector(FVector(CityDetailsPlace::CoalManAt, PersonModel::MiddleHeight));
+	PersonKit::FOutfit Clothes;
+	Clothes.Height = 170.f + static_cast<float>(Seed % 12u);
+	Clothes.Build = 1.1f;
+	Clothes.Hat = PersonKit::EHat::FlatCap;
+	Clothes.Top = PersonKit::ETop::Waistcoat;
+	Clothes.bTie = false;
+	Clothes.bApron = true;
+	Clothes.bBoots = true;
+	Clothes.bMoustache = Seed % 2u == 0u;
+	Clothes.Skin = FLinearColor(0.42f, 0.30f, 0.24f);
+	Clothes.HatColor = FLinearColor(0.05f, 0.05f, 0.05f);
+	Clothes.Shirt = FLinearColor(0.30f, 0.29f, 0.27f);
+	Clothes.Waistcoat = FLinearColor(0.06f, 0.06f, 0.06f);
+	Clothes.Trousers = FLinearColor(0.07f, 0.07f, 0.07f);
+	Clothes.Apron = FLinearColor(0.10f, 0.07f, 0.05f);
+	const FTransform Spawn(FRotator(0.0, FacingYaw + 150.0, 0.0), Spot);
+	AStoryPerson* CoalMan = GetWorld()->SpawnActorDeferred<AStoryPerson>(AStoryPerson::StaticClass(), Spawn, this, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!CoalMan)
+	{
+		return;
+	}
+	CoalMan->SetOutfit(Clothes);
+	CoalMan->FinishSpawning(Spawn);
+	CoalMan->SetActorTickEnabled(false);
+	TInlineComponentArray<UPrimitiveComponent*> Shapes(CoalMan);
+	for (UPrimitiveComponent* Shape : Shapes)
+	{
+		Shape->SetCachedMaxDrawDistance(CityDetailsPlace::CoalManDistance);
 	}
 }
 

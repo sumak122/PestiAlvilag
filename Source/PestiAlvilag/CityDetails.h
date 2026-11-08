@@ -21,6 +21,13 @@ class UStaticMesh;
  * The clocks' hands follow the game's time (ADayNight). It also sends the
  * maps their little pictures of places (APestiHUD::SetMapIcons).
  *
+ * Round 2: the Rókus chapel and the Jézus Szíve church (ChurchModel; their
+ * plain blocks are left out by AOsmGraybox), and the street's life
+ * (CityLifeModel): hydrants, manhole covers, cellar hatches, horse troughs,
+ * the coal man's drops with the coal man standing by, and people at the
+ * windows, gathered into one shape set per patch of the map. The flower
+ * boxes and washing are in the facades themselves (FacadeLifeModel).
+ *
  * The houses the gateways run through are cut by AOsmGraybox from the same
  * file; AStreetFurniture leaves those gates standing open (IsOpenGate).
  */
@@ -50,6 +57,9 @@ private:
 	void BuildKiosks(const FJsonObject& Root);
 	void BuildClocks(const FJsonObject& Root);
 	void ReadMapIcons(const FJsonObject& Root);
+	void BuildChurches(const FJsonObject& Root);
+	void BuildStreetLife(const FJsonObject& Root);
+	void PutCoalMan(const FVector& Foot, double FacingYaw, uint32 Seed);
 	void SetHands(float Hour);
 
 	UPROPERTY()

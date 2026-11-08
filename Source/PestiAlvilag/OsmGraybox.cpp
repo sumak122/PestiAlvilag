@@ -5,6 +5,7 @@
 #include "BozsiHouseModel.h"
 
 #include "DayNight.h"
+#include "FacadeLifeModel.h"
 #include "GroundSurfaces.h"
 #include "Dom/JsonObject.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -52,7 +53,9 @@ namespace OsmGraybox
 		Sign,
 		/** Windows with someone at home: glass by day, lit at night. */
 		LitGlass,
-		FacadeSectionCount
+		/** Flower boxes and washing on the windows (FacadeLifeModel's parts, in its order). */
+		FirstLife,
+		FacadeSectionCount = FirstLife + static_cast<int32>(FacadeLifeModel::NumParts)
 	};
 
 	// Facade tiles: the map is cut into this many columns and rows.
@@ -78,7 +81,8 @@ namespace OsmGraybox
 	// 3: walls split into ground floor and upper floor sections.
 	// 4: Bözsi néni's block left out (BozsiHouseModel builds it with its courtyard).
 	// 5: the city details' blocks (open gateways, the taller Corvin) from city_details.json.
-	constexpr int32 MeshVersion = 5;
+	// 6: flower boxes and washing on the windows; the churches' blocks left out (city_details.json "gone").
+	constexpr int32 MeshVersion = 6;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");
@@ -362,6 +366,22 @@ namespace OsmGraybox
 			Quad(Section, At(S1, Z0, 0.0), At(S1, Z1, 0.0), At(S1, Z1, D), At(S1, Z0, D), Side);
 		}
 
+		// A box standing off the wall: S0..S1 along, Z0..Z1 up, D0..D1 out.
+		void Box(FSection& Section, double S0, double S1, double Z0, double Z1, double D0, double D1) const
+		{
+			const FVector Side(Along.X, Along.Y, 0.0);
+			Panel(Section, S0, S1, Z0, Z1, D1);
+			// The back only shows when the box stands well off the wall.
+			if (D0 > 10.0)
+			{
+				Quad(Section, At(S1, Z0, D0), At(S0, Z0, D0), At(S0, Z1, D0), At(S1, Z1, D0), -Out);
+			}
+			Quad(Section, At(S0, Z1, D0), At(S1, Z1, D0), At(S1, Z1, D1), At(S0, Z1, D1), FVector::UpVector);
+			Quad(Section, At(S0, Z0, D0), At(S1, Z0, D0), At(S1, Z0, D1), At(S0, Z0, D1), FVector::DownVector);
+			Quad(Section, At(S0, Z0, D0), At(S0, Z1, D0), At(S0, Z1, D1), At(S0, Z0, D1), -Side);
+			Quad(Section, At(S1, Z0, D0), At(S1, Z1, D0), At(S1, Z1, D1), At(S1, Z0, D1), Side);
+		}
+
 		// An opening: a raised frame of width Border around an inner panel
 		// that sits back near the wall, with the frame's inner sides showing.
 		void Opening(FSection& FrameSection, FSection& InnerSection, double S0, double S1, double Z0, double Z1, double Border, double Depth) const
@@ -421,6 +441,7 @@ namespace OsmGraybox
 		const int32 Bays = FMath::Max(1, FMath::FloorToInt((Length - 2.0 * EdgeMargin) / BayWidth));
 		const double Bay = (Length - 2.0 * EdgeMargin) / Bays;
 		const bool bShops = Seed % 10 < 7;
+		TArray<FacadeLifeModel::FBox> LifeBoxes;
 		const int32 GateBay = Bays >= 3 && (Seed / 10) % 2 == 0 ? Bays / 2 : INDEX_NONE;
 
 		for (int32 k = 0; k < Bays; ++k)
@@ -460,6 +481,14 @@ namespace OsmGraybox
 				if (Floor == 1)
 				{
 					Wall.Block(StoneS, S0 - 20.0, S1 + 20.0, Z1 + 8.0, Z1 + 30.0, 14.0);
+				}
+				// Flower boxes and washing, picked by where the window is.
+				const FVector2D WindowAt = P0 + Along * Mid;
+				LifeBoxes.Reset();
+				FacadeLifeModel::Window(S0, S1, Z0, Z1, FacadeLifeModel::WindowHash(WindowAt.X, WindowAt.Y, Floor), LifeBoxes);
+				for (const FacadeLifeModel::FBox& Life : LifeBoxes)
+				{
+					Wall.Box(Sections[FirstLife + Life.Part], Life.S0, Life.S1, Life.Z0, Life.Z1, Life.D0, Life.D1);
 				}
 			}
 		}
@@ -588,7 +617,8 @@ TSharedPtr<FJsonObject> AOsmGraybox::LoadData() const
 		for (const TSharedPtr<FJsonValue>& PieceValue : *Pieces)
 		{
 			const TSharedPtr<FJsonObject> Piece = PieceValue->AsObject();
-			if (Piece.IsValid())
+			// A "gone" piece only takes its block away (the churches, which ACityDetails builds).
+			if (Piece.IsValid() && !Piece->HasField(TEXT("gone")))
 			{
 				// Each piece its own id, so its colours and facade are its own.
 				Piece->SetStringField(TEXT("id"), FString::Printf(TEXT("%s-%d"), *Piece->GetStringField(TEXT("replaces")), PieceIndex++));
@@ -913,7 +943,11 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 	}
 
 	// Facade tiles share one material per part.
-	const FLinearColor FacadeColors[FacadeSectionCount] = { StoneColor, GlassColor, WoodColor, SignColor, GlassColor };
+	FLinearColor FacadeColors[FacadeSectionCount] = { StoneColor, GlassColor, WoodColor, SignColor, GlassColor };
+	for (int32 j = FirstLife; j < FacadeSectionCount; ++j)
+	{
+		FacadeColors[j] = FacadeLifeModel::PartColor(j - FirstLife);
+	}
 	ADayNight* Clock = ADayNight::Get(GetWorld());
 	UMaterialInstanceDynamic* FacadeMaterials[FacadeSectionCount] = {};
 	if (BaseMaterial)
