@@ -13,7 +13,7 @@ AOsmGraybox read:
   balconies, yaw facing into the yard), "props": [[kind, x, y, yaw(, length)], ...]
   (pump, rack, line, bench, bins, tree)};
 - buildings: map blocks that the game builds differently from the graybox
-  data, each in the graybox's own building form ({"id", "rings", "tris",
+  data (or not at all: "gone"), each in the graybox's own building form ({"id", "rings", "tris",
   "front", "height", "levels", "base"}), under "replaces" (the original
   block's id): the houses the gateways are cut through, in pieces with a
   bridge over the gateway, and the Corvin department store, taller;
@@ -27,6 +27,16 @@ AOsmGraybox read:
 - clocks: street clocks on a cast iron post on the squares, [x, y, yaw];
 - map_icons: the little pictures on the minimap and the big map, [kind, x, y]
   (cafe, market, tram, phone, yard, theatre, station, store, church).
+- churches: [kind ("rokus" or "jezus"), x, y, yaw, width, depth], the
+  front's middle at the foot, yaw out of the front (ChurchModel.h); their map
+  blocks are listed in "buildings" as {"gone": true} pieces, so AOsmGraybox
+  leaves them out;
+- window_folk: [x, y, sill z, yaw out, kind, seed] at windows that have no
+  flower box or washing (FacadeLifeModel::WindowHash, the same sums here);
+- hydrants [x, y, yaw], manholes [x, y, yaw, variant], hatches (cellar
+  hatches against the house fronts) [x, y, yaw out, variant], troughs (horse
+  troughs) [x, y, yaw], coal_drops (the coal man's drop at a cellar hatch)
+  [x, y, yaw out, seed] (CityLifeModel.h).
 
 Everything is in Unreal centimetres (X east, Y south), yaw in degrees.
 
@@ -507,6 +517,300 @@ def place_map_icons(data, f, courtyards):
             icons.append(["church", round(sum(p[0] for p in ring) / len(ring)), round(sum(p[1] for p in ring) / len(ring))])
     return icons
 
+# ---------------------------------------------------------------------------
+# Round 2: the churches, the people at the windows and the street clutter.
+
+# The churches the game builds itself (ChurchModel.h), in place of their map
+# blocks: the block's id, the model, and the block's edges along its front.
+CHURCHES = [
+    ("w256539415", "rokus", [6]),       # Szent Rókus-kápolna, Rákóczi út
+    ("w191191238", "jezus", [6, 7]),    # Jézus Szíve templom, Mária utca
+]
+BOZSI_ID = "r3333877"
+
+# The facade's sums (AddFacade in OsmGraybox.cpp, Facade:: constants).
+FACADE_STOREY = 380.0
+FACADE_GROUND_FLOOR = 450.0
+FACADE_CORNICE = 60.0
+FACADE_BAY = 320.0
+FACADE_MARGIN = 60.0
+FACADE_MIN_LENGTH = 250.0
+# FacadeLifeModel.h: windows with a hash in this range out of 1000 have
+# nothing on them, and the people are picked from them.
+FOLK_FROM, FOLK_TO = 200, 260
+FOLK_GAP = 2800
+FOLK_MAX_FLOOR = 3
+FOLK_KINDS = 5           # CityLifeModel::EFolk: old woman, man, young woman, duvet, cat
+FOLK_WEIGHTS = [3, 3, 3, 2, 1]
+
+
+def floor_to_int(v):
+    return int(math.floor(v))
+
+
+def window_hash(x, y, floor):
+    """FacadeLifeModel::WindowHash, in uint32 sums."""
+    m = 0xFFFFFFFF
+    cx = floor_to_int(x / 50.0) & m
+    cy = floor_to_int(y / 50.0) & m
+    h = ((cx * 73856093) & m) ^ ((cy * 19349663) & m) ^ ((floor * 83492791) & m)
+    h ^= h >> 13
+    h = (h * 0x5bd1e995) & m
+    h ^= h >> 15
+    return h
+
+
+def facade_buildings(data, replaced):
+    """The blocks the facades are drawn on, as OsmGraybox merges them."""
+    out = [b for b in data["buildings"] if b["id"] not in replaced]
+    for k, pieces in replaced.items():
+        out += [p for p in pieces if not p.get("gone")]
+    return [b for b in out if b.get("id") not in (CORVIN_ID, BOZSI_ID) and not b.get("base")]
+
+
+def facade_walls(buildings):
+    """Each street-facing wall: (p0, p1, height, levels, building)."""
+    for b in buildings:
+        front = set(b.get("front", []))
+        index = 0
+        for flat in b["rings"]:
+            ring = ring_points(flat)
+            for i in range(len(ring)):
+                if index in front:
+                    yield ring[i], ring[(i + 1) % len(ring)], b["height"], int(b.get("levels", 0)), b
+                index += 1
+
+
+def wall_windows(p0, p1, height, levels):
+    """The upper floor windows of one wall, as AddFacade lays them out:
+    (x, y, sill z, floor, out x, out y)."""
+    length = math.dist(p0, p1)
+    if length < 1.0:
+        return
+    ground_top = min(FACADE_GROUND_FLOOR, height - FACADE_CORNICE)
+    if length < FACADE_MIN_LENGTH or ground_top < 300.0:
+        return
+    storeys = levels if levels > 0 else max(1, min(8, floor_to_int(height / FACADE_STOREY + 0.5)))
+    if storeys < 2:
+        return
+    upper = (height - FACADE_CORNICE - ground_top) / (storeys - 1)
+    ax, ay = (p1[0] - p0[0]) / length, (p1[1] - p0[1]) / length
+    bays = max(1, floor_to_int((length - 2 * FACADE_MARGIN) / FACADE_BAY))
+    bay = (length - 2 * FACADE_MARGIN) / bays
+    for k in range(bays):
+        mid = FACADE_MARGIN + bay * (k + 0.5)
+        x, y = p0[0] + ax * mid, p0[1] + ay * mid
+        for floor in range(1, storeys):
+            z0 = ground_top + (floor - 1) * upper + upper * 0.22
+            yield x, y, z0, floor, ay, -ax
+
+
+def place_window_folk(buildings):
+    """People and things at windows with nothing else on them:
+    [x, y, sill z, yaw out, kind, seed]."""
+    spread = Spread(FOLK_GAP)
+    folk = []
+    weights = [k for k, w in enumerate(FOLK_WEIGHTS) for _ in range(w)]
+    for p0, p1, height, levels, b in facade_walls(buildings):
+        for x, y, z0, floor, ox, oy in wall_windows(p0, p1, height, levels):
+            if floor > FOLK_MAX_FLOOR or not FOLK_FROM <= window_hash(x, y, floor) % 1000 < FOLK_TO:
+                continue
+            if not spread.ok(x, y):
+                continue
+            spread.add(x, y)
+            kind = weights[int(chance("folk", round(x), round(y)) * len(weights)) % len(weights)]
+            folk.append([round(x), round(y), round(z0, 1), yaw_of(ox, oy), kind, int(chance("folkseed", round(x), round(y)) * 1000)])
+    return folk
+
+
+def place_churches(data):
+    """[kind, x, y, yaw, width, depth]: the front's middle at the foot, yaw out of the front."""
+    churches = []
+    by_id = {b["id"]: b for b in data["buildings"]}
+    for bid, kind, edges in CHURCHES:
+        b = by_id[bid]
+        ring = ring_points(b["rings"][0])
+        shape = Polygon(ring)
+        a = ring[edges[0]]
+        z = ring[(edges[-1] + 1) % len(ring)]
+        ax, ay = unit(z[0] - a[0], z[1] - a[1])
+        ox, oy = ay, -ax
+        mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
+        if shape.contains(Point(mx + ox * 100, my + oy * 100)):
+            ox, oy = -ox, -oy
+        # Its extent along the front and back from it, the frame put in the middle.
+        along = [(px - mx) * ax + (py - my) * ay for px, py in ring]
+        back = [-((px - mx) * ox + (py - my) * oy) for px, py in ring]
+        lo, hi = min(along), max(along)
+        cx, cy = mx + ax * (lo + hi) / 2, my + ay * (lo + hi) / 2
+        churches.append([kind, round(cx), round(cy), yaw_of(ox, oy), round(hi - lo), round(max(back))])
+    return churches
+
+
+# Street clutter.
+HYDRANT_GAP = 7000
+HYDRANT_IN = 45          # in from the kerb (cm)
+MANHOLE_STEP = 2500
+MANHOLE_GAP = 3200
+MANHOLE_TRAM_CLEAR = 120
+HATCH_SHARE = 0.10
+HATCH_GAP = 2200
+HATCH_SHOP_CLEAR = 80
+TROUGHS_NEAR = [CAFE_AT, HALL_AT, KELETI_AT, (46577, 33461), (99969, 28889), (-7034, -1747)]
+TROUGH_ROOM = 220
+COAL_DROPS = 4
+COAL_GAP = 12000
+
+
+def kerb_spot(space, x, y, inset):
+    """The nearest kerb to a pavement spot, and a spot inset from it onto the
+    pavement: (x, y, yaw towards the road) or None."""
+    p = Point(x, y)
+    edge = space.road_shape.boundary
+    q = edge.interpolate(edge.project(p))
+    d = p.distance(q)
+    if d < 1 or d > 700:
+        return None
+    ux, uy = (x - q.x) / d, (y - q.y) / d
+    return q.x + ux * inset, q.y + uy * inset, yaw_of(-ux, -uy)
+
+
+def clear_of(space, x, y, building_gap, lane_gap=150):
+    pt = Point(x, y)
+    if space.near_building(pt, building_gap) or space.near_lane(pt, lane_gap):
+        return False
+    if space.trams is not None and space.trams.distance(pt) < CLEAR_OF_TRAMS_HERE:
+        return False
+    return True
+
+
+CLEAR_OF_TRAMS_HERE = 150
+
+
+def place_hydrants(space, f, spots):
+    spread = Spread(HYDRANT_GAP)
+    hydrants = []
+    for w in f["sidewalks"]:
+        line = LineString(ring_points(w))
+        steps = max(1, int(line.length // 1500))
+        for i in range(steps + 1):
+            on = line.interpolate(i / steps, normalized=True)
+            spot = kerb_spot(space, on.x, on.y, HYDRANT_IN)
+            if spot is None:
+                continue
+            x, y, yaw = spot
+            if not spread.ok(x, y) or not room(spots, x, y, 150) or not clear_of(space, x, y, 150, 120):
+                continue
+            if space.road_shape.distance(Point(x, y)) < HYDRANT_IN - 5:
+                continue
+            spread.add(x, y)
+            hydrants.append([round(x), round(y), yaw])
+            spots.append((x, y))
+    return hydrants
+
+
+def place_manholes(space):
+    spread = Spread(MANHOLE_GAP)
+    manholes = []
+    for lane in space.lanes:
+        steps = int(lane.length // MANHOLE_STEP)
+        for i in range(1, steps + 1):
+            t = i * MANHOLE_STEP - MANHOLE_STEP / 2
+            on = lane.interpolate(t)
+            if not spread.ok(on.x, on.y):
+                continue
+            if space.trams is not None and space.trams.distance(on) < MANHOLE_TRAM_CLEAR:
+                continue
+            a, b = lane.interpolate(max(t - 50, 0)), lane.interpolate(min(t + 50, lane.length))
+            spread.add(on.x, on.y)
+            manholes.append([round(on.x), round(on.y), yaw_of(b.x - a.x, b.y - a.y), len(manholes) % 2])
+    return manholes
+
+
+def place_hatches(space, buildings, f, spots, skip_ids):
+    """Cellar hatches against the house fronts, between the windows of the
+    ground floor: [x, y, yaw out, variant]."""
+    spread = Spread(HATCH_GAP)
+    fronts = [(s["at"], s["width"]) for s in f["shops"]] + [(g["at"], g["width"]) for g in f["gates"]]
+    hatches = []
+    for p0, p1, height, levels, b in facade_walls(buildings):
+        if b.get("id") in skip_ids:
+            continue
+        length = math.dist(p0, p1)
+        if length < 700:
+            continue
+        ax, ay = (p1[0] - p0[0]) / length, (p1[1] - p0[1]) / length
+        ox, oy = ay, -ax
+        bays = max(1, floor_to_int((length - 2 * FACADE_MARGIN) / FACADE_BAY))
+        bay = (length - 2 * FACADE_MARGIN) / bays
+        for k in range(1, bays):
+            if k in (bays // 2, bays // 2 + 1) or chance("hatch", b.get("id", ""), k, round(p0[0])) >= HATCH_SHARE:
+                continue
+            s_at = FACADE_MARGIN + bay * k
+            x, y = p0[0] + ax * s_at, p0[1] + ay * s_at
+            if any(math.hypot(x - a[0], y - a[1]) < w / 2 + HATCH_SHOP_CLEAR for a, w in fronts):
+                continue
+            out = Point(x + ox * 60, y + oy * 60)
+            if space.road_shape.distance(out) < 120 or space.near_lane(out, 250) or not room(spots, x, y, 160):
+                continue
+            if not spread.ok(x, y):
+                continue
+            spread.add(x, y)
+            hatches.append([round(x), round(y), yaw_of(ox, oy), int(chance("hatchkind", b.get("id", ""), k, round(p0[1])) * 3) % 2])
+    return hatches
+
+
+def place_coal_drops(space, hatches, spots):
+    """Some of the hatches get the coal man's drop: [x, y, yaw out, seed]."""
+    spread = Spread(COAL_GAP)
+    drops = []
+    for h in sorted(hatches, key=lambda h: chance("coal", h[0], h[1])):
+        x, y, yaw = h[0], h[1], h[2]
+        ox, oy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+        ax, ay = -oy, ox
+        ok = True
+        for out in (120, 200, 330):
+            for side in (-250, -100, 0, 150, 300, 450):
+                px, py = x + ox * out + ax * side, y + oy * out + ay * side
+                pt = Point(px, py)
+                if space.road_shape.distance(pt) < 50 or space.near_lane(pt, 200) or space.near_building(pt, 30) or not room(spots, px, py, 110):
+                    ok = False
+        if not ok or not spread.ok(x, y):
+            continue
+        spread.add(x, y)
+        drops.append([x, y, yaw, int(chance("coalseed", x, y) * 1000)])
+        hatches.remove(h)
+        if len(drops) >= COAL_DROPS:
+            break
+    return drops
+
+
+def place_troughs(space, f, spots):
+    walks = [LineString(ring_points(w)) for w in f["sidewalks"]]
+    troughs = []
+    for ax_, ay_ in TROUGHS_NEAR:
+        best = None
+        for walk in sorted(walks, key=lambda w: w.distance(Point(ax_, ay_)))[:12]:
+            for i in range(0, int(walk.length), 200):
+                on = walk.interpolate(i)
+                if math.hypot(on.x - ax_, on.y - ay_) > 3500:
+                    continue
+                spot = kerb_spot(space, on.x, on.y, 70)
+                if spot is None:
+                    continue
+                x, y, yaw = spot
+                if not room(spots, x, y, TROUGH_ROOM) or not clear_of(space, x, y, 200, 150):
+                    continue
+                d = math.hypot(x - ax_, y - ay_)
+                if best is None or d < best[0]:
+                    best = (d, x, y, yaw)
+        if best:
+            _, x, y, yaw = best
+            troughs.append([round(x), round(y), yaw])
+            spots.append((x, y))
+    return troughs
+
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -521,10 +825,20 @@ def main():
     space = Space(data)
     courtyards, replaced = place_courtyards(data, f["gates"])
     replaced[CORVIN_ID] = [corvin(data)]
+    churches = place_churches(data)
+    for bid, _, _ in CHURCHES:
+        replaced[bid] = [{"gone": True}]
     spots = furniture_spots(f)
     ads = place_wall_ads(data, space)
     kiosks = place_kiosks(space, f, spots)
     clocks = place_clocks(space, spots)
+    fronts = facade_buildings(data, replaced)
+    folk = place_window_folk(fronts)
+    troughs = place_troughs(space, f, spots)
+    hydrants = place_hydrants(space, f, spots)
+    hatches = place_hatches(space, fronts, f, spots, {CORVIN_ID})
+    coal_drops = place_coal_drops(space, hatches, spots)
+    manholes = place_manholes(space)
     out = {
         "version": 1,
         "courtyards": courtyards,
@@ -533,10 +847,19 @@ def main():
         "kiosks": kiosks,
         "clocks": clocks,
         "map_icons": place_map_icons(data, f, courtyards),
+        "churches": churches,
+        "window_folk": folk,
+        "hydrants": hydrants,
+        "manholes": manholes,
+        "hatches": hatches,
+        "troughs": troughs,
+        "coal_drops": coal_drops,
     }
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
-    print(f"{len(courtyards)} courtyards, {len(out['buildings'])} building pieces, {len(ads)} wall ads, {len(kiosks)} kiosks, {len(clocks)} clocks, {len(out['map_icons'])} map icons")
+    print(f"{len(courtyards)} courtyards, {len(out['buildings'])} building pieces, {len(ads)} wall ads, {len(kiosks)} kiosks, {len(clocks)} clocks, {len(out['map_icons'])} map icons, "
+          f"{len(churches)} churches, {len(folk)} at windows, {len(hydrants)} hydrants, {len(manholes)} manholes, {len(hatches)} hatches, "
+          f"{len(troughs)} troughs, {len(coal_drops)} coal drops")
 
 
 if __name__ == "__main__":

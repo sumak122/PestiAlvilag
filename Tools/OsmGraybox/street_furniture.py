@@ -1922,6 +1922,31 @@ MARKET_QUARTER_STREETS = [
     ("Víg utca", []),
     ("Salétrom utca", []),
 ]
+# Round 2 (1932 shopping streets): more streets get shop fronts along their
+# length (the side streets only here and there), each with its chemists. Walls near the places the game
+# builds itself (the furrier, Varga's shop, the yards, homes) stay bare, and
+# so does the Corvin department store.
+MORE_SHOP_STREETS = [       # street, its chemists, share of its walls with shops
+    ("Rákóczi út", [(0.25, "RÓKUS", False), (0.7, "ARANY SAS", True)], 1.0),
+    ("József körút", [(0.8, "KÖRÚTI", False)], 1.0),
+    ("Erzsébet körút", [], 1.0),
+    ("Baross tér", [], 0.7),
+    ("Teleki László tér", [], 0.6),
+    ("Kiss József utca", [], 0.5),
+]
+SHOP_KEEP_CLEAR = [
+    ((41134, -21532), 1600),   # Friedmann's furrier (FurrierModel::CityAt)
+    ((74888, -51702), 2000),   # Garay utca 13 (GarayModel::CityAt)
+    ((84658, 51189), 2000),    # Laci's yard (LaciYardModel::CityAt)
+    ((46577, 33461), 1500),    # the stable yard (StableYardModel::CityAt)
+    ((67771, 32278), 1800),    # Bandi's boxing yard (BoxingYardModel)
+    ((58771, 21395), 1500),    # Bozsi neni's house (BozsiHouseModel::CityAt)
+    ((65514, 23668), 1200),    # Varga's shop (DeliveryModel::PlaceAt)
+    ((74990, 27101), 900),     # the cafe on the delivery round
+    ((101266, -37678), 900),   # the station address on the delivery round
+    ((18173, 30456), 900),     # the attic's door on Berkocsis utca
+]
+SHOP_SKIP_BUILDINGS = {"w261801166", "w256539415", "w191191238"}  # the Corvin and the two churches (city_details.py)
 SHOP_OWNERS = [
     "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
     "TÓTH ISTVÁN", "NAGY FERENC", "FISCHER ADOLF", "LÖWY DÁVID", "ROTH SAMU", "SPITZER HERMAN", "HORVÁTH GYULA",
@@ -1970,10 +1995,15 @@ def shop_walls(data, street_name, area=None):
     return walls, lines
 
 
-def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharmacies=PHARMACIES, taken=None):
+def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharmacies=PHARMACIES, taken=None, keep_clear=None, share=1.0):
     """Shop fronts and gates on the ground floors of a shop street. Walls in
     taken (building id and first corner) already have shops from another street."""
     walls, lines = shop_walls(data, street_name, area)
+    if share < 1.0:
+        walls = [w for w in walls if chance("shopwall", w["id"], *w["p0"]) < share]
+    if keep_clear:
+        walls = [w for w in walls if w["id"] not in SHOP_SKIP_BUILDINGS and all(
+            LineString([w["p0"], w["p1"]]).distance(Point(*at)) > gap for at, gap in keep_clear)]
     if taken is not None:
         walls = [w for w in walls if (w["id"], tuple(w["p0"])) not in taken]
         taken.update((w["id"], tuple(w["p0"])) for w in walls)
@@ -2118,6 +2148,10 @@ def main():
         shops += more_shops
         gates += more_gates
         quarter_shops += len(more_shops)
+    for street_name, chemists, share in MORE_SHOP_STREETS:
+        more_shops, more_gates = place_shops(data, spots, street_name, None, chemists, taken, SHOP_KEEP_CLEAR, share)
+        shops += more_shops
+        gates += more_gates
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
     spots += [tuple(v["at"][:2]) for v in shops + gates]
@@ -2148,7 +2182,7 @@ def main():
     }
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
-    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(bus_stops)} bus stops, {len(market['stalls'])} market stalls, {len(shops) - quarter_shops} shops on {SHOP_STREET} and {quarter_shops} round Rákóczi tér, {len(gates)} gates; "
+    print(f"{len(lamps)} lamps, {len(columns)} columns, {len(benches)} benches, {len(bins)} bins, {len(sidewalks)} sidewalks, {len(taxi_stands)} taxi stands, {len(tram_stops)} tram stops, {len(bus_stops)} bus stops, {len(market['stalls'])} market stalls, {len(shops)} shops ({quarter_shops} round Rákóczi tér), {len(gates)} gates; "
           f"Tisza Kálmán tér: {len(park['paths'])} paths, {len(park['trees'])} trees, "
           f"{len(park['benches'])} benches, {len(park['bins'])} bins, {len(park['lamps'])} lamps, {len(park['fence'])} railing runs, "
           f"{len(park['lawn_fences'])} lawn fence and {len(park['hedges'])} hedge pieces, "
