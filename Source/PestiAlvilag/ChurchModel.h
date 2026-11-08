@@ -122,6 +122,9 @@ namespace ChurchModel
 		Add(Out, MarketModel::Cube, Ochre, FVector(Back * 0.5, 0, Eaves * 0.5), FVector(Depth, Nave * 2.0, Eaves));
 		RidgeRoof(Out, Tile, Back, 0.0, Nave + 20.0, Eaves, Rise);
 		Gable(Out, Ochre, 10.0, 20.0, Nave, Eaves + 40.0, Rise);
+		// The back gable, and a ceiling under the roof so no sky shows through it from any side.
+		Gable(Out, Ochre, Back + 10.0, 20.0, Nave, Eaves, Rise);
+		Add(Out, MarketModel::Cube, Ochre, FVector(Back * 0.5, 0, Eaves + 5.0), FVector(Depth, Nave * 2.0, 10));
 		// Baroque scrolls at the gable's shoulders, and the gable's cornice.
 		for (const double Side : { -1.0, 1.0 })
 		{
@@ -160,7 +163,7 @@ namespace ChurchModel
 		// The tower over the door: a square shaft, the belfry with its clock,
 		// and the onion helmet with a lantern and the cross.
 		constexpr double TowerHalf = 230.0;
-		constexpr double TowerX = -140.0;
+		constexpr double TowerX = -250.0;   // its face just behind the front gable
 		constexpr double BelfryTop = 2350.0;
 		Add(Out, MarketModel::Cube, Ochre, FVector(TowerX, 0, (Eaves + BelfryTop) * 0.5), FVector(TowerHalf * 2.0, TowerHalf * 2.0, BelfryTop - Eaves + 200.0));
 		for (const double Z : { Eaves + Rise + 20.0, BelfryTop })
@@ -198,8 +201,24 @@ namespace ChurchModel
 				Add(Out, MarketModel::Cube, OchreDark, FVector(Back * 0.5, Mid, WingTop * 0.5), FVector(Depth, WingSpan, WingTop));
 				Add(Out, MarketModel::Cube, Trim, FVector(8, Mid, WingTop - 20.0), FVector(30, WingSpan, 40), 0.0, false);
 				Add(Out, MarketModel::Cube, Trim, FVector(6, Mid, 470), FVector(16, WingSpan, 20), 0.0, false);
-				Add(Out, MarketModel::Cube, Tile, FVector(-140.0, Mid, WingTop + 140.0), FVector(330, WingSpan, 14), 0.0, true, -40.0);
-				Add(Out, MarketModel::Cube, Tile, FVector(Back * 0.5 - 120.0, Mid, WingTop + 240.0), FVector(FMath::Max(Depth - 400.0, 100.0), WingSpan, 20), 0.0, false);
+				// A pitched roof with its ridge along the wing, a gable at the wing's
+				// outer end, and a ceiling under it.
+				const double HalfDeep = Depth * 0.5;
+				constexpr double WingRise = 320.0;
+				const double Slope = FMath::RadiansToDegrees(FMath::Atan2(WingRise, HalfDeep));
+				const double Run = FMath::Sqrt(HalfDeep * HalfDeep + WingRise * WingRise) + 30.0;
+				for (const double RoofSide : { 1.0, -1.0 })
+				{
+					Add(Out, MarketModel::Cube, Tile, FVector(Back * 0.5 + RoofSide * HalfDeep * 0.5, Mid, WingTop + WingRise * 0.5),
+						FVector(Run, WingSpan + 20.0, 14), 0.0, true, -RoofSide * Slope);
+				}
+				Add(Out, MarketModel::Cube, OchreDark, FVector(Back * 0.5, Mid, WingTop + 5.0), FVector(Depth, WingSpan, 10));
+				constexpr int32 Steps = 8;
+				for (int32 i = 0; i < Steps; ++i)
+				{
+					Add(Out, MarketModel::Cube, OchreDark, FVector(Back * 0.5, Side * (Half - 10.0), WingTop + WingRise * (i + 0.5) / Steps),
+						FVector(Depth * (1.0 - (i + 0.5) / Steps), 20, WingRise / Steps + 1.0));
+				}
 				const int32 Bays = FMath::Max(1, FMath::FloorToInt(WingSpan / 300.0));
 				for (int32 k = 0; k < Bays; ++k)
 				{
@@ -229,6 +248,7 @@ namespace ChurchModel
 		RidgeRoof(Out, Slate, NaveBack, 0.0, Half + 30.0, Eaves, Rise);
 		Gable(Out, PaleStone, 0.0, 40.0, Half, Eaves, Rise + 60.0);
 		Gable(Out, PaleStone, NaveBack + 20.0, 40.0, Half, Eaves, Rise);
+		Add(Out, MarketModel::Cube, PaleStone, FVector(NaveBack * 0.5, 0, Eaves + 5.0), FVector(-NaveBack, Half * 2.0, 10));
 		Add(Out, MarketModel::Cube, StoneTrim, FVector(4, 0, Eaves), FVector(50, Half * 2.0 + 40.0, 40), 0.0, false);
 		Add(Out, MarketModel::Cube, StoneTrim, FVector(2, 0, 40), FVector(50, Half * 2.0 + 40.0, 80));
 		// The round apse with its cone roof.
