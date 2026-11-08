@@ -394,6 +394,143 @@ namespace LaciYardModel
 		}
 	}
 
+	/**
+	 * Where the leftovers of the cars Laci takes apart end up, one car to a
+	 * place, in the order they came in (the doctor's Steyr from mission 7
+	 * first): a point at the foot of a wall or the bench, and the way out
+	 * from it (degrees). Nobody says what happened to the cars.
+	 */
+	struct FLeftoverSpot
+	{
+		FVector At;
+		double Yaw;
+	};
+	const FLeftoverSpot LeftoverSpots[] = {
+		{ FVector(35.0, -560.0, 0.0), 0.0 },        // inside the street wall, left of the gate
+		{ FVector(1930.0, LeftY + 25.0, 0.0), 90.0 },   // in the shed, at its left end
+		{ FVector(35.0, -250.0, 0.0), 0.0 },        // the street wall again, nearer the gate
+		{ FVector(2230.0, -350.0, 0.0), 180.0 },    // against the workbench
+		{ FVector(860.0, LeftY + 1.0, 0.0), 90.0 },     // the left wall, between the tyres and the old chassis
+		{ FVector(1930.0, RightY - 25.0, 0.0), -90.0 }, // in the shed, at its right end
+	};
+	constexpr int32 NumLeftoverSpots = static_cast<int32>(UE_ARRAY_COUNT(LeftoverSpots));
+	/** Number plates nailed in a row inside the street wall, one per car, up to this many. */
+	constexpr int32 MaxPlates = 13;
+
+	/** What is left of one car: what it looked like, so the parts can be told apart. */
+	struct FStrippedCar
+	{
+		FLinearColor Paint = FLinearColor(0.05f, 0.13f, 0.07f);
+		FLinearColor Rim = FLinearColor(0.02f, 0.02f, 0.02f);
+		/** A big car (Steyr, limousine): a spare wheel off its wing too. */
+		bool bBig = false;
+		/** A van: its painted sign panel, in Panel. */
+		bool bVan = false;
+		FLinearColor Panel = FLinearColor(0.70f, 0.62f, 0.42f);
+	};
+
+	/**
+	 * One stripped car at leftover place Index: a door leaning on the wall
+	 * (glass out), the bonnet propped on a brick, a wheel with the car's own
+	 * rims leaning beside it, a headlamp, the back seat; a big car's spare,
+	 * a van's sign panel.
+	 */
+	inline void BuildLeftovers(TArray<FShape>& Out, int32 Index, const FStrippedCar& Car)
+	{
+		if (Index < 0 || Index >= NumLeftoverSpots)
+		{
+			return;
+		}
+		const FLeftoverSpot& Place = LeftoverSpots[Index];
+		const FRotator Frame(0.0, Place.Yaw, 0.0);
+		// A piece in the place's frame: X out from the wall, Y along it.
+		const auto Put = [&Out, &Place, &Frame](int32 Kind, const FLinearColor& Color, const FVector& Local, const FVector& Size,
+			double TurnYaw, double TiltPitch, double TiltRoll, bool bSolid)
+		{
+			Add(Out, Kind, Color, Place.At + Frame.RotateVector(Local), Size, Place.Yaw + TurnYaw, bSolid, TiltPitch, TiltRoll);
+		};
+
+		// The door, leaning back on the wall: the window an empty dark frame, the handle.
+		const FRotator DoorLean(10.0, 0.0, 0.0);
+		const FVector DoorAt(12.0, -62.0, 56.0);
+		Put(MarketModel::Cube, Car.Paint, DoorAt, FVector(5, 90, 110), 0.0, 10.0, 0.0, true);
+		Put(MarketModel::Cube, Colors::Dark, DoorAt + DoorLean.RotateVector(FVector(2.0, 0.0, 26.0)), FVector(2, 66, 36), 0.0, 10.0, 0.0, false);
+		Put(MarketModel::Cube, Colors::Steel, DoorAt + DoorLean.RotateVector(FVector(4.0, 33.0, 0.0)), FVector(3, 12, 3), 0.0, 10.0, 0.0, false);
+
+		// A wheel standing beside it, leaning on the wall: tyre, the car's rim, the hub cap.
+		const FRotator WheelLean(80.0, 0.0, 0.0);
+		const FVector WheelAt(16.0, 40.0, 37.0);
+		Put(MarketModel::Cylinder, Colors::Rubber, WheelAt, FVector(72, 72, 15), 0.0, 80.0, 0.0, false);
+		Put(MarketModel::Cylinder, Car.Rim, WheelAt + WheelLean.RotateVector(FVector(0.0, 0.0, 0.8)), FVector(46, 46, 15), 0.0, 80.0, 0.0, false);
+		Put(MarketModel::Cylinder, Colors::Steel, WheelAt + WheelLean.RotateVector(FVector(0.0, 0.0, 2.0)), FVector(16, 16, 15), 0.0, 80.0, 0.0, false);
+
+		// The bonnet on the ground, one edge up on a brick, its louvres.
+		const FRotator BonnetLie(0.0, 8.0, 6.0);
+		const FVector BonnetAt(92.0, -20.0, 8.0);
+		Put(MarketModel::Cube, Colors::Brick, FVector(92.0, 34.0, 4.0), FVector(22, 11, 8), 20.0, 0.0, 0.0, false);
+		Put(MarketModel::Cube, Car.Paint, BonnetAt, FVector(64, 112, 3), 8.0, 0.0, 6.0, false);
+		for (int32 i = 0; i < 4; ++i)
+		{
+			Put(MarketModel::Cube, Colors::Dark, BonnetAt + BonnetLie.RotateVector(FVector(-14.0 + i * 9.0, -30.0, 1.8)), FVector(3, 30, 0.6), 8.0, 0.0, 6.0, false);
+		}
+
+		// A headlamp lying on its side, the glass gone.
+		Put(MarketModel::Sphere, Colors::Steel, FVector(118.0, 52.0, 10.0), FVector(20, 20, 18), 0.0, 0.0, 0.0, false);
+		Put(MarketModel::Cylinder, Colors::Dark, FVector(124.0, 56.0, 10.0), FVector(14, 14, 2), 30.0, 90.0, 0.0, false);
+
+		if (Car.bBig)
+		{
+			// The spare wheel off the front wing, lying flat.
+			Put(MarketModel::Cylinder, Colors::Rubber, FVector(70.0, 100.0, 7.0), FVector(74, 74, 14), 0.0, 0.0, 0.0, false);
+			Put(MarketModel::Cylinder, Car.Rim, FVector(70.0, 100.0, 7.5), FVector(46, 46, 14), 0.0, 0.0, 0.0, false);
+			Put(MarketModel::Cylinder, Colors::Steel, FVector(70.0, 100.0, 8.5), FVector(16, 16, 14), 0.0, 0.0, 0.0, false);
+		}
+		else
+		{
+			// The back seat, cushion and back, put down on its end.
+			Put(MarketModel::Cube, Colors::Leather, FVector(70.0, 98.0, 14.0), FVector(46, 60, 26), -18.0, 0.0, 0.0, false);
+			Put(MarketModel::Cube, Colors::Leather, FVector(48.0, 104.0, 40.0), FVector(12, 58, 40), -18.0, 14.0, 0.0, false);
+		}
+		if (Car.bVan)
+		{
+			// The tradesman's sign panel off the side, leaning behind the wheel; the name painted out.
+			Put(MarketModel::Cube, Car.Panel, FVector(5.0, 92.0, 52.0), FVector(4, 56, 92), 0.0, 6.0, 0.0, false);
+			Put(MarketModel::Cube, Car.Paint, FVector(7.5, 92.0, 62.0), FVector(1, 44, 22), 0.0, 6.0, 0.0, false);
+		}
+
+		// A dark patch of oil where it was taken apart.
+		Put(MarketModel::Cylinder, Colors::Oil, FVector(70.0, 0.0, 2.6), FVector(120, 80, 0.5), 25.0, 0.0, 0.0, false);
+	}
+
+	/** Number plate Index (0 the first car) nailed inside the street wall, left of the gate: black, white rim and figures. */
+	inline void BuildPlate(TArray<FShape>& Out, int32 Index)
+	{
+		if (Index < 0 || Index >= MaxPlates)
+		{
+			return;
+		}
+		const double Y = LeftY + 60.0 + Index * 50.0;
+		const double Z = 222.0 + (Index % 2) * 4.0;
+		const double Tilt = (Index % 3 - 1) * 4.0;
+		Add(Out, MarketModel::Cube, Colors::Globe, FVector(36.0, Y, Z), FVector(1.6, 42, 14), 0.0, false, 0.0, Tilt);
+		Add(Out, MarketModel::Cube, Colors::Dark, FVector(37.0, Y, Z), FVector(1.6, 39, 11), 0.0, false, 0.0, Tilt);
+		const FRotator Turn(0.0, 0.0, Tilt);
+		for (int32 k = 0; k < 5; ++k)
+		{
+			if (k == 2)
+			{
+				continue;
+			}
+			// Figures as white strokes (a gap for the dash), different on each plate.
+			const double H = 5.0 + ((Index * 7 + k * 3) % 3);
+			Add(Out, MarketModel::Cube, Colors::Globe, FVector(38.0, Y, Z) + Turn.RotateVector(FVector(0.0, -14.0 + k * 7.0, 0.0)), FVector(0.8, 3.0, H), 0.0, false, 0.0, Tilt);
+		}
+		for (const double Side : { -1.0, 1.0 })
+		{
+			Add(Out, MarketModel::Cylinder, Colors::Steel, FVector(38.4, Y, Z) + Turn.RotateVector(FVector(0.0, Side * 17.0, 0.0)), FVector(2, 2, 1), 0.0, false, 90.0, 0.0);
+		}
+	}
+
 	inline void Build(TArray<FShape>& Out)
 	{
 		FRandom R(1932);

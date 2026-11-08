@@ -31,6 +31,10 @@ public:
 	UPROPERTY()
 	int32 TaxiJobs = 0;
 
+	/** Cars brought to Laci on his orders (Body * 100 + paint, see ALaciOrders). */
+	UPROPERTY()
+	TArray<int32> LaciCars;
+
 	/** Dishes the player has eaten at least once, by id (FoodMenus). */
 	UPROPERTY()
 	TArray<FName> TriedDishes;

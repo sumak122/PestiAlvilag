@@ -17,6 +17,7 @@
 #include "StableYardModel.h"
 #include "BoxingYard.h"
 #include "BoxingYardModel.h"
+#include "LaciOrders.h"
 #include "LaciYard.h"
 #include "LaciYardModel.h"
 #include "DayNight.h"
@@ -448,6 +449,11 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 		const double Z = GroundZ(FVector2D(ALaciYard::ToCity(LaciYardModel::Spots::Park, 0.0)));
 		GetWorld()->SpawnActor<ALaciYard>(ALaciYard::StaticClass(), FVector(LaciYardModel::CityAt, Z), FRotator(0.0, LaciYardModel::CityYaw, 0.0));
 	}
+	// Laci's car orders, the side job there after mission 7.
+	if (!TActorIterator<ALaciOrders>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ALaciOrders>(ALaciOrders::StaticClass(), FVector(LaciYardModel::CityAt, 0.0), FRotator::ZeroRotator);
+	}
 
 	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).
 	if (!TActorIterator<ABoxingYard>(GetWorld()))
@@ -794,6 +800,7 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		Money = Save->Money;
 		CompletedMissions = Save->CompletedMissions;
 		TaxiJobs = Save->TaxiJobs;
+		LaciCars = Save->LaciCars;
 		TriedDishes = Save->TriedDishes;
 		FoundLighters = Save->FoundLighters;
 		bHasBaton = Save->bHasBaton;
@@ -944,6 +951,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->Money = Money;
 	Save->CompletedMissions = CompletedMissions;
 	Save->TaxiJobs = TaxiJobs;
+	Save->LaciCars = LaciCars;
 	Save->TriedDishes = TriedDishes;
 	Save->FoundLighters = FoundLighters;
 	Save->bHasBaton = bHasBaton;
