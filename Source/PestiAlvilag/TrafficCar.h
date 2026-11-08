@@ -42,6 +42,9 @@ public:
 	/** What it looks like: the kind of car, its paint and wheels. */
 	const CarModel::FStyle& GetStyle() const { return Style; }
 
+	/** Out on the other side of the street, passing a horse cart: oncoming traffic slows for it. */
+	bool IsPassing() const { return PassShift > 50.f; }
+
 	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
 	void LeaveTraffic() { ReleaseAllJunctions(); }
 

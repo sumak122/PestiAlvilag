@@ -1084,7 +1084,8 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 	{
 		for (const ATrafficCar* Other : Cars)
 		{
-			if (Other && Other != Car && !IsOncoming(Other))
+			// A car coming the other way counts only while it is out on this side, passing a cart.
+			if (Other && Other != Car && (!IsOncoming(Other) || Other->IsPassing()))
 			{
 				ConsiderPoint(Other->GetActorLocation());
 			}
