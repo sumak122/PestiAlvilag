@@ -1055,7 +1055,7 @@ bool ATrafficManager::HasRoomOnLane(int32 LaneIndex, float Room, const AActor* A
 	return !Player || FVector::Dist2D(Player->GetActorLocation(), Start) >= Room;
 }
 
-float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars, float HalfWidth) const
+float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars, float HalfWidth, const AActor* Ignore) const
 {
 	const float Corridor = HalfWidth > 0.f ? HalfWidth : Traffic::CorridorHalfWidth;
 	const FVector Origin = Car->GetActorLocation();
@@ -1093,7 +1093,7 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 	// The horse carts are long: the horse in front, the bed behind.
 	for (const ATrafficCart* Other : Carts)
 	{
-		if (Other && Other != Car && !IsOncoming(Other))
+		if (Other && Other != Car && Other != Ignore && !IsOncoming(Other))
 		{
 			const FVector Along = Other->GetActorForwardVector().GetSafeNormal2D() * 250.f;
 			ConsiderPoint(Other->GetActorLocation());
@@ -1135,6 +1135,106 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 		}
 	}
 	return Clear;
+}
+
+float ATrafficManager::OncomingLaneGap(int32 LaneIndex) const
+{
+	if (!Lanes.IsValidIndex(LaneIndex))
+	{
+		return 0.f;
+	}
+	const FTrafficLane& Lane = Lanes[LaneIndex];
+	if (Lane.Points.Num() == 0 || !LanesFromNode.IsValidIndex(Lane.ToNode))
+	{
+		return 0.f;
+	}
+	// The same street piece back the other way starts where this one ends.
+	for (const int32 Other : LanesFromNode[Lane.ToNode])
+	{
+		const FTrafficLane& Back = Lanes[Other];
+		if (Back.ToNode == Lane.FromNode && Back.Way == Lane.Way && Back.Points.Num() > 0)
+		{
+			return static_cast<float>(FVector::Dist2D(Lane.Points.Last(), Back.Points[0]));
+		}
+	}
+	return 0.f;
+}
+
+const AActor* ATrafficManager::FindCartAhead(const AActor* Car, float Range, float& OutDistance) const
+{
+	const FVector Origin = Car->GetActorLocation();
+	const FVector Forward = Car->GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right(-Forward.Y, Forward.X, 0.0);
+	const AActor* Nearest = nullptr;
+	OutDistance = Range;
+	for (const ATrafficCart* Other : Carts)
+	{
+		if (!Other || Other == Car || FVector::DotProduct(Other->GetActorForwardVector().GetSafeNormal2D(), Forward) < 0.5)
+		{
+			continue;
+		}
+		const FVector Offset = Other->GetActorLocation() - Origin;
+		const float Ahead = static_cast<float>(FVector::DotProduct(Offset, Forward));
+		const float Side = static_cast<float>(FMath::Abs(FVector::DotProduct(Offset, Right)));
+		if (Ahead > 0.f && Ahead < OutDistance && Side < Traffic::CorridorHalfWidth)
+		{
+			Nearest = Other;
+			OutDistance = Ahead;
+		}
+	}
+	return Nearest;
+}
+
+bool ATrafficManager::IsStripClear(const FVector& From, const FVector& Dir, float Length, float HalfWidth, const AActor* Asker, const AActor* Ignore) const
+{
+	const FVector Along = Dir.GetSafeNormal2D();
+	const FVector Across(-Along.Y, Along.X, 0.0);
+	auto IsInStrip = [&](const FVector& Point)
+	{
+		const FVector Offset = Point - From;
+		const double Ahead = FVector::DotProduct(Offset, Along);
+		return Ahead > -300.0 && Ahead < Length && FMath::Abs(FVector::DotProduct(Offset, Across)) < HalfWidth;
+	};
+	auto Counts = [&](const AActor* Other)
+	{
+		return Other && Other != Asker && Other != Ignore && !Other->IsHidden();
+	};
+	for (const ATrafficCar* Other : Cars)
+	{
+		if (Counts(Other) && IsInStrip(Other->GetActorLocation()))
+		{
+			return false;
+		}
+	}
+	for (const ATrafficCart* Other : Carts)
+	{
+		if (Counts(Other) && IsInStrip(Other->GetActorLocation()))
+		{
+			return false;
+		}
+	}
+	for (const ATram* Other : Trams)
+	{
+		if (!Counts(Other))
+		{
+			continue;
+		}
+		// A tram is long: its ends count as well as its middle.
+		const FVector TramAlong = Other->GetActorForwardVector().GetSafeNormal2D() * 450.f;
+		if (IsInStrip(Other->GetActorLocation()) || IsInStrip(Other->GetActorLocation() + TramAlong) || IsInStrip(Other->GetActorLocation() - TramAlong))
+		{
+			return false;
+		}
+	}
+	for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
+	{
+		if (Counts(*It) && IsInStrip(It->GetActorLocation()))
+		{
+			return false;
+		}
+	}
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	return !(Counts(Player) && IsInStrip(Player->GetActorLocation()));
 }
 
 bool ATrafficManager::IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const

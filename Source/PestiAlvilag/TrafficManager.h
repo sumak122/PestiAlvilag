@@ -110,7 +110,20 @@ public:
 	 * Distance to the nearest car, horse cart, tram or player in front, in the same lane
 	 * corridor (this wide each side; 0 for a car's). bIgnoreAICars counts only trams and the player.
 	 */
-	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f) const;
+	float ClearDistanceAhead(const AActor* Car, float LookAhead, bool bIgnoreAICars = false, float HalfWidth = 0.f, const AActor* Ignore = nullptr) const;
+
+	/** How far across the street the lane the other way is (cm), or 0 on a one-way street. */
+	float OncomingLaneGap(int32 LaneIndex) const;
+
+	/** The nearest horse cart in front of this car in its lane, within Range (cm), going its way; null if none. */
+	const AActor* FindCartAhead(const AActor* Car, float Range, float& OutDistance) const;
+
+	/**
+	 * True if no car, horse cart, tram or the player is in the strip from From
+	 * along Dir, Length long and HalfWidth each side (cm), whichever way they
+	 * go; Asker and Ignore do not count.
+	 */
+	bool IsStripClear(const FVector& From, const FVector& Dir, float Length, float HalfWidth, const AActor* Asker, const AActor* Ignore) const;
 
 	/** True unless a car, tram or the player is within Radius of Location. */
 	bool IsAreaClear(const FVector& Location, float Radius, const AActor* Asker) const;

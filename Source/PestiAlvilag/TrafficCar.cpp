@@ -38,6 +38,26 @@ namespace TrafficCar
 	// ...if the road bends more than this (degrees).
 	constexpr float SignalAngle = 25.f;
 	const FLinearColor TrafficatorColor(1.f, 0.35f, 0.f);
+
+	// Passing a horse cart: held up this long (s) by one within CartNear (cm), on a street whose
+	// other lane is at least MinGap across (at most MaxGap is used), with this much of the lane left
+	// before the junction, and nothing in the other lane for PassLook ahead, PassHalfWidth each side.
+	constexpr float PassAfter = 2.f;
+	constexpr float CartNear = 1500.f;
+	constexpr float MinGap = 300.f;
+	constexpr float MaxGap = 450.f;
+	constexpr float MinRoomLeft = 2500.f;
+	constexpr float PassLook = 6000.f;
+	constexpr float PassHalfWidth = 200.f;
+	// Something closer than this (cm) the other way, before the car is level with the cart, and it backs off.
+	constexpr float AbortLook = 2500.f;
+	// Level with the cart: its middle less than this far ahead (cm). Past it: this far behind the car.
+	constexpr double LevelWithCart = 600.0;
+	constexpr double PassedCart = 750.0;
+	// Pulling out and back in (cm/s); a pass is given up after this long (s), or if the cart is this far off (cm).
+	constexpr float ShiftRate = 220.f;
+	constexpr float MaxPassingTime = 10.f;
+	constexpr double LostCart = 3000.0;
 }
 
 ATrafficCar::ATrafficCar()
@@ -111,6 +131,10 @@ void ATrafficCar::ResumeOnLane(int32 InLaneIndex, int32 InPointIndex)
 	NextLaneIndex = Manager->PickNextLane(LaneIndex);
 	BlockedTime = 0.f;
 	JunctionWaitTime = 0.f;
+	PassingCart = nullptr;
+	BehindCartTime = 0.f;
+	PassShift = 0.f;
+	PassShiftWanted = 0.f;
 }
 
 void ATrafficCar::ReleaseAllJunctions()
@@ -156,7 +180,8 @@ void ATrafficCar::Tick(float DeltaSeconds)
 	// Advance along the lane, switching lanes at the end of each street piece.
 	const FTrafficLane* Lane = &Manager->GetLane(LaneIndex);
 	FVector Target = Lane->Points[PointIndex];
-	for (int32 Guard = 0; Guard < 4 && FVector::Dist2D(Location, Target) < TrafficCar::ReachRadius; ++Guard)
+	// (Out passing a cart, the car goes by the points off to the side.)
+	for (int32 Guard = 0; Guard < 4 && FVector::Dist2D(Location, Target) < TrafficCar::ReachRadius + PassShift; ++Guard)
 	{
 		if (++PointIndex >= Lane->Points.Num())
 		{
@@ -168,8 +193,11 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		Target = Lane->Points[PointIndex];
 	}
 
-	// Steer towards the target point at a limited turn rate.
-	const FVector ToTarget = (Target - Location).GetSafeNormal2D();
+	// Steer towards the target point at a limited turn rate (shifted to the right while passing a cart).
+	const FVector LaneFrom = PointIndex > 0 ? Lane->Points[PointIndex - 1] : Location;
+	const FVector LaneDir = (Target - LaneFrom).GetSafeNormal2D();
+	const FVector LaneRight(-LaneDir.Y, LaneDir.X, 0.0);
+	const FVector ToTarget = (Target + LaneRight * PassShift - Location).GetSafeNormal2D();
 	const float CurrentYaw = static_cast<float>(GetActorRotation().Yaw);
 	const float WantedYaw = static_cast<float>(ToTarget.Rotation().Yaw);
 	const float TurnNeeded = FMath::Abs(FRotator::NormalizeAxis(WantedYaw - CurrentYaw));
@@ -194,7 +222,8 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		WantedSpeed = FMath::Min(WantedSpeed,
 			FMath::Sqrt(FMath::Square(NextCornerSpeed) + BrakeDeceleration * BrakeRoom));
 	}
-	const float Clear = Manager->ClearDistanceAhead(this, TrafficCar::LookAhead);
+	const float Clear = Manager->ClearDistanceAhead(this, TrafficCar::LookAhead, false, 0.f, PassingCart.Get());
+	UpdatePassing(Location, LaneDir, *Lane, Clear, DeltaSeconds);
 	WantedSpeed *= FMath::Clamp((Clear - StopGap) / (TrafficCar::LookAhead - StopGap), 0.f, 1.f);
 
 	// Take turns at junctions.
@@ -237,6 +266,57 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		}
 	}
 	CurrentSpeed = 0.f;
+}
+
+void ATrafficCar::UpdatePassing(const FVector& Location, const FVector& LaneDir, const FTrafficLane& Lane, float Clear, float DeltaSeconds)
+{
+	using namespace TrafficCar;
+	const FVector LaneRight(-LaneDir.Y, LaneDir.X, 0.0);
+	const AActor* Cart = PassingCart.Get();
+	if (!Cart)
+	{
+		// Held up behind a cart (nothing nearer than its tail, which is some 2.5 m behind its middle)?
+		// After a while, pull out if the way is clear.
+		PassShiftWanted = 0.f;
+		PassingTime = 0.f;
+		float CartDistance = CartNear;
+		const AActor* Ahead = Manager->FindCartAhead(this, CartNear, CartDistance);
+		const bool bHeldUp = Ahead && Clear >= CartDistance - 400.f && CurrentSpeed < Lane.Speed * 0.6f;
+		BehindCartTime = bHeldUp ? BehindCartTime + DeltaSeconds : 0.f;
+		if (bHeldUp && BehindCartTime > PassAfter && PassShift < 1.f)
+		{
+			const float Gap = Manager->OncomingLaneGap(LaneIndex);
+			const float RoomLeft = static_cast<float>(FVector::Dist2D(Location, Lane.Points.Last()));
+			if (Gap >= MinGap && RoomLeft > MinRoomLeft
+				&& Manager->IsStripClear(Location + LaneRight * FMath::Min(Gap, MaxGap), LaneDir, PassLook, PassHalfWidth, this, Ahead))
+			{
+				PassingCart = Ahead;
+				PassGap = FMath::Min(Gap, MaxGap);
+				BehindCartTime = 0.f;
+			}
+		}
+	}
+	else
+	{
+		PassingTime += DeltaSeconds;
+		// How far the cart's middle is still ahead along the street (below 0: the car is past it).
+		const double CartAhead = FVector::DotProduct(Cart->GetActorLocation() - Location, LaneDir);
+		const bool bPassed = CartAhead < -PassedCart;
+		// Something coming the other way while still behind the cart: back in behind it.
+		const bool bBackOff = CartAhead > LevelWithCart
+			&& !Manager->IsStripClear(Location + LaneRight * PassShift, LaneDir, AbortLook, PassHalfWidth, this, Cart);
+		const bool bGiveUp = PassingTime > MaxPassingTime || FVector::Dist2D(Cart->GetActorLocation(), Location) > LostCart;
+		if (bPassed || bBackOff || bGiveUp)
+		{
+			PassingCart = nullptr;
+			PassShiftWanted = 0.f;
+		}
+		else
+		{
+			PassShiftWanted = PassGap;
+		}
+	}
+	PassShift = FMath::FInterpConstantTo(PassShift, PassShiftWanted, DeltaSeconds, ShiftRate);
 }
 
 float ATrafficCar::CornerFraction(float TurnDegrees)
