@@ -66,4 +66,19 @@ public:
 	/** The employer's letters opened (bits, StreetName::Letters order). */
 	UPROPERTY()
 	int32 LettersRead = 0;
+
+	/** Pista bácsi's cart runs done. */
+	UPROPERTY()
+	int32 CartRuns = 0;
+
+	/** Varga's delivery rounds: the best time (tenths of a second, 0 for none) and the best medal (0 to 3). */
+	UPROPERTY()
+	int32 BestRoundTenths = 0;
+
+	UPROPERTY()
+	int32 BestMedal = 0;
+
+	/** Laci's night races won (bits, ANightRaces order). */
+	UPROPERTY()
+	int32 RacesWon = 0;
 };
