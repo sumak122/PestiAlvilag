@@ -1101,8 +1101,21 @@ namespace CarModel
 		B.Cylinder(Guards, FVector(Back + 22.0, 0.0, Waist + 8.0), 9.0, 2.0 * W - 6.0, 1, 10);
 		B.Box(Guards, FVector(Back + 12.0, -W + 3.0, Waist), FVector(Back + 32.0, W - 3.0, Waist + 8.0));
 		B.BarBothSides(Chrome, FVector(Back + 40.0, W - 1.0, Waist - 4.0), FVector(Back + 24.0, W - 1.0, Waist + 10.0), 2.0);
-		// Seats, front and back, with the driver.
+		// The rear wheels' arches stand up inside the tub, so the wheels and
+		// mudguards never show through the floor.
+		const double ArchHalf = WheelRadius + 8.0;
+		B.BothSides(Paint, FVector(L.RearAxle - ArchHalf, L.TrackY - 14.0, Floor), FVector(L.RearAxle + ArchHalf, W - 4.0, HubZ + WheelRadius + 9.0));
+		// The dashboard under the windscreen, with two dials.
+		B.Box(Paint, FVector(L.Cowl - 14.0, -(W - 4.0), Waist - 16.0), FVector(L.Cowl - 8.0, W - 4.0, Waist));
+		for (const double Y : { -44.0, -26.0 })
+		{
+			B.Cylinder(Chrome, FVector(L.Cowl - 14.5, Y, Waist - 8.0), 3.5, 1.0, 0, 10);
+		}
+		// Seats, front and back, with the driver; the front seat's back is a
+		// proper padded bench back, rolled over at the top.
 		BuildDriverSeat(B, L);
+		B.Box(Leather, FVector(L.SeatX - 24.0, -(W - 6.0), Floor), FVector(L.SeatX - 12.0, W - 6.0, Waist + 8.0));
+		B.Cylinder(Leather, FVector(L.SeatX - 18.0, 0.0, Waist + 8.0), 6.0, 2.0 * (W - 6.0), 1, 10);
 		B.Box(Leather, FVector(Back + 30.0, -62.0, Floor), FVector(Back + 64.0, 62.0, L.SeatTop));
 		B.Box(Leather, FVector(Back + 28.0, -62.0, L.SeatTop), FVector(Back + 36.0, 62.0, Waist + 14.0));
 		B.BothSides(Chrome, FVector(-44.0, W, Waist - 9.0), FVector(-37.0, W + 1.4, Waist - 7.0));
