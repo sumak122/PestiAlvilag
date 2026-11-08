@@ -41,7 +41,9 @@ enum class ERuffian : uint8
 	BoxJeno,
 	BoxMazsas,
 	BoxGyuri,
-	BoxVasoklu
+	BoxVasoklu,
+	// Anyone off the street the player picks a fight with (AStreetFights): dressed as he walked.
+	Passerby
 };
 
 UCLASS()
@@ -56,6 +58,9 @@ public:
 
 	/** Which of them he is; set before he is spawned for good (SpawnActorDeferred). */
 	ERuffian Kind = ERuffian::Bika;
+
+	/** A passer-by's own clothes (Kind Passerby); set before he is spawned for good. */
+	PersonKit::FOutfit StreetDress;
 
 	/** His name over the fight bar and on what he says. */
 	FString GetSpeakerName() const;
@@ -72,6 +77,7 @@ public:
 	bool IsBeaten() const { return Act == Brawl::EAct::Beaten; }
 	bool IsAttacking() const { return Mode == EMode::Attack; }
 	bool IsGone() const { return Mode == EMode::Gone; }
+	bool IsFleeing() const { return Mode == EMode::Flee; }
 
 	virtual FString GetFightName() const override;
 	virtual float GetHealthShare() const override;

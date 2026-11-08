@@ -26,6 +26,7 @@
 #include "PestiHud.h"
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
+#include "StreetFights.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
@@ -136,6 +137,9 @@ namespace Pedestrians
 	// turns to the player and after a moment points. He never turns further
 	// from the player than MostAside to point, and points a little down.
 	constexpr double AskReach = 250.0;
+	// A click picks a fight with someone this close (cm) and this much in front (cosine).
+	constexpr double FightReach = 230.0;
+	constexpr double FightFacing = 0.3;
 	constexpr double AskHeight = 200.0;
 	constexpr float AskSeconds = 5.f;
 	constexpr float PointAfter = 0.5f;
@@ -469,6 +473,53 @@ void APedestrians::Shout(const TCHAR* Hu, const TCHAR* En)
 	}
 	LastShout = Now;
 	Hud->Say(TEXT("J\u00e1r\u00f3kel\u0151"), Hu, En, 3.f);
+}
+
+void APedestrians::PickAFight(APawn* Player)
+{
+	APestiPerson* Person = Cast<APestiPerson>(Player);
+	if (!AStreetFights::WantsToPunch(Person))
+	{
+		return;
+	}
+	// The nearest one standing or walking within reach, more or less in front of him.
+	int32 Picked = INDEX_NONE;
+	double Nearest = FMath::Square(Pedestrians::FightReach);
+	for (int32 i = 0; i < Walkers.Num(); ++i)
+	{
+		const FWalker& Walker = Walkers[i];
+		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Stumble
+			|| Walker.React == EReact::Point || Walker.React == EReact::Flee;
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree
+			|| FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) > Pedestrians::AskHeight)
+		{
+			continue;
+		}
+		const FVector2D Offset = Walker.Shown - FVector2D(PlayerAt);
+		const double Gap = Offset.SizeSquared();
+		if (Gap < Nearest && FVector2D::DotProduct(Offset.GetSafeNormal(), PlayerForward) > Pedestrians::FightFacing)
+		{
+			Nearest = Gap;
+			Picked = i;
+		}
+	}
+	if (Picked == INDEX_NONE)
+	{
+		return;
+	}
+	FWalker& Walker = Walkers[Picked];
+	AStreetFights* Fights = AStreetFights::Get(this);
+	if (!Fights || !Fights->Begin(Person, Walker.Person->GetOutfit(), FVector(Walker.Shown, Walker.GroundZ), Walker.ShownYaw))
+	{
+		return;
+	}
+	// The fighter stands where he was: the walker himself is gone (another comes along out of sight).
+	if (Walker.Blood)
+	{
+		Walker.Blood->DestroyComponent();
+	}
+	Walker.Person->Destroy();
+	Walkers.RemoveAt(Picked);
 }
 
 void APedestrians::AskTheWay(APawn* Player, double Now)
@@ -943,6 +994,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		PlayerForward = FVector2D(Player->GetActorForwardVector()).GetSafeNormal();
 		bPlayerDriving = Player->IsA<APestiCar>();
 		AskTheWay(Player, Now);
+		PickAFight(Player);
 	}
 
 	for (FWalker& Walker : Walkers)

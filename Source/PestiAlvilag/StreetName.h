@@ -27,6 +27,7 @@ namespace StreetName
 	constexpr int32 ForRaceWin = 3;
 	constexpr int32 ForKnockingDown = -1;
 	constexpr int32 ForRunningOver = -4;
+	constexpr int32 ForBeatingUp = -1;
 
 	struct FRank
 	{

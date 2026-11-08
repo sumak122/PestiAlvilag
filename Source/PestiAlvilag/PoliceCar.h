@@ -7,6 +7,7 @@
 #include "PoliceCar.generated.h"
 
 class APestiAlvilagGameModeBase;
+class APoliceman;
 class UMaterialInstanceDynamic;
 class UTextRenderComponent;
 
@@ -14,8 +15,11 @@ class UTextRenderComponent;
  * A police patrol. It drives with the traffic until the player is wanted
  * and it is close enough to hear of it; then it chases the player along the
  * streets (ignoring one-way rules) and, once in sight, straight at them.
- * Staying next to a slow or stopped player arrests them. When the player is
- * no longer wanted it goes back to patrolling.
+ * Staying next to a slow or stopped player arrests them. Close to the
+ * player on foot (or to his car standing still), it pulls up and two
+ * constables get out and run at him to lay hands on him; if he gets away
+ * they run back, get in and the chase goes on. When the player is no
+ * longer wanted they get back in and it goes back to patrolling.
  */
 UCLASS()
 class PESTIALVILAG_API APoliceCar : public ATrafficCar
@@ -52,6 +56,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual CarModel::FStyle PickStyle(const FLinearColor& Paint) const override;
 
 	/** White sign on the roof reading RENDŐRSÉG; it flashes red in a chase. */
@@ -71,8 +76,39 @@ private:
 	bool CanSee(const APawn* Player) const;
 	void MoveChasing(const FVector& Delta, const APawn* Player, float DeltaSeconds);
 
+	/** Close enough, and he slow enough, to pull up and get out. */
+	bool WantsToStop(const APawn* Player, float DistToPlayer) const;
+	/** Two constables out of the doors. */
+	void GetOut();
+	/** The constables on foot: after the player, or back to the car (bBack). True once all are back in. */
+	bool TickOfficers(const APawn* Player, APestiAlvilagGameModeBase* Game, float DeltaSeconds, bool bBack);
+	/** Puts them away (back in the car). */
+	void ClearOfficers();
+	/** Where the constable on this side (0 left, 1 right) gets out and in, on the map. */
+	FVector2D DoorSpot(int32 Side) const;
+	/** The ground under At (cm), looking down from near Near. */
+	bool FindGround(const FVector2D& At, double Near, double& OutZ) const;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> SignPaint;
+
+	struct FOfficer
+	{
+		TWeakObjectPtr<APoliceman> Man;
+		FVector2D At = FVector2D::ZeroVector;
+		double GroundZ = 0.0;
+		float Yaw = 0.f;
+		/** Knocked down by the player's car: seconds still lying there. */
+		float DownLeft = 0.f;
+		bool bIn = false;
+	};
+	TArray<FOfficer> Officers;
+	bool bOfficersOut = false;
+	FVector ParkedAt = FVector::ZeroVector;
+	/** Not before this time does it pull up again (after they got back in). */
+	double NoStopUntil = 0.0;
+	double LastOfficerShout = -10.0;
+	FRandomStream OfficerLooks;
 
 	bool bChasing = false;
 	bool bSeesPlayer = false;

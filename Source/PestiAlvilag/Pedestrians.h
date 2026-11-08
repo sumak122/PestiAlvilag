@@ -177,6 +177,8 @@ private:
 	void Shout(const TCHAR* Hu, const TCHAR* En);
 	/** Q on foot: the nearest passer-by stops, points the way to the mission's goal and says how far. */
 	void AskTheWay(APawn* Player, double Now);
+	/** A click on foot next to someone: the player picks a fight with him (AStreetFights). */
+	void PickAFight(APawn* Player);
 	/** The map direction to point from From to get to To along the streets, and how far that is (cm). */
 	float WayFrom(const FVector2D& From, const FVector2D& To, double& OutDistance) const;
 
