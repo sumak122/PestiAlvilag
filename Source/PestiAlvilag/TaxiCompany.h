@@ -47,6 +47,9 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** A street's 1932 name from today's, or empty when it isn't one people named then (also used by Laci's car orders). */
+	static FString PeriodStreetName(const FString* TodaysName);
+
 	/** How close to the kiosk the player must stand to start or end a shift (cm). */
 	UPROPERTY(EditAnywhere, Category = "Taxi")
 	float SignOnRange = 500.f;

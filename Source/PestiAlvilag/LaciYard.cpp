@@ -12,6 +12,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PersonModel.h"
+#include "LaciOrders.h"
 #include "LaciYardModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
@@ -121,6 +122,7 @@ void ALaciYard::Tick(float DeltaSeconds)
 	{
 		Hud->MarkPlace(GetActorLocation(), TEXT("G"));
 	}
+	TickLeftovers();
 	TickGarage(DeltaSeconds);
 }
 
@@ -129,6 +131,44 @@ void ALaciYard::LaciSays(const FString& Hu, const FString& En) const
 	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
 		Hud->Say(TEXT("Laci"), Hu, En, LaciYardPlace::SaySeconds);
+	}
+}
+
+void ALaciYard::TickLeftovers()
+{
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Game || !Game->IsMissionDone(LaciYardPlace::OpenedBy))
+	{
+		return;
+	}
+	const TArray<int32>& Cars = Game->GetLaciCars();
+	const int32 Wanted = 1 + Cars.Num();
+	if (LeftoversShown >= Wanted)
+	{
+		return;
+	}
+	TArray<MarketModel::FShape> Pieces;
+	for (; LeftoversShown < Wanted; ++LeftoversShown)
+	{
+		LaciYardModel::FStrippedCar Stripped;
+		if (LeftoversShown == 0)
+		{
+			// The doctor's Steyr from mission 7.
+			const CarModel::FStyle Steyr = CarModel::SteyrStyle();
+			Stripped.Paint = Steyr.PaintColor;
+			Stripped.Rim = Steyr.SpokeColor;
+			Stripped.bBig = true;
+		}
+		else
+		{
+			Stripped = ALaciOrders::Leftovers(Cars[LeftoversShown - 1]);
+		}
+		LaciYardModel::BuildLeftovers(Pieces, LeftoversShown, Stripped);
+		LaciYardModel::BuildPlate(Pieces, LeftoversShown);
+	}
+	for (const MarketModel::FShape& Piece : Pieces)
+	{
+		AddShape(Piece.Shape, Piece.Color, Piece.At, Piece.Size, FRotator(Piece.Pitch, Piece.Yaw, Piece.Roll), Piece.bCollide);
 	}
 }
 
@@ -163,6 +203,12 @@ void ALaciYard::TickGarage(float DeltaSeconds)
 	}
 
 	APestiCar* Car = PC ? Cast<APestiCar>(PC->GetPawn()) : nullptr;
+	// A car brought on Laci's order is taken in by ALaciOrders, not mended.
+	TActorIterator<ALaciOrders> Orders(GetWorld());
+	if (Car && Orders && Orders->GetOrderCar() == Car)
+	{
+		Car = nullptr;
+	}
 	if (!Car)
 	{
 		StoodFor = 0.f;

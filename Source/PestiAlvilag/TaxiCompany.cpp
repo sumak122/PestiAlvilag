@@ -132,6 +132,11 @@ namespace TaxiCompany
 	}
 }
 
+FString ATaxiCompany::PeriodStreetName(const FString* TodaysName)
+{
+	return TaxiCompany::PeriodName(TodaysName);
+}
+
 ATaxiCompany::ATaxiCompany()
 {
 	PrimaryActorTick.bCanEverTick = true;

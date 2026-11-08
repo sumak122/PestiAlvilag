@@ -50,6 +50,12 @@ private:
 	void StartWork(APestiCar* Car);
 	void FinishWork();
 	void LaciSays(const FString& Hu, const FString& En) const;
+	/**
+	 * What is left of the cars Laci took apart: the doctor's Steyr once
+	 * mission 7 is done, then each car brought on his orders (ALaciOrders),
+	 * added as they come in, a number plate for each on the wall.
+	 */
+	void TickLeftovers();
 
 	void AddShape(int32 Shape, const FLinearColor& Color, const FVector& At, const FVector& Size, const FRotator& Turn, bool bCollide);
 
@@ -80,4 +86,6 @@ private:
 	/** While working: when the car is done (the screen still black), and when the screen clears. */
 	double DoneAt = -1.0;
 	double ClearAt = -1.0;
+	/** Stripped cars shown so far (the Steyr counts as the first). */
+	int32 LeftoversShown = 0;
 };

@@ -80,6 +80,10 @@ public:
 	int32 GetTaxiJobs() const { return TaxiJobs; }
 	void AddTaxiJob() { ++TaxiJobs; }
 
+	/** Cars brought to Laci on his orders, each as Body * 100 + paint (ALaciOrders), oldest first. */
+	const TArray<int32>& GetLaciCars() const { return LaciCars; }
+	void AddLaciCar(int32 Car) { LaciCars.Add(Car); }
+
 	/** Dishes eaten at least once; true the first time. */
 	bool TryDish(FName DishId)
 	{
@@ -183,6 +187,7 @@ private:
 	int32 Money = 0;
 	TArray<FName> CompletedMissions;
 	int32 TaxiJobs = 0;
+	TArray<int32> LaciCars;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;
