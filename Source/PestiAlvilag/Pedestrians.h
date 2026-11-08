@@ -70,6 +70,18 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/**
+	 * Someone who keeps to one spot (the folk in front of a church): stands
+	 * at At on the floor at Ground facing FaceYaw, or sits there with his middle
+	 * SeatedUp above it when the outfit is seated (0 for one standing). He
+	 * reacts to the player like any passer-by and can be asked the way;
+	 * afterwards he walks back to his spot. When the player comes near on
+	 * foot he turns to him, and Who calls out Hu/En now and then (no call
+	 * when Hu is empty).
+	 */
+	void AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
+		const FString& Who, const FString& Hu, const FString& En);
+
 	/** The furniture file with the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")
 	FString DataFile = TEXT("Data/OsmGraybox/street_furniture.json");
@@ -148,6 +160,17 @@ private:
 		/** Asked the way: the map direction he points, and whether he knows it at all. */
 		float PointYaw = 0.f;
 		bool bPointing = false;
+		/** Keeps to one spot (AddStander): there, facing that way, and, when seated, his middle this high over the floor. */
+		bool bStander = false;
+		bool bSeated = false;
+		FVector2D Home = FVector2D::ZeroVector;
+		float HomeYaw = 0.f;
+		double SeatedUp = 0.0;
+		/** What he calls out to the player, and not before when again. */
+		FString CallWho;
+		FString CallHu;
+		FString CallEn;
+		double NextCall = 0.0;
 	};
 
 	bool LoadLines();
@@ -173,6 +196,10 @@ private:
 	bool PoseReacting(FWalker& Walker, float DeltaSeconds);
 	/** Back to walking (and the blood gone), once he is cleared away. */
 	void ClearReact(FWalker& Walker);
+	/** A stander's frame: back to his spot after a reaction, turning to the player near him and calling out. */
+	void TickStander(FWalker& Walker, const FVector& Camera, bool bPlayerAbout, double Now, float DeltaSeconds);
+	/** His middle's height over the floor: standing, or seated. */
+	double MiddleUp(const FWalker& Walker) const;
 	/** Someone calls out (only now and then, and not over other speech). */
 	void Shout(const TCHAR* Hu, const TCHAR* En);
 	/** Q on foot: the nearest passer-by stops, points the way to the mission's goal and says how far. */
@@ -188,6 +215,8 @@ private:
 	double NearLongest = 1.0;
 	FVector NearLinesFrom = FVector(1e9);
 	TArray<FWalker> Walkers;
+	/** How many of the walkers are standers (they do not count in the crowd). */
+	int32 NumStanders = 0;
 	FRandomStream Random;
 	bool bReady = false;
 
