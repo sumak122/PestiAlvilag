@@ -914,8 +914,11 @@ namespace ShopModel
 	/** Width of the stone surround of a tenement gate (cm, along the wall). */
 	constexpr double GateSurround = 34.0;
 
-	/** A tenement gate Width cm wide: stone surround, panelled double doors, fanlight and the blue number plate. */
-	inline void BuildGate(TArray<FPart>& P, TArray<FLettering>& Text, double Width)
+	/**
+	 * A tenement gate Width cm wide: stone surround, panelled double doors, fanlight and the blue number plate.
+	 * With bOpen the doors stand swung back against the gateway's walls and the opening is clear up to the vault.
+	 */
+	inline void BuildGate(TArray<FPart>& P, TArray<FLettering>& Text, double Width, bool bOpen = false)
 	{
 		using namespace Colors;
 		const int32 FirstPart = P.Num();
@@ -936,24 +939,43 @@ namespace ShopModel
 		}
 		P.Add(Span(0.0, 22.0, -Half, Half, Spring, Top, Stone, true));
 		P.Add(Span(0.0, 30.0, -18.0, 18.0, Spring - 6.0, Top - 4.0, StoneDark));
-		// Fanlight with bars, and the doors set back in the opening.
-		P.Add(Span(0.5, 2.5, -Open, Open, Spring - 70.0, Spring, Inside));
-		for (int32 k = 1; k < 4; ++k)
+		if (bOpen)
 		{
-			const double Y = -Open + Open * 2.0 * k / 4.0;
-			P.Add(Span(6.0, 9.0, Y - 1.5, Y + 1.5, Spring - 70.0, Spring, GateWood));
-		}
-		P.Add(Span(6.0, 10.0, -Open, Open, Spring - 78.0, Spring - 70.0, GateWood));
-		for (const double Side : { -1.0, 1.0 })
-		{
-			const double Y0 = Side < 0.0 ? -Open : 0.5;
-			const double Y1 = Side < 0.0 ? -0.5 : Open;
-			P.Add(Span(4.0, 10.0, Y0, Y1, 0.0, Spring - 78.0, GateWood, true));
-			for (const double Z0 : { 25.0, 130.0 })
+			// The two doors swung back flat against the gateway's walls, inside the dado.
+			for (const double Side : { -1.0, 1.0 })
 			{
-				P.Add(Span(10.0, 13.0, Y0 + 14.0, Y1 - 14.0, Z0, Z0 + (Z0 < 100.0 ? 85.0 : 115.0), GateWood));
+				const double Y0 = Side < 0.0 ? -Open + 12.0 : Open - 18.0;
+				const double Y1 = Y0 + 6.0;
+				const double Face = Side < 0.0 ? Y1 : Y0;
+				P.Add(Span(-6.0 - Open, -6.0, Y0, Y1, 0.0, Spring - 78.0, GateWood, true));
+				for (const double Z0 : { 25.0, 130.0 })
+				{
+					P.Add(Span(-Open + 8.0, -20.0, Face - 1.5, Face + 1.5, Z0, Z0 + (Z0 < 100.0 ? 85.0 : 115.0), GateWood));
+				}
+				P.Add({ ParkModel::Sphere, Brass, FVector(-Open + 14.0, Face - Side * 4.0, 120.0), FVector(6.0, 6.0, 6.0) });
 			}
-			P.Add({ ParkModel::Sphere, Brass, FVector(14.0, Side * 9.0, 120.0), FVector(6.0, 6.0, 6.0) });
+		}
+		else
+		{
+			// Fanlight with bars, and the doors set back in the opening.
+			P.Add(Span(0.5, 2.5, -Open, Open, Spring - 70.0, Spring, Inside));
+			for (int32 k = 1; k < 4; ++k)
+			{
+				const double Y = -Open + Open * 2.0 * k / 4.0;
+				P.Add(Span(6.0, 9.0, Y - 1.5, Y + 1.5, Spring - 70.0, Spring, GateWood));
+			}
+			P.Add(Span(6.0, 10.0, -Open, Open, Spring - 78.0, Spring - 70.0, GateWood));
+			for (const double Side : { -1.0, 1.0 })
+			{
+				const double Y0 = Side < 0.0 ? -Open : 0.5;
+				const double Y1 = Side < 0.0 ? -0.5 : Open;
+				P.Add(Span(4.0, 10.0, Y0, Y1, 0.0, Spring - 78.0, GateWood, true));
+				for (const double Z0 : { 25.0, 130.0 })
+				{
+					P.Add(Span(10.0, 13.0, Y0 + 14.0, Y1 - 14.0, Z0, Z0 + (Z0 < 100.0 ? 85.0 : 115.0), GateWood));
+				}
+				P.Add({ ParkModel::Sphere, Brass, FVector(14.0, Side * 9.0, 120.0), FVector(6.0, 6.0, 6.0) });
+			}
 		}
 		// The blue enamel house number plate on the right jamb.
 		P.Add(Span(22.0, 23.5, Open + 3.0, Half - 3.0, 252.0, 276.0, White));
