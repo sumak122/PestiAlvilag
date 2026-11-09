@@ -13,10 +13,13 @@
 #include "Dom/JsonValue.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "ParkModel.h"
+#include "Pedestrians.h"
 #include "PersonKit.h"
 #include "PersonModel.h"
 #include "PestiHud.h"
@@ -465,10 +468,34 @@ void ACityDetails::BuildChurches(const FJsonObject& Root)
 		TArray<FShape> Shapes;
 		TArray<FLamp> Lights;
 		Church(Which, C[4]->AsNumber(), C[5]->AsNumber(), Shapes, Lights);
+		// Its steps and flower stall, and the folk about the door.
+		TArray<FChurchFolk> Folk;
+		Forecourt(Which, Shapes, Folk);
 		Set->AddShapes(Shapes);
 		for (const FLamp& Light : Lights)
 		{
 			Set->AddLamp(Light.At, Light.Radius);
+		}
+
+		// The folk are passers-by that keep to their spots: bumped, driven
+		// at or asked the way, they react as anyone in the street would.
+		TActorIterator<APedestrians> Crowd(GetWorld());
+		if (!Crowd)
+		{
+			continue;
+		}
+		const FRotator Turn(0.0, FrontYaw, 0.0);
+		int32 OldWomen = 0;
+		for (const FChurchFolk& One : Folk)
+		{
+			const PersonKit::FOutfit Clothes = FolkOutfit(One.Who, One.Who == EChurchFolk::OldWoman ? OldWomen++ : 0);
+			const FVector Spot = FVector(Front, 0.0) + Turn.RotateVector(FVector(One.At, 0.0));
+			const double SeatedUp = One.SeatHeight > 0.0 ? ParkModel::SeatedMiddle(Clothes, One.SeatHeight, PersonModel::MiddleHeight) : 0.0;
+			const TCHAR* Name = TEXT("");
+			const TCHAR* Hu = TEXT("");
+			const TCHAR* En = TEXT("");
+			FolkCall(One.Who, Name, Hu, En);
+			Crowd->AddStander(FVector2D(Spot), Ground + One.Up, FrontYaw + One.Yaw, Clothes, SeatedUp, Name, Hu, En);
 		}
 	}
 }
