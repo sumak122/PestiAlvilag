@@ -6,6 +6,7 @@
 #include "DayNight.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "GroundSurfaces.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -40,6 +41,17 @@ namespace Weather
 	// Pale see-through grey: colour and how much it hides.
 	const FLinearColor DropTint(0.72f, 0.75f, 0.80f, 0.35f);
 	constexpr float RainVolume = 0.8f;
+
+	// The streets: in rain they get as wet as WetFloor plus the rest by how
+	// hard it rains, soaking up in about SoakSeconds and drying in about
+	// DrySeconds after it stops (quicker when set from the test page); the
+	// ground is told again once it changed by WetStep.
+	constexpr float WetFloor = 0.55f;
+	constexpr float SoakSeconds = 40.f;
+	constexpr float DrySeconds = 240.f;
+	constexpr float ForcedSoakSeconds = 6.f;
+	constexpr float ForcedDrySeconds = 30.f;
+	constexpr float WetStep = 0.01f;
 }
 
 AWeather::AWeather()
@@ -220,6 +232,19 @@ void AWeather::Tick(float DeltaSeconds)
 	if (ADayNight* Clock = ADayNight::Get(GetWorld()))
 	{
 		Clock->SetWeather(Overcast, Mist);
+	}
+
+	// Wet streets: soaking in the rain, drying slowly after.
+	const bool bForced = Forced != ETestWeather::Natural;
+	const float WetAim = Rain > 0.05f ? FMath::Min(1.f, Weather::WetFloor + (1.f - Weather::WetFloor) * Rain) : 0.f;
+	const float WetSeconds = WetAim > Wet
+		? (bForced ? Weather::ForcedSoakSeconds : Weather::SoakSeconds)
+		: (bForced ? Weather::ForcedDrySeconds : Weather::DrySeconds);
+	Wet = FMath::FInterpConstantTo(Wet, WetAim, DeltaSeconds, 1.f / WetSeconds);
+	if (WetShown < 0.f || FMath::Abs(Wet - WetShown) >= Weather::WetStep || (Wet == 0.f && WetShown > 0.f))
+	{
+		WetShown = Wet;
+		GroundSurfaces::SetWet(Wet);
 	}
 
 	if (Rain > 0.005f && !RainNoise)

@@ -9,12 +9,16 @@
 
 #if WITH_EDITOR
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionCameraPositionWS.h"
+#include "Materials/MaterialExpressionConstant3Vector.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionDistance.h"
 #include "Materials/MaterialExpressionDivide.h"
+#include "Materials/MaterialExpressionLinearInterpolate.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionNoise.h"
+#include "Materials/MaterialExpressionOneMinus.h"
 #include "Materials/MaterialExpressionSaturate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSubtract.h"
@@ -41,6 +45,35 @@ namespace GroundSurfaces::Private
 	// ...and how dark and light they get.
 	constexpr float PatchDark = 0.82f;
 	constexpr float PatchLight = 1.12f;
+
+	// Wet ground ("Wet" 0 dry to 1 soaked, times "Soak" for how much this
+	// ground shows it): darker by up to this share, its roughness down to
+	// this (so it shines and mirrors the lamps), and puddles in the hollows,
+	// patches about this big (cm) that spread as it gets wetter (the top
+	// PuddleReach of the patches when soaked) with this soft an edge; in
+	// a puddle the ground is darker still, as smooth as glass and flat.
+	constexpr float WetDarken = 0.35f;
+	constexpr float WetRoughness = 0.2f;
+	constexpr float PuddleSize = 380.f;
+	constexpr float PuddleReach = 0.3f;
+	constexpr float PuddleEdge = 9.f;
+	constexpr float PuddleDarken = 0.2f;
+	constexpr float PuddleRoughness = 0.03f;
+
+	/** How much this ground shows the wet: stone and earth fully, gravel less, grass hardly. */
+	float SoakOf(EKind Kind)
+	{
+		switch (Kind)
+		{
+		case EKind::Gravel: return 0.75f;
+		case EKind::Grass: return 0.3f;
+		default: return 1.f;
+		}
+	}
+
+	// Every ground material made, so the weather can wet them all, and how wet they are now.
+	TArray<TWeakObjectPtr<UMaterialInstanceDynamic>> AllMade;
+	float CurrentWet = 0.f;
 
 	struct FPictures
 	{
@@ -224,10 +257,75 @@ namespace GroundSurfaces::Private
 		Normal->A.Connect(0, Doubled);
 		Normal->ConstB = 1.f;
 
+		// Rain: wetter is darker and smoother, with puddles in the hollows.
+		auto* Wet = AddExpression<UMaterialExpressionScalarParameter>(Material);
+		Wet->ParameterName = TEXT("Wet");
+		Wet->DefaultValue = 0.f;
+		Wet->UpdateParameterGuid(true, false);
+		auto* Soak = AddExpression<UMaterialExpressionScalarParameter>(Material);
+		Soak->ParameterName = TEXT("Soak");
+		Soak->DefaultValue = 1.f;
+		Soak->UpdateParameterGuid(true, false);
+		auto* Wetness = AddExpression<UMaterialExpressionMultiply>(Material);
+		Wetness->A.Connect(0, Wet);
+		Wetness->B.Connect(0, Soak);
+
+		auto* Hollows = AddExpression<UMaterialExpressionNoise>(Material);
+		Hollows->NoiseFunction = NOISEFUNCTION_ValueALU;
+		Hollows->Scale = 1.f / PuddleSize;
+		Hollows->Levels = 3;
+		Hollows->OutputMin = 0.f;
+		Hollows->OutputMax = 1.f;
+		auto* Rise = AddExpression<UMaterialExpressionMultiply>(Material);
+		Rise->A.Connect(0, Wetness);
+		Rise->ConstB = PuddleReach;
+		auto* Risen = AddExpression<UMaterialExpressionAdd>(Material);
+		Risen->A.Connect(0, Hollows);
+		Risen->B.Connect(0, Rise);
+		auto* Above = AddExpression<UMaterialExpressionSubtract>(Material);
+		Above->A.Connect(0, Risen);
+		Above->ConstB = 1.f;
+		auto* Edged = AddExpression<UMaterialExpressionMultiply>(Material);
+		Edged->A.Connect(0, Above);
+		Edged->ConstB = PuddleEdge;
+		auto* Puddle = AddExpression<UMaterialExpressionSaturate>(Material);
+		Puddle->Input.Connect(0, Edged);
+
+		auto* WetDark = AddExpression<UMaterialExpressionMultiply>(Material);
+		WetDark->A.Connect(0, Wetness);
+		WetDark->ConstB = WetDarken;
+		auto* PuddleDark = AddExpression<UMaterialExpressionMultiply>(Material);
+		PuddleDark->A.Connect(0, Puddle);
+		PuddleDark->ConstB = PuddleDarken;
+		auto* AllDark = AddExpression<UMaterialExpressionAdd>(Material);
+		AllDark->A.Connect(0, WetDark);
+		AllDark->B.Connect(0, PuddleDark);
+		auto* Kept = AddExpression<UMaterialExpressionOneMinus>(Material);
+		Kept->Input.Connect(0, AllDark);
+		auto* Darkened = AddExpression<UMaterialExpressionMultiply>(Material);
+		Darkened->A.Connect(0, Patched);
+		Darkened->B.Connect(0, Kept);
+
+		auto* Damp = AddExpression<UMaterialExpressionLinearInterpolate>(Material);
+		Damp->A.Connect(4, Colour);
+		Damp->ConstB = WetRoughness;
+		Damp->Alpha.Connect(0, Wetness);
+		auto* Glassy = AddExpression<UMaterialExpressionLinearInterpolate>(Material);
+		Glassy->A.Connect(0, Damp);
+		Glassy->ConstB = PuddleRoughness;
+		Glassy->Alpha.Connect(0, Puddle);
+
+		auto* Up = AddExpression<UMaterialExpressionConstant3Vector>(Material);
+		Up->Constant = FLinearColor(0.f, 0.f, 1.f);
+		auto* Flattened = AddExpression<UMaterialExpressionLinearInterpolate>(Material);
+		Flattened->A.Connect(0, Normal);
+		Flattened->B.Connect(0, Up);
+		Flattened->Alpha.Connect(0, Puddle);
+
 		UMaterialEditorOnlyData* Inputs = Material->GetEditorOnlyData();
-		Inputs->BaseColor.Connect(0, Patched);
-		Inputs->Roughness.Connect(4, Colour);
-		Inputs->Normal.Connect(0, Normal);
+		Inputs->BaseColor.Connect(0, Darkened);
+		Inputs->Roughness.Connect(0, Glassy);
+		Inputs->Normal.Connect(0, Flattened);
 
 		Material->PreEditChange(nullptr);
 		Material->PostEditChange();
@@ -349,6 +447,9 @@ UMaterialInstanceDynamic* GroundSurfaces::Make(SurfaceModel::EKind Kind, UObject
 	Material->SetTextureParameterValue(TEXT("Colour"), Found.Colour.Get());
 	Material->SetTextureParameterValue(TEXT("Bumps"), Found.Bumps.Get());
 	Material->SetScalarParameterValue(TEXT("TileSize"), static_cast<float>(SurfaceModel::TileCm(Kind)));
+	Material->SetScalarParameterValue(TEXT("Soak"), SoakOf(Kind));
+	Material->SetScalarParameterValue(TEXT("Wet"), CurrentWet);
+	AllMade.Add(Material);
 	return Material;
 #else
 	return nullptr;
@@ -372,5 +473,19 @@ UMaterialInstanceDynamic* GroundSurfaces::MakeLightPool(UObject* Outer)
 	return UMaterialInstanceDynamic::Create(PoolMaterial.Get(), Outer);
 #else
 	return nullptr;
+#endif
+}
+
+void GroundSurfaces::SetWet(float Wetness)
+{
+#if WITH_EDITOR
+	using namespace GroundSurfaces::Private;
+
+	CurrentWet = FMath::Clamp(Wetness, 0.f, 1.f);
+	AllMade.RemoveAll([](const TWeakObjectPtr<UMaterialInstanceDynamic>& Made) { return !Made.IsValid(); });
+	for (const TWeakObjectPtr<UMaterialInstanceDynamic>& Made : AllMade)
+	{
+		Made->SetScalarParameterValue(TEXT("Wet"), CurrentWet);
+	}
 #endif
 }

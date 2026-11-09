@@ -24,6 +24,13 @@ namespace GroundSurfaces
 	UMaterialInstanceDynamic* Make(SurfaceModel::EKind Kind, UObject* Outer);
 
 	/**
+	 * How wet the ground is, 0 dry to 1 soaked (from AWeather): every ground
+	 * material made by Make turns darker and shinier, and puddles spread in
+	 * its hollows. Materials made later start as wet as this.
+	 */
+	void SetWet(float Wetness);
+
+	/**
 	 * The glow a street lamp throws on the ground, for a flat square
 	 * LightPoolRadius cm from its middle to each side, with texture
 	 * coordinates 0..1 across it. Set the vector "Light" to the brightness

@@ -11,6 +11,7 @@ class AOsmGraybox;
 class APawn;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -46,8 +47,37 @@ public:
 	 */
 	void PointTo(const FVector& Location, double Yaw, double PointYaw, bool bPointing);
 
+	/**
+	 * In the rain: whether he wants his umbrella up, and its cloth colour.
+	 * WalkTo then raises his arm and opens it over his head (or closes it and
+	 * puts it away); held in the right hand, or the left when the right one
+	 * carries something. Someone with a furled umbrella opens that one.
+	 */
+	void WantUmbrella(bool bOpen, const FLinearColor& Cloth);
+
+	/** Whether he has his umbrella up (or is opening it). */
+	bool HasUmbrellaUp() const { return UmbrellaOpen > 0.f; }
+
 private:
+	/** Which arm holds the umbrella: 0 left, 1 right. */
+	int32 UmbrellaArm() const;
+	/** Opens or shuts it a little more, and makes it the first time. */
+	void UpdateUmbrella(float DeltaSeconds);
+	/** Bends the elbow by Raised (0..1) and puts the umbrella in that hand. */
+	void PlaceUmbrella(int32 HoldingArm, float Raised);
+	/** Umbrella gone at once (knocked down, pointing, running off), the elbows straight. */
+	void DropUmbrella();
+
 	float Stride = 0.f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Umbrella;
+	/** 0 shut and away, up to 0.5 raising the arm, 1 open over his head. */
+	float UmbrellaOpen = 0.f;
+	bool bWantsUmbrella = false;
+	FLinearColor UmbrellaCloth = FLinearColor::Black;
+	/** He came out with a furled umbrella, taken out of his hand while it is open. */
+	bool bFurledInUse = false;
 };
 
 /**
@@ -148,6 +178,10 @@ private:
 		/** Asked the way: the map direction he points, and whether he knows it at all. */
 		float PointYaw = 0.f;
 		bool bPointing = false;
+		/** Whether he brought an umbrella, its colour, and how much rain it takes before he opens it (0..1). */
+		bool bHasUmbrella = false;
+		FLinearColor UmbrellaColor = FLinearColor::Black;
+		float UmbrellaPatience = 0.f;
 	};
 
 	bool LoadLines();
