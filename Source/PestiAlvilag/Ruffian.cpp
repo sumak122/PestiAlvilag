@@ -82,6 +82,8 @@ FString ARuffian::GetSpeakerName() const
 		return TEXT("Sz\u0151ke Gyuri");
 	case ERuffian::BoxVasoklu:
 		return TEXT("Vas\u00f6kl\u0171");
+	case ERuffian::Passerby:
+		return TEXT("J\u00e1r\u00f3kel\u0151");
 	default:
 		return TEXT("Bika");
 	}
@@ -125,6 +127,9 @@ float ARuffian::GetMaxHealth() const
 		return 70.f;
 	case ERuffian::BoxVasoklu:
 		return 100.f;
+	// Someone off the street: no fighter.
+	case ERuffian::Passerby:
+		return 30.f;
 	default:
 		return 60.f;
 	}
@@ -140,6 +145,7 @@ float ARuffian::Quickness() const
 	case ERuffian::BoxVasoklu:
 		return 1.3f;
 	case ERuffian::BoxMazsas:
+	case ERuffian::Passerby:
 		return 0.85f;
 	default:
 		return 1.f;
@@ -179,6 +185,8 @@ float ARuffian::GetVoicePitch() const
 		return 110.f;
 	case ERuffian::BoxVasoklu:
 		return 92.f;
+	case ERuffian::Passerby:
+		return StreetDress.bWoman ? 205.f : 112.f;
 	default:
 		return 142.f;
 	}
@@ -195,6 +203,8 @@ float ARuffian::GetBlowStrength() const
 		return 1.35f;
 	case ERuffian::BoxVasoklu:
 		return 1.25f;
+	case ERuffian::Passerby:
+		return 0.8f;
 	default:
 		return 1.f;
 	}
@@ -223,6 +233,8 @@ PersonKit::FOutfit ARuffian::GetDress() const
 		return BoxingYardModel::Rival(3);
 	case ERuffian::BoxVasoklu:
 		return BoxingYardModel::Rival(4);
+	case ERuffian::Passerby:
+		return StreetDress;
 	default:
 		break;
 	}
