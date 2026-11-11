@@ -27,6 +27,7 @@
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
+#include "StreetFights.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
@@ -159,6 +160,9 @@ namespace Pedestrians
 	// turns to the player and after a moment points. He never turns further
 	// from the player than MostAside to point, and points a little down.
 	constexpr double AskReach = 250.0;
+	// A click picks a fight with someone this close (cm) and this much in front (cosine).
+	constexpr double FightReach = 230.0;
+	constexpr double FightFacing = 0.3;
 	constexpr double AskHeight = 200.0;
 	constexpr float AskSeconds = 5.f;
 	constexpr float PointAfter = 0.5f;
@@ -179,6 +183,22 @@ namespace Pedestrians
 		{ TEXT("Nem tudom, fiam, nem vagyok ideval\u00f3si."), TEXT("Sorry, son, I'm not from round here.") },
 		{ TEXT("Bocs\u00e1sson meg, sietek!"), TEXT("Excuse me, I'm in a hurry!") },
 	};
+
+	// Standers (AddStander): how fast they walk back to their spot, how far
+	// round they turn to the player (seated ones less), how near on foot the
+	// player must come for them to turn and call, and how often they call.
+	constexpr float StanderPace = 110.f;
+	constexpr float StanderTurnRate = 200.f;
+	constexpr float StanderLookAside = 120.f;
+	constexpr float SeatedLookAside = 50.f;
+	constexpr double HomeNear = 8.0;
+	constexpr double CallReach = 450.0;
+	constexpr double CallHeight = 300.0;
+	constexpr float MinCallEvery = 18.f;
+	constexpr float MaxCallEvery = 30.f;
+	// A car this near one standing has him jump away; one seated cries out.
+	constexpr double StanderCarNear = 500.0;
+	constexpr double SeatedCarNear = 700.0;
 
 	FIntPoint CellOf(const FVector2D& At)
 	{
@@ -625,6 +645,53 @@ void APedestrians::Shout(const TCHAR* Hu, const TCHAR* En)
 	Hud->Say(TEXT("J\u00e1r\u00f3kel\u0151"), Hu, En, 3.f);
 }
 
+void APedestrians::PickAFight(APawn* Player)
+{
+	APestiPerson* Person = Cast<APestiPerson>(Player);
+	if (!AStreetFights::WantsToPunch(Person))
+	{
+		return;
+	}
+	// The nearest one standing or walking within reach, more or less in front of him.
+	int32 Picked = INDEX_NONE;
+	double Nearest = FMath::Square(Pedestrians::FightReach);
+	for (int32 i = 0; i < Walkers.Num(); ++i)
+	{
+		const FWalker& Walker = Walkers[i];
+		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Stumble
+			|| Walker.React == EReact::Point || Walker.React == EReact::Flee;
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree
+			|| FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) > Pedestrians::AskHeight)
+		{
+			continue;
+		}
+		const FVector2D Offset = Walker.Shown - FVector2D(PlayerAt);
+		const double Gap = Offset.SizeSquared();
+		if (Gap < Nearest && FVector2D::DotProduct(Offset.GetSafeNormal(), PlayerForward) > Pedestrians::FightFacing)
+		{
+			Nearest = Gap;
+			Picked = i;
+		}
+	}
+	if (Picked == INDEX_NONE)
+	{
+		return;
+	}
+	FWalker& Walker = Walkers[Picked];
+	AStreetFights* Fights = AStreetFights::Get(this);
+	if (!Fights || !Fights->Begin(Person, Walker.Person->GetOutfit(), FVector(Walker.Shown, Walker.GroundZ), Walker.ShownYaw))
+	{
+		return;
+	}
+	// The fighter stands where he was: the walker himself is gone (another comes along out of sight).
+	if (Walker.Blood)
+	{
+		Walker.Blood->DestroyComponent();
+	}
+	Walker.Person->Destroy();
+	Walkers.RemoveAt(Picked);
+}
+
 void APedestrians::AskTheWay(APawn* Player, double Now)
 {
 	if (!Player->IsA<APestiPerson>())
@@ -774,6 +841,25 @@ void APedestrians::ReactToPlayer(FWalker& Walker, double Now)
 	const double Speed = PlayerVelocity.Size2D();
 	const FVector2D Going = FVector2D(PlayerVelocity).GetSafeNormal();
 
+	if (Walker.bSeated)
+	{
+		// Sitting, he only tells you off when walked into, or cries out at a car coming near.
+		if (bPlayerDriving)
+		{
+			if (Speed > Pedestrians::CarNoticeSpeed && Offset.Size() < Pedestrians::SeatedCarNear)
+			{
+				const Pedestrians::FLine2& Line = Pedestrians::LeapLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::LeapLines)) - 1)];
+				Shout(Line.Hu, Line.En);
+			}
+		}
+		else if (Speed > Pedestrians::BumpSpeed && Offset.Size() < Pedestrians::BumpDistance + 30.0)
+		{
+			const Pedestrians::FLine2& Line = Pedestrians::BumpLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::BumpLines)) - 1)];
+			Shout(Line.Hu, Line.En);
+		}
+		return;
+	}
+
 	if (bPlayerDriving)
 	{
 		const FVector2D Right(-PlayerForward.Y, PlayerForward.X);
@@ -812,6 +898,18 @@ void APedestrians::ReactToPlayer(FWalker& Walker, double Now)
 		}
 		Walker.NoticeAt = -1.f;
 		Walker.bFrozen = false;
+
+		// One who keeps to his spot jumps away from a car close by.
+		if (Walker.bStander)
+		{
+			if (Walker.React == EReact::None && Speed > Pedestrians::CarNoticeSpeed * 0.5 && Offset.Size() < Pedestrians::StanderCarNear)
+			{
+				StartReact(Walker, EReact::Leap, 0.7f, Offset.GetSafeNormal() * Pedestrians::LeapSpeed);
+				const Pedestrians::FLine2& Line = Pedestrians::LeapLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::LeapLines)) - 1)];
+				Shout(Line.Hu, Line.En);
+			}
+			return;
+		}
 
 		// The car up on the pavement near him: he runs off along it.
 		if (Walker.React == EReact::None && Speed > Pedestrians::CarNoticeSpeed * 0.5 && Offset.Size() < Pedestrians::PavementNear)
@@ -892,6 +990,15 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 			if (&Other != &Walker && IsValid(Other.Person) && (Other.React == EReact::None || Other.React == EReact::Aside)
 				&& FVector2D::Distance(Other.Shown, Walker.Shown) < Pedestrians::WitnessNear)
 			{
+				if (Other.bStander)
+				{
+					// Those keeping to a spot run a few steps off, then come back.
+					if (!Other.bSeated)
+					{
+						StartReact(Other, EReact::Leap, 1.2f, (Other.Shown - Walker.Shown).GetSafeNormal() * Pedestrians::LeapSpeed * 0.7);
+					}
+					continue;
+				}
 				FVector2D Tangent;
 				PointOn(Lines[Other.Line], Other.Along, Tangent);
 				Other.Dir = FVector2D::DotProduct(Tangent, Other.Shown - Walker.Shown) >= 0.0 ? 1 : -1;
@@ -909,7 +1016,7 @@ bool APedestrians::PoseReacting(FWalker& Walker, float DeltaSeconds)
 	}
 	APedestrian* Person = Walker.Person;
 	const double Size = Person->GetActorScale3D().Z;
-	const double Standing = Walker.GroundZ + Pedestrians::Middle * Size;
+	const double Standing = Walker.GroundZ + MiddleUp(Walker);
 	const double Lying = Walker.GroundZ + Pedestrians::LyingHeight * Size;
 	Walker.ReactTime += DeltaSeconds;
 	Walker.ReactLeft -= DeltaSeconds;
@@ -1056,7 +1163,7 @@ void APedestrians::Tick(float DeltaSeconds)
 	const bool bFilling = GetWorld()->GetTimeSeconds() < 2.0;
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	for (int32 n = 0; n < Pedestrians::SpawnPerFrame && Walkers.Num() < Crowd; ++n)
+	for (int32 n = 0; n < Pedestrians::SpawnPerFrame && Walkers.Num() - NumStanders < Crowd; ++n)
 	{
 		FWalker Walker;
 		if (!PickSpot(Camera, Looking, bFilling, bFilling ? Pedestrians::FillNear : AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
@@ -1101,6 +1208,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		PlayerForward = FVector2D(Player->GetActorForwardVector()).GetSafeNormal();
 		bPlayerDriving = Player->IsA<APestiCar>();
 		AskTheWay(Player, Now);
+		PickAFight(Player);
 	}
 
 	const AWeather* Sky = AWeather::Get(GetWorld());
@@ -1110,6 +1218,11 @@ void APedestrians::Tick(float DeltaSeconds)
 	{
 		if (!IsValid(Walker.Person))
 		{
+			continue;
+		}
+		if (Walker.bStander)
+		{
+			TickStander(Walker, Camera, bPlayerAbout, Now, DeltaSeconds);
 			continue;
 		}
 
@@ -1202,4 +1315,113 @@ void APedestrians::Tick(float DeltaSeconds)
 				Walker.React == EReact::Flee ? 1.f : 0.f);
 		}
 	}
+}
+
+double APedestrians::MiddleUp(const FWalker& Walker) const
+{
+	return Walker.bSeated ? Walker.SeatedUp : Pedestrians::Middle * Walker.Person->GetActorScale3D().Z;
+}
+
+void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
+	const FString& Who, const FString& Hu, const FString& En)
+{
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	APedestrian* Person = GetWorld()->SpawnActor<APedestrian>(APedestrian::StaticClass(), FVector(At, Ground + Pedestrians::Middle),
+		FRotator(0.0, FaceYaw, 0.0), Params);
+	if (!Person)
+	{
+		return;
+	}
+	Person->SetOutfit(Outfit);
+	TInlineComponentArray<UPrimitiveComponent*> Shapes(Person);
+	for (UPrimitiveComponent* Shape : Shapes)
+	{
+		Shape->SetCachedMaxDrawDistance(Range);
+	}
+
+	FWalker Walker;
+	Walker.Person = Person;
+	Walker.bStander = true;
+	Walker.bSeated = Outfit.bSeated && SeatedUp > 0.0;
+	Walker.SeatedUp = SeatedUp;
+	Walker.Home = At;
+	Walker.HomeYaw = static_cast<float>(FaceYaw);
+	Walker.Shown = At;
+	Walker.ShownYaw = static_cast<float>(FaceYaw);
+	Walker.GroundZ = Ground;
+	Walker.bGroundKnown = true;
+	Walker.bPlaced = true;
+	Walker.CallWho = Who;
+	Walker.CallHu = Hu;
+	Walker.CallEn = En;
+	Person->PointTo(FVector(At, Ground + MiddleUp(Walker)), FaceYaw, 0.0, false);
+	Walkers.Add(Walker);
+	++NumStanders;
+}
+
+void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPlayerAbout, double Now, float DeltaSeconds)
+{
+	APedestrian* Person = Walker.Person;
+	if (FVector2D::Distance(Walker.Shown, FVector2D(Camera)) > Range)
+	{
+		// Far off: back at his spot as he was, once nobody sees him.
+		if ((Walker.React != EReact::None || !Walker.Shown.Equals(Walker.Home, 1.0))
+			&& !Person->WasRecentlyRendered(Pedestrians::SeenWithin))
+		{
+			ClearReact(Walker);
+			Walker.Shown = Walker.Home;
+			Walker.ShownYaw = Walker.HomeYaw;
+			Person->PointTo(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.HomeYaw, 0.0, false);
+		}
+		return;
+	}
+
+	if (bPlayerAbout)
+	{
+		ReactToPlayer(Walker, Now);
+	}
+	if (PoseReacting(Walker, DeltaSeconds))
+	{
+		return;
+	}
+	if (Walker.React == EReact::Flee)
+	{
+		StartReact(Walker, EReact::None, 0.f, FVector2D::ZeroVector);
+	}
+
+	// Pushed or scared off his spot: he walks back to it.
+	const FVector2D Gap = Walker.Home - Walker.Shown;
+	const double Left = Gap.Size();
+	if (Left > Pedestrians::HomeNear)
+	{
+		const double Step = Pedestrians::StanderPace * DeltaSeconds;
+		Walker.Shown += Left > Step ? Gap / Left * Step : Gap;
+		const float Toward = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Gap.Y, Gap.X)));
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Toward, Pedestrians::TurnRate * DeltaSeconds);
+		Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw, Pedestrians::StanderPace, DeltaSeconds);
+		return;
+	}
+	Walker.Shown = Walker.Home;
+
+	// The player close by on foot: he turns to him (not all the way round)
+	// and now and then calls out to him.
+	float Facing = Walker.HomeYaw;
+	const FVector2D ToPlayer = FVector2D(PlayerAt) - Walker.Home;
+	if (bPlayerAbout && !bPlayerDriving && ToPlayer.SizeSquared() < FMath::Square(Pedestrians::CallReach)
+		&& FMath::Abs(Walker.GroundZ - PlayerAt.Z) < Pedestrians::CallHeight)
+	{
+		const float Toward = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToPlayer.Y, ToPlayer.X)));
+		const float Most = Walker.bSeated ? Pedestrians::SeatedLookAside : Pedestrians::StanderLookAside;
+		Facing = Walker.HomeYaw + FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(Toward - Walker.HomeYaw)), -Most, Most);
+		APestiHUD* Hud = APestiHUD::Get(this);
+		if (!Walker.CallHu.IsEmpty() && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
+		{
+			Hud->Say(Walker.CallWho, Walker.CallHu, Walker.CallEn, 3.f);
+			Walker.NextCall = Now + Random.FRandRange(Pedestrians::MinCallEvery, Pedestrians::MaxCallEvery);
+			LastShout = Now;
+		}
+	}
+	Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, Pedestrians::StanderTurnRate * DeltaSeconds);
+	Person->PointTo(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw, 0.0, false);
 }

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "CityDetailsModel.h"
+#include "PersonKit.h"
 
 /**
  * Two of Józsefváros's churches as they stood in 1932, in basic shapes
@@ -324,6 +325,218 @@ namespace ChurchModel
 		Add(Out, MarketModel::Sphere, Gilt, FVector(TowerX, 0, ShaftTop + 2210.0), FVector(40, 40, 40), 0.0, false);
 		Cross(Out, TowerX, ShaftTop + 2220.0, 220.0);
 		Lamps.Add({ FVector(Face + 120.0, 0, 560), 800.f });
+	}
+
+	// ---------------------------------------------------------------------
+	// Life in front of the church: the steps, a flower and candle stall, and
+	// the people ACityDetails stands about it.
+
+	enum class EChurchFolk : uint8 { Priest, OldWoman, Beggar, FlowerSeller, Gentleman, Mother };
+
+	/**
+	 * Someone in front of the church: where (the church's frame), which way
+	 * they face, who, the seat's height for one sitting (0 standing), and
+	 * the height of the step they are on.
+	 */
+	struct FChurchFolk
+	{
+		FVector2D At;
+		double Yaw;
+		EChurchFolk Who;
+		double SeatHeight;
+		double Up = 0.0;
+	};
+
+	/** What one of the church folk wears (Seed tells the two old women apart). */
+	inline PersonKit::FOutfit FolkOutfit(EChurchFolk Who, int32 Seed)
+	{
+		using namespace PersonKit;
+		FOutfit O;
+		const FLinearColor Black(0.03f, 0.03f, 0.035f);
+		switch (Who)
+		{
+		case EChurchFolk::Priest:
+			// A black cassock to the ankles, a white collar, bare head.
+			O.Height = 174.f;
+			O.Build = 1.12f;
+			O.Hat = EHat::None;
+			O.Top = ETop::Overcoat;
+			O.Coat = Black;
+			O.Trousers = Black;
+			O.Shirt = FLinearColor(0.92f, 0.92f, 0.90f);
+			O.bTie = false;
+			O.Hair = FLinearColor(0.42f, 0.40f, 0.38f);
+			break;
+		case EChurchFolk::OldWoman:
+			// Black from head to foot, a headscarf, a basket on one of them.
+			O.bWoman = true;
+			O.Height = Seed == 0 ? 154.f : 158.f;
+			O.Build = Seed == 0 ? 1.15f : 1.05f;
+			O.Hat = EHat::Hood;
+			O.HatColor = Seed == 0 ? Black : FLinearColor(0.10f, 0.09f, 0.10f);
+			O.Top = ETop::Dress;
+			O.Coat = Black;
+			O.bTie = false;
+			O.Held = Seed == 0 ? EHeld::Basket : EHeld::None;
+			O.HeldColor = FLinearColor(0.50f, 0.36f, 0.18f);
+			O.Skin = FLinearColor(0.70f, 0.52f, 0.42f);
+			break;
+		case EChurchFolk::Beggar:
+			// Worn brown jacket and cap, no tie, boots.
+			O.Height = 170.f;
+			O.Build = 0.95f;
+			O.Hat = EHat::FlatCap;
+			O.HatColor = FLinearColor(0.16f, 0.14f, 0.11f);
+			O.Top = ETop::Jacket;
+			O.Coat = FLinearColor(0.22f, 0.17f, 0.11f);
+			O.Trousers = FLinearColor(0.14f, 0.13f, 0.12f);
+			O.Shirt = FLinearColor(0.55f, 0.52f, 0.45f);
+			O.bTie = false;
+			O.bBoots = true;
+			O.bMoustache = true;
+			O.bScarf = true;
+			O.Scarf = FLinearColor(0.30f, 0.12f, 0.08f);
+			O.bSeated = true;
+			break;
+		case EChurchFolk::FlowerSeller:
+			// A stout woman in a headscarf and a white apron.
+			O.bWoman = true;
+			O.Height = 160.f;
+			O.Build = 1.22f;
+			O.Hat = EHat::Hood;
+			O.HatColor = FLinearColor(0.50f, 0.10f, 0.08f);
+			O.Top = ETop::Dress;
+			O.Coat = FLinearColor(0.16f, 0.20f, 0.30f);
+			O.bTie = false;
+			O.bApron = true;
+			O.bSeated = true;
+			break;
+		case EChurchFolk::Gentleman:
+			// Sunday best: a dark overcoat and a bowler.
+			O.Height = 180.f;
+			O.Build = 1.05f;
+			O.Hat = EHat::Bowler;
+			O.Top = ETop::Overcoat;
+			O.Coat = FLinearColor(0.10f, 0.10f, 0.12f);
+			O.bMoustache = true;
+			O.Held = EHeld::Umbrella;
+			O.HeldColor = Black;
+			break;
+		default:
+			// A young mother in her good coat and cloche hat.
+			O.bWoman = true;
+			O.Height = 164.f;
+			O.Hat = EHat::Cloche;
+			O.HatColor = FLinearColor(0.30f, 0.12f, 0.16f);
+			O.Top = ETop::Overcoat;
+			O.Coat = FLinearColor(0.24f, 0.20f, 0.16f);
+			O.Trousers = FLinearColor(0.18f, 0.14f, 0.12f);
+			O.bTie = false;
+			O.Held = EHeld::Basket;
+			O.HeldColor = FLinearColor(0.50f, 0.36f, 0.18f);
+			break;
+		}
+		return O;
+	}
+
+	/** What one of the church folk calls out when the player comes near on foot, and the name shown; false for those who keep quiet. */
+	inline bool FolkCall(EChurchFolk Who, const TCHAR*& OutName, const TCHAR*& OutHu, const TCHAR*& OutEn)
+	{
+		switch (Who)
+		{
+		case EChurchFolk::Priest:
+			OutName = TEXT("Pap");
+			OutHu = TEXT("Dics\u00e9rtess\u00e9k a J\u00e9zus Krisztus, fiam!");
+			OutEn = TEXT("Praised be Jesus Christ, my son!");
+			return true;
+		case EChurchFolk::Beggar:
+			OutName = TEXT("Koldus");
+			OutHu = TEXT("Egy fill\u00e9rt, j\u00f3 uram, az Isten \u00e1ldja meg!");
+			OutEn = TEXT("A filler, good sir, God bless you!");
+			return true;
+		case EChurchFolk::FlowerSeller:
+			OutName = TEXT("Vir\u00e1gos asszony");
+			OutHu = TEXT("Vir\u00e1got, gyerty\u00e1t, tess\u00e9k! Olcs\u00f3n adom!");
+			OutEn = TEXT("Flowers, candles, here you are! Going cheap!");
+			return true;
+		case EChurchFolk::OldWoman:
+			OutName = TEXT("N\u00e9ni");
+			OutHu = TEXT("...\u00e9s azt mondja a pl\u00e9b\u00e1nos \u00far, hogy b\u0171n az!");
+			OutEn = TEXT("...and the parish priest says it's a sin!");
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	/** The flower and candle woman's stall: a trestle table with buckets of flowers and rows of candles, a basket under it. Its front faces +X. */
+	inline void FlowerStall(TArray<FShape>& Out, const FVector& At)
+	{
+		const FLinearColor Wood(0.34f, 0.24f, 0.14f);
+		const FLinearColor Zinc(0.40f, 0.41f, 0.41f);
+		const FLinearColor Wax(0.90f, 0.86f, 0.70f);
+		const FLinearColor Cloth(0.80f, 0.78f, 0.70f);
+		Add(Out, MarketModel::Cube, Cloth, At + FVector(0, 0, 76), FVector(70, 150, 4));
+		Add(Out, MarketModel::Cube, Cloth, At + FVector(36, 0, 60), FVector(2, 150, 34), 0.0, false);
+		for (const double Y : { -64.0, 64.0 })
+		{
+			for (const double X : { -28.0, 28.0 })
+			{
+				Add(Out, MarketModel::Cube, Wood, At + FVector(X, Y, 37), FVector(5, 5, 74), 0.0, false);
+			}
+		}
+		// Buckets of flowers on the table: red, white and yellow.
+		const FLinearColor Flowers[] = { FLinearColor(0.62f, 0.04f, 0.05f), FLinearColor(0.85f, 0.84f, 0.80f), FLinearColor(0.80f, 0.62f, 0.10f) };
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const FVector Bucket = At + FVector(-10, -48 + i * 34, 90);
+			Add(Out, MarketModel::Cylinder, Zinc, Bucket, FVector(24, 24, 24), 0.0, false);
+			Add(Out, MarketModel::Sphere, FLinearColor(0.10f, 0.22f, 0.06f), Bucket + FVector(0, 0, 20), FVector(30, 30, 22), 0.0, false);
+			Add(Out, MarketModel::Sphere, Flowers[i], Bucket + FVector(2, 0, 30), FVector(26, 26, 14), 0.0, false);
+		}
+		// Candles for sale, standing and in a bundle.
+		for (int32 i = 0; i < 6; ++i)
+		{
+			Add(Out, MarketModel::Cylinder, Wax, At + FVector(20, 30 + (i % 3) * 12, 86 + (i / 3) * 1.0), FVector(3, 3, 20), 0.0, false);
+		}
+		Add(Out, MarketModel::Cube, Wax, At + FVector(22, 54, 81), FVector(14, 10, 6), 0.0, false);
+		// A basket on the ground and the seller's stool.
+		Add(Out, MarketModel::Cylinder, FLinearColor(0.52f, 0.38f, 0.18f), At + FVector(10, 92, 16), FVector(40, 40, 32), 0.0, false);
+		Add(Out, MarketModel::Cube, Wood, At + FVector(-70, 0, 22), FVector(34, 34, 44));
+	}
+
+	/** Two worn stone steps across the door, Width wide, its front at X. */
+	inline void Steps(TArray<FShape>& Out, double X, double Width)
+	{
+		const FLinearColor Step(0.56f, 0.53f, 0.47f);
+		Add(Out, MarketModel::Cube, Step, FVector(X - 20.0, 0, 7), FVector(60, Width, 14));
+		Add(Out, MarketModel::Cube, Step, FVector(X - 45.0, 0, 21), FVector(40, Width - 40.0, 14));
+	}
+
+	/** The church's forecourt things and people. */
+	inline void Forecourt(EChurch Which, TArray<FShape>& Out, TArray<FChurchFolk>& Folk)
+	{
+		// Where the door's threshold is, out from the front.
+		const double Door = Which == EChurch::Rokus ? 30.0 : 270.0;
+		Steps(Out, Door + 60.0, Which == EChurch::Rokus ? 360.0 : 440.0);
+		// The Jézus Szíve's pavement is narrower: the folk keep closer to the door there.
+		const double Reach = Which == EChurch::Rokus ? 1.0 : 0.65;
+		const FVector2D Stall(Door + 230.0 * Reach, Which == EChurch::Rokus ? 520.0 : 440.0);
+		FlowerStall(Out, FVector(Stall, 0.0));
+		// The priest on the steps, seeing people out.
+		Folk.Add({ FVector2D(Door + 40.0, 70.0), 0.0, EChurchFolk::Priest, 0.0, 14.0 });
+		// The flower woman on her stool behind the stall.
+		Folk.Add({ FVector2D(Stall.X - 70.0, Stall.Y), 0.0, EChurchFolk::FlowerSeller, 44.0 });
+		// Two old women in black talking by the door.
+		Folk.Add({ FVector2D(Door + 210.0 * Reach, -260.0), 70.0, EChurchFolk::OldWoman, 0.0 });
+		Folk.Add({ FVector2D(Door + 210.0 * Reach + 50.0, -170.0), -110.0, EChurchFolk::OldWoman, 0.0 });
+		// The beggar sitting on the top step by the door with his hat out.
+		Folk.Add({ FVector2D(Door + 15.0, -150.0), 10.0, EChurchFolk::Beggar, 28.0 });
+		// A gentleman and a mother coming to the door.
+		Folk.Add({ FVector2D(Door + 330.0 * Reach, 120.0), 180.0, EChurchFolk::Gentleman, 0.0 });
+		Folk.Add({ FVector2D(Door + 380.0 * Reach, -40.0), 165.0, EChurchFolk::Mother, 0.0 });
+		// The beggar's hat on the step in front of him.
+		Add(Out, MarketModel::Cylinder, FLinearColor(0.10f, 0.09f, 0.08f), FVector(Door + 65.0, -150.0, 16), FVector(28, 28, 6), 0.0, false);
 	}
 
 	inline void Church(EChurch Which, double Width, double Depth, TArray<FShape>& Out, TArray<FLamp>& Lamps)
