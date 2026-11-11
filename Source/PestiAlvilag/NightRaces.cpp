@@ -41,8 +41,8 @@ namespace NightRace
 	constexpr double InRing = 450.0;
 	constexpr float StillSpeed = 60.f;
 	constexpr float StillTime = 0.6f;
-	// Away from the ring this far, it starts races again (cm); the day-time hint this close, this often (s).
-	constexpr double RearmAway = 1500.0;
+	// Out of the ring this far, it starts races again (cm); the day-time hint this close, this often (s).
+	constexpr double RearmAway = 900.0;
 	constexpr double HintNear = 1500.0;
 	constexpr float HintEvery = 12.f;
 	// The rivals line up this far back along the street (cm); the player stands this far along.
@@ -363,6 +363,13 @@ void ANightRaces::Tick(float DeltaSeconds)
 	if (Game->GetWantedLevel() > 0)
 	{
 		Note(TEXT("Rend\u0151r\u00F6kkel a nyomodban nincs verseny.  (No racing with the police on your tail.)"), 0.5f);
+		StoodFor = 0.f;
+		return;
+	}
+	if (!bRingArmed)
+	{
+		// Just back from a race: drive out of the ring and stop in it again for the next one.
+		Note(FString::Printf(TEXT("Laci \u00E9jszakai versenye: %s. Hajts ki a k\u00F6rb\u0151l, azt\u00E1n \u00E1llj meg benne \u00FAjra.  (Laci's night race: %s. Drive out of the ring, then stop in it again.)"), Next.Hu, Next.En), 0.5f);
 		StoodFor = 0.f;
 		return;
 	}
