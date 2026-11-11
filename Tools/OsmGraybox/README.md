@@ -47,7 +47,9 @@ Notes:
   (print M.92/932, Budapest City Archives, kozlekedes.bparchiv.hu). The
   track follows those streets, sits in the middle of streets mapped as two
   one-way halves, and each direction keeps left. Lines on the same street
-  share tracks and stops. The 1932 map has no stops, so stops are placed
+  share tracks and stops. Where houses stand closer than 4.5 m to the middle
+  of a line's two tracks (narrow Csokonai and Bezerédj utca), that middle is
+  pushed away from the walls, so the rails do not cut through corners. The 1932 map has no stops, so stops are placed
   just before crossings, main roads first, about 300 m apart, each named
   after the street it crosses (by its 1932 name); `EXTRA_STOPS` adds the
   stops the story needs (Teleki tér, Bözsi néni's on Népszínház utca). The `tram`

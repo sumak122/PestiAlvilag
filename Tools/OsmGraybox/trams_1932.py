@@ -14,6 +14,7 @@ import heapq
 import math
 
 from shapely.geometry import LineString, Point
+from shapely.strtree import STRtree
 
 # Streets with trams in 1932 inside the prototype area, each line from one map
 # edge to another. "from"/"to" say which end of the first/last street to use.
@@ -49,6 +50,18 @@ MEDIAN_WINDOW = 4
 OFF_LINE_COST = 4.0
 # A line within this distance (m) of a line built before it shares its track.
 SHARE_DISTANCE = 16.0
+# In narrow streets (Csokonai utca, Bezerédj utca) the OSM middle line runs
+# close to the houses, so the rails cut corners through them: where the
+# walls are nearer than this (m) to the middle of a line's two tracks, the
+# middle is moved away from them, to halfway between the walls when both
+# sides are that close.
+WALL_CLEARANCE = 4.5
+# How many passes to make, each moving the line at most WALL_STEP (m)
+# sideways; sideways is across the line's heading over 2 * WALL_NORMAL points
+# (2 m apart), so at a bend it is out to the open side.
+WALL_STEP = 0.5
+WALL_NORMAL = 4
+WALL_PASSES = 24
 # Resample the track every this many metres before offsetting.
 RESAMPLE_STEP = 4.0
 # Where a line runs through a spread zone (see build_1932_tram_routes), its
@@ -225,6 +238,54 @@ def middle_of_street(graph, pts, streets):
     return out
 
 
+def keep_clear_of_walls(pts, walls, tree):
+    """Move the middle line of a pair of tracks away from walls nearer than
+    WALL_CLEARANCE (see above): each near wall pushes it away, so between
+    two near walls it settles halfway. pts are 2 m apart; walls is a list of
+    polygons and tree an STRtree of them. Returns None when the line is
+    clear of walls already."""
+    if not walls:
+        return None
+    moved = False
+    for _ in range(WALL_PASSES):
+        shifts = []
+        for i, (x, y) in enumerate(pts):
+            a = pts[max(0, i - WALL_NORMAL)]
+            b = pts[min(len(pts) - 1, i + WALL_NORMAL)]
+            length = math.dist(a, b) or 1.0
+            nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+            here = Point(x, y)
+            sx = sy = 0.0
+            for k in tree.query(here.buffer(WALL_CLEARANCE)):
+                wall = walls[k]
+                inside = wall.contains(here)
+                gap = 0.0 if inside else wall.exterior.distance(here)
+                if gap >= WALL_CLEARANCE:
+                    continue
+                q = wall.exterior.interpolate(wall.exterior.project(here))
+                ax, ay = x - q.x, y - q.y
+                away = math.hypot(ax, ay) or 1.0
+                if inside:
+                    ax, ay = -ax, -ay
+                # Straight away from the wall: across the street, and at a
+                # corner out to the open side, which widens the bend.
+                sx += ax / away * (WALL_CLEARANCE - gap) * 0.5
+                sy += ay / away * (WALL_CLEARANCE - gap) * 0.5
+            # Only sideways, so the points keep their spacing along the line.
+            side = max(-WALL_STEP, min(WALL_STEP, sx * nx + sy * ny))
+            shifts.append((nx * side, ny * side))
+        if not any(abs(dx) + abs(dy) > 0.01 for dx, dy in shifts):
+            break
+        moved = True
+        # Ease the shifts along the line so the track bends smoothly.
+        eased = []
+        for i in range(len(pts)):
+            around = shifts[max(0, i - 3):i + 4]
+            eased.append((sum(s[0] for s in around) / len(around), sum(s[1] for s in around) / len(around)))
+        pts = [(x + dx, y + dy) for (x, y), (dx, dy) in zip(pts, eased)]
+    return pts if moved else None
+
+
 def share_tracks(pts, centres):
     """Lines that run along the same street share one pair of tracks: snap
     points close to an earlier line onto it."""
@@ -322,23 +383,28 @@ def offset_track(axis, spread):
     return LineString(smooth(out, passes=SPREAD_SMOOTH))
 
 
-def build_1932_tram_routes(ways, nodes, proj, clip, to_ue, spread=()):
+def build_1932_tram_routes(ways, nodes, proj, clip, to_ue, spread=(), walls=None):
     """Routes in the JSON's "trams" format plus the track lines (map metres)
     for drawing the rails. In each `spread` zone the two tracks of a line run
-    further apart, as at a stop with islands between the tracks."""
+    further apart, as at a stop with islands between the tracks. The tracks
+    keep clear of `walls` (the buildings, map metres)."""
     graph = StreetGraph(ways, nodes, proj, clip)
     graph.main_streets = {
         w["tags"]["name"] for w in ways.values()
         if w["tags"].get("highway") in STOP_ROADS and w["tags"].get("name")
     }
     inner = clip.buffer(-5.0)
+    wall_list = [] if walls is None else [g for g in getattr(walls, "geoms", [walls]) if g.geom_type == "Polygon"]
+    wall_tree = STRtree(wall_list) if wall_list else None
     routes, tracks, centres, stop_places = [], [], [], []
     for line in LINES_1932:
         path_nodes = line_path(graph, line)
         centre = LineString([graph.pos[n] for n in path_nodes])
         pts = middle_of_street(graph, resample(centre, RESAMPLE_STEP), set(line["streets"]))
         pts = share_tracks(pts, centres)
-        centre = LineString(smooth(pts, passes=3)).simplify(0.2)
+        centre = LineString(smooth(pts, passes=3))
+        clear = keep_clear_of_walls(resample(centre, 2.0), wall_list, wall_tree)
+        centre = (LineString(clear) if clear else centre).simplify(0.2)
         centres.append(centre)
         for forward in (True, False):
             axis = centre if forward else LineString(centre.coords[::-1])
