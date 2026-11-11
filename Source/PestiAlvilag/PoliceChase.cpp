@@ -360,9 +360,9 @@ bool APoliceChase::TryPlaceBlock(const APawn* Player)
 		FCollisionQueryParams SightParams(SCENE_QUERY_STAT(RoadBlockHidden), false, this);
 		SightParams.AddIgnoredActor(Player);
 		FHitResult Hit;
-		const bool bHidden = GetWorld()->LineTraceSingleByObjectType(Hit, Camera, At + FVector(0.0, 0.0, 150.0),
+		const bool bOutOfSight = GetWorld()->LineTraceSingleByObjectType(Hit, Camera, At + FVector(0.0, 0.0, 150.0),
 			FCollisionObjectQueryParams(ECC_WorldStatic), SightParams);
-		if (!bHidden && FVector::Dist2D(Camera, At) < PoliceChase::SeenFrom)
+		if (!bOutOfSight && FVector::Dist2D(Camera, At) < PoliceChase::SeenFrom)
 		{
 			continue;
 		}
