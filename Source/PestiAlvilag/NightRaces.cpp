@@ -52,21 +52,29 @@ namespace NightRace
 	// The count before the start (s), and how far the car may roll before it's a false start (cm).
 	constexpr float CountFrom = 3.5f;
 	constexpr double FalseStart = 600.0;
-	// Gates: about this far apart along the line, never closer, none this near the start or the finish (cm).
-	constexpr double GateEvery = 25000.0;
-	constexpr double GateGap = 8000.0;
-	constexpr double GateFromStart = 4000.0;
+	// A gate stands this far past its corner, in the street the line turns into, and at least this far
+	// before the next corner and before the finish (cm).
+	constexpr double GatePastCorner = 1500.0;
+	constexpr double GateBeforeCorner = 300.0;
 	constexpr double GateBeforeFinish = 6000.0;
 	// A gate's half width, from the walls either side (cm), and how near its middle counts as through.
 	constexpr double SideLook = 1500.0;
 	constexpr double MinHalf = 250.0;
 	constexpr double MaxHalf = 600.0;
 	constexpr double ThroughExtra = 250.0;
-	// The race is off: out of a car this long (s), or this far from the next gate (cm).
+	// The race is off: out of a car this long (s), or this much further from the next gate than the gate before it is (cm).
 	constexpr float MaxOutOfCar = 8.f;
-	constexpr double MaxAway = 60000.0;
+	constexpr double MaxAway = 40000.0;
 	// The Mercedes word comes this long after the last first win (s).
 	constexpr float MercedesAfter = 8.f;
+
+	/** A street corner on a race's way: where it is (a corner of the traffic map), and the name of the gate past it (none: the line only goes by it). */
+	struct FCorner
+	{
+		double X;
+		double Y;
+		const TCHAR* Gate;
+	};
 
 	struct FRace
 	{
@@ -74,29 +82,48 @@ namespace NightRace
 		const TCHAR* En;
 		const TCHAR* LaciHu;
 		const TCHAR* LaciEn;
-		FVector2D Ways[5];
-		int32 NumWays;
+		FCorner Corners[24];
+		int32 NumCorners;
 		float TopSpeed;
 		int32 Prize;
 	};
+	// Each race is a round from the ring (heading off towards Mátyás tér) through these corners in turn,
+	// on to Teleki tér and home along Szerdahelyi utca; no street twice, no dead ends.
 	const FRace Races[] = {
-		{ TEXT("Teleki t\u00E9r \u00E9s az Oppenheim k\u00E1v\u00E9h\u00E1z"), TEXT("Teleki t\u00E9r and Caf\u00E9 Oppenheim"),
-			TEXT("Kezdj\u00FCk k\u00F6nnyen: a Teleki t\u00E9rig, onnan az Oppenheim el\u00E9, \u00E9s vissza ide. A kapukon \u00E1t, ahogy a fi\u00FAk kiaggatt\u00E1k!"),
-			TEXT("Let's start easy: to Teleki t\u00E9r, then past Caf\u00E9 Oppenheim and back here. Through the gates, the way the boys hung them!"),
-			{ FVector2D(101337.0, 30370.0), FVector2D(74990.0, 27101.0) }, 2, 1700.f, 300 },
-		{ TEXT("a Keleti \u00E9s a Teleki t\u00E9r"), TEXT("Keleti and Teleki t\u00E9r"),
-			TEXT("Ma este a Keletiig mentek, azt\u00E1n a Teleki t\u00E9rre, \u00E9s vissza. Ezek a fi\u00FAk m\u00E1r nem kezd\u0151k."),
-			TEXT("Tonight it's down to Keleti, then Teleki t\u00E9r, and back. These lads aren't beginners."),
-			{ FVector2D(101266.0, -37678.0), FVector2D(101337.0, 30370.0) }, 2, 1850.f, 400 },
-		{ TEXT("N\u00E9psz\u00EDnh\u00E1z utca, R\u00E1k\u00F3czi \u00FAt, Keleti"), TEXT("N\u00E9psz\u00EDnh\u00E1z utca, R\u00E1k\u00F3czi \u00FAt, Keleti"),
-			TEXT("Hossz\u00FA k\u00F6r: B\u00F6zsi n\u00E9ni h\u00E1za, a R\u00E1k\u00F3czi \u00FAt, a Keleti, \u00E9s haza. Vigy\u00E1zz a villamosokra!"),
-			TEXT("A long one: B\u00F6zsi n\u00E9ni's house, R\u00E1k\u00F3czi \u00FAt, Keleti, and home. Mind the trams!"),
-			{ FVector2D(58771.0, 21395.0), FVector2D(41134.0, -21532.0), FVector2D(101266.0, -37678.0) }, 3, 2000.f, 500 },
+		{ TEXT("kis k\u00F6r a Teleki t\u00E9rig"), TEXT("a little round to Teleki t\u00E9r"),
+			TEXT("Kezdj\u00FCk k\u00F6nnyen: egy kis k\u00F6r a M\u00E1ty\u00E1s t\u00E9rt\u0151l a Teleki t\u00E9rig, \u00E9s vissza ide. A l\u00E1mp\u00E1s kapukon \u00E1t, ahogy a fi\u00FAk kiaggatt\u00E1k!"),
+			TEXT("Let's start easy: a little round from M\u00E1ty\u00E1s t\u00E9r to Teleki t\u00E9r and back here. Through the lantern gates, the way the boys hung them!"),
+			{ { 70785.0, 44383.0, TEXT("M\u00E1ty\u00E1s t\u00E9r") }, { 77562.0, 40380.0, TEXT("Homok utca") }, { 70457.0, 31070.0, nullptr },
+				{ 74096.0, 27813.0, TEXT("N\u00E9psz\u00EDnh\u00E1z utca") }, { 90901.0, 33381.0, TEXT("Teleki t\u00E9r") }, { 97026.0, 43893.0, nullptr } },
+			6, 1700.f, 300 },
+		{ TEXT("Tisza K\u00E1lm\u00E1n t\u00E9r \u00E9s a Fiumei \u00FAt"), TEXT("Tisza K\u00E1lm\u00E1n t\u00E9r and Fiumei \u00FAt"),
+			TEXT("Ma este a Tisza K\u00E1lm\u00E1n t\u00E9r, a Dologh\u00E1z utca, azt\u00E1n le a Fiumei \u00FAton, \u00E9s haza. Ezek a fi\u00FAk m\u00E1r nem kezd\u0151k."),
+			TEXT("Tonight it's Tisza K\u00E1lm\u00E1n t\u00E9r, Dologh\u00E1z utca, then down Fiumei \u00FAt and home. These lads aren't beginners."),
+			{ { 63159.0, 48058.0, TEXT("Nagy Fuvaros utca") }, { 58722.0, 39851.0, nullptr }, { 50960.0, 20191.0, TEXT("Tisza K\u00E1lm\u00E1n t\u00E9r") },
+				{ 64313.0, 13377.0, nullptr }, { 77196.0, 8623.0, TEXT("Dologh\u00E1z utca") }, { 95175.0, 1810.0, TEXT("Fiumei \u00FAt") },
+				{ 109519.0, 21237.0, TEXT("Teleki t\u00E9r") }, { 90901.0, 33381.0, nullptr }, { 97026.0, 43893.0, nullptr } },
+			9, 1850.f, 400 },
+		{ TEXT("R\u00E1k\u00F3czi \u00FAt \u00E9s a Keleti"), TEXT("R\u00E1k\u00F3czi \u00FAt and Keleti"),
+			TEXT("Hossz\u00FA k\u00F6r: a Luther utc\u00E1n ki a R\u00E1k\u00F3czi \u00FAtra, k\u00F6rbe a Baross t\u00E9ren a Keleti el\u0151tt, le a Fiumei \u00FAton, \u00E9s haza. Vigy\u00E1zz a villamosokra!"),
+			TEXT("A long one: up Luther utca onto R\u00E1k\u00F3czi \u00FAt, round Baross t\u00E9r past Keleti, down Fiumei \u00FAt and home. Mind the trams!"),
+			{ { 63159.0, 48058.0, TEXT("Nagy Fuvaros utca") }, { 58722.0, 39851.0, nullptr }, { 50960.0, 20191.0, TEXT("Tisza K\u00E1lm\u00E1n t\u00E9r") },
+				{ 42233.0, -7817.0, TEXT("Luther utca") }, { 36938.0, -21294.0, TEXT("R\u00E1k\u00F3czi \u00FAt") }, { 53859.0, -27763.0, nullptr },
+				{ 67866.0, -35178.0, nullptr }, { 75099.0, -35311.0, TEXT("Keleti p\u00E1lyaudvar") }, { 81726.0, -21461.0, TEXT("Fiumei \u00FAt") },
+				{ 89090.0, -6306.0, nullptr }, { 95175.0, 1810.0, TEXT("Dologh\u00E1z utca") }, { 109519.0, 21237.0, TEXT("Teleki t\u00E9r") },
+				{ 90901.0, 33381.0, nullptr }, { 97026.0, 43893.0, nullptr } },
+			14, 2000.f, 500 },
 		{ TEXT("a nagy k\u00F6r J\u00F3zsefv\u00E1rosban"), TEXT("the big round of J\u00F3zsefv\u00E1ros"),
-			TEXT("A nagy k\u00F6r: a N\u00E9psz\u00EDnh\u00E1z utca eleje, a v\u00E1s\u00E1rcsarnok, a R\u00E1k\u00F3czi \u00FAt, a Keleti, a Teleki t\u00E9r. Ezt csak a legjobbak b\u00EDrj\u00E1k."),
-			TEXT("The big round: the top of N\u00E9psz\u00EDnh\u00E1z utca, the market hall, R\u00E1k\u00F3czi \u00FAt, Keleti, Teleki t\u00E9r. Only the best can do it."),
-			{ FVector2D(21760.0, 9062.0), FVector2D(18109.0, 40941.0), FVector2D(41134.0, -21532.0), FVector2D(101266.0, -37678.0), FVector2D(101337.0, 30370.0) },
-			5, 2150.f, 800 },
+			TEXT("A nagy k\u00F6r: a Magdolna utca, a Fiumei \u00FAt, a Keleti, a R\u00E1k\u00F3czi \u00FAt a Blah\u00E1ig, a v\u00E1s\u00E1rcsarnok, \u00E9s v\u00E9gig a N\u00E9psz\u00EDnh\u00E1z utc\u00E1n. Ezt csak a legjobbak b\u00EDrj\u00E1k."),
+			TEXT("The big round: Magdolna utca, Fiumei \u00FAt, Keleti, R\u00E1k\u00F3czi \u00FAt to Blaha, the market hall, and all the way down N\u00E9psz\u00EDnh\u00E1z utca. Only the best can do it."),
+			{ { 96044.0, 69320.0, TEXT("Dank\u00F3 utca") }, { 108599.0, 61865.0, TEXT("Magdolna utca") }, { 115580.0, 57153.0, TEXT("Lujza utca") },
+				{ 104588.0, 39459.0, nullptr }, { 111497.0, 35303.0, nullptr }, { 126059.0, 37605.0, TEXT("Fiumei \u00FAt") },
+				{ 119961.0, 29322.0, nullptr }, { 95175.0, 1810.0, TEXT("Dologh\u00E1z utca") }, { 81726.0, -21461.0, nullptr },
+				{ 75099.0, -35311.0, TEXT("Keleti p\u00E1lyaudvar") }, { 67866.0, -35178.0, nullptr }, { 62062.0, -30619.0, TEXT("R\u00E1k\u00F3czi \u00FAt") },
+				{ 36938.0, -21294.0, nullptr }, { 292.0, -5356.0, TEXT("Blaha Lujza t\u00E9r") }, { 6321.0, 39386.0, TEXT("V\u00E1s\u00E1rcsarnok") },
+				{ 15930.0, 37064.0, nullptr }, { 23670.0, 33900.0, TEXT("V\u00EDg utca") }, { 19882.0, 9733.0, TEXT("N\u00E9psz\u00EDnh\u00E1z utca") },
+				{ 50960.0, 20191.0, TEXT("Tisza K\u00E1lm\u00E1n t\u00E9r") }, { 74096.0, 27813.0, nullptr }, { 90901.0, 33381.0, TEXT("Teleki t\u00E9r") },
+				{ 97026.0, 43893.0, nullptr } },
+			22, 2150.f, 800 },
 	};
 	constexpr int32 NumRaces = static_cast<int32>(UE_ARRAY_COUNT(Races));
 
@@ -213,10 +240,14 @@ bool ANightRaces::FindStartSpot(FVector& OutAt, FVector& OutDir) const
 	{
 		return false;
 	}
-	OutAt = Points[Point];
-	const FVector Ahead = Points.IsValidIndex(Point + 1) ? Points[Point + 1] - Points[Point]
-		: Points.IsValidIndex(Point - 1) ? Points[Point] - Points[Point - 1] : Along;
-	OutDir = Ahead.GetSafeNormal2D();
+	// Right in front of the gate: the nearest spot on that bit of the lane.
+	const FVector LaneEnd = Points[Point];
+	const FVector LaneStart = Points.IsValidIndex(Point - 1) ? Points[Point - 1] : LaneEnd;
+	const FVector Span = LaneEnd - LaneStart;
+	const double SpanSquared = Span.SizeSquared2D();
+	const double Share = SpanSquared > 1.0 ? FMath::Clamp(((Out.X - LaneStart.X) * Span.X + (Out.Y - LaneStart.Y) * Span.Y) / SpanSquared, 0.0, 1.0) : 1.0;
+	OutAt = LaneStart + Span * Share;
+	OutDir = Span.GetSafeNormal2D();
 	if (OutDir.IsNearlyZero())
 	{
 		OutDir = Along;
@@ -359,11 +390,11 @@ bool ANightRaces::StartRace(APestiCar* Car)
 	Race = PickRace();
 	const NightRace::FRace& Def = NightRace::Races[Race];
 
-	// The line: from behind the start along the street, through each place in turn, and back to the ring.
+	// The line: from behind the start along the street, through each corner in turn, and back to the ring.
 	RaceLine.Reset();
 	RaceLine.Add(StartAt - StartDir * NightRace::LineBack);
 	RaceLine.Add(StartAt);
-	TArray<int32> WayEnds;
+	TArray<int32> CornerEnds;
 	auto AddPoint = [this](const FVector& P)
 	{
 		if (FVector::Dist2D(RaceLine.Last(), P) > 50.0)
@@ -371,25 +402,46 @@ bool ANightRaces::StartRace(APestiCar* Car)
 			RaceLine.Add(P);
 		}
 	};
-	FVector From = StartAt;
-	for (int32 w = 0; w <= Def.NumWays; ++w)
+	auto FlatDot = [](const FVector& A, const FVector& B)
 	{
-		const FVector To = w < Def.NumWays ? FVector(Def.Ways[w], StartAt.Z) : StartAt;
+		return A.X * B.X + A.Y * B.Y;
+	};
+	FVector From = StartAt;
+	for (int32 c = 0; c <= Def.NumCorners; ++c)
+	{
+		const bool bHome = c == Def.NumCorners;
+		const FVector To = bHome ? StartAt : FVector(Def.Corners[c].X, Def.Corners[c].Y, StartAt.Z);
 		TArray<FVector> Leg;
 		if (!Traffic->FindPath(From, To, Leg) || Leg.Num() == 0)
 		{
 			Note(TEXT("Laci fiai ma nem tal\u00E1lnak utat.  (Laci's lads can't find a way tonight.)"), 4.f);
 			return false;
 		}
+		if (c == 0)
+		{
+			// Off the ring: never back to a street corner behind it.
+			while (Leg.Num() > 1 && FlatDot(Leg[0] - StartAt, StartDir) < 100.0)
+			{
+				Leg.RemoveAt(0);
+			}
+		}
+		if (bHome)
+		{
+			// Home: stop at the ring, not at the street corner past it.
+			while (Leg.Num() > 1 && FlatDot(Leg.Last() - StartAt, StartAt - Leg[Leg.Num() - 2]) > 0.0)
+			{
+				Leg.Pop();
+			}
+		}
 		for (const FVector& P : Leg)
 		{
 			AddPoint(P);
 		}
-		if (w == Def.NumWays)
+		if (bHome)
 		{
 			AddPoint(StartAt);
 		}
-		WayEnds.Add(RaceLine.Num() - 1);
+		CornerEnds.Add(RaceLine.Num() - 1);
 		From = Leg.Last();
 	}
 	RaceAlong.SetNum(RaceLine.Num());
@@ -399,34 +451,31 @@ bool ANightRaces::StartRace(APestiCar* Car)
 		RaceAlong[i] = RaceAlong[i - 1] + FVector::Dist2D(RaceLine[i - 1], RaceLine[i]);
 	}
 	const double Total = RaceAlong.Last();
-	const double StartAlong = NightRace::LineBack;
 
-	// The gates: one at each place on the way, and others in between, then the finish at the ring.
-	TArray<double> Wanted;
-	for (int32 w = 0; w + 1 < WayEnds.Num(); ++w)
-	{
-		Wanted.Add(RaceAlong[WayEnds[w]]);
-	}
-	for (double S = StartAlong + NightRace::GateEvery; S < Total; S += NightRace::GateEvery)
-	{
-		Wanted.Add(S);
-	}
-	Wanted.Sort();
+	// The gates: one just past each named corner, across the street the line turns into, then the finish at the ring.
 	GateAt.Reset();
 	GateDir.Reset();
 	GateHalf.Reset();
 	GateAlong.Reset();
-	double Last = StartAlong;
-	for (const double S : Wanted)
+	GateName.Reset();
+	for (int32 c = 0; c < Def.NumCorners; ++c)
 	{
-		if (S - Last < NightRace::GateGap || S < StartAlong + NightRace::GateFromStart || S > Total - NightRace::GateBeforeFinish)
+		if (!Def.Corners[c].Gate)
+		{
+			continue;
+		}
+		const double Corner = RaceAlong[CornerEnds[c]];
+		const double Ahead = RaceAlong[CornerEnds[c + 1]];
+		const double S = FMath::Max(Corner, FMath::Min3(Corner + NightRace::GatePastCorner, Ahead - NightRace::GateBeforeCorner, Total - NightRace::GateBeforeFinish));
+		if (S <= NightRace::LineBack || (GateAlong.Num() > 0 && S <= GateAlong.Last() + 100.0))
 		{
 			continue;
 		}
 		GateAlong.Add(S);
-		Last = S;
+		GateName.Add(Def.Corners[c].Gate);
 	}
 	GateAlong.Add(Total);
+	GateName.Add(TEXT("Laci kapuja"));
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(NightRaceGate), false, this);
 	Params.AddIgnoredActor(Car);
 	for (const double S : GateAlong)
@@ -572,7 +621,8 @@ void ANightRaces::TickRacing(APawn* Player, float DeltaSeconds)
 		ShowGates(NextGate);
 	}
 	const FVector Target = GateAt[NextGate];
-	if (FVector::Dist2D(At, Target) > NightRace::MaxAway)
+	const FVector Before = NextGate > 0 ? GateAt[NextGate - 1] : StartAt;
+	if (FVector::Dist2D(At, Target) > FVector::Dist2D(Before, Target) + NightRace::MaxAway)
 	{
 		StopRace(TEXT("T\u00FAl messzire ker\u00FClt\u00E9l a p\u00E1ly\u00E1t\u00F3l.  (You strayed too far from the course.)"));
 		return;
@@ -602,8 +652,8 @@ void ANightRaces::TickRacing(APawn* Player, float DeltaSeconds)
 	}
 	else
 	{
-		Note(FString::Printf(TEXT("Kapu %d / %d  (Gate)   %d. hely / %d  (place)   %s   %s %s"),
-			NextGate + 1, GateAt.Num() - 1, Place, Rivals.Num() + 1, *Time, *PestiText::Metres(FVector::Dist2D(At, Target)), PestiText::Compass(At, Target)), 0.f);
+		Note(FString::Printf(TEXT("Kapu %d / %d: %s  (Gate)   %d. hely / %d  (place)   %s   %s %s"),
+			NextGate + 1, GateAt.Num() - 1, *GateName[NextGate], Place, Rivals.Num() + 1, *Time, *PestiText::Metres(FVector::Dist2D(At, Target)), PestiText::Compass(At, Target)), 0.f);
 	}
 }
 
