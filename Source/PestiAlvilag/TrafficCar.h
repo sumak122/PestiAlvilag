@@ -31,6 +31,8 @@ public:
 
 	int32 GetLaneIndex() const { return LaneIndex; }
 	int32 GetPointIndex() const { return PointIndex; }
+	/** How fast it drives now, forwards (cm/s). */
+	float GetDrivingSpeed() const { return CurrentSpeed; }
 	int32 GetNextLaneIndex() const { return NextLaneIndex; }
 
 	/** Called by the manager right after spawning. */

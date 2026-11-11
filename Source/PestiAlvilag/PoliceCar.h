@@ -34,7 +34,7 @@ public:
 	bool IsChasing() const { return bChasing; }
 	const TArray<FVector>& GetChasePath() const { return ChasePath; }
 
-	/** Top speed in a chase (cm/s); a little under the player's 2800. */
+	/** Top speed in a chase at two stars (cm/s); a little under the player's 2800 (slower at one star, faster at three). */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float ChaseSpeed = 2500.f;
 
@@ -42,7 +42,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float ChaseTurnRate = 150.f;
 
-	/** Patrols this close when the player becomes wanted join the chase (cm). */
+	/** Patrols this close when the player is wanted at two stars join the chase (cm); at one star only the nearer ones, at three all. */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float ResponseRange = 40000.f;
 
@@ -74,6 +74,8 @@ private:
 	void StopChase();
 	void ChaseTick(APawn* Player, APestiAlvilagGameModeBase* Game, float DeltaSeconds);
 	bool CanSee(const APawn* Player) const;
+	/** Out of sight: where to drive to look for him, round where he was last seen. */
+	FVector SearchGoalFor(const APestiAlvilagGameModeBase* Game, const FVector& Here);
 	void MoveChasing(const FVector& Delta, const APawn* Player, float DeltaSeconds);
 
 	/** Close enough, and he slow enough, to pull up and get out. */
@@ -117,4 +119,11 @@ private:
 	float ReplanTimer = 0.f;
 	float SightTimer = 0.f;
 	float FlashTimer = 0.f;
+	/** Looking for him out of sight: the spot driven to, and whether there is one. */
+	FVector SearchGoal = FVector::ZeroVector;
+	bool bHasSearchGoal = false;
+	/** At three stars: not before this time does it ram his car again. */
+	double NextRamAt = 0.0;
+	/** The stars he had this frame (1 to 3 in a chase). */
+	int32 Stars = 1;
 };

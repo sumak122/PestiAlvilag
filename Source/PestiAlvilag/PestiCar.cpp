@@ -17,6 +17,7 @@
 #include "PestiPerson.h"
 #include "PersonModel.h"
 #include "PoliceCar.h"
+#include "PolicePatrols.h"
 #include "TrafficCar.h"
 #include "Tram.h"
 #include "PestiHud.h"
@@ -39,8 +40,10 @@ namespace PestiCar
 	constexpr float LookResetRate = 120.f;
 	constexpr float LookResetSpeed = 200.f;
 
-	// Ramming something faster than this is a crime (cm/s; 500 is 18 km/h).
-	constexpr float CrimeImpactSpeed = 500.f;
+	// Ramming something faster than this is a crime, if the police see it (cm/s; 900 is about 32 km/h).
+	constexpr float CrimeImpactSpeed = 900.f;
+	// A police car this near sees a crash (cm); constables see it as far as they see.
+	constexpr double PoliceSeeCrash = 3500.0;
 	// Hitting anything faster than this jolts a passenger (cm/s).
 	constexpr float BumpSpeed = 300.f;
 
@@ -412,6 +415,21 @@ void APestiCar::CrashFeedback(const FVector& At, const FVector& Away, float Into
 	}
 }
 
+void APestiCar::TakeKnock(const FVector& At, const FVector& Push)
+{
+	const FVector Into = FVector(Push.X, Push.Y, 0.0).GetSafeNormal();
+	const float Speed = static_cast<float>(Push.Size2D());
+	if (Into.IsNearlyZero() || Speed < 1.f)
+	{
+		return;
+	}
+	const int32 Knocked = Visuals->Knock(At, Into, Speed);
+	CrashFeedback(At, Into, Speed, 0.f, Knocked, false);
+	ForwardSpeed += static_cast<float>(FVector::DotProduct(Push, GetActorForwardVector()));
+	SideSpeed += static_cast<float>(FVector::DotProduct(Push, GetActorRightVector()));
+	ForwardSpeed = FMath::Clamp(ForwardSpeed, -MaxReverseSpeed, MaxSpeed);
+}
+
 bool APestiCar::ForceDriverOut()
 {
 	APestiPerson* Person = Cast<APestiPerson>(Driver);
@@ -530,9 +548,11 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 		LastBumpTime = Now;
 	}
 
-	// Ramming traffic brings the police; ramming the police more so.
+	// A real crash into traffic brings the police, but only when a police
+	// car or a constable is there to see it; ramming the police more so.
 	const AActor* Rammed = Hit.GetActor();
-	if (Rammed && HitSpeed > PestiCar::CrimeImpactSpeed && (Rammed->IsA<ATrafficCar>() || Rammed->IsA<ATram>()))
+	if (Rammed && HitSpeed > PestiCar::CrimeImpactSpeed && (Rammed->IsA<ATrafficCar>() || Rammed->IsA<ATram>())
+		&& (Rammed->IsA<APoliceCar>() || APolicePatrols::Witnessed(this, Hit.ImpactPoint, PestiCar::PoliceSeeCrash)))
 	{
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{

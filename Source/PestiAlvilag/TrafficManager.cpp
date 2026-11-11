@@ -27,6 +27,7 @@
 #include "TrafficCar.h"
 #include "PoliceCar.h"
 #include "PolicePatrols.h"
+#include "PoliceChase.h"
 #include "Bus.h"
 #include "Tram.h"
 
@@ -1134,6 +1135,11 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 		{
 			ConsiderPoint(It->GetActorLocation());
 		}
+	}
+	// A police road block across the street.
+	for (const FVector& Barrier : APoliceChase::BlockPoints())
+	{
+		ConsiderPoint(Barrier);
 	}
 	return Clear;
 }

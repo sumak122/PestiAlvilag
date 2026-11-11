@@ -12,6 +12,8 @@ that the AStreetFurniture actor reads:
   block, turning at its corners, over the road from corner to corner,
   and down the paths of Tisza Kálmán tér, as flat [x0, y0, x1, y1,
   ...] lists;
+- crossings: the indexes in sidewalks of the lines that go over the road
+  (people wait at the kerb there while a car comes);
 - bins: litter bins on a post, beside some street lamps and next to the
   park benches;
 - taxi_stands: a rank of parked taxis by the kerb near the Népszínház and
@@ -514,6 +516,7 @@ def place_sidewalks(data, space, tisza, park):
                 add(LineString(piece))
                 corners.append(piece[0])
     crossed = set()
+    crossings = []
     for i, a in enumerate(corners):
         across = sorted((math.dist(a, b), j) for j, b in enumerate(corners)
                         if j != i and SIDEWALK_MIN_CROSS < math.dist(a, b) < SIDEWALK_MAX_CROSS)
@@ -523,6 +526,7 @@ def place_sidewalks(data, space, tisza, park):
             if key in crossed or houses.intersects(crossing):
                 continue
             crossed.add(key)
+            crossings.append(len(sidewalks))
             sidewalks.append([round(v) for xy in crossing.coords for v in xy])
     # The park paths, cut where they reach a round place. From each cut a
     # short way leads in to a walk round the flower bed, and that walk is
@@ -553,7 +557,7 @@ def place_sidewalks(data, space, tisza, park):
             arc = [(c.x + math.cos(a0 + (a1 - a0) * t / steps) * ring, c.y + math.sin(a0 + (a1 - a0) * t / steps) * ring)
                    for t in range(steps + 1)]
             sidewalks.append([round(v) for xy in arc for v in xy])
-    return sidewalks
+    return sidewalks, crossings
 
 
 def place_taxi_stands(data, space):
@@ -2141,7 +2145,7 @@ def main():
     benches = place_park_benches(space, tisza, bins, [garden])
     bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
-    sidewalks = place_sidewalks(data, space, tisza, park)
+    sidewalks, crossings = place_sidewalks(data, space, tisza, park)
     taxi_stands = place_taxi_stands(data, space)
     taxi_destinations = place_taxi_destinations(sidewalks)
     tram_stops = place_tram_stops(data, space, sidewalks)
@@ -2178,6 +2182,7 @@ def main():
         "benches": benches,
         "bins": bins,
         "sidewalks": sidewalks,
+        "crossings": crossings,
         "taxi_stands": taxi_stands,
         "taxi_destinations": taxi_destinations,
         "tram_stops": tram_stops + bus_stops,

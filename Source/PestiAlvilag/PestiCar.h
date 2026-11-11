@@ -115,6 +115,13 @@ public:
 	/** The body's paint now. */
 	FLinearColor GetPaint() const;
 
+	/**
+	 * Something not moved by the car's own sweep hit it at At, shoving it by
+	 * Push (cm/s): a police car ramming it, a road barrier it smashed. Dents,
+	 * sparks and the crash sound, and the shove to its speed.
+	 */
+	void TakeKnock(const FVector& At, const FVector& Push);
+
 	/** Stops the car and puts the player who drives it out on foot, whatever its speed (missions that fail). False when he could not get out. */
 	bool ForceDriverOut();
 

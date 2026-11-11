@@ -36,6 +36,8 @@ namespace CityDetailsPlace
 	const TCHAR* const DataFile = TEXT("Data/OsmGraybox/city_details.json");
 	// A gate counts as open when its foot is this near an open courtyard's gate (cm).
 	constexpr double OpenGateNear = 100.0;
+	// Hiding from the police counts this far in from a gateway's street end (cm).
+	constexpr double HideStepIn = 120.0;
 	// How far things are drawn (cm): the big ones from far off.
 	constexpr float BigDrawDistance = 60000.f;
 	constexpr float YardDrawDistance = 15000.f;
@@ -124,6 +126,83 @@ bool ACityDetails::IsOpenGate(const FVector2D& Foot)
 	for (const FVector2D& Gate : OpenGates)
 	{
 		if (FVector2D::Distance(Gate, Foot) < CityDetailsPlace::OpenGateNear)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ACityDetails::IsHidingPlace(const FVector2D& At)
+{
+	// Read once: each open gateway (foot, the way out, width, depth) and its yard's outline.
+	struct FHideout
+	{
+		FVector2D Foot = FVector2D::ZeroVector;
+		FVector2D Out = FVector2D::ZeroVector;
+		double HalfWidth = 0.0;
+		double Depth = 0.0;
+		TArray<FVector2D> Yard;
+	};
+	static TArray<FHideout> Hideouts;
+	static bool bRead = false;
+	if (!bRead)
+	{
+		bRead = true;
+		const TArray<TSharedPtr<FJsonValue>>* Yards = nullptr;
+		if (const TSharedPtr<FJsonObject> Root = LoadDetails())
+		{
+			if (Root->TryGetArrayField(TEXT("courtyards"), Yards))
+			{
+				for (const TSharedPtr<FJsonValue>& YardValue : *Yards)
+				{
+					const TSharedPtr<FJsonObject> Yard = YardValue->AsObject();
+					const TArray<TSharedPtr<FJsonValue>>* Gate = nullptr;
+					if (!Yard.IsValid() || !Yard->TryGetArrayField(TEXT("gate"), Gate) || Gate->Num() < 3)
+					{
+						continue;
+					}
+					FHideout Hideout;
+					Hideout.Foot = CityDetailsPlace::Pair(*Gate);
+					Hideout.Out = CityDetailsPlace::Ahead(CityDetailsPlace::Number(*Gate, 2), 1.0);
+					Hideout.HalfWidth = Yard->GetNumberField(TEXT("width")) * 0.5;
+					Hideout.Depth = Yard->GetNumberField(TEXT("depth"));
+					const TArray<TSharedPtr<FJsonValue>>* Outline = nullptr;
+					if (Yard->TryGetArrayField(TEXT("yard"), Outline))
+					{
+						for (int32 i = 0; i + 1 < Outline->Num(); i += 2)
+						{
+							Hideout.Yard.Add(CityDetailsPlace::Pair(*Outline, i));
+						}
+					}
+					Hideouts.Add(MoveTemp(Hideout));
+				}
+			}
+		}
+	}
+	for (const FHideout& Hideout : Hideouts)
+	{
+		// In the gateway, a step or more in from the street.
+		const FVector2D Offset = At - Hideout.Foot;
+		const double In = -FVector2D::DotProduct(Offset, Hideout.Out);
+		const double Across = FMath::Abs(FVector2D::CrossProduct(Hideout.Out, Offset));
+		if (In > CityDetailsPlace::HideStepIn && In < Hideout.Depth + 100.0 && Across < Hideout.HalfWidth)
+		{
+			return true;
+		}
+		// In the yard (even-odd rule).
+		bool bIn = false;
+		const int32 Count = Hideout.Yard.Num();
+		for (int32 i = 0, j = Count - 1; i < Count; j = i++)
+		{
+			const FVector2D& P = Hideout.Yard[i];
+			const FVector2D& Q = Hideout.Yard[j];
+			if ((P.Y > At.Y) != (Q.Y > At.Y) && At.X < (Q.X - P.X) * (At.Y - P.Y) / (Q.Y - P.Y) + P.X)
+			{
+				bIn = !bIn;
+			}
+		}
+		if (bIn)
 		{
 			return true;
 		}

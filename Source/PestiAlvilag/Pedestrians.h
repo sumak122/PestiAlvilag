@@ -159,6 +159,15 @@ private:
 		/** Distance along the line at each point. */
 		TArray<double> Along;
 		double Length = 0.0;
+		/** A crossing over the road, from kerb to kerb. */
+		bool bCrossing = false;
+	};
+
+	/** Something on the road coming along: a car, a tram, the player. */
+	struct FMover
+	{
+		FVector2D At = FVector2D::ZeroVector;
+		FVector2D Velocity = FVector2D::ZeroVector;
 	};
 
 	struct FWalker
@@ -185,6 +194,11 @@ private:
 		/** Not before this time does he notice a car coming (he may freeze instead). */
 		float NoticeAt = -1.f;
 		bool bFrozen = false;
+		/** At the kerb waiting for the road to clear before crossing; on the way over, hurrying. */
+		bool bWaiting = false;
+		bool bRushing = false;
+		float Waited = 0.f;
+		float RoadClock = 0.f;
 		/** The blood under him once he is run over. */
 		UStaticMeshComponent* Blood = nullptr;
 		/** Asked the way: the map direction he points, and whether he knows it at all. */
@@ -217,6 +231,10 @@ private:
 		int32& OutLine, double& OutAlong, double& OutGroundZ);
 	/** At the end of a line: on to a line that starts or ends near here, or back. */
 	void TurnAtEnd(FWalker& Walker);
+	/** The cars, trams and the player moving near the camera this frame (for the crossings). */
+	void GatherMovers(const FVector& Camera);
+	/** True while something on the road would reach this crossing before he got over. */
+	bool IsRoadBusy(const FLine& Line) const;
 	FVector2D PointOn(const FLine& Line, double Along, FVector2D& OutTangent) const;
 	/** True when a building stands between the camera and someone standing here. */
 	bool BehindBuilding(const FVector& Camera, const FVector2D& At, double GroundZ) const;
@@ -251,6 +269,7 @@ private:
 	double NearLongest = 1.0;
 	FVector NearLinesFrom = FVector(1e9);
 	TArray<FWalker> Walkers;
+	TArray<FMover> Movers;
 	/** How many of the walkers are standers (they do not count in the crowd). */
 	int32 NumStanders = 0;
 	FRandomStream Random;

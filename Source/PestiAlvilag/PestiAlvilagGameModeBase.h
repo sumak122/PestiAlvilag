@@ -34,7 +34,10 @@ public:
 	/** The running game's mode, or null (for example in the editor). */
 	static APestiAlvilagGameModeBase* Get(const UObject* WorldContextObject);
 
-	/** Seconds out of police sight that lose them. */
+	/**
+	 * Seconds out of police sight that lose them, at two stars (less at one,
+	 * more at three; half as long hidden in a courtyard gateway).
+	 */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	float EscapeTime = 20.f;
 
@@ -50,7 +53,19 @@ public:
 	int32 GetArrests() const { return Arrests; }
 	void ReportCrime(int32 CrimeLevel);
 	/** Seconds still to stay out of police sight to lose them. */
-	float GetEscapeSecondsLeft() const { return FMath::Max(0.f, EscapeTime - TimeUnseen); }
+	float GetEscapeSecondsLeft() const { return FMath::Max(0.f, EscapeTimeNow() - TimeUnseen); }
+	/** Seconds out of sight that lose them at the stars he has now. */
+	float EscapeTimeNow() const;
+	/**
+	 * Out of their sight a moment, the police search round where they last
+	 * saw him (the red circle on the maps): leaving the circle loses them
+	 * soon, hiding in a courtyard gateway loses them faster.
+	 */
+	bool IsPoliceSearching() const;
+	FVector GetLastSeenAt() const { return LastSeenAt; }
+	float GetSearchRadius() const;
+	/** True while he hides in a courtyard gateway from the police. */
+	bool IsHiding() const { return bHiding; }
 	/** How far an arrest has got, from 0 to 1. */
 	float GetArrestFraction() const { return ArrestTime > 0.f ? FMath::Clamp(ArrestProgress / ArrestTime, 0.f, 1.f) : 0.f; }
 	/** Police call these every frame they see the player or are right beside them. */
@@ -204,6 +219,9 @@ public:
 private:
 	void UpdateWanted(float DeltaSeconds);
 	void UpdateFaint();
+	/** Caught: outside a mission the picture goes dark and he comes out of the police station, poorer. */
+	void Busted();
+	void UpdateBusted();
 	void SpawnNextMission();
 	/** Where he stands on the pavement outside the home door. */
 	FVector2D HomeStartAt() const;
@@ -262,6 +280,13 @@ private:
 	double PlaceAtRingUntil = 0.0;
 	float TimeUnseen = 0.f;
 	float ArrestProgress = 0.f;
+	/** Where the police last had him in sight, and whether he is hiding now. */
+	FVector LastSeenAt = FVector::ZeroVector;
+	bool bHiding = false;
+	/** After an arrest: when he is let out of the station, or below 0; and what it cost him. */
+	double BustedUntil = -1.0;
+	int32 BustedFine = 0;
+	int32 BustedStars = 0;
 	double LastPoliceNearTime = -1.0;
 	/** Until when the cars called by telephone are out, or below 0. */
 	double PoliceCalledUntil = -1.0;

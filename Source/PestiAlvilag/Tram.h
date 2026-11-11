@@ -41,6 +41,9 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/** How fast it runs now, forwards (cm/s). */
+	float GetDrivingSpeed() const { return CurrentSpeed; }
+
 	/** Called by the manager right after spawning. */
 	virtual void StartOnRoute(ATrafficManager* InManager, int32 InRouteIndex, float InDistance);
 

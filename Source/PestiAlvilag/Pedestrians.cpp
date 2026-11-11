@@ -30,7 +30,9 @@
 #include "StreetFights.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "TrafficCar.h"
 #include "TrafficManager.h"
+#include "Tram.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UmbrellaModel.h"
 #include "Weather.h"
@@ -103,12 +105,25 @@ namespace Pedestrians
 	// plus a bit) and this far to either side of its path, and leaps clear;
 	// unless he freezes in fright.
 	constexpr double CarNoticeSpeed = 300.0;
-	constexpr double CarWarnSeconds = 1.0;
+	constexpr double CarWarnSeconds = 1.6;
 	constexpr double CarWarnExtra = 250.0;
 	constexpr double CarPathHalfWidth = 260.0;
-	constexpr float FreezeChance = 0.25f;
-	constexpr float MinNotice = 0.15f;
-	constexpr float MaxNotice = 0.6f;
+	constexpr float FreezeChance = 0.1f;
+	constexpr float MinNotice = 0.1f;
+	constexpr float MaxNotice = 0.4f;
+	// At a crossing he waits at the kerb while anything moving faster than
+	// MoverSlowest would reach it within RoadClearSeconds, or is this near it
+	// (cm); looking again this often (s), at most this long before he goes
+	// anyway. On the way over he walks briskly, and runs if a car comes.
+	constexpr double MoverSlowest = 150.0;
+	constexpr double RoadClearSeconds = 3.5;
+	constexpr double RoadNear = 600.0;
+	constexpr float RoadLookEvery = 0.3f;
+	constexpr float MaxWait = 25.f;
+	constexpr float CrossHurry = 1.35f;
+	constexpr float CrossRun = 2.3f;
+	// Only cars this near the camera count (the walkers further off are not seen).
+	constexpr double MoversNear = 9000.0;
 	constexpr double LeapSpeed = 420.0;
 	// A car up on the pavement (this close to his walking line, this near
 	// him) sends him running off along it, this many times faster.
@@ -450,10 +465,24 @@ bool APedestrians::LoadLines()
 		return false;
 	}
 
+	// Which rows go over the road.
+	TSet<int32> CrossingRows;
+	const TArray<TSharedPtr<FJsonValue>>* Crossings = nullptr;
+	if (Root->TryGetArrayField(TEXT("crossings"), Crossings))
+	{
+		for (const TSharedPtr<FJsonValue>& Crossing : *Crossings)
+		{
+			CrossingRows.Add(static_cast<int32>(Crossing->AsNumber()));
+		}
+	}
+
+	int32 RowIndex = -1;
 	for (const TSharedPtr<FJsonValue>& Row : *Rows)
 	{
+		++RowIndex;
 		const TArray<TSharedPtr<FJsonValue>>& Numbers = Row->AsArray();
 		FLine Line;
+		Line.bCrossing = CrossingRows.Contains(RowIndex);
 		for (int32 i = 0; i + 1 < Numbers.Num(); i += 2)
 		{
 			const FVector2D Point(Numbers[i]->AsNumber(), Numbers[i + 1]->AsNumber());
@@ -603,6 +632,66 @@ void APedestrians::TurnAtEnd(FWalker& Walker)
 	Walker.Line = Join.X;
 	Walker.Dir = Join.Y == 0 ? 1 : -1;
 	Walker.Along = Join.Y == 0 ? 0.0 : Lines[Join.X].Length;
+	// Over the road: first a look both ways at the kerb.
+	Walker.bWaiting = Lines[Join.X].bCrossing;
+	Walker.bRushing = false;
+	Walker.Waited = 0.f;
+	Walker.RoadClock = 0.f;
+}
+
+void APedestrians::GatherMovers(const FVector& Camera)
+{
+	Movers.Reset();
+	auto AddMover = [this, &Camera](const AActor* Thing, double Speed)
+	{
+		if (Speed > Pedestrians::MoverSlowest && FVector::Dist2D(Thing->GetActorLocation(), Camera) < Pedestrians::MoversNear)
+		{
+			FMover& Mover = Movers.AddDefaulted_GetRef();
+			Mover.At = FVector2D(Thing->GetActorLocation());
+			Mover.Velocity = FVector2D(Thing->GetActorForwardVector()).GetSafeNormal() * Speed;
+		}
+	};
+	for (TActorIterator<ATrafficCar> It(GetWorld()); It; ++It)
+	{
+		AddMover(*It, It->GetDrivingSpeed());
+	}
+	for (TActorIterator<ATram> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsHidden())
+		{
+			AddMover(*It, It->GetDrivingSpeed());
+		}
+	}
+	// The player, at the wheel or on a bicycle, by how he really moves.
+	if (const AActor* Player = LastPlayer.Get(); Player && !Player->IsA<APestiPerson>() && PlayerVelocity.Size2D() > Pedestrians::MoverSlowest
+		&& FVector::Dist2D(PlayerAt, Camera) < Pedestrians::MoversNear)
+	{
+		FMover& Mover = Movers.AddDefaulted_GetRef();
+		Mover.At = FVector2D(PlayerAt);
+		Mover.Velocity = FVector2D(PlayerVelocity);
+	}
+}
+
+bool APedestrians::IsRoadBusy(const FLine& Line) const
+{
+	const FVector2D From = Line.Points[0];
+	const FVector2D To = Line.Points.Last();
+	for (const FMover& Mover : Movers)
+	{
+		const FVector2D Near = FMath::ClosestPointOnSegment2D(Mover.At, From, To);
+		const FVector2D Ahead = Near - Mover.At;
+		const double Distance = Ahead.Size();
+		if (Distance < Pedestrians::RoadNear)
+		{
+			return true;
+		}
+		const double Speed = Mover.Velocity.Size();
+		if (FVector2D::DotProduct(Ahead, Mover.Velocity) > 0.0 && Distance < Speed * Pedestrians::RoadClearSeconds)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool APedestrians::BehindBuilding(const FVector& Camera, const FVector2D& At, double GroundZ) const
@@ -1227,6 +1316,8 @@ void APedestrians::Tick(float DeltaSeconds)
 		PickAFight(Player);
 	}
 
+	GatherMovers(Camera);
+
 	const AWeather* Sky = AWeather::Get(GetWorld());
 	const float RainNow = Sky ? Sky->GetRain() : 0.f;
 
@@ -1254,6 +1345,8 @@ void APedestrians::Tick(float DeltaSeconds)
 		{
 			Walker.bPlaced = false;
 			ClearReact(Walker);
+			Walker.bWaiting = false;
+			Walker.bRushing = false;
 		}
 
 		if (bPlayerAbout && Walker.bPlaced)
@@ -1267,7 +1360,29 @@ void APedestrians::Tick(float DeltaSeconds)
 			&& RainNow > (bUmbrellaUp ? Pedestrians::UmbrellaUntil : Pedestrians::UmbrellaFrom + Pedestrians::UmbrellaSpread * Walker.UmbrellaPatience),
 			Walker.UmbrellaColor);
 		const float Hurry = bUmbrellaUp ? 1.f : 1.f + Pedestrians::RainHurry * RainNow;
-		const float Pace = Walker.Speed * Hurry * (Walker.React == EReact::Flee ? Pedestrians::FleeShare : 1.f);
+		// At a crossing: wait at the kerb while the road is busy, then go over
+		// briskly, running if something comes after all.
+		const bool bOnCrossing = Lines[Walker.Line].bCrossing;
+		Walker.RoadClock -= DeltaSeconds;
+		if (bOnCrossing && Walker.RoadClock <= 0.f)
+		{
+			Walker.RoadClock = Pedestrians::RoadLookEvery;
+			const bool bBusy = IsRoadBusy(Lines[Walker.Line]);
+			if (Walker.bWaiting)
+			{
+				Walker.bWaiting = bBusy && Walker.Waited < Pedestrians::MaxWait;
+			}
+			else
+			{
+				Walker.bRushing = bBusy;
+			}
+		}
+		if (Walker.bWaiting)
+		{
+			Walker.Waited += DeltaSeconds;
+		}
+		const float CrossShare = !bOnCrossing ? 1.f : Walker.bWaiting ? 0.f : Walker.bRushing ? Pedestrians::CrossRun : Pedestrians::CrossHurry;
+		const float Pace = Walker.Speed * Hurry * CrossShare * (Walker.React == EReact::Flee ? Pedestrians::FleeShare : 1.f);
 		if (Walker.React == EReact::Flee)
 		{
 			Walker.ReactLeft -= DeltaSeconds;
@@ -1311,7 +1426,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		// to face the way he goes.
 		const float Yaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X)));
 		const FVector2D Gap = At - Walker.Shown;
-		const double Step = Pace * Pedestrians::CatchUp * DeltaSeconds;
+		const double Step = FMath::Max(Pace, Walker.Speed) * Pedestrians::CatchUp * DeltaSeconds;
 		if (!Walker.bPlaced || (bOnWalk && Gap.Size() > Pedestrians::SnapDistance))
 		{
 			Walker.Shown = At;
@@ -1328,7 +1443,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		{
 			const double Size = Walker.Person->GetActorScale3D().Z;
 			Walker.Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Pace, DeltaSeconds,
-				Walker.React == EReact::Flee ? 1.f : 0.f);
+				Walker.React == EReact::Flee || (bOnCrossing && Walker.bRushing) ? 1.f : 0.f);
 		}
 	}
 }

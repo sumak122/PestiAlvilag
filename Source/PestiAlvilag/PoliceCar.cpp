@@ -3,6 +3,7 @@
 #include "PoliceCar.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "CarVisuals.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -58,6 +59,21 @@ namespace PoliceCar
 	constexpr float DownSeconds = 4.f;
 	constexpr double LyingHeight = 18.0;
 	constexpr double ShoutEvery = 4.0;
+
+	// The stars he has change the chase. At one, two and three stars: the
+	// share of ResponseRange from which cars come, and of ChaseSpeed.
+	const float RangeShare[] = { 0.3f, 1.f, 5.f };
+	const float SpeedShare[] = { 0.88f, 1.04f, 1.2f };
+	// Only at three stars do they ram his car: no more often than this (s),
+	// shoving it by this share of their speed (and slowing to this share).
+	constexpr int32 RamStars = 3;
+	constexpr double RamEvery = 2.0;
+	constexpr float RamShove = 0.45f;
+	constexpr float RamSpeedKept = 0.6f;
+	// Below three stars, closing in behind his car they keep this far off (cm).
+	constexpr float KeepBack = 450.f;
+	// Out of sight they search: a new spot when this near the last one (cm).
+	constexpr double SearchReached = 900.0;
 
 	struct FLine2 { const TCHAR* Hu; const TCHAR* En; };
 	const FLine2 OutLines[] = {
@@ -145,8 +161,10 @@ void APoliceCar::Tick(float DeltaSeconds)
 	}
 
 	const bool bWanted = Game->GetWantedLevel() > 0;
-	// Called by telephone from a police box, every car in the district comes.
-	const float Range = Game->IsPoliceCalledIn() ? CalledInRange : ResponseRange;
+	Stars = FMath::Clamp(Game->GetWantedLevel(), 1, 3);
+	// Called by telephone from a police box, every car in the district comes;
+	// otherwise more of them the more stars he has.
+	const float Range = Game->IsPoliceCalledIn() ? CalledInRange : ResponseRange * PoliceCar::RangeShare[Stars - 1];
 	if (!bChasing && bWanted && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < Range)
 	{
 		StartChase();
@@ -184,6 +202,7 @@ void APoliceCar::StartChase()
 {
 	bChasing = true;
 	bSeesPlayer = false;
+	bHasSearchGoal = false;
 	ReplanTimer = 0.f;
 	SightTimer = 0.f;
 	ChasePath.Reset();
@@ -252,21 +271,30 @@ void APoliceCar::ChaseTick(APawn* Player, APestiAlvilagGameModeBase* Game, float
 	}
 
 	// Work out the way: straight at the player when close and in view,
-	// otherwise along the streets.
-	FVector Target = PlayerAt;
+	// otherwise along the streets: to him while they see him, or else to
+	// where he was last seen and round about there.
+	APestiCar* PlayerCar = Cast<APestiCar>(Player);
+	const bool bRamming = Stars >= PoliceCar::RamStars && PlayerCar != nullptr;
+	FVector Target = bRamming ? PlayerAt + Player->GetVelocity() * 0.3 : PlayerAt;
 	const bool bDirect = bSeesPlayer && DistToPlayer < PoliceCar::DirectChaseRange;
+	if (bSeesPlayer)
+	{
+		bHasSearchGoal = false;
+	}
 	if (bDirect)
 	{
 		ChasePath.Reset();
 	}
 	else
 	{
+		const FVector Goal = bSeesPlayer ? PlayerAt : SearchGoalFor(Game, Here);
+		Target = Goal;
 		ReplanTimer -= DeltaSeconds;
 		if (ReplanTimer <= 0.f || ChasePathIndex >= ChasePath.Num())
 		{
 			ReplanTimer = PoliceCar::ReplanInterval;
-			Manager->FindPath(Here, PlayerAt, ChasePath);
-			ChasePath.Add(PlayerAt);
+			Manager->FindPath(Here, Goal, ChasePath);
+			ChasePath.Add(Goal);
 			ChasePathIndex = 0;
 			// Don't turn back for a point that is already behind us.
 			while (ChasePathIndex + 1 < ChasePath.Num()
@@ -291,12 +319,14 @@ void APoliceCar::ChaseTick(APawn* Player, APestiAlvilagGameModeBase* Game, float
 	const float TurnNeeded = FMath::Abs(FRotator::NormalizeAxis(WantedYaw - CurrentYaw));
 	SetActorRotation(FRotator(0.f, FMath::FixedTurn(CurrentYaw, WantedYaw, ChaseTurnRate * DeltaSeconds), 0.f));
 
-	float WantedSpeed = ChaseSpeed * FMath::Lerp(1.f, PoliceCar::CornerSpeedFraction, FMath::Clamp(TurnNeeded / 90.f, 0.f, 1.f));
-	if (bDirect)
+	const float TopSpeed = ChaseSpeed * PoliceCar::SpeedShare[Stars - 1];
+	float WantedSpeed = TopSpeed * FMath::Lerp(1.f, PoliceCar::CornerSpeedFraction, FMath::Clamp(TurnNeeded / 90.f, 0.f, 1.f));
+	if (bDirect && !bRamming)
 	{
-		// Close in, then keep pace to box the player in.
+		// Close in, then keep pace a little way off to box the player in.
 		const float PlayerSpeed = static_cast<float>(Player->GetVelocity().Size2D());
-		WantedSpeed = FMath::Min(WantedSpeed, PlayerSpeed + FMath::Max(0.f, DistToPlayer - 500.f) * 1.5f);
+		WantedSpeed = FMath::Min(WantedSpeed, PlayerSpeed + (DistToPlayer - PoliceCar::KeepBack) * 1.5f);
+		WantedSpeed = FMath::Max(WantedSpeed, 0.f);
 	}
 	// Near enough to him: pull up, and out they get.
 	const bool bStopping = WantsToStop(Player, DistToPlayer);
@@ -332,6 +362,26 @@ bool APoliceCar::CanSee(const APawn* Player) const
 	return !GetWorld()->LineTraceSingleByObjectType(Hit, Eye, PlayerAt, Objects, Params);
 }
 
+FVector APoliceCar::SearchGoalFor(const APestiAlvilagGameModeBase* Game, const FVector& Here)
+{
+	// First to where he was last seen, then from spot to spot round about it.
+	const FVector Seen = Game->GetLastSeenAt();
+	if (!bHasSearchGoal)
+	{
+		bHasSearchGoal = true;
+		SearchGoal = Seen;
+		ReplanTimer = 0.f;
+	}
+	else if (FVector::Dist2D(Here, SearchGoal) < PoliceCar::SearchReached)
+	{
+		const double Radius = Game->GetSearchRadius() * 0.7;
+		const FVector2D Away = FVector2D(OfficerLooks.FRandRange(-1.f, 1.f), OfficerLooks.FRandRange(-1.f, 1.f)).GetSafeNormal() * OfficerLooks.FRandRange(0.2f, 1.f) * Radius;
+		SearchGoal = Seen + FVector(Away, 0.0);
+		ReplanTimer = 0.f;
+	}
+	return SearchGoal;
+}
+
 void APoliceCar::MoveChasing(const FVector& Delta, const APawn* Player, float DeltaSeconds)
 {
 	FHitResult Hit;
@@ -350,13 +400,22 @@ void APoliceCar::MoveChasing(const FVector& Delta, const APawn* Player, float De
 	const AActor* Blocker = Hit.GetActor();
 	if (Blocker == Player)
 	{
-		// Bumping the player: hold position against them. Running into
-		// him on foot hurts him.
-		if (APestiPerson* Person = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0)))
+		// At three stars they ram his car: a shove that dents it. Otherwise
+		// they only hold position against him, and never run him down on foot.
+		const double Now = GetWorld()->GetTimeSeconds();
+		APestiCar* Car = Cast<APestiCar>(UGameplayStatics::GetPlayerPawn(this, 0));
+		if (Car && Stars >= PoliceCar::RamStars && Now >= NextRamAt && CurrentSpeed > 300.f)
 		{
-			Person->HitByVehicle(CurrentSpeed, GetActorForwardVector());
+			NextRamAt = Now + PoliceCar::RamEvery;
+			Car->TakeKnock(Hit.ImpactPoint, GetActorForwardVector().GetSafeNormal2D() * (CurrentSpeed * PoliceCar::RamShove));
+			if (Visuals)
+			{
+				Visuals->Knock(Hit.ImpactPoint, -GetActorForwardVector().GetSafeNormal2D(), CurrentSpeed * PoliceCar::RamShove);
+			}
+			CurrentSpeed *= PoliceCar::RamSpeedKept;
+			return;
 		}
-		CurrentSpeed *= 0.5f;
+		CurrentSpeed *= Car ? 0.5f : 0.f;
 		return;
 	}
 

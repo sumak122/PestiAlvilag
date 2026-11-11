@@ -44,6 +44,12 @@ public:
 	/** True when the tenement gate whose foot is at Foot stands open onto a courtyard. */
 	static bool IsOpenGate(const FVector2D& Foot);
 
+	/**
+	 * True inside one of the open gateways or its courtyard: a place to hide
+	 * from the police (the street can't see in, and they give up sooner).
+	 */
+	static bool IsHidingPlace(const FVector2D& At);
+
 protected:
 	virtual void BeginPlay() override;
 
