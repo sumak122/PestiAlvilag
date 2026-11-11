@@ -89,6 +89,17 @@ namespace PestiStart
 	// A bicycle stands this far out from the door and along the wall to its right (cm).
 	constexpr double BikeOut = 90.0;
 	constexpr double BikeAlong = 260.0;
+	// The coffee house, on the south side of Tisza Kálmán tér looking over
+	// the park: the left end of its front on the house wall, facing the square.
+	const FVector2D CafeAt(62184.0, 14956.0);
+	constexpr double CafeYaw = -110.3;
+	// Things put against a house wall find the ground this far out on the
+	// pavement, so the drop from the sky misses the cornice above them.
+	constexpr double WallProbe = 200.0;
+	inline FVector2D OutFrom(const FVector2D& ProbeSpot, double ProbeYaw)
+	{
+		return ProbeSpot + FVector2D(FRotator(0.0, ProbeYaw, 0.0).Vector()) * WallProbe;
+	}
 	const FName Prologue(TEXT("Prologue"));
 	const FName Uzenet(TEXT("Uzenet"));
 	const FName Zsebtolvaj(TEXT("Zsebtolvaj"));
@@ -231,15 +242,15 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AHomeDoor>(GetWorld()))
 	{
 		const FVector2D DoorAt = HomeDoorSpot();
-		const FVector Location(DoorAt, GroundZ(DoorAt));
+		const FVector Location(DoorAt, GroundZ(PestiStart::OutFrom(DoorAt, HomeDoorFacing())));
 		GetWorld()->SpawnActor<AHomeDoor>(AHomeDoor::StaticClass(), Location, FRotator(0.0, HomeDoorFacing(), 0.0));
 	}
 
-	// The coffee house beside it, with its terrace on the pavement.
+	// The coffee house on Tisza Kálmán tér, with its terrace on the pavement.
 	if (!TActorIterator<ACafe>(GetWorld()))
 	{
-		const FVector Location(PestiStart::HomeDoorAt, GroundZ(PestiStart::HomeDoorAt));
-		GetWorld()->SpawnActor<ACafe>(ACafe::StaticClass(), Location, FRotator(0.f, PestiStart::HomeDoorYaw, 0.f));
+		const FVector Location(PestiStart::CafeAt, GroundZ(PestiStart::OutFrom(PestiStart::CafeAt, PestiStart::CafeYaw)));
+		GetWorld()->SpawnActor<ACafe>(ACafe::StaticClass(), Location, FRotator(0.0, PestiStart::CafeYaw, 0.0));
 	}
 
 	// Lamps, benches, advertising columns and the park on Tisza Kálmán tér.
@@ -586,7 +597,7 @@ void APestiAlvilagGameModeBase::PlaceHomeDoor()
 	const FVector2D DoorAt = HomeDoorSpot();
 	for (TActorIterator<AHomeDoor> It(GetWorld()); It; ++It)
 	{
-		It->SetActorLocationAndRotation(FVector(DoorAt, GroundZ(DoorAt)), FRotator(0.0, HomeDoorFacing(), 0.0));
+		It->SetActorLocationAndRotation(FVector(DoorAt, GroundZ(PestiStart::OutFrom(DoorAt, HomeDoorFacing()))), FRotator(0.0, HomeDoorFacing(), 0.0));
 	}
 
 	// A plain door stands at the other one, so the attic has its door before
@@ -601,7 +612,7 @@ void APestiAlvilagGameModeBase::PlaceHomeDoor()
 	TArray<MarketModel::FShape> SpareShapes;
 	TArray<BozsiHouseModel::FLamp> SpareLamps;
 	BozsiHouseModel::StreetDoor(SpareShapes, SpareLamps, false);
-	PestiStart::PutUpShapeSet(GetWorld(), PestiStart::SpareDoorKey, FVector(SpareAt, GroundZ(SpareAt)), SpareYaw,
+	PestiStart::PutUpShapeSet(GetWorld(), PestiStart::SpareDoorKey, FVector(SpareAt, GroundZ(PestiStart::OutFrom(SpareAt, SpareYaw))), SpareYaw,
 		SpareShapes, SpareLamps, TArray<BozsiHouseModel::FSign>());
 }
 

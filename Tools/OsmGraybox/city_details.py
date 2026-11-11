@@ -479,10 +479,12 @@ def place_clocks(space, spots):
     return clocks
 
 
-# The cafe by Bozsi neni's house (SoundSpots::CafeAt), the Nepszinhaz
+# The cafe on Tisza Kalman ter (PestiStart::CafeAt), the Nepszinhaz
 # (PestiStart::TheatreAt), Keleti's front (AKeletiStation::FrontAt) and the
 # market hall's front (AMarketHall::FrontAt), all built by the game itself.
-CAFE_AT = (58392, 21268)
+CAFE_AT = (62685, 14408)
+# Bozsi neni's door on Nepszinhaz utca (PestiStart::HomeDoorAt).
+BOZSI_AT = (58392, 21268)
 THEATRE_AT = (-3600, 200)
 KELETI_AT = (92766, -43178)
 HALL_AT = (18109, 40941)
@@ -656,7 +658,7 @@ MANHOLE_TRAM_CLEAR = 120
 HATCH_SHARE = 0.10
 HATCH_GAP = 2200
 HATCH_SHOP_CLEAR = 80
-TROUGHS_NEAR = [CAFE_AT, HALL_AT, KELETI_AT, (46577, 33461), (99969, 28889), (-7034, -1747)]
+TROUGHS_NEAR = [BOZSI_AT, HALL_AT, KELETI_AT, (46577, 33461), (99969, 28889), (-7034, -1747)]
 TROUGH_ROOM = 220
 COAL_DROPS = 4
 COAL_GAP = 12000

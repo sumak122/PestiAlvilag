@@ -25,8 +25,8 @@ namespace SoundSpots
 	const FVector2D TelekiAt(99969.0, 28889.0);
 	// Tisza Kálmán tér, the park.
 	const FVector2D ParkAt(60000.0, 500.0);
-	// The café beside the player's home.
-	const FVector2D CafeAt(58392.0, 21268.0);
+	// The café on Tisza Kálmán tér (PestiStart::CafeAt, the middle of its terrace).
+	const FVector2D CafeAt(62685.0, 14408.0);
 	// The workshops of Garay utca.
 	const FVector2D GarayAt(74888.0, -51702.0);
 	// The squares where the pigeon flocks keep (as in Pigeons.cpp).
