@@ -529,6 +529,11 @@ bool ANightRaces::StartRace(APestiCar* Car)
 		}
 	}
 
+	// The player's car on the start line, facing the way the race goes.
+	const FVector CarAt = Car->GetActorLocation();
+	Car->SetActorLocationAndRotation(FVector(StartAt.X, StartAt.Y, CarAt.Z), FRotator(0.0, StartDir.Rotation().Yaw, 0.0),
+		false, nullptr, ETeleportType::TeleportPhysics);
+
 	StartRing->Hide();
 	NextGate = 0;
 	ShowGates(0);
