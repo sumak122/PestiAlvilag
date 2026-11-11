@@ -57,6 +57,8 @@ namespace GroundSurfaces::Private
 	constexpr float PuddleSize = 380.f;
 	constexpr float PuddleReach = 0.3f;
 	constexpr float PuddleEdge = 9.f;
+	// Puddles fade in over the first 1 / PuddleOnset of the wetness.
+	constexpr float PuddleOnset = 3.f;
 	constexpr float PuddleDarken = 0.2f;
 	constexpr float PuddleRoughness = 0.03f;
 
@@ -273,7 +275,10 @@ namespace GroundSurfaces::Private
 		auto* Hollows = AddExpression<UMaterialExpressionNoise>(Material);
 		Hollows->NoiseFunction = NOISEFUNCTION_ValueALU;
 		Hollows->Scale = 1.f / PuddleSize;
-		Hollows->Levels = 3;
+		// One plain level: with more levels (or turbulence) the noise overshoots
+		// OutputMax, which left puddles on dry ground.
+		Hollows->Levels = 1;
+		Hollows->bTurbulence = false;
 		Hollows->OutputMin = 0.f;
 		Hollows->OutputMax = 1.f;
 		auto* Rise = AddExpression<UMaterialExpressionMultiply>(Material);
@@ -288,8 +293,18 @@ namespace GroundSurfaces::Private
 		auto* Edged = AddExpression<UMaterialExpressionMultiply>(Material);
 		Edged->A.Connect(0, Above);
 		Edged->ConstB = PuddleEdge;
-		auto* Puddle = AddExpression<UMaterialExpressionSaturate>(Material);
-		Puddle->Input.Connect(0, Edged);
+		auto* Pooled = AddExpression<UMaterialExpressionSaturate>(Material);
+		Pooled->Input.Connect(0, Edged);
+		// No puddles at all on dry ground, whatever the noise gives: they
+		// only come once it is a little wet, and go last but one when it dries.
+		auto* Enough = AddExpression<UMaterialExpressionMultiply>(Material);
+		Enough->A.Connect(0, Wetness);
+		Enough->ConstB = PuddleOnset;
+		auto* Allowed = AddExpression<UMaterialExpressionSaturate>(Material);
+		Allowed->Input.Connect(0, Enough);
+		auto* Puddle = AddExpression<UMaterialExpressionMultiply>(Material);
+		Puddle->A.Connect(0, Pooled);
+		Puddle->B.Connect(0, Allowed);
 
 		auto* WetDark = AddExpression<UMaterialExpressionMultiply>(Material);
 		WetDark->A.Connect(0, Wetness);
