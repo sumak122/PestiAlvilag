@@ -100,7 +100,13 @@ AD_KINDS = 8
 
 # Kiosks: one by each of these tram stops, a few metres along the pavement.
 KIOSK_STOPS = ["József körút", "Rákóczi út", "Baross tér", "Teleki tér", "Népszínház utca",
-               "Keleti pályaudvar", "Erzsébet körút", "Fiumei út", "Kiss József utca"]
+               "Keleti pályaudvar", "Erzsébet körút", "Fiumei út"]
+# Kiosks out on a square, where people can walk round them: near this spot,
+# put after the clocks, with this much more room round them than a kerb one.
+# (The one by Kiss József utca stood on Rakoczi ut's narrow pavement.)
+KIOSK_SQUARES = [("Blaha Lujza tér", (-9200, 1800))]
+KIOSK_SQUARE_CLEAR = 250
+KIOSK_SQUARE_ROOM = 500  # from the clock, lamps and the like
 KIOSK_RADIUS = 140
 KIOSK_ROOM = 260        # from lamps, columns, benches, signs and the like
 KIOSK_SLIDE = [500, -500, 800, -800, 1100, -1100]
@@ -455,6 +461,31 @@ def place_kiosks(space, f, spots):
                 spots.append((kx, ky))
                 break
     return kiosks
+
+
+def place_square_kiosks(space, f, spots, kiosks):
+    walks = [LineString(ring_points(w)) for w in f["sidewalks"]]
+    for name, (cx, cy) in KIOSK_SQUARES:
+        best = None
+        for r in range(300, 4000, 100):
+            for k in range(16):
+                a = 2 * math.pi * k / 16
+                x, y = cx + r * math.cos(a), cy + r * math.sin(a)
+                if not space.free(x, y, KIOSK_RADIUS + KIOSK_SQUARE_CLEAR) or not room(spots, x, y, KIOSK_SQUARE_ROOM):
+                    continue
+                p = Point(x, y)
+                if any(w.distance(p) < KIOSK_RADIUS + KIOSK_SQUARE_CLEAR for w in walks if w.distance(p) < 2000):
+                    continue
+                best = (x, y)
+                break
+            if best:
+                break
+        if best:
+            # The counter faces the nearest road.
+            p = Point(*best)
+            q = space.road_shape.boundary.interpolate(space.road_shape.boundary.project(p))
+            kiosks.append([round(best[0]), round(best[1]), yaw_of(q.x - best[0], q.y - best[1]), len(kiosks) % KIOSK_VARIANTS])
+            spots.append(best)
 
 
 def place_clocks(space, spots):
@@ -835,6 +866,7 @@ def main():
     ads = place_wall_ads(data, space)
     kiosks = place_kiosks(space, f, spots)
     clocks = place_clocks(space, spots)
+    place_square_kiosks(space, f, spots, kiosks)
     fronts = facade_buildings(data, replaced)
     folk = place_window_folk(fronts)
     troughs = place_troughs(space, f, spots)
