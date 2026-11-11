@@ -552,6 +552,10 @@ void ATestGrounds::SpawnVehicles()
 			Look.Body = Spot.Body;
 			Look.Wheel = Spot.Wheel;
 			Look.PaintColor = Spot.Paint;
+			if (Spot.Body == CarModel::EBody::TownCar)
+			{
+				Look.AccentColor = CarModel::OldBrass();
+			}
 			if (Spot.Kind == EVehicle::Police)
 			{
 				// As the force's own: dark blue on steel discs, the blue lamp by the windscreen.
