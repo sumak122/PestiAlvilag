@@ -140,6 +140,14 @@ void APistaRuns::Tick(float DeltaSeconds)
 
 	// Talking to him, on foot: E for a run (or to hear it again).
 	AStoryPerson* Pista = AFleaMarket::FindKeeper(GetWorld(), PistaRun::PistaName);
+	// His stall on the maps, so the runs are not missed.
+	if (Pista)
+	{
+		if (APestiHUD* MapHud = APestiHUD::Get(this))
+		{
+			MapHud->MarkPlace(Pista->GetActorLocation(), TEXT("P"));
+		}
+	}
 	const APestiPerson* Person = Cast<APestiPerson>(Player);
 	const bool bByPista = Pista && Person && !Person->IsRiding() && !Person->IsCarrying()
 		&& FVector::Dist2D(Person->GetActorLocation(), Pista->GetActorLocation()) < PistaRun::TalkRange;

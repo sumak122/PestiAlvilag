@@ -133,6 +133,14 @@ void AVargaRuns::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	// His shop on the maps, so the rounds are not missed.
+	if (!ShopAt.IsZero())
+	{
+		if (APestiHUD* MapHud = APestiHUD::Get(this))
+		{
+			MapHud->MarkPlace(ShopAt, TEXT("V"));
+		}
+	}
 	const bool bMission = IsMissionUnderway();
 	if (bMission)
 	{
