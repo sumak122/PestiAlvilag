@@ -105,6 +105,9 @@ namespace CarModel
 		/** Where the driver and a back-seat passenger sit across the car (DriverY, PassengerY; nearer the middle in a narrow car). */
 		double DriverSide = -36.0;
 		double PassengerSide = 30.0;
+		/** The front doors' front and back edges (cm; the front edge is the windscreen's foot unless set). No door when they meet. */
+		double DoorFront = 1.0e9;
+		double DoorBack = -45.0;
 	};
 
 	/** The driver sits on the left (FLayout::DriverSide). How far the arms reach forward to the wheel, and the thighs tilt up (degrees). */
@@ -128,6 +131,7 @@ namespace CarModel
 			L.Tail = -186.0;
 			L.RoofTop = 78.0;
 			L.Exhaust = FVector(-200.0, 38.0, -62.0);
+			L.DoorBack = -70.0;
 			break;
 		case EBody::Limousine:
 			L.FrontAxle = 142.0;
@@ -139,15 +143,18 @@ namespace CarModel
 			L.SeatX = -30.0;
 			L.RearDoorX = -67.0;
 			L.Exhaust = FVector(-226.0, 40.0, -62.0);
+			L.DoorBack = -36.0;
 			break;
 		case EBody::Van:
 			L.Tail = -208.0;
 			L.RoofTop = 88.0;
 			L.Exhaust = FVector(-222.0, 44.0, -62.0);
 			L.SeatX = -36.0;
+			L.DoorBack = -56.0;
 			break;
 		case EBody::Tourer:
 			L.RoofTop = 52.0;
+			L.DoorBack = -48.0;
 			break;
 		case EBody::Balilla:
 			// 3.2 m long and 1.39 m wide on a 2.25 m wheelbase, 1.19 m track, 1.6 m tall.
@@ -168,6 +175,7 @@ namespace CarModel
 			L.SeatTop = Waist - 54.0;
 			L.DriverSide = -27.0;
 			L.PassengerSide = 25.0;
+			L.DoorBack = -72.0;
 			break;
 		case EBody::Opel:
 			// 3.35 m long and 1.42 m wide on a 2.29 m wheelbase, 1.6 m tall.
@@ -186,6 +194,7 @@ namespace CarModel
 			L.SeatTop = Waist - 50.0;
 			L.DriverSide = -28.0;
 			L.PassengerSide = 26.0;
+			L.DoorBack = -42.0;
 			break;
 		case EBody::Steyr:
 			// The Steyr XII / XXX saloon: a long bonnet, a tall four-door body
@@ -203,6 +212,7 @@ namespace CarModel
 			L.RearSeatX = -87.0;
 			L.RearDoorX = -43.0;
 			L.Exhaust = FVector(-213.0, 40.0, -62.0);
+			L.DoorBack = -6.0;
 			break;
 		case EBody::Ssk:
 			// The Mercedes-Benz SSK "Black Prince" roadster: the radiator just
@@ -224,6 +234,9 @@ namespace CarModel
 			L.DriverSide = -20.0;
 			L.PassengerSide = 20.0;
 			L.Exhaust = FVector(-44.0, 52.0, -70.0);
+			// A roadster without doors to speak of.
+			L.DoorFront = 0.0;
+			L.DoorBack = 0.0;
 			break;
 		case EBody::FordT:
 			// The Ford T saloon of the early twenties: 2.54 m wheelbase, tall
@@ -240,6 +253,7 @@ namespace CarModel
 			L.RearSeatX = -132.0;
 			L.RearDoorX = -20.0;
 			L.Exhaust = FVector(-185.0, 36.0, -62.0);
+			L.DoorBack = -38.0;
 			break;
 		case EBody::TownCar:
 			// A town car of about 1912: a long wheelbase, the chauffeur in the
@@ -256,9 +270,16 @@ namespace CarModel
 			L.RearSeatX = -165.0;
 			L.RearDoorX = -63.0;
 			L.Exhaust = FVector(-215.0, 40.0, -62.0);
+			// The passengers' doors; the chauffeur has none.
+			L.DoorFront = -40.0;
+			L.DoorBack = -86.0;
 			break;
 		default:
 			break;
+		}
+		if (L.DoorFront > 1.0e8)
+		{
+			L.DoorFront = L.Cowl - 2.0;
 		}
 		return L;
 	}

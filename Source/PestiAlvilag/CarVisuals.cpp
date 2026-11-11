@@ -92,6 +92,17 @@ namespace CarVisuals
 	// come to rest for good after this long (s).
 	constexpr float LampKg = 4.f;
 	constexpr float BumperKg = 14.f;
+	constexpr float DoorKg = 25.f;
+	constexpr float BonnetKg = 15.f;
+	constexpr float WheelKg = 20.f;
+	// A car missing a wheel hangs down at that corner this much (degrees).
+	constexpr float SagPitchPerWheel = 4.f;
+	constexpr float SagRollPerWheel = 5.f;
+	// A fallen-off wheel rolls on away at this share of the car's speed, out from it this fast (cm/s).
+	constexpr float WheelCarry = 0.8f;
+	constexpr float WheelOut = 250.f;
+	// A bonnet torn off lets out this many puffs of steam at once.
+	constexpr int32 BonnetSteamPuffs = 6;
 	constexpr float LooseCarry = 0.6f;
 	constexpr float LooseUp = 250.f;
 	constexpr float LooseOut = 150.f;
@@ -229,6 +240,7 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 	Damage = CarDamage::FState();
 	bLampOut[0] = bLampOut[1] = false;
 	SwayRoll = SwayRollRate = SwayPitch = SwayPitchRate = 0.f;
+	SagPitch = SagRoll = 0.f;
 	PushSide = PushAhead = 0.f;
 	bVelocityKnown = false;
 
@@ -278,6 +290,7 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 	{
 		Wheels[i]->SetRelativeLocationAndRotation(CarModel::WheelHub(Style.Body, i), FRotator::ZeroRotator);
 		Fill(Wheels[i], CarVisuals::WheelShape(Style.Wheel));
+		Wheels[i]->SetVisibility(true);
 	}
 	bShown = true;
 	bMoved = false;
@@ -542,7 +555,7 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 	}
 
 	// Tip the body about the axles' height, so its bottom stays down by the wheels.
-	const FQuat Lean = FRotator(SwayPitch + Nod, 0.f, SwayRoll + Rock).Quaternion();
+	const FQuat Lean = FRotator(SwayPitch + Nod + SagPitch, 0.f, SwayRoll + Rock + SagRoll).Quaternion();
 	const FVector Pivot(0.0, 0.0, CarModel::HubZ);
 	Body->SetRelativeLocationAndRotation(Pivot - Lean.RotateVector(Pivot) + FVector(0.0, 0.0, Bob), Lean);
 
@@ -811,7 +824,14 @@ int32 UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, fl
 	int32 Happened = CarVisuals::KnockDented;
 
 	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
-	const int32 Fresh = CarDamage::KnockOff(Clean, Layout, Damage);
+	int32 Fresh = CarDamage::KnockOff(Clean, Layout, Damage);
+	// A hard crash right by a wheel tears it off.
+	const int32 GoneWheel = CarDamage::WheelOff(Layout, Damage, At, Speed);
+	if (GoneWheel != INDEX_NONE)
+	{
+		Damage.Fallen |= 1 << GoneWheel;
+		Fresh |= 1 << GoneWheel;
+	}
 	CarModel::FBuilder Dented;
 	bool LampBroken[2] = { false, false };
 	bool TailBroken[2] = { false, false };
@@ -836,7 +856,23 @@ int32 UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, fl
 	{
 		if ((Fresh & (1 << Which)) != 0)
 		{
-			DropPart(Which);
+			if (Which >= CarDamage::WheelFrontLeft && Which <= CarDamage::WheelRearRight)
+			{
+				DropWheel(Which - CarDamage::WheelFrontLeft);
+			}
+			else
+			{
+				DropPart(Which);
+			}
+			if (Which == CarDamage::Bonnet)
+			{
+				// The engine laid bare: a burst of steam.
+				for (int32 Puff = 0; Puff < CarVisuals::BonnetSteamPuffs; ++Puff)
+				{
+					PuffFrom(CarDamage::RadiatorCap(Layout) + FVector(FMath::FRandRange(-40.0, 0.0), FMath::FRandRange(-15.0, 15.0), 0.0),
+						FVector(0.0, 0.0, CarVisuals::SteamRise * 1.5f), FMath::FRandRange(9.f, 14.f), false);
+				}
+			}
 			Happened |= CarVisuals::KnockPart;
 		}
 	}
@@ -929,7 +965,20 @@ void UCarVisuals::DropPart(int32 Which)
 	Piece->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 	Piece->RegisterComponent();
 	Piece->SetSimulatePhysics(true);
-	Piece->SetMassOverrideInKg(NAME_None, Which == CarDamage::LampLeft || Which == CarDamage::LampRight ? CarVisuals::LampKg : CarVisuals::BumperKg, true);
+	float Kg = CarVisuals::BumperKg;
+	if (Which == CarDamage::LampLeft || Which == CarDamage::LampRight)
+	{
+		Kg = CarVisuals::LampKg;
+	}
+	else if (Which == CarDamage::DoorLeft || Which == CarDamage::DoorRight)
+	{
+		Kg = CarVisuals::DoorKg;
+	}
+	else if (Which == CarDamage::Bonnet)
+	{
+		Kg = CarVisuals::BonnetKg;
+	}
+	Piece->SetMassOverrideInKg(NAME_None, Kg, true);
 	Piece->SetLinearDamping(0.2f);
 	Piece->SetAngularDamping(0.5f);
 
@@ -942,6 +991,62 @@ void UCarVisuals::DropPart(int32 Which)
 	Piece->SetPhysicsAngularVelocityInDegrees(FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * 500.f);
 	LooseParts.Add(Piece);
 	LooseSince.Add(GetWorld()->GetTimeSeconds());
+}
+
+void UCarVisuals::DropWheel(int32 Index)
+{
+	AActor* Owner = GetOwner();
+	USceneComponent* Frame = Body ? Body->GetAttachParent() : nullptr;
+	if (!Owner || !Frame || !Wheels.IsValidIndex(Index))
+	{
+		return;
+	}
+	UProceduralMeshComponent* OnCar = Wheels[Index];
+	OnCar->SetVisibility(false);
+
+	// The same wheel, free, where the one on the car was: built about its hub already.
+	const CarModel::FBuilder& Shape = CarVisuals::WheelShape(Style.Wheel);
+	TArray<FVector> Hull;
+	for (const CarModel::FPart& Part : Shape.Parts)
+	{
+		Hull.Append(Part.Vertices);
+	}
+	if (Hull.Num() < 4)
+	{
+		return;
+	}
+	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Owner, NAME_None, RF_Transient);
+	Piece->SetWorldTransform(FTransform(OnCar->GetComponentQuat(), OnCar->GetComponentLocation()));
+	Piece->SetCanEverAffectNavigation(false);
+	Piece->bUseComplexAsSimpleCollision = false;
+	Fill(Piece, Shape);
+	Piece->AddCollisionConvexMesh(Hull);
+	Piece->SetCollisionObjectType(ECC_PhysicsBody);
+	Piece->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Piece->SetCollisionResponseToAllChannels(ECR_Block);
+	Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	Piece->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	Piece->RegisterComponent();
+	Piece->SetSimulatePhysics(true);
+	Piece->SetMassOverrideInKg(NAME_None, CarVisuals::WheelKg, true);
+	Piece->SetLinearDamping(0.1f);
+	Piece->SetAngularDamping(0.2f);
+
+	// It rolls on with the car's speed and out to its own side, spinning on its axle.
+	const FVector SideOut = Frame->GetComponentQuat().GetRightVector() * (Index % 2 == 0 ? -1.0 : 1.0);
+	Piece->SetPhysicsLinearVelocity(LastVelocity * CarVisuals::WheelCarry + SideOut * CarVisuals::WheelOut
+		+ FVector(0.0, 0.0, CarVisuals::LooseUp * FMath::FRandRange(0.3f, 0.8f)));
+	const float Rolling = static_cast<float>(LastVelocity.Size() / CarModel::WheelRadius) * 57.3f;
+	Piece->SetPhysicsAngularVelocityInDegrees(Frame->GetComponentQuat().GetRightVector() * Rolling
+		+ FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f)) * 150.f);
+	LooseParts.Add(Piece);
+	LooseSince.Add(GetWorld()->GetTimeSeconds());
+
+	// That corner of the car drops (pitch + is nose up, roll + is right side down).
+	SagPitch += Index < 2 ? -CarVisuals::SagPitchPerWheel : CarVisuals::SagPitchPerWheel;
+	SagRoll += Index % 2 == 0 ? -CarVisuals::SagRollPerWheel : CarVisuals::SagRollPerWheel;
 }
 
 void UCarVisuals::UpdateWear(float DeltaTime, double Distance)

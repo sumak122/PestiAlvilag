@@ -144,6 +144,8 @@ private:
 	void Refill(UProceduralMeshComponent* Mesh, const CarModel::FBuilder& Shape);
 	/** One knocked-off part (CarDamage::ELoose) falls off and tumbles away. */
 	void DropPart(int32 Which);
+	/** Wheel Index (0 front left, 1 front right, 2 rear left, 3 rear right) comes off and rolls away; the car sags on that corner. */
+	void DropWheel(int32 Index);
 	/** Steam, then smoke, from the radiator of a worn-out car; fallen parts come to rest. */
 	void UpdateWear(float DeltaTime, double Distance);
 	/** A puff of smoke from this point of the car (car frame), drifting at Drift (world). */
@@ -212,6 +214,9 @@ private:
 	float SwayRollRate = 0.f;
 	float SwayPitch = 0.f;
 	float SwayPitchRate = 0.f;
+	/** How far the body hangs down where a wheel has come off (degrees, as the sway). */
+	float SagPitch = 0.f;
+	float SagRoll = 0.f;
 	/** The car's push sideways and ahead, smoothed (cm/s each second). */
 	float PushSide = 0.f;
 	float PushAhead = 0.f;

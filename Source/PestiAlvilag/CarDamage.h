@@ -47,6 +47,17 @@ namespace CarDamage
 	constexpr double BumperOffDepth = 13.0;
 	// The headlamp (drum, lens and stalk) is everything this close to the drum's middle (cm).
 	constexpr double LampReach = 16.0;
+	// A door comes off when the dents push its middle in this far (cm), the
+	// bonnet when they push its front or back corner in this far.
+	constexpr double DoorOffDepth = 15.0;
+	constexpr double BonnetOffDepth = 14.0;
+	// A doorway shorter than this (cm) is no door.
+	constexpr double MinDoor = 20.0;
+	// A wheel comes off in a crash this fast (cm/s, straight into it) within this reach of its hub (cm, flat).
+	constexpr double WheelOffSpeed = 1300.0;
+	constexpr double WheelReach = 90.0;
+	// ...and only this far in from the wheel's own side (cm).
+	constexpr double WheelSideIn = 30.0;
 	// How worn out the car gets for each cm/s of a knock over MinSpeed (1 is done for).
 	constexpr double WearPerSpeed = 1.0 / 7000.0;
 
@@ -77,6 +88,14 @@ namespace CarDamage
 		LampRight,
 		FrontBumper,
 		RearBumper,
+		DoorLeft,
+		DoorRight,
+		Bonnet,
+		// The wheels, in CarModel::WheelHub's order: front left, front right, rear left, rear right.
+		WheelFrontLeft,
+		WheelFrontRight,
+		WheelRearLeft,
+		WheelRearRight,
 		LooseCount
 	};
 
@@ -208,8 +227,15 @@ namespace CarDamage
 	}
 
 	/** Which loose part (ELoose) this piece of the body, of this part, with its middle here, belongs to, or INDEX_NONE. */
-	inline int32 LooseOf(int32 Part, const FVector& Middle, const CarModel::FLayout& L, const FVector Drums[2])
+	inline int32 LooseOf(int32 Part, const FVector& Middle, const FVector& Facing, const CarModel::FLayout& L, const FVector Drums[2])
 	{
+		// The bonnet's top: the painted panels facing up between the windscreen and
+		// the radiator, and the chrome strip along it.
+		if (Middle.X > L.Cowl + 2.0 && Middle.X < L.Nose - 6.0 && FMath::Abs(Middle.Y) < 42.0
+			&& ((Part == CarModel::Paint && Facing.Z > 0.5 && Middle.Z > -5.0) || (Part == CarModel::Chrome && Middle.Z > CarModel::Waist - 6.0)))
+		{
+			return Bonnet;
+		}
 		if (Part == CarModel::Chrome || Part == CarModel::Lamp)
 		{
 			for (int32 Side = 0; Side < 2; ++Side)
@@ -232,6 +258,70 @@ namespace CarDamage
 			}
 		}
 		return INDEX_NONE;
+	}
+
+	/** Which way a triangle of a part faces (its corners' normals together). */
+	inline FVector FacingOf(const CarModel::FPart& Part, int32 T)
+	{
+		return (Part.Normals[Part.Triangles[T]] + Part.Normals[Part.Triangles[T + 1]] + Part.Normals[Part.Triangles[T + 2]]).GetSafeNormal();
+	}
+
+	/** Whether this car has front doors, and where the middle of one (side 0 left, 1 right) is. */
+	inline bool HasDoors(const CarModel::FLayout& L)
+	{
+		return L.DoorFront - L.DoorBack >= MinDoor;
+	}
+	inline FVector DoorMiddle(const CarModel::FLayout& L, int32 Side)
+	{
+		return FVector((L.DoorFront + L.DoorBack) * 0.5, (Side == 0 ? -1.0 : 1.0) * L.HalfWidth, -12.0);
+	}
+
+	/** The box round the bonnet's top (its loose pieces), or an empty box. */
+	inline FBox BonnetBox(const CarModel::FBuilder& Clean, const CarModel::FLayout& L, const FVector Drums[2])
+	{
+		FBox Box(ForceInit);
+		for (int32 p = 0; p < CarModel::PartCount; ++p)
+		{
+			const CarModel::FPart& From = Clean.Parts[p];
+			for (int32 t = 0; t + 2 < From.Triangles.Num(); t += 3)
+			{
+				const FVector Middle = (From.Vertices[From.Triangles[t]] + From.Vertices[From.Triangles[t + 1]] + From.Vertices[From.Triangles[t + 2]]) / 3.0;
+				if (LooseOf(p, Middle, FacingOf(From, t), L, Drums) == Bonnet)
+				{
+					for (int32 k = 0; k < 3; ++k)
+					{
+						Box += From.Vertices[From.Triangles[t + k]];
+					}
+				}
+			}
+		}
+		return Box;
+	}
+
+	/**
+	 * Which wheel (ELoose) a crash at At (car frame), this fast (cm/s), knocks
+	 * off, or INDEX_NONE: only a hard one, near the wheel's hub, one still on.
+	 */
+	inline int32 WheelOff(const CarModel::FLayout& L, const FState& State, const FVector& At, double Speed)
+	{
+		// Only a crash into the car's side or corner, out where the wheels are.
+		if (Speed < WheelOffSpeed || FMath::Abs(At.Y) < L.TrackY - WheelSideIn)
+		{
+			return INDEX_NONE;
+		}
+		int32 Best = INDEX_NONE;
+		double BestDistance = WheelReach;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			const FVector2D Hub(i < 2 ? L.FrontAxle : L.RearAxle, (i % 2 == 0 ? -1.0 : 1.0) * L.TrackY);
+			const double Distance = (FVector2D(At.X, At.Y) - Hub).Size();
+			if (Distance < BestDistance && (State.Fallen & (1 << (WheelFrontLeft + i))) == 0)
+			{
+				Best = WheelFrontLeft + i;
+				BestDistance = Distance;
+			}
+		}
+		return Best;
 	}
 
 	/**
@@ -261,6 +351,30 @@ namespace CarDamage
 				}
 			}
 		}
+		if (HasDoors(L))
+		{
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				if (Offset(State, DoorMiddle(L, Side), false).Size() > DoorOffDepth)
+				{
+					Off |= 1 << (DoorLeft + Side);
+				}
+			}
+		}
+		const FBox Lid = BonnetBox(Clean, L, Drums);
+		if (Lid.IsValid)
+		{
+			for (const double X : { Lid.Min.X + 8.0, Lid.Max.X - 8.0 })
+			{
+				for (const double Y : { Lid.Min.Y + 4.0, Lid.Max.Y - 4.0 })
+				{
+					if (Offset(State, FVector(X, Y, Lid.Max.Z), false).Size() > BonnetOffDepth)
+					{
+						Off |= 1 << Bonnet;
+					}
+				}
+			}
+		}
 		const int32 Fresh = Off & ~State.Fallen;
 		State.Fallen |= Off;
 		return Fresh;
@@ -269,6 +383,16 @@ namespace CarDamage
 	/** The shape of one loose part (ELoose), as it was on the car (car frame), and its middle. */
 	inline void BuildLoose(const CarModel::FBuilder& Clean, const CarModel::FLayout& L, int32 Which, CarModel::FBuilder& Out, FVector& OutMiddle)
 	{
+		if (Which == DoorLeft || Which == DoorRight)
+		{
+			// A door is no piece of the body's shape: a painted panel the door's size, with its handle.
+			const double S = Which == DoorLeft ? -1.0 : 1.0;
+			const double W = L.HalfWidth;
+			Out.Box(CarModel::Paint, FVector(L.DoorBack + 1.0, FMath::Min(S * (W - 2.0), S * W), -38.0), FVector(L.DoorFront - 1.0, FMath::Max(S * (W - 2.0), S * W), CarModel::Waist - 1.0));
+			Out.Box(CarModel::Chrome, FVector(L.DoorBack + 3.0, FMath::Min(S * W, S * (W + 1.4)), CarModel::Waist - 9.0), FVector(L.DoorBack + 10.0, FMath::Max(S * W, S * (W + 1.4)), CarModel::Waist - 7.0));
+			OutMiddle = FVector((L.DoorFront + L.DoorBack) * 0.5, S * (W - 1.0), (CarModel::Waist - 39.0) * 0.5);
+			return;
+		}
 		FVector Drums[2];
 		LampDrums(Clean, Drums);
 		FVector Sum = FVector::ZeroVector;
@@ -280,7 +404,7 @@ namespace CarDamage
 			for (int32 t = 0; t + 2 < From.Triangles.Num(); t += 3)
 			{
 				const FVector Middle = (From.Vertices[From.Triangles[t]] + From.Vertices[From.Triangles[t + 1]] + From.Vertices[From.Triangles[t + 2]]) / 3.0;
-				if (LooseOf(p, Middle, L, Drums) != Which)
+				if (LooseOf(p, Middle, FacingOf(From, t), L, Drums) != Which)
 				{
 					continue;
 				}
@@ -322,6 +446,38 @@ namespace CarDamage
 		{
 			Out.Parts[p] = CarModel::FPart();
 		}
+		// Where a door has come off, a dark doorway.
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			if ((State.Fallen & (1 << (DoorLeft + Side))) != 0 && HasDoors(L))
+			{
+				const double S = Side == 0 ? -1.0 : 1.0;
+				const double Y0 = S * (L.HalfWidth + 0.1), Y1 = S * (L.HalfWidth + 0.4);
+				Out.Box(CarModel::Rubber, FVector(L.DoorBack + 0.5, FMath::Min(Y0, Y1), -38.0), FVector(L.DoorFront - 0.5, FMath::Max(Y0, Y1), CarModel::Waist - 2.0));
+			}
+		}
+		// Where the bonnet has come off, the engine under it, in a dark bay.
+		if ((State.Fallen & (1 << Bonnet)) != 0)
+		{
+			const FBox Lid = BonnetBox(Clean, L, Drums);
+			if (Lid.IsValid)
+			{
+				const double Top = Lid.Min.Z;
+				const double HalfY = FMath::Max(FMath::Abs(Lid.Min.Y), FMath::Abs(Lid.Max.Y)) - 1.0;
+				const double X0 = Lid.Min.X + 0.5, X1 = Lid.Max.X - 0.5, Z0 = Top - 34.0;
+				Out.Pane(CarModel::Guards, FVector(X0, -HalfY, Z0), FVector(X1, -HalfY, Z0), FVector(X1, -HalfY, Top), FVector(X0, -HalfY, Top));
+				Out.Pane(CarModel::Guards, FVector(X0, HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, Top), FVector(X0, HalfY, Top));
+				Out.Pane(CarModel::Guards, FVector(X0, -HalfY, Z0), FVector(X0, HalfY, Z0), FVector(X0, HalfY, Top), FVector(X0, -HalfY, Top));
+				Out.Pane(CarModel::Guards, FVector(X1, -HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, Top), FVector(X1, -HalfY, Top));
+				Out.Box(CarModel::Rubber, FVector(X0 + 6.0, -HalfY * 0.55, Z0), FVector(X1 - 8.0, HalfY * 0.55, Top - 10.0));
+				Out.Box(CarModel::Chrome, FVector(X0 + 10.0, -HalfY * 0.3, Top - 10.0), FVector(X1 - 14.0, HalfY * 0.3, Top - 6.0));
+				for (int32 k = 0; k < 4; ++k)
+				{
+					const double X = X0 + 14.0 + (X1 - X0 - 30.0) * k / 3.0;
+					Out.Bar(CarModel::Guards, FVector(X, -HalfY * 0.3, Top - 8.0), FVector(X, -HalfY + 1.0, Top - 14.0), 1.6);
+				}
+			}
+		}
 		for (int32 p = 0; p < CarModel::PartCount; ++p)
 		{
 			const CarModel::FPart& From = Clean.Parts[p];
@@ -340,7 +496,7 @@ namespace CarDamage
 				// Knocked off: gone from the car.
 				if (State.Fallen != 0)
 				{
-					const int32 Loose = LooseOf(p, (A + B + C) / 3.0, L, Drums);
+					const int32 Loose = LooseOf(p, (A + B + C) / 3.0, FacingOf(From, t), L, Drums);
 					if (Loose != INDEX_NONE && (State.Fallen & (1 << Loose)) != 0)
 					{
 						continue;
