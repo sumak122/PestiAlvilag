@@ -99,8 +99,12 @@ namespace CrashSynth
 			Sounds[Slot] = Fresh;
 		}
 
-		/** Scrape 0..1: a wing grinding along a wall, louder and brighter the faster it goes. */
-		void Generate(float* Out, int32 NumSamples, float Scrape, float SampleRate)
+		/**
+		 * Scrape 0..1: a wing grinding along a wall, louder and brighter the faster it goes.
+		 * Skid 0..1: the tyres sliding; on dry setts a squeal that chatters over the
+		 * stones, on wet ones (Wet 0..1) more of a hiss.
+		 */
+		void Generate(float* Out, int32 NumSamples, float Scrape, float SampleRate, float Skid = 0.f, float Wet = 0.f)
 		{
 			const float Dt = 1.f / SampleRate;
 			const float Follow = 1.f - FMath::Exp(-Dt / 0.05f);
@@ -137,6 +141,24 @@ namespace CrashSynth
 					const float Rasp = ScrapeBand.Run(NextNoise(), Hz, 900.f, SampleRate) * 3.f * Grit;
 					const float Squeal = ScrapeRing.Run(NextNoise() * Grit, 1850.f + 300.f * Grind, 25.f, SampleRate) * 6.f;
 					Sample += 0.7f * Grind * (Rasp + 0.35f * Grind * Squeal);
+				}
+
+				// The skid: a rubber squeal wavering in pitch, chattering as the
+				// tyres hop from sett to sett, with a hiss under it that takes over when wet.
+				Slide += (Skid - Slide) * Follow;
+				if (Slide > 0.01f)
+				{
+					SkidWobble = Wrap(SkidWobble + Dt * (5.5f + 3.f * Slide));
+					ChatterTimer -= Dt;
+					if (ChatterTimer <= 0.f)
+					{
+						Chatter = 0.55f + 0.45f * FMath::Abs(NextNoise());
+						ChatterTimer = 0.018f + 0.02f * FMath::Abs(NextNoise());
+					}
+					const float Hz = 950.f + 250.f * Slide + 60.f * Sine(SkidWobble);
+					const float Squeal = SkidRing.Run(NextNoise(), Hz, 18.f, SampleRate) * 9.f * Chatter;
+					const float Hiss = SkidHiss.Run(NextNoise(), 3200.f, 2500.f, SampleRate) * 1.6f;
+					Sample += 0.45f * Slide * ((1.f - 0.85f * Wet) * Squeal + (0.25f + 0.75f * Wet) * Hiss);
 				}
 
 				Sample *= Volume;
@@ -246,6 +268,12 @@ namespace CrashSynth
 		float GritTimer = 0.f;
 		FResonator ScrapeBand;
 		FResonator ScrapeRing;
+		float Slide = 0.f;
+		float SkidWobble = 0.f;
+		float Chatter = 0.f;
+		float ChatterTimer = 0.f;
+		FResonator SkidRing;
+		FResonator SkidHiss;
 		uint32 Seed = 1932u;
 	};
 }

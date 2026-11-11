@@ -25,6 +25,7 @@ int32 UCrashSound::OnGenerateAudio(float* OutAudio, int32 NumSamples)
 			Voice.Play(static_cast<CrashSynth::EKind>(k), FMath::Clamp(Ask.Strength.load(), 0.f, 1.5f), FMath::Max(0.f, Ask.Delay.load()));
 		}
 	}
-	Voice.Generate(OutAudio, NumSamples, FMath::Clamp(Scrape.load(), 0.f, 1.f), SampleRateHz);
+	Voice.Generate(OutAudio, NumSamples, FMath::Clamp(Scrape.load(), 0.f, 1.f), SampleRateHz,
+		FMath::Clamp(Skid.load(), 0.f, 1.f), FMath::Clamp(Wet.load(), 0.f, 1.f));
 	return NumSamples;
 }

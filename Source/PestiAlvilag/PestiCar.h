@@ -13,6 +13,7 @@ class UCarVisuals;
 class UCrashSound;
 class UEngineSound;
 class USpringArmComponent;
+class AWeather;
 
 /**
  * A simple arcade car for the feasibility prototype, built from engine shapes
@@ -24,6 +25,12 @@ class USpringArmComponent;
  * mouse or right stick to look around, F or gamepad B to get out.
  *
  * Ramming traffic makes the police come after you (see the game mode).
+ *
+ * Each kind of car drives differently (CarHandling: weight, power, top speed,
+ * steering, grip). The car's weight shifts: braking into a bend tucks the
+ * nose in and lets the back step out, pulling hard makes it run wide. Wet
+ * streets grip and brake less. Crashes trade speed between the cars by their
+ * weight, and a hit off the middle spins them (CarHandling::Collide).
  */
 UCLASS()
 class PESTIALVILAG_API APestiCar : public APawn
@@ -122,6 +129,17 @@ public:
 	 */
 	void TakeKnock(const FVector& At, const FVector& Push);
 
+	/**
+	 * Shoved by another car sliding into it: its speed changes by Push (cm/s),
+	 * its spin by Spin (degrees a second, + turns right). DentSpeed above 0
+	 * dents it at At and plays the crash, as hard as they met (cm/s).
+	 * Works on a parked car too: it slides on its locked wheels to a stop.
+	 */
+	void Shove(const FVector& Push, float Spin, const FVector& At, float DentSpeed);
+
+	/** How heavy it is (kg), by its kind of car. */
+	float GetMass() const { return Mass; }
+
 	/** Stops the car and puts the player who drives it out on foot, whatever its speed (missions that fail). False when he could not get out. */
 	bool ForceDriverOut();
 
@@ -156,6 +174,12 @@ protected:
 
 private:
 	void UpdateSpeed(float Throttle, bool bHandbrake, float DeltaSeconds);
+	/** Sets the top speed, pull, brakes, steering, grip and weight for its kind of car (CarHandling). */
+	void ApplyHandling();
+	/** Nobody driving: still slides on after a shove, on locked wheels, and spins to a stop. */
+	void RollDriverless(float DeltaSeconds);
+	/** The tyres squeal (or hiss on wet setts) while sliding, and the camera widens with speed. */
+	void UpdateSkidAndView(bool bHandbrake, float DeltaSeconds);
 	void MoveWithSlide(const FVector& Delta);
 	void SnapToGround();
 	void ToggleCamera();
@@ -193,4 +217,24 @@ private:
 	float ScrapeAmount = 0.f;
 	/** How fast the car is turning now (degrees a second): follows the wheel with a little lag. */
 	float TurnRate = 0.f;
+	/** Spin from a crash (degrees a second, + to the right): the tyres slowly stop it. */
+	float SpinRate = 0.f;
+
+	/** Its kind of car's handling (see ApplyHandling). */
+	float Mass = 1100.f;
+	float GripShare = 1.f;
+	float HandbrakeGripShare = 1.f;
+	float TurnWeight = 7.f;
+	float ShiftTime = 0.25f;
+	bool bHandlingSet = false;
+	/** The pull dips for this long still (s) while the gear changes up. */
+	float ShiftPause = 0.f;
+	/** Weight on the front wheels (+, braking) or the back ones (-, pulling), -1..1. */
+	float WeightShift = 0.f;
+	/** How wet the street is, 0..1 (AWeather). */
+	float RoadWet = 0.f;
+	TWeakObjectPtr<AWeather> WeatherFound;
+	/** The tyre squeal now, 0..1, and the chase camera's view angle. */
+	float SkidAmount = 0.f;
+	float ChaseView = 90.f;
 };

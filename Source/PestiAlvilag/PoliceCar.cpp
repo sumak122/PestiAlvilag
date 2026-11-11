@@ -154,6 +154,11 @@ void APoliceCar::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Knocked by a crash while parked: the constables still know where it is.
+	if (bOfficersOut && IsKnocked())
+	{
+		ParkedAt = GetActorLocation();
+	}
 	// The car was taken away (moved on by the traffic): its constables with it.
 	if (bOfficersOut && FVector::Dist2D(GetActorLocation(), ParkedAt) > 500.0)
 	{
@@ -175,6 +180,7 @@ void APoliceCar::Tick(float DeltaSeconds)
 		if (bOfficersOut)
 		{
 			AActor::Tick(DeltaSeconds);
+			TickKnocked(DeltaSeconds);
 			if (SignPaint)
 			{
 				SignPaint->SetVectorParameterValue(TEXT("Color"), PoliceCar::SignWhite);
@@ -195,6 +201,13 @@ void APoliceCar::Tick(float DeltaSeconds)
 	}
 	// Skip the lane driving in ATrafficCar::Tick while chasing.
 	AActor::Tick(DeltaSeconds);
+	// Spun off by a crash: it slides to a stop, then gives chase again.
+	// (With the constables out on foot, they carry on while it slides.)
+	if (TickKnocked(DeltaSeconds) && !bOfficersOut)
+	{
+		CurrentSpeed = 0.f;
+		return;
+	}
 	ChaseTick(Player, Game, DeltaSeconds);
 }
 
