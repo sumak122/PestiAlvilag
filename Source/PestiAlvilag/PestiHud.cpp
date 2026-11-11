@@ -2306,6 +2306,8 @@ private:
 		Row(TEXT("Laci gar\u00e1zsa"), TEXT("Laci's garage"));
 		PaintPlaceBlip(Over, Above, FVector2f(IconX, RowY - 8.f), TEXT("\u00d6"), 1);
 		Row(TEXT("Bandi \u00f6k\u00f6lv\u00edv\u00f3 grundja"), TEXT("Bandi's boxing yard"));
+		PaintPlaceBlip(Over, Above, FVector2f(IconX, RowY - 8.f), TEXT("V"), 1);
+		Row(TEXT("Varga f\u0171szeres\u00fczlete"), TEXT("Varga's grocery"));
 		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::Gold, 5.f, 1);
 		Row(TEXT("Az \u00fat a c\u00e9lhoz"), TEXT("The way to the goal"));
 		Over.Line(IconX - 18.f, RowY - 8.f, IconX + 18.f, RowY - 8.f, PestiHud::TramInk, 2.f, 1);
