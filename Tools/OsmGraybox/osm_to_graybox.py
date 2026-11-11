@@ -910,7 +910,7 @@ def convert(osm_path, origin):
     walls = unary_union([p for p, tags in buildings if building_base_m(tags) < DRIVE_UNDER_HEIGHT]) if buildings else None
 
     # Today's tram tracks are left out: the 1932 network was different.
-    tram_routes, tram_tracks = build_1932_tram_routes(ways, nodes, proj, clip, to_ue, baross["tram_spread"])
+    tram_routes, tram_tracks = build_1932_tram_routes(ways, nodes, proj, clip, to_ue, baross["tram_spread"], walls)
     siding = [side_track(tram_tracks)]
     for track in tram_tracks + siding:
         add_area(trams, track.buffer(TRACK_WIDTH["tram"] / 2.0, cap_style="flat"), {})
