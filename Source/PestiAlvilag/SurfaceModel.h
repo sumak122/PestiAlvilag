@@ -412,11 +412,11 @@ namespace SurfaceModel
 					const double Sn = FMath::Sin(S.Angle);
 					const double LX = FMath::Abs(DX * C + DY * Sn) - (S.HalfLength - S.Corner);
 					const double LY = FMath::Abs(-DX * Sn + DY * C) - (S.HalfWidth - S.Corner);
-					const double Out = FMath::Sqrt(FMath::Square(FMath::Max(LX, 0.0)) + FMath::Square(FMath::Max(LY, 0.0)))
+					const double Gap = FMath::Sqrt(FMath::Square(FMath::Max(LX, 0.0)) + FMath::Square(FMath::Max(LY, 0.0)))
 						+ FMath::Min(FMath::Max(LX, LY), 0.0) - S.Corner;
-					if (-Out > BestInside)
+					if (-Gap > BestInside)
 					{
-						BestInside = -Out;
+						BestInside = -Gap;
 						Best = s;
 					}
 				}
