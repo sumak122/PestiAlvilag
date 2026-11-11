@@ -295,7 +295,7 @@ namespace LighterModel
 			{ -29979.0, 5190.0, 0.0, 66.1, EWhere::Column, TEXT("Klauz\u00e1l utca") },
 			{ -24635.0, -61366.0, 0.0, 144.0, EWhere::TramStop, TEXT("Dob utca") },
 			{ 3667.0, 64455.0, 0.0, -174.9, EWhere::TramStop, TEXT("J\u00f3zsef utca") },
-			{ 57540.0, 21353.0, 0.0, 20.0, EWhere::Cafe, nullptr },
+			{ 62794.0, 14355.0, 0.0, 161.1, EWhere::Cafe, nullptr },
 			{ 8620.0, 4836.0, 0.0, 108.2, EWhere::Gateway, TEXT("J\u00f3zsef k\u00f6r\u00fat") },
 			{ 76688.0, 29734.0, 0.0, -73.2, EWhere::Gateway, TEXT("Nagy Fuvaros utca") },
 			{ -5850.0, 37225.0, 47.5, 133.0, EWhere::Bench, TEXT("B\u00e9rkocsis utca") },
