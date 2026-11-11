@@ -71,6 +71,15 @@ LAMP_SPACING = 3000
 # Keep lamps this far from street ends, where other streets cross (cm).
 LAMP_END_CLEARANCE = 1200
 LAMP_MIN_GAP = 1500
+# Gateways carts drive in and out of: (middle of the gate on the pavement, how
+# far round it stays clear of lamps and street troughs (cm)).
+CART_GATES = [
+    ((46551, 33385), 500),     # the stable yard's gate (StableYardModel CityAt + Gate spot)
+]
+
+
+def in_cart_gate(x, y, extra=0):
+    return any(math.hypot(x - gx, y - gy) < r + extra for (gx, gy), r in CART_GATES)
 
 # How far from things the furniture must stand (cm).
 CLEAR_OF_BUILDINGS = 70
@@ -382,6 +391,8 @@ def place_lamps(data, space, tisza):
                     lx = x + nx * (width / 2 + out)
                     ly = y + ny * (width / 2 + out)
                     if tisza.contains(Point(lx, ly)):
+                        break
+                    if in_cart_gate(lx, ly):
                         break
                     if space.free(lx, ly, 20) and spread.ok(lx, ly):
                         # The crook reaches out over the road.

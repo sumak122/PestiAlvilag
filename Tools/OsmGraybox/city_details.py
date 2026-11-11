@@ -54,7 +54,7 @@ import numpy as np
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import polylabel, unary_union
 
-from street_furniture import Space, Spread, chance, ring_points, unit, yaw_of
+from street_furniture import Space, Spread, chance, in_cart_gate, ring_points, unit, yaw_of
 
 # The gates that stand open (their house numbers and where they are, as in
 # street_furniture.json's "gates"): Népszínház utca 9, 19, 39, 2 and 20,
@@ -800,6 +800,9 @@ def place_troughs(space, f, spots):
                     continue
                 x, y, yaw = spot
                 if not room(spots, x, y, TROUGH_ROOM) or not clear_of(space, x, y, 200, 150):
+                    continue
+                # A trough runs about 2.4 m along the kerb: keep all of it out of a cart gateway.
+                if in_cart_gate(x, y, 150):
                     continue
                 d = math.hypot(x - ax_, y - ay_)
                 if best is None or d < best[0]:
