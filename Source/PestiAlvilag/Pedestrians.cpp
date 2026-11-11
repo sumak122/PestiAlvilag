@@ -26,11 +26,14 @@
 #include "PestiHud.h"
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
+#include "ProceduralMeshComponent.h"
 #include "StreetFights.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UmbrellaModel.h"
+#include "Weather.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPedestrians, Log, All);
 
@@ -68,6 +71,26 @@ namespace Pedestrians
 	constexpr float StrideLength = 110.f;
 	// The pace at which the knees bend as much as in a brisk walk (cm/s).
 	constexpr float BriskWalk = 140.f;
+
+	// Umbrellas in the rain: how many people have one with them, how much
+	// rain it takes before they open it (more for some than others) and
+	// below which they shut it again; the umbrella arm raised forward and
+	// the elbow bent (degrees), so the hand is at chest height before him;
+	// the shaft tipped back towards his head and in over it (degrees), and
+	// tipped forward and down while it hangs furled before he raises it; how
+	// fast it goes up (share a second, from shut to open); and how much faster
+	// those without one hurry along in a downpour.
+	constexpr float UmbrellaShare = 0.7f;
+	constexpr float UmbrellaFrom = 0.1f;
+	constexpr float UmbrellaSpread = 0.25f;
+	constexpr float UmbrellaUntil = 0.03f;
+	constexpr float UmbrellaRaise = 30.f;
+	constexpr float UmbrellaBend = 95.f;
+	constexpr float UmbrellaTilt = 6.f;
+	constexpr float UmbrellaHang = -130.f;
+	constexpr float UmbrellaLean = 7.f;
+	constexpr float UmbrellaSpeed = 0.8f;
+	constexpr float RainHurry = 0.35f;
 
 	// Someone on foot who walks into him (closer than this, faster than
 	// that) makes him stumble back; someone running at him makes him step
@@ -193,6 +216,14 @@ APedestrian::APedestrian()
 void APedestrian::WalkTo(const FVector& Location, double Yaw, float Speed, float DeltaSeconds, float ArmsUp)
 {
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	if (ArmsUp > 0.f)
+	{
+		DropUmbrella();
+	}
+	else if (bWantsUmbrella || UmbrellaOpen > 0.f)
+	{
+		UpdateUmbrella(DeltaSeconds);
+	}
 
 	Stride += DeltaSeconds * Speed / Pedestrians::StrideLength * PI;
 	const float Swing = FMath::Sin(Stride);
@@ -205,6 +236,13 @@ void APedestrian::WalkTo(const FVector& Location, double Yaw, float Speed, float
 		Arms[0] = FMath::Lerp(Arms[0], 140.f + Flail, ArmsUp);
 		Arms[1] = FMath::Lerp(Arms[1], 140.f - Flail, ArmsUp);
 	}
+	// The umbrella arm comes up first, then the umbrella opens.
+	const int32 HoldingArm = UmbrellaOpen > 0.f ? UmbrellaArm() : -1;
+	const float Raised = FMath::SmoothStep(0.f, 1.f, FMath::Clamp(UmbrellaOpen * 2.f, 0.f, 1.f));
+	if (HoldingArm >= 0)
+	{
+		Arms[HoldingArm] = FMath::Lerp(Arms[HoldingArm] * 0.2f, Pedestrians::UmbrellaRaise, Raised);
+	}
 	for (int32 i = 0; i < 2; ++i)
 	{
 		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
@@ -212,10 +250,125 @@ void APedestrian::WalkTo(const FVector& Location, double Yaw, float Speed, float
 			Part->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
 		}
 	}
+	if (HoldingArm >= 0)
+	{
+		PlaceUmbrella(HoldingArm, Raised);
+	}
+}
+
+int32 APedestrian::UmbrellaArm() const
+{
+	// The right hand, unless it carries something else.
+	const bool bRightBusy = Outfit.Held != PersonKit::EHeld::None && Outfit.Held != PersonKit::EHeld::Umbrella;
+	return bRightBusy ? 0 : 1;
+}
+
+void APedestrian::WantUmbrella(bool bOpen, const FLinearColor& Cloth)
+{
+	bWantsUmbrella = bOpen;
+	if (!Umbrella)
+	{
+		UmbrellaCloth = Cloth;
+	}
+}
+
+void APedestrian::UpdateUmbrella(float DeltaSeconds)
+{
+	UmbrellaOpen = FMath::FInterpConstantTo(UmbrellaOpen, bWantsUmbrella ? 1.f : 0.f, DeltaSeconds, Pedestrians::UmbrellaSpeed);
+
+	if (UmbrellaOpen > 0.f)
+	{
+		// Someone carrying his umbrella furled opens that one: out of his hand while it is up.
+		if (Outfit.Held == PersonKit::EHeld::Umbrella)
+		{
+			PersonKit::FOutfit Bare = Outfit;
+			Bare.Held = PersonKit::EHeld::None;
+			SetOutfit(Bare);
+			bFurledInUse = true;
+		}
+		if (!Umbrella)
+		{
+			Umbrella = NewObject<UProceduralMeshComponent>(this);
+			Umbrella->SetupAttachment(Capsule);
+			Umbrella->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Umbrella->SetCanEverAffectNavigation(false);
+			// It moves with him all the time: kept out of the ray-traced lighting and the distance fields.
+			Umbrella->bVisibleInRayTracing = false;
+			Umbrella->bAffectDistanceFieldLighting = false;
+			PersonKit::FPiece Shape;
+			UmbrellaModel::Build(Shape, UmbrellaCloth);
+			for (int32 s = 0; s < Shape.Sections.Num(); ++s)
+			{
+				const PersonKit::FSection& Section = Shape.Sections[s];
+				Umbrella->CreateMeshSection_LinearColor(s, Section.Vertices, Section.Triangles, Section.Normals,
+					TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+				if (BaseMaterial)
+				{
+					UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+					Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+					Umbrella->SetMaterial(s, Paint);
+				}
+			}
+			Umbrella->RegisterComponent();
+			AddInstanceComponent(Umbrella);
+		}
+		Umbrella->SetVisibility(true);
+	}
+	else
+	{
+		DropUmbrella();
+	}
+}
+
+void APedestrian::PlaceUmbrella(int32 HoldingArm, float Raised)
+{
+	const int32 ForearmIndex = PersonKit::ForearmOf(PersonKit::ArmLeft + HoldingArm);
+	if (!Umbrella || !Pieces.IsValidIndex(ForearmIndex) || !Pieces[ForearmIndex])
+	{
+		return;
+	}
+	UProceduralMeshComponent* Forearm = Pieces[ForearmIndex];
+	Forearm->SetRelativeRotation(FRotator(Pedestrians::UmbrellaBend * Raised, 0.f, 0.f));
+
+	// The grip in his fist (where PersonKit puts the hand, from the elbow).
+	const double Side = HoldingArm == 1 ? 1.0 : -1.0;
+	const double Tall = Outfit.Height / 178.0;
+	const FVector Grip = Forearm->GetComponentTransform().TransformPosition(FVector(1.4, 2.3 * Side, -27.5 * Tall));
+	const FVector InHand = Capsule->GetComponentTransform().InverseTransformPosition(Grip);
+
+	// Furled while the arm comes up, then spread over his head, tipped back and in.
+	const float Spread = FMath::SmoothStep(0.f, 1.f, FMath::Clamp(UmbrellaOpen * 2.f - 1.f, 0.f, 1.f));
+	const double Width = FMath::Lerp(UmbrellaModel::Furled, 1.0, static_cast<double>(Spread));
+	// Before that it hangs furled from his hand like a walking stick, and swings up as the arm rises.
+	const float Swung = FMath::Lerp(Pedestrians::UmbrellaHang, Pedestrians::UmbrellaTilt, Raised);
+	Umbrella->SetRelativeLocationAndRotation(InHand, FRotator(Swung, 0.f, Pedestrians::UmbrellaLean * Side * Raised));
+	Umbrella->SetRelativeScale3D(FVector(Width, Width, 1.0));
+}
+
+void APedestrian::DropUmbrella()
+{
+	if (UmbrellaOpen <= 0.f && (!Umbrella || !Umbrella->IsVisible()) && !bFurledInUse)
+	{
+		return;
+	}
+	UmbrellaOpen = 0.f;
+	if (Umbrella)
+	{
+		Umbrella->SetVisibility(false);
+	}
+	PersonModel::PoseElbows(Pieces, 0.f, 0.f);
+	if (bFurledInUse)
+	{
+		bFurledInUse = false;
+		PersonKit::FOutfit Carried = Outfit;
+		Carried.Held = PersonKit::EHeld::Umbrella;
+		SetOutfit(Carried);
+	}
 }
 
 void APedestrian::Hold(const FVector& Location, const FRotator& Rotation, float Legs, float Knees, float Arms)
 {
+	DropUmbrella();
 	SetActorLocationAndRotation(Location, Rotation);
 	// Not quite the same on both sides, so he does not look like a doll.
 	PersonModel::PoseLegs(Pieces, Legs, Legs * 0.6f, Knees, Knees * 0.8f);
@@ -230,6 +383,7 @@ void APedestrian::Hold(const FVector& Location, const FRotator& Rotation, float 
 
 void APedestrian::PointTo(const FVector& Location, double Yaw, double PointYaw, bool bPointing)
 {
+	DropUmbrella();
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 	PersonModel::PoseLegs(Pieces, 0.f, 0.f);
 	PersonModel::PoseElbows(Pieces, 0.f, 0.f);
@@ -1028,6 +1182,10 @@ void APedestrians::Tick(float DeltaSeconds)
 			break;
 		}
 		Walker.Person->SetOutfit(PersonModel::RandomOutfit(Random));
+		const PersonKit::FOutfit& Dressed = Walker.Person->GetOutfit();
+		Walker.bHasUmbrella = Dressed.Held == PersonKit::EHeld::Umbrella || Random.FRand() < Pedestrians::UmbrellaShare;
+		Walker.UmbrellaColor = UmbrellaModel::ClothColor(Random.FRand(), Dressed.bWoman);
+		Walker.UmbrellaPatience = Random.FRand();
 		Walkers.Add(Walker);
 	}
 
@@ -1052,6 +1210,9 @@ void APedestrians::Tick(float DeltaSeconds)
 		AskTheWay(Player, Now);
 		PickAFight(Player);
 	}
+
+	const AWeather* Sky = AWeather::Get(GetWorld());
+	const float RainNow = Sky ? Sky->GetRain() : 0.f;
 
 	for (FWalker& Walker : Walkers)
 	{
@@ -1084,7 +1245,13 @@ void APedestrians::Tick(float DeltaSeconds)
 			ReactToPlayer(Walker, Now);
 		}
 		const bool bOnWalk = Walker.React == EReact::None || Walker.React == EReact::Flee;
-		const float Pace = Walker.Speed * (Walker.React == EReact::Flee ? Pedestrians::FleeShare : 1.f);
+		// In the rain: up with the umbrella, or hurry along without one.
+		const bool bUmbrellaUp = Walker.bHasUmbrella && Walker.Person->HasUmbrellaUp();
+		Walker.Person->WantUmbrella(Walker.bHasUmbrella
+			&& RainNow > (bUmbrellaUp ? Pedestrians::UmbrellaUntil : Pedestrians::UmbrellaFrom + Pedestrians::UmbrellaSpread * Walker.UmbrellaPatience),
+			Walker.UmbrellaColor);
+		const float Hurry = bUmbrellaUp ? 1.f : 1.f + Pedestrians::RainHurry * RainNow;
+		const float Pace = Walker.Speed * Hurry * (Walker.React == EReact::Flee ? Pedestrians::FleeShare : 1.f);
 		if (Walker.React == EReact::Flee)
 		{
 			Walker.ReactLeft -= DeltaSeconds;

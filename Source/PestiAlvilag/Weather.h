@@ -20,6 +20,8 @@ enum class ETestWeather : uint8 { Natural, Clear, Rain, Fog, Count };
  * Cloud dims the sun and greys the haze, fog thickens it (both through
  * ADayNight::SetWeather); rain falls as thin streaks all round the camera,
  * one mesh like AExhaustSmoke, with its hiss and patter (URainSound).
+ * The streets get wet in the rain and dry slowly after it (shiny cobbles
+ * and puddles, GroundSurfaces::SetWet).
  */
 UCLASS()
 class PESTIALVILAG_API AWeather : public AActor
@@ -34,6 +36,9 @@ public:
 
 	/** 0 dry to 1 pouring. */
 	float GetRain() const { return Rain; }
+
+	/** How wet the streets are, 0 dry to 1 soaked: soaks up in the rain, dries slowly after. */
+	float GetWet() const { return Wet; }
 
 	/** For the test page: the weather it is set to, and stepping on to the next. */
 	ETestWeather GetTestWeather() const { return Forced; }
@@ -67,6 +72,9 @@ private:
 	float Overcast = 0.f;
 	float Mist = 0.f;
 	float Rain = 0.f;
+	float Wet = 0.f;
+	/** The wetness last given to the ground (below 0: none yet). */
+	float WetShown = -1.f;
 	float AimOvercast = 0.f;
 	float AimMist = 0.f;
 	float AimRain = 0.f;
