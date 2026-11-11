@@ -26,7 +26,8 @@ enum class ENightRace : uint8
  * half past four) a gold ring stands in the street in front of his yard's
  * gate; stop a car in it and Laci's pals line up two more beside you. Four
  * races, each a round through Józsefváros and back to the gate through
- * gates of lanterns his pals have hung across the streets. Coming first
+ * gates of lanterns his pals have hung across the streets, one just past
+ * each corner where the way turns. Coming first
  * pays a prize (the first win of each also street name, kept in the game
  * mode, saved); later wins of the same race pay half. When all four are
  * won Laci has a word about a black Mercedes at the Tattersall show.
@@ -89,6 +90,8 @@ private:
 	TArray<FVector> GateDir;
 	TArray<double> GateHalf;
 	TArray<double> GateAlong;
+	/** The place each gate stands at, shown on screen as the player heads for it. */
+	TArray<FString> GateName;
 	int32 NextGate = 0;
 
 	UPROPERTY(Transient)
