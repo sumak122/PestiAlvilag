@@ -776,8 +776,11 @@ private:
 		}
 		// Being arrested shows instead of the seconds left to lose them.
 		const float Arrest = Game->GetArrestFraction();
+		// Hidden in a courtyard gateway the seconds say so.
 		const FString Label = Arrest > 0.f
 			? FString::Printf(TEXT("ELFOG\u00c1S %d%%"), FMath::RoundToInt(100.f * Arrest))
+			: Game->IsHiding()
+			? FString::Printf(TEXT("REJT\u0150Z\u00c9S %d"), FMath::CeilToInt(Game->GetEscapeSecondsLeft()))
 			: FString::Printf(TEXT("K\u00d6R\u00d6Z\u00c9S %d"), FMath::CeilToInt(Game->GetEscapeSecondsLeft()));
 		Paint.Text(Label, Paint.Bold(15.f, 3.f), X + W - 124.f, Y + H + 33.f, PestiHud::RedHi, 1.f);
 	}
@@ -2110,6 +2113,27 @@ private:
 		Above.Text(Letter, Above.Deco(16.f), At.X, At.Y + 6.f, PestiHud::Cream, 0.5f);
 	}
 
+	/** While the police search for him out of sight: a dashed red ring round where they last saw him. */
+	void PaintSearch(const FPainter& Paint, const APestiHUD& Hud, const PestiHud::FMapFrame& Frame, int32 Up) const
+	{
+		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(&Hud);
+		if (!Game || !Game->IsPoliceSearching())
+		{
+			return;
+		}
+		const FVector2D Middle(Game->GetLastSeenAt());
+		const double Radius = Game->GetSearchRadius();
+		const int32 Steps = 48;
+		for (int32 i = 0; i < Steps; i += 2)
+		{
+			const double A0 = UE_TWO_PI * i / Steps;
+			const double A1 = UE_TWO_PI * (i + 1) / Steps;
+			const FVector2f P0 = Frame.ToScreen(Middle + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * Radius);
+			const FVector2f P1 = Frame.ToScreen(Middle + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * Radius);
+			Paint.Line(P0.X, P0.Y, P1.X, P1.Y, PestiHud::RedHi, 3.f, Up);
+		}
+	}
+
 	void PaintMinimap(const FPainter& Paint, const APestiHUD& Hud, float High) const
 	{
 		const PestiMap::FPlan* Plan = PestiMap::Get();
@@ -2138,6 +2162,7 @@ private:
 		PaintPlan(Over, *Plan, Frame, 0);
 		Over.Box(X, Y, Across, Across, PestiHud::MapShade, 1);
 		PaintRoutes(Over, Hud, Frame, Now, 2);
+		PaintSearch(Over, Hud, Frame, 2);
 		Paint.Out.PopClip();
 		Over.Frame(X + Inset, Y + Inset, Inner, Inner, PestiHud::Brass, 1.5f, 1);
 
@@ -2238,6 +2263,7 @@ private:
 			Over.Text(Place.Name, Over.Bold(17.f, 3.f), At.X, At.Y, PestiHud::PlaceInk, 0.5f);
 		}
 		PaintRoutes(Over, Hud, Frame, Now, 3);
+		PaintSearch(Over, Hud, Frame, 3);
 		for (const APestiHUD::FMapIcon& Icon : Hud.MapIcons)
 		{
 			PaintMapIcon(Over, Frame.ToScreen(Icon.At), Icon.Kind, PestiHud::MapIconSize, 4);

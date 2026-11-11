@@ -55,6 +55,8 @@
 #include "ChimneySmoke.h"
 #include "Weather.h"
 #include "PolicePatrols.h"
+#include "PoliceChase.h"
+#include "Mission.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiMenu.h"
@@ -188,6 +190,24 @@ namespace PestiStart
 	// Below this speed next to a police car counts as being caught (cm/s).
 	constexpr float CaughtSpeed = 300.f;
 	constexpr int32 MaxWantedLevel = 3;
+
+	// Out of police sight this long, they search round where they last saw
+	// him, in a circle this wide at one, two and three stars (cm); out of the
+	// circle and unseen this long, they have lost him (s).
+	constexpr float SearchAfter = 1.5f;
+	const float SearchRadius[] = { 15000.f, 22000.f, 30000.f };
+	constexpr float LostOutsideAfter = 4.f;
+	// How long out of sight loses them, against EscapeTime, at one, two and three stars.
+	const float EscapeShare[] = { 0.75f, 1.f, 1.5f };
+	// Hiding in a courtyard gateway the time out of sight runs this much faster.
+	constexpr float HideRate = 2.f;
+	// Caught: the fine per star (fillér), hírnév lost per star, the fade and
+	// the dark, and the hours he spends in the cells.
+	constexpr int32 FinePerStar = 200;
+	constexpr int32 RenownLostPerStar = 2;
+	constexpr float BustedFade = 1.2f;
+	constexpr float BustedDark = 2.5f;
+	constexpr float CellHours = 6.f;
 }
 
 APestiAlvilagGameModeBase::APestiAlvilagGameModeBase()
@@ -317,6 +337,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<APolicePatrols>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<APolicePatrols>();
+	}
+
+	// The district police station, and the road blocks of a chase at three stars.
+	if (!TActorIterator<APoliceChase>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<APoliceChase>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first
@@ -658,6 +684,7 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 
 	UpdateWanted(DeltaSeconds);
 	UpdateFaint();
+	UpdateBusted();
 	TickPlaceAtRing();
 	TickGreetings();
 
@@ -751,12 +778,33 @@ void APestiAlvilagGameModeBase::ReportCrime(int32 CrimeLevel)
 		APestiHUD::Show(this, 3, 4.f, FColor::Red, TEXT("The police are after you!"));
 	}
 	WantedLevel = FMath::Clamp(FMath::Max(WantedLevel, CrimeLevel), 0, PestiStart::MaxWantedLevel);
-	TimeUnseen = 0.f;
+	NotifySeenByPolice();
 }
 
 void APestiAlvilagGameModeBase::NotifySeenByPolice()
 {
 	TimeUnseen = 0.f;
+	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		LastSeenAt = Player->GetActorLocation();
+	}
+}
+
+float APestiAlvilagGameModeBase::EscapeTimeNow() const
+{
+	const int32 Stars = FMath::Clamp(WantedLevel, 1, PestiStart::MaxWantedLevel);
+	return EscapeTime * PestiStart::EscapeShare[Stars - 1];
+}
+
+bool APestiAlvilagGameModeBase::IsPoliceSearching() const
+{
+	return WantedLevel > 0 && TimeUnseen > PestiStart::SearchAfter;
+}
+
+float APestiAlvilagGameModeBase::GetSearchRadius() const
+{
+	const int32 Stars = FMath::Clamp(WantedLevel, 1, PestiStart::MaxWantedLevel);
+	return PestiStart::SearchRadius[Stars - 1];
 }
 
 void APestiAlvilagGameModeBase::NotifyPoliceNear()
@@ -772,7 +820,7 @@ void APestiAlvilagGameModeBase::CallInPolice()
 	}
 	const bool bAlready = IsPoliceCalledIn();
 	PoliceCalledUntil = GetWorld()->GetTimeSeconds() + CalledInTime;
-	TimeUnseen = 0.f;
+	NotifySeenByPolice();
 	if (!bAlready)
 	{
 		WantedLevel = FMath::Min(WantedLevel + 1, PestiStart::MaxWantedLevel);
@@ -789,29 +837,34 @@ void APestiAlvilagGameModeBase::UpdateWanted(float DeltaSeconds)
 {
 	if (WantedLevel == 0)
 	{
+		bHiding = false;
 		return;
 	}
 
-	TimeUnseen += DeltaSeconds;
-	if (TimeUnseen > EscapeTime)
-	{
-		ClearWanted(TEXT("You lost the police!"));
-		return;
-	}
-
+	// Out of sight he gets away: sooner hidden in a courtyard gateway, and
+	// soon once out of the circle they search.
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	bHiding = Player && ACityDetails::IsHidingPlace(FVector2D(Player->GetActorLocation()));
+	TimeUnseen += DeltaSeconds * (bHiding ? PestiStart::HideRate : 1.f);
+	if (TimeUnseen > EscapeTimeNow())
+	{
+		ClearWanted(bHiding ? TEXT("You hid until the police gave up!") : TEXT("You lost the police!"));
+		return;
+	}
+	if (Player && TimeUnseen > PestiStart::LostOutsideAfter
+		&& FVector::Dist2D(Player->GetActorLocation(), LastSeenAt) > GetSearchRadius())
+	{
+		ClearWanted(TEXT("You got out of the search: the police lost you!"));
+		return;
+	}
+
 	const bool bPoliceNear = GetWorld()->GetTimeSeconds() - LastPoliceNearTime < 0.2;
 	if (Player && bPoliceNear && Player->GetVelocity().Size2D() < PestiStart::CaughtSpeed)
 	{
 		ArrestProgress += DeltaSeconds;
 		if (ArrestProgress > ArrestTime)
 		{
-			if (APestiCar* Car = Cast<APestiCar>(UGameplayStatics::GetPlayerPawn(this, 0)))
-			{
-				Car->ForwardSpeed = 0.f;
-			}
-			++Arrests;
-			ClearWanted(TEXT("BUSTED! The police caught you."));
+			Busted();
 		}
 	}
 	else
@@ -827,6 +880,113 @@ void APestiAlvilagGameModeBase::ClearWanted(const TCHAR* Message)
 	TimeUnseen = 0.f;
 	ArrestProgress = 0.f;
 	APestiHUD::Show(this, 3, 4.f, FColor::Yellow, Message);
+}
+
+void APestiAlvilagGameModeBase::Busted()
+{
+	++Arrests;
+	const int32 Stars = FMath::Max(WantedLevel, 1);
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	APawn* Player = PC ? PC->GetPawn() : nullptr;
+	if (APestiCar* Car = Cast<APestiCar>(Player))
+	{
+		Car->ForwardSpeed = 0.f;
+		Car->SideSpeed = 0.f;
+	}
+
+	// In a mission the mission tells of the arrest (it fails); on a horse
+	// cart, a bicycle or a tram he is only stopped. As before: no cells.
+	bool bMission = false;
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		bMission = bMission || It->IsUnderway();
+	}
+	const APestiPerson* OnFoot = Cast<APestiPerson>(Player);
+	const bool bCanTakeIn = PC && !bMission && FaintUntil < 0.0
+		&& (Cast<APestiCar>(Player) || (OnFoot && !OnFoot->IsRiding()))
+		&& APoliceChase::Get(GetWorld()) != nullptr;
+	if (!bCanTakeIn)
+	{
+		ClearWanted(TEXT("BUSTED! The police caught you."));
+		return;
+	}
+
+	// The fine and the name it gives him, then a night in the cells.
+	BustedStars = Stars;
+	BustedFine = FMath::Min(Money, PestiStart::FinePerStar * Stars);
+	AddMoney(-BustedFine);
+	AddRenown(-PestiStart::RenownLostPerStar * Stars, TEXT("letart\u00f3ztat\u00e1s"), TEXT("arrested"));
+	WantedLevel = 0;
+	PoliceCalledUntil = -1.0;
+	TimeUnseen = 0.f;
+	ArrestProgress = 0.f;
+	bHiding = false;
+	BustedUntil = GetWorld()->GetTimeSeconds() + PestiStart::BustedFade + PestiStart::BustedDark;
+	PC->SetIgnoreMoveInput(true);
+	if (PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->StartCameraFade(0.f, 1.f, PestiStart::BustedFade, FLinearColor::Black, false, true);
+	}
+	APestiHUD::Show(this, 3, 3.f, FColor::Red, TEXT("ELFOGTAK!  (BUSTED!)"));
+}
+
+void APestiAlvilagGameModeBase::UpdateBusted()
+{
+	if (BustedUntil < 0.0 || GetWorld()->GetTimeSeconds() < BustedUntil)
+	{
+		return;
+	}
+	BustedUntil = -1.0;
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC)
+	{
+		return;
+	}
+
+	// Out of the car: the police keep it (not a taxi of the company's, nor the car Laci ordered).
+	bool bCarKept = false;
+	if (APestiCar* Car = Cast<APestiCar>(PC->GetPawn()))
+	{
+		if (Car->ForceDriverOut())
+		{
+			bool bOrdered = false;
+			for (TActorIterator<ALaciOrders> It(GetWorld()); It; ++It)
+			{
+				bOrdered = bOrdered || It->GetOrderCar() == Car;
+			}
+			if (!bOrdered && !Car->IsA<APestiTaxi>())
+			{
+				Car->Destroy();
+				bCarKept = true;
+			}
+		}
+	}
+
+	// He walks out of the district police station hours later.
+	FVector LetOut;
+	double LetOutYaw = 0.0;
+	APestiPerson* Person = Cast<APestiPerson>(PC->GetPawn());
+	if (Person && APoliceChase::Get(GetWorld()) && APoliceChase::Get(GetWorld())->GetLetOut(LetOut, LetOutYaw))
+	{
+		Person->SetActorLocationAndRotation(LetOut + FVector(0.0, 0.0, 100.0), FRotator(0.0, LetOutYaw, 0.0), false, nullptr, ETeleportType::TeleportPhysics);
+		PC->SetControlRotation(FRotator(-10.0, LetOutYaw, 0.0));
+		if (ADayNight* Clock = ADayNight::Get(GetWorld()))
+		{
+			Clock->ReachHourIn(FMath::Fmod(Clock->GetHour() + PestiStart::CellHours, 24.f), 0.f);
+		}
+	}
+	PC->SetIgnoreMoveInput(false);
+	if (PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, PestiStart::BustedFade, FLinearColor::Black);
+	}
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		const FString En = FString::Printf(TEXT("A night in the cells. Fine: %s%s Your street name suffers."), *FormatMoney(BustedFine),
+			bCarKept ? TEXT("; the police kept the car.") : TEXT("."));
+		Hud->Announce(TEXT("ELFOGTAK"), En, 7.f);
+	}
+	SaveToDisk();
 }
 
 void APestiAlvilagGameModeBase::AddMoney(int32 Filler)
