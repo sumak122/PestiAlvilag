@@ -679,8 +679,20 @@ void APedestrians::PickAFight(APawn* Player)
 	}
 	FWalker& Walker = Walkers[Picked];
 	AStreetFights* Fights = AStreetFights::Get(this);
-	if (!Fights || !Fights->Begin(Person, Walker.Person->GetOutfit(), FVector(Walker.Shown, Walker.GroundZ), Walker.ShownYaw))
+	// One sitting (the beggar, the flower woman) gets up to fight: the fighter is dressed standing.
+	PersonKit::FOutfit Dress = Walker.Person->GetOutfit();
+	Dress.bSeated = false;
+	if (!Fights || !Fights->Begin(Person, Dress, FVector(Walker.Shown, Walker.GroundZ), Walker.ShownYaw))
 	{
+		return;
+	}
+	if (Walker.bStander)
+	{
+		// One who keeps to a spot is only hidden while the fighter stands in
+		// for him; TickStander puts him back on his spot once the player is far off.
+		ClearReact(Walker);
+		Walker.bPlaced = false;
+		Walker.Person->SetActorHiddenInGame(true);
 		return;
 	}
 	// The fighter stands where he was: the walker himself is gone (another comes along out of sight).
@@ -992,6 +1004,10 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 			{
 				if (Other.bStander)
 				{
+					if (!Other.bPlaced)
+					{
+						continue;
+					}
 					// Those keeping to a spot run a few steps off, then come back.
 					if (!Other.bSeated)
 					{
@@ -1363,6 +1379,19 @@ void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw
 void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPlayerAbout, double Now, float DeltaSeconds)
 {
 	APedestrian* Person = Walker.Person;
+	if (!Walker.bPlaced)
+	{
+		// Handed over to a street fight: back on his spot, as he was, once the player is far off.
+		if (FVector2D::Distance(Walker.Home, FVector2D(Camera)) > Range)
+		{
+			Walker.Shown = Walker.Home;
+			Walker.ShownYaw = Walker.HomeYaw;
+			Walker.bPlaced = true;
+			Person->SetActorHiddenInGame(false);
+			Person->PointTo(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.HomeYaw, 0.0, false);
+		}
+		return;
+	}
 	if (FVector2D::Distance(Walker.Shown, FVector2D(Camera)) > Range)
 	{
 		// Far off: back at his spot as he was, once nobody sees him.
