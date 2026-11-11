@@ -1461,8 +1461,8 @@ namespace CarModel
 		const double W = BodyHalfWidth;
 		const double Floor = -40.0;
 		// An open tub: the body to the floor, thin sides up to the waist, a rear deck.
-		B.SideOutline(Paint, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Floor), FVector2D(Back + 4.0, Floor), FVector2D(Back, Waist - 42.0),
-			FVector2D(Back + 6.0, -44.0) }, -W, W);
+		// (Kept convex: a step up at the tail made the floor face downwards, so it vanished from above.)
+		B.SideOutline(Paint, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Floor), FVector2D(Back + 4.0, Floor), FVector2D(Back + 6.0, -44.0) }, -W, W);
 		B.BothSides(Paint, FVector(Back + 28.0, W - 4.0, Floor), FVector(L.Cowl, W, Waist));
 		B.SideOutline(Paint, { FVector2D(Back + 28.0, Floor), FVector2D(Back + 28.0, Waist), FVector2D(Back + 16.0, Waist), FVector2D(Back + 3.0, Waist - 14.0),
 			FVector2D(Back + 4.0, Floor) }, -W, W);
