@@ -232,8 +232,8 @@ namespace CarDamage
 		// The bonnet's top: the painted panels facing up between the windscreen and
 		// the radiator, and the chrome strip along it.
 		// (Not the radiator shell or its cap, at the front: they stay on the car.)
-		if (Middle.X > L.Cowl + 2.0 && Middle.X < L.Nose - 6.0 && FMath::Abs(Middle.Y) < 42.0
-			&& ((Part == CarModel::Paint && Facing.Z > 0.5 && Middle.Z > -5.0)
+		if (Middle.X > L.BonnetBack && Middle.X < L.Nose - 6.0 && FMath::Abs(Middle.Y) < 42.0
+			&& ((Part == CarModel::Paint && Facing.Z > 0.5 && Middle.Z > -5.0 && Middle.Z < CarModel::Waist + 16.0)
 				|| (Part == CarModel::Chrome && Middle.Z > CarModel::Waist - 6.0 && FMath::Abs(Middle.Y) < 2.0 && Middle.X < L.Nose - 16.0)))
 		{
 			return Bonnet;

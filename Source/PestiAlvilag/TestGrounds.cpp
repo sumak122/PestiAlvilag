@@ -557,9 +557,13 @@ void ATestGrounds::SpawnVehicles()
 			Look.Body = Spot.Body;
 			Look.Wheel = Spot.Wheel;
 			Look.PaintColor = Spot.Paint;
-			if (Spot.Body == CarModel::EBody::TownCar)
+			if (Spot.Body == CarModel::EBody::TownCar || Spot.Body == CarModel::EBody::FordT)
 			{
 				Look.AccentColor = CarModel::OldBrass();
+			}
+			if (Spot.Body == CarModel::EBody::FordT)
+			{
+				Look.SpokeColor = CarModel::OldWood();
 			}
 			if (Spot.Kind == EVehicle::Police)
 			{
