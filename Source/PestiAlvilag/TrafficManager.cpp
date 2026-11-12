@@ -52,6 +52,11 @@ namespace Traffic
 
 	// Half the width of the corridor a car watches for others (cm).
 	constexpr float CorridorHalfWidth = 220.f;
+	// A tram's or bus's ends are this far from its middle (cm).
+	constexpr float LongHalf = 450.f;
+	// Trams and buses facing more against each other than this (the dot of
+	// their headings) are passing on their own sides, not in each other's way.
+	constexpr double OncomingDot = -0.7;
 
 	// Bicycles: none start closer than this to each other or the player (cm).
 	constexpr double BikeSpacing = 700.0;
@@ -1104,25 +1109,79 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 			ConsiderPoint(Other->GetActorLocation() - Along);
 		}
 	}
-	// Two trams that meet where lines join must not both wait for the other:
-	// a tram only waits for trams whose middle is ahead of its own.
+	// A tram or bus is long: its middle and both ends.
+	auto Ends = [](const AActor* Long, FVector Out[3])
+	{
+		const FVector Along = Long->GetActorForwardVector().GetSafeNormal2D() * Traffic::LongHalf;
+		Out[0] = Long->GetActorLocation();
+		Out[1] = Long->GetActorLocation() + Along;
+		Out[2] = Long->GetActorLocation() - Along;
+	};
+	// How far ahead of From (in its path) the nearest of these points is, or -1 if none is.
+	auto AheadIn = [Corridor, LookAhead](const AActor* From, const FVector Points[3])
+	{
+		const FVector Fwd = From->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Side(-Fwd.Y, Fwd.X, 0.f);
+		float Best = -1.f;
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const FVector Offset = Points[i] - From->GetActorLocation();
+			const float Ahead = static_cast<float>(FVector::DotProduct(Offset, Fwd));
+			if (Ahead > 0.f && Ahead < LookAhead && FMath::Abs(FVector::DotProduct(Offset, Side)) < Corridor && (Best < 0.f || Ahead < Best))
+			{
+				Best = Ahead;
+			}
+		}
+		return Best;
+	};
+	// Trams and buses that meet where lines join or cross must not both wait
+	// for the other, nor both drive on: when each is in the other's way, the
+	// one further along goes first and the other waits.
 	const bool bAskerIsTram = Car->IsA<ATram>();
+	FVector MyEnds[3];
+	Ends(Car, MyEnds);
 	for (const ATram* Other : Trams)
 	{
-		if (!Other || Other == Car || Other->IsHidden() || IsOncoming(Other))
+		if (!Other || Other == Car || Other->IsHidden())
 		{
 			continue;
 		}
-		if (bAskerIsTram && FVector::DotProduct(Other->GetActorLocation() - Origin, Forward) <= 0.f)
+		const FVector OtherForward = Other->GetActorForwardVector().GetSafeNormal2D();
+		FVector OtherEnds[3];
+		Ends(Other, OtherEnds);
+		if (!bAskerIsTram)
+		{
+			if (!IsOncoming(Other))
+			{
+				for (const FVector& Point : OtherEnds)
+				{
+					ConsiderPoint(Point);
+				}
+			}
+			continue;
+		}
+		// Only one coming straight the other way passes on its own side.
+		if (FVector::DotProduct(OtherForward, Forward) < Traffic::OncomingDot)
 		{
 			continue;
 		}
-		// A tram is long: check its ends as well as its middle, so a tram
-		// crossing in front is seen.
-		const FVector Along = Other->GetActorForwardVector().GetSafeNormal2D() * 450.f;
-		ConsiderPoint(Other->GetActorLocation());
-		ConsiderPoint(Other->GetActorLocation() + Along);
-		ConsiderPoint(Other->GetActorLocation() - Along);
+		if (AheadIn(Car, OtherEnds) < 0.f)
+		{
+			continue;
+		}
+		if (AheadIn(Other, MyEnds) >= 0.f)
+		{
+			const double MineAlong = FVector::DotProduct(Origin - Other->GetActorLocation(), OtherForward);
+			const double TheirsAlong = FVector::DotProduct(Other->GetActorLocation() - Origin, Forward);
+			if (MineAlong > TheirsAlong || (MineAlong == TheirsAlong && Car->GetUniqueID() < Other->GetUniqueID()))
+			{
+				continue;
+			}
+		}
+		for (const FVector& Point : OtherEnds)
+		{
+			ConsiderPoint(Point);
+		}
 	}
 	// Not the player riding on this tram.
 	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0); Player && Player != Car && Player->GetAttachParentActor() != Car)
