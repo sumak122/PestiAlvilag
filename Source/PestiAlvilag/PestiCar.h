@@ -102,6 +102,16 @@ public:
 	/** Puts a person behind the wheel; they get out again with F. */
 	void TakeDriver(APawn* InDriver);
 
+	/**
+	 * A parked car can be locked. Getting in then means smashing the driver's
+	 * window (quick and loud: police near enough hear it) or picking the lock
+	 * (slow and quiet); see APestiPerson::TickBreakIn.
+	 */
+	void SetLocked(bool bInLocked) { bLocked = bInLocked; }
+	bool IsLocked() const { return bLocked; }
+	/** The lock is beaten: with a smashed window (glass flies, a crime if the police hear), or quietly picked. */
+	void BreakIn(bool bSmash);
+
 	/** The car's look; set it before the car is spawned (SpawnActorDeferred), or it is a saloon in BodyColor. */
 	void SetStyle(const CarModel::FStyle& InStyle)
 	{
@@ -201,6 +211,18 @@ private:
 	double DriverInTime = 0.0;
 	int32 BumpCount = 0;
 	float LastPedal = 0.f;
+
+	/** Locked, until broken into or driven. */
+	bool bLocked = false;
+	/** An old car (CarModel::IsOld) is started with the crank (E) and stalls now and then: whether it runs, */
+	bool bOldEngineOn = false;
+	/** the crank turning the engine over until this time and whether it will catch, */
+	double CrankUntil = -1.0;
+	bool bCrankCatches = false;
+	/** and when the last driver got out (a warm engine catches more easily). */
+	double DriverOutTime = -1000.0;
+	/** The old engine stops, with a cough. */
+	void StallEngine();
 
 	/** The headlights, switched with H while driving. */
 	bool bHeadlightsOn = false;

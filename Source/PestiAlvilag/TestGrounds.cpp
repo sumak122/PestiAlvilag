@@ -547,11 +547,24 @@ void ATestGrounds::SpawnVehicles()
 			// Dr. Halász's Steyr (mission 7) in its own colours.
 			Look = CarModel::SteyrStyle();
 		}
+		else if (Spot.Body == CarModel::EBody::Ssk)
+		{
+			// The car show's black Mercedes SSK in its own colours.
+			Look = CarModel::SskStyle();
+		}
 		else
 		{
 			Look.Body = Spot.Body;
 			Look.Wheel = Spot.Wheel;
 			Look.PaintColor = Spot.Paint;
+			if (Spot.Body == CarModel::EBody::TownCar || Spot.Body == CarModel::EBody::FordT)
+			{
+				Look.AccentColor = CarModel::OldBrass();
+			}
+			if (Spot.Body == CarModel::EBody::FordT)
+			{
+				Look.SpokeColor = CarModel::OldWood();
+			}
 			if (Spot.Kind == EVehicle::Police)
 			{
 				// As the force's own: dark blue on steel discs, the blue lamp by the windscreen.
@@ -568,6 +581,11 @@ void ATestGrounds::SpawnVehicles()
 		}
 		Car->BodyColor = Look.PaintColor;
 		Car->SetStyle(Look);
+		// The saloon and the coupe at the head of the row are locked, to try breaking in.
+		if (Spot.Kind == EVehicle::Car && !Spot.bTarget && (Spot.Body == CarModel::EBody::Saloon || Spot.Body == CarModel::EBody::Coupe))
+		{
+			Car->SetLocked(true);
+		}
 		if (Spot.Kind == EVehicle::DeluxeTaxi)
 		{
 			Car->MaxSpeed = 3300.f;

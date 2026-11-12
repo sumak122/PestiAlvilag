@@ -11,6 +11,7 @@
 #include "PersonKit.h"
 #include "PestiPerson.generated.h"
 
+class APestiCar;
 class UCameraComponent;
 class UFightSound;
 class UMaterialInterface;
@@ -265,6 +266,10 @@ private:
 	void Walk(const APlayerController* PC);
 	void SwingLimbs(float DeltaSeconds);
 	void TryEnterCar(APlayerController* PC);
+	/** Breaking into a locked car (a tap of F smashes the window, holding it picks the lock); true while that has his F key. */
+	bool TickBreakIn(APlayerController* PC);
+	/** Into the car and behind the wheel. */
+	void GetIntoCar(APlayerController* PC, APestiCar* Car);
 	void SetInWorld(bool bInWorld);
 	void SetRideView(bool bOutside, APlayerController* PC);
 
@@ -278,6 +283,9 @@ private:
 	/** Where he sits on the vehicle he rides. */
 	FTransform RideSeat;
 	double OutOfCarTime = -1.0;
+	/** The locked car he is breaking into, and when F went down for it. */
+	TWeakObjectPtr<APestiCar> LockedCar;
+	double BreakInStart = 0.0;
 	/** The last time a vehicle hurt him, so one bump hurts only once. */
 	double LastHitTime = -100.0;
 	/** The fastest he has been falling since he left the ground (cm/s). */
