@@ -125,6 +125,12 @@ public:
 	bool IsEngineDead() const { return Damage.Wear >= 1.0; }
 	/** Any dent, lost part or wear at all. */
 	bool IsDamaged() const { return Damage.Dents.Num() > 0 || Damage.Fallen != 0 || Damage.Wear > 0.0; }
+	/**
+	 * The same car in another actor (a traffic car the player has just taken):
+	 * its dents, lost parts and wear, and the parts lying where they fell.
+	 * Shown in the same look first.
+	 */
+	void TakeOverFrom(UCarVisuals* Other);
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

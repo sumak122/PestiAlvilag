@@ -112,6 +112,9 @@ public:
 	/** The lock is beaten: with a smashed window (glass flies, a crime if the police hear), or quietly picked. */
 	void BreakIn(bool bSmash);
 
+	/** The dents, lost parts and wear of the same car as it was in traffic (stolen from it). */
+	void TakeLooksFrom(UCarVisuals* From);
+
 	/** The car's look; set it before the car is spawned (SpawnActorDeferred), or it is a saloon in BodyColor. */
 	void SetStyle(const CarModel::FStyle& InStyle)
 	{

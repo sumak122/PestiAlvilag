@@ -206,7 +206,8 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 	const bool bTaxi = Cast<ATrafficTaxi>(Car) != nullptr;
 	Car->LeaveTraffic();
 	Cars.Remove(Car);
-	Car->Destroy();
+	// Out of the way of the new one, until its dents have been handed on.
+	Car->SetActorEnableCollision(false);
 
 	// The same car, now one the player drives (it settles onto the ground itself).
 	const FTransform Place(Facing, Location + FVector(0.f, 0.f, Traffic::StolenLift));
@@ -215,11 +216,15 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Stolen)
 	{
+		Car->Destroy();
 		return nullptr;
 	}
 	Stolen->BodyColor = Look.PaintColor;
 	Stolen->SetStyle(Look);
 	Stolen->FinishSpawning(Place);
+	// Still dented, still missing what it lost.
+	Stolen->TakeLooksFrom(Car->GetVisuals());
+	Car->Destroy();
 	++(bTaxi ? TaxisToReplace : CarsToReplace);
 
 	// The driver gets out on the side away from the player and runs off.
