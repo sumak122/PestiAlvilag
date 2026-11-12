@@ -202,6 +202,16 @@ private:
 	int32 BumpCount = 0;
 	float LastPedal = 0.f;
 
+	/** An old car (CarModel::IsOld) is started with the crank (E) and stalls now and then: whether it runs, */
+	bool bOldEngineOn = false;
+	/** the crank turning the engine over until this time and whether it will catch, */
+	double CrankUntil = -1.0;
+	bool bCrankCatches = false;
+	/** and when the last driver got out (a warm engine catches more easily). */
+	double DriverOutTime = -1000.0;
+	/** The old engine stops, with a cough. */
+	void StallEngine();
+
 	/** The headlights, switched with H while driving. */
 	bool bHeadlightsOn = false;
 	/** The gear the engine is in, from 0. */
