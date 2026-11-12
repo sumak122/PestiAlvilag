@@ -50,12 +50,12 @@ namespace CarDamage
 	// A door comes off when the dents push its middle in this far (cm), the
 	// bonnet when they push its front or back corner in this far.
 	constexpr double DoorOffDepth = 15.0;
-	constexpr double BonnetOffDepth = 14.0;
+	constexpr double BonnetOffDepth = 12.0;
 	// A doorway shorter than this (cm) is no door.
 	constexpr double MinDoor = 20.0;
 	// A wheel comes off in a crash this fast (cm/s, straight into it) within this reach of its hub (cm, flat).
-	constexpr double WheelOffSpeed = 1300.0;
-	constexpr double WheelReach = 90.0;
+	constexpr double WheelOffSpeed = 1600.0;
+	constexpr double WheelReach = 75.0;
 	// ...and only this far in from the wheel's own side (cm).
 	constexpr double WheelSideIn = 30.0;
 	// How worn out the car gets for each cm/s of a knock over MinSpeed (1 is done for).
@@ -231,8 +231,10 @@ namespace CarDamage
 	{
 		// The bonnet's top: the painted panels facing up between the windscreen and
 		// the radiator, and the chrome strip along it.
+		// (Not the radiator shell or its cap, at the front: they stay on the car.)
 		if (Middle.X > L.Cowl + 2.0 && Middle.X < L.Nose - 6.0 && FMath::Abs(Middle.Y) < 42.0
-			&& ((Part == CarModel::Paint && Facing.Z > 0.5 && Middle.Z > -5.0) || (Part == CarModel::Chrome && Middle.Z > CarModel::Waist - 6.0)))
+			&& ((Part == CarModel::Paint && Facing.Z > 0.5 && Middle.Z > -5.0)
+				|| (Part == CarModel::Chrome && Middle.Z > CarModel::Waist - 6.0 && FMath::Abs(Middle.Y) < 2.0 && Middle.X < L.Nose - 16.0)))
 		{
 			return Bonnet;
 		}
@@ -465,17 +467,28 @@ namespace CarDamage
 				const double Top = Lid.Min.Z;
 				const double HalfY = FMath::Max(FMath::Abs(Lid.Min.Y), FMath::Abs(Lid.Max.Y)) - 1.0;
 				const double X0 = Lid.Min.X + 0.5, X1 = Lid.Max.X - 0.5, Z0 = Top - 34.0;
-				Out.Pane(CarModel::Guards, FVector(X0, -HalfY, Z0), FVector(X1, -HalfY, Z0), FVector(X1, -HalfY, Top), FVector(X0, -HalfY, Top));
-				Out.Pane(CarModel::Guards, FVector(X0, HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, Top), FVector(X0, HalfY, Top));
-				Out.Pane(CarModel::Guards, FVector(X0, -HalfY, Z0), FVector(X0, HalfY, Z0), FVector(X0, HalfY, Top), FVector(X0, -HalfY, Top));
-				Out.Pane(CarModel::Guards, FVector(X1, -HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, Top), FVector(X1, -HalfY, Top));
-				Out.Box(CarModel::Rubber, FVector(X0 + 6.0, -HalfY * 0.55, Z0), FVector(X1 - 8.0, HalfY * 0.55, Top - 10.0));
-				Out.Box(CarModel::Chrome, FVector(X0 + 10.0, -HalfY * 0.3, Top - 10.0), FVector(X1 - 14.0, HalfY * 0.3, Top - 6.0));
+				// The bonnet sides' insides (in the paint), the bulkhead and the radiator's back (dark).
+				const double WallTop = Top - 2.0;
+				Out.Pane(CarModel::Paint, FVector(X0, -HalfY, Z0), FVector(X1, -HalfY, Z0), FVector(X1, -HalfY, WallTop), FVector(X0, -HalfY, WallTop));
+				Out.Pane(CarModel::Paint, FVector(X0, HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, WallTop), FVector(X0, HalfY, WallTop));
+				Out.Pane(CarModel::Guards, FVector(X0, -HalfY, Z0), FVector(X0, HalfY, Z0), FVector(X0, HalfY, WallTop), FVector(X0, -HalfY, WallTop));
+				Out.Pane(CarModel::Guards, FVector(X1, -HalfY, Z0), FVector(X1, HalfY, Z0), FVector(X1, HalfY, WallTop), FVector(X1, -HalfY, WallTop));
+				// The engine: a dark block, its head on top, a rusty exhaust manifold
+				// down one side, the hose to the radiator and the fan in front.
+				const double EngineHalf = FMath::Min(HalfY * 0.45, 16.0);
+				const double Front = X1 - 10.0;
+				const double Rear = FMath::Max(X0 + 6.0, Front - 70.0);
+				Out.Box(CarModel::Rubber, FVector(Rear, -EngineHalf, Z0), FVector(Front, EngineHalf, Top - 14.0));
+				Out.Box(CarModel::Chrome, FVector(Rear + 4.0, -EngineHalf + 3.0, Top - 14.0), FVector(Front - 4.0, EngineHalf - 3.0, Top - 9.0));
 				for (int32 k = 0; k < 4; ++k)
 				{
-					const double X = X0 + 14.0 + (X1 - X0 - 30.0) * k / 3.0;
-					Out.Bar(CarModel::Guards, FVector(X, -HalfY * 0.3, Top - 8.0), FVector(X, -HalfY + 1.0, Top - 14.0), 1.6);
+					const double X = Rear + 10.0 + (Front - Rear - 20.0) * k / 3.0;
+					Out.Bar(CarModel::Rubber, FVector(X, EngineHalf - 6.0, Top - 9.0), FVector(X, EngineHalf - 6.0, Top - 6.0), 1.6);
+					Out.Bar(CarModel::Leather, FVector(X, -EngineHalf, Top - 18.0), FVector(X, -EngineHalf - 6.0, Top - 26.0), 3.0);
 				}
+				Out.Bar(CarModel::Leather, FVector(Rear + 6.0, -EngineHalf - 6.0, Top - 26.0), FVector(Front - 6.0, -EngineHalf - 6.0, Top - 26.0), 4.0);
+				Out.Bar(CarModel::Rubber, FVector(Front - 2.0, 0.0, Top - 11.0), FVector(X1 - 1.0, 0.0, Top - 5.0), 4.0);
+				Out.Cylinder(CarModel::Chrome, FVector(Front + 3.0, 0.0, Top - 20.0), 11.0, 1.0, 0, 6);
 			}
 		}
 		for (int32 p = 0; p < CarModel::PartCount; ++p)
