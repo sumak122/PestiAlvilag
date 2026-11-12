@@ -581,6 +581,11 @@ void ATestGrounds::SpawnVehicles()
 		}
 		Car->BodyColor = Look.PaintColor;
 		Car->SetStyle(Look);
+		// The saloon and the coupe at the head of the row are locked, to try breaking in.
+		if (Spot.Kind == EVehicle::Car && !Spot.bTarget && (Spot.Body == CarModel::EBody::Saloon || Spot.Body == CarModel::EBody::Coupe))
+		{
+			Car->SetLocked(true);
+		}
 		if (Spot.Kind == EVehicle::DeluxeTaxi)
 		{
 			Car->MaxSpeed = 3300.f;

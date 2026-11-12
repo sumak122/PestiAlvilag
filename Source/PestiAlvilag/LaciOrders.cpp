@@ -26,6 +26,8 @@ namespace LaciOrder
 	const FName OpenedBy(TEXT("ElsoAuto"));
 	// On-screen note key (under the goal).
 	constexpr int32 NoteKey = 70;
+	// This share of the ordered cars are locked.
+	constexpr float LockedChance = 0.7f;
 	// How close to Laci the player stands to talk to him (cm).
 	constexpr double TalkRange = 260.0;
 	// The car stands this far from the yard, in a straight line (cm).
@@ -346,6 +348,8 @@ void ALaciOrders::StartOrder()
 		const CarModel::FStyle Look = OrderStyle(Packed);
 		Car->BodyColor = Look.PaintColor;
 		Car->SetStyle(Look);
+		// Most owners lock up: smash a window (loud) or pick the lock (slow).
+		Car->SetLocked(FMath::FRand() < LaciOrder::LockedChance);
 		Car->FinishSpawning(Place);
 
 		OrderCar = Car;

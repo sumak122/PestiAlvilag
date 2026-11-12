@@ -49,6 +49,13 @@ namespace PestiPerson
 	constexpr double MinTimeOnFoot = 0.3;
 	// How close he must stand to a bicycle's saddle to get on (cm).
 	constexpr double BikeReach = 200.0;
+	// A locked car: F let go within this long (s) smashes the window; held, it
+	// picks the lock in this long more. Walking off this far further (cm), or
+	// moving faster than this (cm/s) while picking, gives up.
+	constexpr double SmashTapTime = 0.3;
+	constexpr double PickTime = 6.0;
+	constexpr double BreakInSlack = 120.0;
+	constexpr double PickStillSpeed = 60.0;
 
 	// Being hit: slower than this does no harm, and each cm/s over it
 	// takes this much health (a car at 36 km/h takes about half). One bump
@@ -249,6 +256,10 @@ void APestiPerson::Tick(float DeltaSeconds)
 			return;
 		}
 		Jump();
+	}
+	if (TickBreakIn(PC))
+	{
+		return;
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Right))
 	{
@@ -500,10 +511,85 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 	{
 		return;
 	}
+	// Locked: F held picks the lock, a quick tap smashes the window (TickBreakIn).
+	if (Nearest->IsLocked())
+	{
+		LockedCar = Nearest;
+		BreakInStart = GetWorld()->GetTimeSeconds();
+		return;
+	}
+	GetIntoCar(PC, Nearest);
+}
 
+void APestiPerson::GetIntoCar(APlayerController* PC, APestiCar* Car)
+{
 	SetInWorld(false);
-	Nearest->TakeDriver(this);
-	PC->Possess(Nearest);
+	Car->TakeDriver(this);
+	PC->Possess(Car);
+}
+
+bool APestiPerson::TickBreakIn(APlayerController* PC)
+{
+	APestiHUD* Hud = APestiHUD::Get(this);
+	APestiCar* Car = LockedCar.Get();
+	if (!Car)
+	{
+		// Standing by a locked car: say how to get in.
+		if (Hud)
+		{
+			for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
+			{
+				if (It->IsLocked() && !It->GetController() && FVector::Dist2D(It->GetActorLocation(), GetActorLocation()) < EnterCarRange)
+				{
+					Hud->Prompt(TEXT("F"), TEXT("Koppints: ablakbet\u00f6r\u00e9s \u00b7 tartsd: z\u00e1rfeszeget\u00e9s"),
+						TEXT("Tap: smash the window \u00b7 hold: pick the lock"), false);
+					break;
+				}
+			}
+		}
+		return false;
+	}
+	const double Held = GetWorld()->GetTimeSeconds() - BreakInStart;
+	const bool bDown = PC->IsInputKeyDown(EKeys::F) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Right);
+	const bool bPicking = Held > PestiPerson::SmashTapTime;
+	if (!Car->IsLocked() || Car->GetController()
+		|| FVector::Dist2D(Car->GetActorLocation(), GetActorLocation()) > EnterCarRange + PestiPerson::BreakInSlack
+		|| (bPicking && GetVelocity().Size2D() > PestiPerson::PickStillSpeed))
+	{
+		LockedCar = nullptr;
+		return false;
+	}
+	if (!bDown)
+	{
+		LockedCar = nullptr;
+		if (bPicking)
+		{
+			// Let go while picking: he gives up.
+			return false;
+		}
+		Car->BreakIn(true);
+		GetIntoCar(PC, Car);
+		return true;
+	}
+	if (!bPicking)
+	{
+		return true;
+	}
+	const double Share = FMath::Clamp((Held - PestiPerson::SmashTapTime) / PestiPerson::PickTime, 0.0, 1.0);
+	if (Share >= 1.0)
+	{
+		LockedCar = nullptr;
+		Car->BreakIn(false);
+		GetIntoCar(PC, Car);
+		return true;
+	}
+	if (Hud)
+	{
+		const int32 Percent = FMath::RoundToInt(Share * 100.0);
+		Hud->Prompt(TEXT("F"), FString::Printf(TEXT("Z\u00e1rfeszeget\u00e9s... %d%%"), Percent),
+			FString::Printf(TEXT("Picking the lock... %d%%"), Percent), true);
+	}
+	return true;
 }
 
 bool APestiPerson::TryStepOutAt(const FVector& At, double Yaw)

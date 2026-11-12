@@ -94,6 +94,8 @@ namespace PestiCar
 	constexpr float StallOnPullChance = 0.15f;
 	constexpr float StallCrashSpeed = 550.f;
 	constexpr float StallCrashChance = 0.5f;
+	// A smashed car window is heard by a police car this near (cm); constables hear it as far as they see.
+	constexpr double SmashHeard = 5000.0;
 
 	// Grip: how fast the tyres kill sliding sideways (each second the slide
 	// shrinks to e^-Grip of itself). Firm on the road, less when cornering
@@ -425,9 +427,36 @@ FVector APestiCar::GetVelocity() const
 	return GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
 }
 
+void APestiCar::BreakIn(bool bSmash)
+{
+	bLocked = false;
+	if (!bSmash)
+	{
+		return;
+	}
+	// The driver's window (on the left) bursts.
+	const CarModel::FLayout Plan = CarModel::Layout(Style.Body);
+	const FVector Window = GetActorTransform().TransformPosition(FVector(Plan.SeatX + 30.0, -Plan.HalfWidth, CarModel::Waist + 20.0));
+	const double Ground = GetActorLocation().Z - CollisionBox->GetScaledBoxExtent().Z - HoverHeight;
+	if (ACrashBits* Bits = ACrashBits::Get(GetWorld()))
+	{
+		Bits->Burst(Window, -GetActorRightVector(), 0.5f, true, Ground);
+	}
+	PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Glass), 0.8f, 0.f);
+	// Loud: police near enough hear it.
+	if (APolicePatrols::Witnessed(this, Window, PestiCar::SmashHeard))
+	{
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			Game->ReportCrime(1);
+		}
+	}
+}
+
 void APestiCar::TakeDriver(APawn* InDriver)
 {
 	Driver = InDriver;
+	bLocked = false;
 	DriverInTime = GetWorld()->GetTimeSeconds();
 	Visuals->ShowDriver(PersonModel::PlayerOutfit());
 	LookYaw = 0.f;
