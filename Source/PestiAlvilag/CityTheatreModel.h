@@ -89,10 +89,17 @@ namespace CityTheatreModel
 		Span(Out, Iron, FVector(X, Y - 75, 110), FVector(X + 6, Y + 75, 330), false);
 		Span(Out, bRed ? PaperRed : Paper, FVector(X + 6, Y - 68, 117), FVector(X + 8, Y + 68, 323), false);
 		const FLinearColor& Letters = bRed ? Paper : Ink;
-		Signs.Add({ TEXT("VÁROSI SZÍNHÁZ"), FVector(X + 9, Y, 305), 0.0, 11.0, Letters });
+		Signs.Add({ TEXT("V\u00C1ROSI SZ\u00CDNH\u00C1Z"), FVector(X + 9, Y, 305), 0.0, 11.0, Letters });
 		Signs.Add({ TEXT("MA ESTE"), FVector(X + 9, Y, 265), 0.0, 22.0, Letters });
-		Signs.Add({ bRed ? TEXT("OPERETT") : TEXT("OPERA"), FVector(X + 9, Y, 220), 0.0, 26.0, Letters });
-		Signs.Add({ TEXT("8 ÓRAKOR"), FVector(X + 9, Y, 175), 0.0, 16.0, Letters });
+		if (bRed)
+		{
+			Signs.Add({ TEXT("OPERETT"), FVector(X + 9, Y, 220), 0.0, 26.0, Letters });
+		}
+		else
+		{
+			Signs.Add({ TEXT("OPERA"), FVector(X + 9, Y, 220), 0.0, 26.0, Letters });
+		}
+		Signs.Add({ TEXT("8 \u00D3RAKOR"), FVector(X + 9, Y, 175), 0.0, 16.0, Letters });
 	}
 
 	/** One of the lower wings, from Y0 to Y1 along the front. */
@@ -166,7 +173,7 @@ namespace CityTheatreModel
 		Span(Out, Iron, FVector(X, M0 + 60, CanopyAt), FVector(X + CanopyDepth, M1 - 60, CanopyAt + 14), false);
 		Span(Out, FoyerGlass, FVector(X + 10, M0 + 70, CanopyAt + 14), FVector(X + CanopyDepth - 10, M1 - 70, CanopyAt + 18), false);
 		Span(Out, Gilt, FVector(X + CanopyDepth - 2, M0 + 60, CanopyAt - 30), FVector(X + CanopyDepth + 2, M1 - 60, CanopyAt + 14), false);
-		Signs.Add({ TEXT("VÁROSI SZÍNHÁZ"), FVector(X + CanopyDepth + 3, Mid, CanopyAt - 12), 0.0, 16.0, Gilt });
+		Signs.Add({ TEXT("V\u00C1ROSI SZ\u00CDNH\u00C1Z"), FVector(X + CanopyDepth + 3, Mid, CanopyAt - 12), 0.0, 16.0, Gilt });
 		for (int32 k = 0; k <= 4; ++k)
 		{
 			const double Y = M0 + 60.0 + (M1 - M0 - 120.0) * k / 4.0;
@@ -199,7 +206,7 @@ namespace CityTheatreModel
 
 		// The name band, the cornice, the round gable with a lyre in a wreath.
 		Span(Out, PlasterDark, FVector(X, M0, MiddleTop - 220), FVector(X + 14, M1, MiddleTop - 60), false);
-		Signs.Add({ TEXT("VÁROSI SZÍNHÁZ"), FVector(X + 15, Mid, MiddleTop - 140), 0.0, 110.0, Gilt });
+		Signs.Add({ TEXT("V\u00C1ROSI SZ\u00CDNH\u00C1Z"), FVector(X + 15, Mid, MiddleTop - 140), 0.0, 110.0, Gilt });
 		Span(Out, Trim, FVector(MiddleBack, M0 - 10, MiddleTop - 60), FVector(X + 50, M1 + 10, MiddleTop), false);
 		Add(Out, MarketModel::Cylinder, Plaster, FVector(X - 10, Mid, MiddleTop), FVector(2.0 * GableRise, M1 - M0 - 200.0, 20), 0.0, false, 90.0);
 		Add(Out, MarketModel::Cylinder, Trim, FVector(X - 14, Mid, MiddleTop), FVector(2.0 * GableRise + 40.0, M1 - M0 - 160.0, 20), 0.0, false, 90.0);
