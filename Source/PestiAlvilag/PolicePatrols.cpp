@@ -25,6 +25,7 @@
 #include "PersonModel.h"
 #include "PoliceModel.h"
 #include "ProceduralMeshComponent.h"
+#include "StreetFights.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
@@ -81,6 +82,16 @@ namespace PolicePatrol
 		{ TEXT("Fogj\u00e1k meg! Ott fut!"), TEXT("Stop him! There he goes!") },
 	};
 	const FLine2 PhoneLine = { TEXT("K\u00f6zpont? Er\u0151s\u00edt\u00e9st k\u00e9rek, azonnal!"), TEXT("Headquarters? Send help, at once!") };
+	// A pair on the beat this close to a crowd walks over to look (cm), this fast (share of the walk), and stays this long (s).
+	constexpr double LookRange = 6000.0;
+	constexpr float LookPace = 1.4f;
+	constexpr float LookSeconds = 15.f;
+	// They stand this far from the middle of the crowd (cm), side by side this far apart.
+	constexpr double LookBack = 420.0;
+	constexpr double LookSide = 90.0;
+	// The player fighting this close to where they look (cm) is caught at it.
+	constexpr double FightSeen = 900.0;
+	const FLine2 LookLine = { TEXT("Mi folyik itt? Sz\u00e9tmenni!"), TEXT("What's going on here? Move along!") };
 	const FLine2 DownLine = { TEXT("Jaj! Elg\u00e1zolt egy rend\u0151rt, az \u00e1tkozott!"), TEXT("Ow! The devil ran down a policeman!") };
 
 	// "RENDŐRSÉG" (police), on the box's sign band.
@@ -907,6 +918,44 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 		}
 		break;
 	}
+	case EDoing::Looking:
+	{
+		if (!Man.bLookArrived)
+		{
+			const float Pace = WalkSpeed * PolicePatrol::LookPace;
+			const bool bThere = FollowPath(Man, Pace, DeltaSeconds);
+			Man.Person->WalkOn(MiddleOf(Man), Man.Yaw, Pace, DeltaSeconds);
+			if (bThere || Man.Clock > PolicePatrol::LookSeconds * 4.f)
+			{
+				Man.bLookArrived = true;
+				Man.Clock = 0.f;
+				Shout(Man, PolicePatrol::LookLine.Hu, PolicePatrol::LookLine.En);
+			}
+			break;
+		}
+		// There: hands behind, facing the trouble.
+		const FVector2D To = Man.LookTarget - Man.At;
+		const float FaceYaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(To.Y, To.X)));
+		Man.Yaw = FMath::FixedTurn(Man.Yaw, FaceYaw, PolicePatrol::TurnRate * DeltaSeconds);
+		Man.Person->Stand(MiddleOf(Man), Man.Yaw);
+		// The player still at it in front of them: now he is wanted.
+		if (!Patrol.bSawFight && Game && Game->GetWantedLevel() == 0
+			&& FVector2D::Distance(FVector2D(PlayerAt), Man.LookTarget) < PolicePatrol::FightSeen
+			&& AStreetFights::IsFightNear(this, PlayerAt, PolicePatrol::FightSeen)
+			&& CanSee(Man, PlayerAt))
+		{
+			Patrol.bSawFight = true;
+			Game->ReportCrime(1);
+			Patrol.bAlarmed = false;
+			StartChase(Patrol, true);
+			break;
+		}
+		if (Man.Clock > PolicePatrol::LookSeconds)
+		{
+			BackToBeat(Patrol, Which);
+		}
+		break;
+	}
 	case EDoing::Returning:
 	{
 		const bool bThere = FollowPath(Man, WalkSpeed * 1.3f, DeltaSeconds);
@@ -1121,6 +1170,61 @@ void APolicePatrols::Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En)
 	}
 	LastShout = Now;
 	Hud->Say(TEXT("Rend\u0151r"), Hu, En, 3.f);
+}
+
+void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVector& At)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	const FVector2D Spot(At);
+	for (TActorIterator<APolicePatrols> It(World); It; ++It)
+	{
+		APolicePatrols* Police = *It;
+		if (!Police->bReady)
+		{
+			continue;
+		}
+		// The nearest pair walking its beat together.
+		FPatrol* Nearest = nullptr;
+		double NearestDistance = PolicePatrol::LookRange;
+		for (FPatrol& Patrol : Police->Patrols)
+		{
+			if (Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
+				|| !Patrol.Men[0].Person || !Patrol.Men[1].Person)
+			{
+				continue;
+			}
+			const double Distance = FVector2D::Distance(Patrol.Men[0].At, Spot);
+			if (Distance < NearestDistance)
+			{
+				NearestDistance = Distance;
+				Nearest = &Patrol;
+			}
+		}
+		if (!Nearest)
+		{
+			continue;
+		}
+		Nearest->bSawFight = false;
+		// They stop a little short of it, on their own side, side by side.
+		FVector2D Back = Nearest->Men[0].At - Spot;
+		Back = Back.IsNearlyZero() ? FVector2D(1.0, 0.0) : Back.GetSafeNormal();
+		const FVector2D Side(-Back.Y, Back.X);
+		for (int32 m = 0; m < 2; ++m)
+		{
+			FMan& Man = Nearest->Men[m];
+			const FVector2D Goal = Spot + Back * PolicePatrol::LookBack + Side * (m == 0 ? PolicePatrol::LookSide : -PolicePatrol::LookSide);
+			Police->PlanPath(Man, Goal);
+			Man.Doing = EDoing::Looking;
+			Man.LookTarget = Spot;
+			Man.bLookArrived = false;
+			Man.Clock = 0.f;
+		}
+		return;
+	}
 }
 
 bool APolicePatrols::Witnessed(const UObject* WorldContextObject, const FVector& At, double CarRange)

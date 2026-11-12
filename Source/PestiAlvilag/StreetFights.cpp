@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiHud.h"
+#include "Pedestrians.h"
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "Ruffian.h"
@@ -31,6 +32,11 @@ namespace StreetFight
 	// A constable or police car this close sees the first punch (cm).
 	constexpr double PoliceSee = 5000.0;
 	constexpr double ShoutEvery = 4.0;
+	// Passers-by gather round a fight: called this often (s), each call holding them this long (s).
+	constexpr double GatherEvery = 1.0;
+	constexpr float GatherHold = 4.f;
+	// Round a man beaten down they stay a little longer (s).
+	constexpr float BeatenHold = 10.f;
 
 	struct FLine2 { const TCHAR* Hu; const TCHAR* En; };
 	const FLine2 FightLines[] = {
@@ -130,6 +136,36 @@ bool AStreetFights::Begin(APestiPerson* Player, const PersonKit::FOutfit& Dress,
 	return true;
 }
 
+void AStreetFights::SetLoot(int32 Filler)
+{
+	if (Fights.Num() > 0 && Filler > 0)
+	{
+		Fights.Last().Loot = Filler;
+		Fights.Last().bFightsBack = true;
+	}
+}
+
+bool AStreetFights::IsFightNear(const UObject* WorldContextObject, const FVector& At, double Radius)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	for (TActorIterator<AStreetFights> It(World); It; ++It)
+	{
+		for (const FFight& Fight : It->Fights)
+		{
+			const ARuffian* Man = Fight.Man.Get();
+			if (Man && !Fight.bRanOff && !Man->IsBeaten() && FVector::Dist2D(Man->GetActorLocation(), At) < Radius)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void AStreetFights::Say(const TCHAR* Hu, const TCHAR* En)
 {
 	const double Now = GetWorld()->GetTimeSeconds();
@@ -198,10 +234,28 @@ void AStreetFights::Tick(float DeltaSeconds)
 			if (Fight.BeatenAt < 0.0)
 			{
 				Fight.BeatenAt = Now;
-				Say(StreetFight::BeatenLine.Hu, StreetFight::BeatenLine.En);
-				if (Game)
+				// The street stops to look at the man on the ground.
+				APedestrians::Gather(this, Man->GetActorLocation(), StreetFight::BeatenHold, false);
+				if (Fight.Loot > 0)
 				{
-					Game->AddRenown(StreetName::ForBeatingUp, TEXT("megvert egy j\u00e1r\u00f3kel\u0151t"), TEXT("beat up a passer-by"));
+					// The pickpocket: the money comes back, and nobody minds him beaten.
+					if (Game)
+					{
+						Game->AddMoney(Fight.Loot);
+					}
+					if (APestiHUD* Hud = APestiHUD::Get(this))
+					{
+						Hud->Say(TEXT("Zsebtolvaj"), TEXT("Itt van, itt van, vegye vissza!"), TEXT("Here, here, take it back!"), 3.f);
+					}
+					Fight.Loot = 0;
+				}
+				else
+				{
+					Say(StreetFight::BeatenLine.Hu, StreetFight::BeatenLine.En);
+					if (Game)
+					{
+						Game->AddRenown(StreetName::ForBeatingUp, TEXT("megvert egy j\u00e1r\u00f3kel\u0151t"), TEXT("beat up a passer-by"));
+					}
 				}
 			}
 			if (Player && Player->GetFoe() == Man && Player->IsFighting() && Now - Fight.BeatenAt > StreetFight::FistsDownAfter)
@@ -236,6 +290,13 @@ void AStreetFights::Tick(float DeltaSeconds)
 			}
 			SendOff(Fight, Player);
 			continue;
+		}
+
+		// Passers-by stop and make a ring round the two of them.
+		if (Now >= Fight.NextGather)
+		{
+			Fight.NextGather = Now + StreetFight::GatherEvery;
+			APedestrians::Gather(this, (Player->GetActorLocation() + Man->GetActorLocation()) * 0.5, StreetFight::GatherHold, true);
 		}
 
 		// After the first punch has had its moment: fists up and in, or off he runs.

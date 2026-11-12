@@ -122,6 +122,15 @@ public:
 	void AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
 		const FString& Who, const FString& Hu, const FString& En);
 
+	/**
+	 * Something worth a look happened at At (a street fight, a crash, a spilled
+	 * load, someone knocked down): passers-by near it stop and stand round it
+	 * for Seconds (a fight keeps its crowd while it goes on, so call it again
+	 * each frame), and the nearest constables walk over to see. With bFight
+	 * they cheer the fighters on.
+	 */
+	static void Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight);
+
 	/** The furniture file with the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")
 	FString DataFile = TEXT("Data/OsmGraybox/street_furniture.json");
@@ -227,6 +236,15 @@ private:
 		/** Gone indoors out of a downpour (hidden until it eases), and how little rain it takes (0..1). */
 		bool bIndoors = false;
 		float RainShy = 1.f;
+		/** Watching something (a gathering's Id, or none): where he stands from its middle, how, and when he looks for one next. */
+		int32 Gawk = INDEX_NONE;
+		FVector2D GawkOffset = FVector2D::ZeroVector;
+		int32 GawkPose = 0;
+		float GawkClock = 0.f;
+		/** Stops to watch if this is below GawkShare (0..1). */
+		float Nosy = 1.f;
+		/** A pickpocket's takings from the player (fillér), got back by beating him. */
+		int32 Stolen = 0;
 		/** Keeps to one spot (AddStander): there, facing that way, and, when seated, his middle this high over the floor. */
 		bool bStander = false;
 		bool bSeated = false;
@@ -273,6 +291,34 @@ private:
 	void LeaveShelter(FWalker& Walker);
 	/** How many more may come back out of doors this frame. */
 	int32 ComeBackLeft = 0;
+
+	/** A crowd round something: where, until when, how many watch, and its pickpocket. */
+	struct FGathering
+	{
+		int32 Id = 0;
+		FVector2D At = FVector2D::ZeroVector;
+		double Until = 0.0;
+		bool bFight = false;
+		int32 Watchers = 0;
+		/** The next ring spot to give out. */
+		int32 NextSpot = 0;
+		double NextShout = 0.0;
+		/** Since when the player has stood in it on foot, and whether its pickpocket has had his go. */
+		double PlayerSince = -1.0;
+		bool bPicked = false;
+	};
+	TArray<FGathering> Gatherings;
+	int32 NextGatheringId = 1;
+
+	void AddGathering(const FVector& At, float Seconds, bool bFight);
+	FGathering* FindGathering(int32 Id);
+	/** The crowds: ends the ones that are over, calls out, lets the pickpocket work. */
+	void TickGatherings(double Now, bool bPlayerAbout);
+	/** A walker joins a crowd near him, walks to his place in the ring and watches; true when it has moved and posed him. */
+	bool TickGawk(FWalker& Walker, double Now, float DeltaSeconds);
+	void LeaveGawk(FWalker& Walker);
+	/** The watcher nearest the player lifts his wallet and runs. */
+	void PickPocket(FGathering& Ring);
 
 	/** Has him pose as what he is doing now demands; false when just walking. */
 	bool PoseReacting(FWalker& Walker, float DeltaSeconds);

@@ -10,6 +10,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "HorseSound.h"
 #include "Kismet/GameplayStatics.h"
+#include "Pedestrians.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiHud.h"
@@ -357,6 +358,8 @@ void ATrafficCart::SpillOne()
 	}
 	++SpilledThisBolt;
 	LoadMeshes[Index]->SetVisibility(false);
+	// Passers-by stop to look at the mess.
+	APedestrians::Gather(this, GetActorLocation(), 25.f, false);
 
 	// Over the side it stood on (the middle row either way), onto the road behind.
 	const FVector Spot = LoadSpot(CartLoad, Index);

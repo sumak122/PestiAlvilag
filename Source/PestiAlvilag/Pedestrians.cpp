@@ -190,6 +190,52 @@ namespace Pedestrians
 		{ TEXT("Rend\u0151r! Elg\u00e1zoltak!"), TEXT("Police! I've been run over!") },
 	};
 	const FLine2 WitnessLine = { TEXT("\u00daristen! Ment\u0151t! H\u00edvjanak ment\u0151t!"), TEXT("Good God! Call an ambulance!") };
+	// Crowds round trouble (APedestrians::Gather): how far off a passer-by
+	// notices it, how many of them stop (share), how many watch at most, how
+	// far from the middle they stand (the first ring, and each further one),
+	// one stays only this far from his own walk, and how often he looks.
+	constexpr double GatherMerge = 700.0;
+	constexpr double GawkReach = 1000.0;
+	constexpr float GawkShare = 0.65f;
+	constexpr int32 MostWatchers = 12;
+	constexpr double RingNear = 330.0;
+	constexpr double RingStep = 75.0;
+	constexpr double GawkStray = 1300.0;
+	constexpr float GawkLook = 1.f;
+	constexpr float GawkHurry = 1.3f;
+	constexpr double GawkNear = 12.0;
+	constexpr float CheerArms = 140.f;
+	constexpr float CheerWave = 20.f;
+	constexpr float CheerSpeed = 6.f;
+	// How long a crowd stays round a crash, a spilled load, someone knocked down (s).
+	constexpr float CrowdKnockedDown = 20.f;
+	// Calls from the crowd now and then, when the player is this near (cm).
+	constexpr float CrowdShoutMin = 5.f;
+	constexpr float CrowdShoutMax = 9.f;
+	constexpr double CrowdHeard = 3000.0;
+	// The pickpocket: a crowd this big, the player standing in it this long
+	// (within PickNear of its middle), and this chance he tries; he takes
+	// between these (fillér) and runs this long.
+	constexpr int32 PickWatchers = 4;
+	constexpr double PickNear = 650.0;
+	constexpr double PickAfter = 6.0;
+	constexpr float PickChance = 0.5f;
+	constexpr int32 PickLeast = 40;
+	constexpr int32 PickMost = 200;
+	constexpr float PickRun = 14.f;
+	const FLine2 FightCrowdLines[] = {
+		{ TEXT("\u00dcsd!"), TEXT("Hit him!") },
+		{ TEXT("Ez az, add neki!"), TEXT("That's it, give it to him!") },
+		{ TEXT("Rend\u0151rt! Valaki h\u00edvjon rend\u0151rt!"), TEXT("Police! Someone call the police!") },
+		{ TEXT("Na, ebb\u0151l baj lesz."), TEXT("Well, this'll end badly.") },
+	};
+	const FLine2 CrashCrowdLines[] = {
+		{ TEXT("J\u00e9zusom!"), TEXT("Good Lord!") },
+		{ TEXT("Ki volt ez az \u0151r\u00fclt?"), TEXT("Who was that madman?") },
+		{ TEXT("H\u00edvjanak orvost!"), TEXT("Get a doctor!") },
+		{ TEXT("L\u00e1ttam, ahogy j\u00f6tt!"), TEXT("I saw him coming!") },
+	};
+	const FLine2 PickLine = { TEXT("K\u00f6sz\u00f6n\u00f6m a t\u00e1rc\u00e1t, nagys\u00e1gos \u00far!"), TEXT("Much obliged for the wallet, sir!") };
 
 	// Asked the way (Q): the nearest passer-by within reach stops this long,
 	// turns to the player and after a moment points. He never turns further
@@ -828,6 +874,13 @@ void APedestrians::PickAFight(APawn* Player)
 	{
 		return;
 	}
+	LeaveGawk(Walker);
+	// The pickpocket: beaten, he hands the wallet back.
+	if (Walker.Stolen > 0)
+	{
+		Fights->SetLoot(Walker.Stolen);
+		Walker.Stolen = 0;
+	}
 	if (Walker.bStander)
 	{
 		// One who keeps to a spot is only hidden while the fighter stands in
@@ -1115,6 +1168,12 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 	StartReact(Walker, bKilled ? EReact::Dead : EReact::Down, Pedestrians::FallSeconds + Pedestrians::LieSeconds, Thrown);
 	// He falls on his back, away from the car: so he faces it.
 	Walker.ShownYaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(-Going.Y, -Going.X)));
+	LeaveGawk(Walker);
+	if (!bKilled)
+	{
+		// People come over to see if he is all right.
+		AddGathering(FVector(Walker.Shown + Thrown, Walker.GroundZ), Pedestrians::CrowdKnockedDown, false);
+	}
 
 	if (APestiCar* Car = Cast<APestiCar>(LastPlayer.Get()))
 	{
@@ -1347,6 +1406,8 @@ void APedestrians::Tick(float DeltaSeconds)
 		Walker.UmbrellaPatience = Random.FRand();
 		Walker.RainShy = Random.FRand();
 		Walker.ShelterClock = Random.FRand() * Pedestrians::ShelterLook;
+		Walker.Nosy = Random.FRand();
+		Walker.GawkClock = Random.FRand() * Pedestrians::GawkLook;
 		Walkers.Add(Walker);
 	}
 
@@ -1377,6 +1438,7 @@ void APedestrians::Tick(float DeltaSeconds)
 	const AWeather* Sky = AWeather::Get(GetWorld());
 	const float RainNow = Sky ? Sky->GetRain() : 0.f;
 	ComeBackLeft = Pedestrians::SpawnPerFrame;
+	TickGatherings(Now, bPlayerAbout);
 
 	for (FWalker& Walker : Walkers)
 	{
@@ -1406,6 +1468,8 @@ void APedestrians::Tick(float DeltaSeconds)
 		if ((bClearDead || (Away > Range * 1.2 && (!bSeen || Away > Range * Pedestrians::GiveUpShare)))
 			&& PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
 		{
+			LeaveGawk(Walker);
+			Walker.Stolen = 0;
 			Walker.bPlaced = false;
 			ClearReact(Walker);
 			Walker.bWaiting = false;
@@ -1417,6 +1481,10 @@ void APedestrians::Tick(float DeltaSeconds)
 			ReactToPlayer(Walker, Now);
 		}
 		if (TickRain(Walker, RainNow, Camera, Looking, DeltaSeconds))
+		{
+			continue;
+		}
+		if (TickGawk(Walker, Now, DeltaSeconds))
 		{
 			continue;
 		}
@@ -1611,6 +1679,262 @@ void APedestrians::LeaveShelter(FWalker& Walker)
 		Street->LeaveShelter(Walker.Shelter);
 	}
 	Walker.Shelter = INDEX_NONE;
+}
+
+void APedestrians::Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	TActorIterator<APedestrians> It(World);
+	if (It)
+	{
+		It->AddGathering(At, Seconds, bFight);
+	}
+}
+
+void APedestrians::AddGathering(const FVector& At, float Seconds, bool bFight)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	for (FGathering& Ring : Gatherings)
+	{
+		if (FVector2D::Distance(Ring.At, FVector2D(At)) < Pedestrians::GatherMerge)
+		{
+			// The same trouble: it lasts longer, and a fight's crowd follows it as it moves.
+			Ring.Until = FMath::Max(Ring.Until, Now + Seconds);
+			Ring.bFight = Ring.bFight || bFight;
+			if (bFight)
+			{
+				Ring.At = FVector2D(At);
+			}
+			return;
+		}
+	}
+	FGathering& Ring = Gatherings.AddDefaulted_GetRef();
+	Ring.Id = NextGatheringId++;
+	Ring.At = FVector2D(At);
+	Ring.Until = Now + Seconds;
+	Ring.bFight = bFight;
+	Ring.NextShout = Now + Random.FRandRange(1.f, Pedestrians::CrowdShoutMin);
+	// The nearest constables come to see what is going on.
+	APolicePatrols::Investigate(this, At);
+}
+
+APedestrians::FGathering* APedestrians::FindGathering(int32 Id)
+{
+	for (FGathering& Ring : Gatherings)
+	{
+		if (Ring.Id == Id)
+		{
+			return &Ring;
+		}
+	}
+	return nullptr;
+}
+
+void APedestrians::TickGatherings(double Now, bool bPlayerAbout)
+{
+	for (int32 i = Gatherings.Num() - 1; i >= 0; --i)
+	{
+		FGathering& Ring = Gatherings[i];
+		if (Now > Ring.Until)
+		{
+			// Over: the watchers walk on (TickGawk finds their crowd gone).
+			Gatherings.RemoveAt(i);
+			continue;
+		}
+		const double FromPlayer = FVector2D::Distance(Ring.At, FVector2D(PlayerAt));
+
+		// Someone calls out now and then.
+		if (Ring.Watchers > 0 && Now >= Ring.NextShout)
+		{
+			Ring.NextShout = Now + Random.FRandRange(Pedestrians::CrowdShoutMin, Pedestrians::CrowdShoutMax);
+			if (bPlayerAbout && FromPlayer < Pedestrians::CrowdHeard)
+			{
+				const Pedestrians::FLine2& Line = Ring.bFight
+					? Pedestrians::FightCrowdLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::FightCrowdLines)) - 1)]
+					: Pedestrians::CrashCrowdLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::CrashCrowdLines)) - 1)];
+				Shout(Line.Hu, Line.En);
+			}
+		}
+
+		// The player standing about in the crowd on foot: its pickpocket may try his luck, once.
+		if (Ring.bPicked)
+		{
+			continue;
+		}
+		if (bPlayerAbout && !bPlayerDriving && Ring.Watchers >= Pedestrians::PickWatchers && FromPlayer < Pedestrians::PickNear)
+		{
+			if (Ring.PlayerSince < 0.0)
+			{
+				Ring.PlayerSince = Now;
+			}
+			else if (Now - Ring.PlayerSince > Pedestrians::PickAfter)
+			{
+				Ring.bPicked = true;
+				if (Random.FRand() < Pedestrians::PickChance)
+				{
+					PickPocket(Ring);
+				}
+			}
+		}
+		else
+		{
+			Ring.PlayerSince = -1.0;
+		}
+	}
+}
+
+void APedestrians::PickPocket(FGathering& Ring)
+{
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Game || Game->GetMoney() <= 0)
+	{
+		return;
+	}
+	FWalker* Thief = nullptr;
+	double Nearest = 1e12;
+	for (FWalker& Walker : Walkers)
+	{
+		const double Gap = FVector2D::DistSquared(Walker.Shown, FVector2D(PlayerAt));
+		if (Walker.Gawk == Ring.Id && IsValid(Walker.Person) && Walker.React == EReact::None && Gap < Nearest)
+		{
+			Nearest = Gap;
+			Thief = &Walker;
+		}
+	}
+	if (!Thief)
+	{
+		return;
+	}
+	const int32 Taken = FMath::Min(Game->GetMoney(), Random.RandRange(Pedestrians::PickLeast, Pedestrians::PickMost));
+	Game->AddMoney(-Taken);
+	Thief->Stolen = Taken;
+	LeaveGawk(*Thief);
+	// Off he runs, away from the player.
+	const FVector2D Away = (Thief->Shown - FVector2D(PlayerAt)).GetSafeNormal();
+	StartReact(*Thief, EReact::Flee, Pedestrians::PickRun, Away);
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->Say(TEXT("Zsebtolvaj"), Pedestrians::PickLine.Hu, Pedestrians::PickLine.En, 3.f);
+	}
+}
+
+bool APedestrians::TickGawk(FWalker& Walker, double Now, float DeltaSeconds)
+{
+	APedestrian* Person = Walker.Person;
+	FGathering* Ring = Walker.Gawk != INDEX_NONE ? FindGathering(Walker.Gawk) : nullptr;
+
+	// Watching: over to his place in the ring, then turned to it, cheering, pointing or just looking.
+	if (Walker.Gawk != INDEX_NONE)
+	{
+		FVector2D Tangent;
+		const FVector2D OwnWay = PointOn(Lines[Walker.Line], Walker.Along, Tangent);
+		const FVector2D Spot = Ring ? Ring->At + Walker.GawkOffset : FVector2D::ZeroVector;
+		if (!Ring || Walker.React != EReact::None || !Walker.bPlaced || Walker.Shelter != INDEX_NONE
+			|| FVector2D::Distance(Spot, OwnWay) > Pedestrians::GawkStray)
+		{
+			LeaveGawk(Walker);
+			return false;
+		}
+		const double Raise = Pedestrians::Middle * Person->GetActorScale3D().Z;
+		const FVector2D Gap = Spot - Walker.Shown;
+		const double Left = Gap.Size();
+		if (Left > Pedestrians::GawkNear)
+		{
+			const float Pace = Walker.Speed * Pedestrians::GawkHurry;
+			const double Step = Pace * DeltaSeconds;
+			Walker.Shown += Left > Step ? Gap / Left * Step : Gap;
+			const float Toward = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Gap.Y, Gap.X)));
+			Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Toward, Pedestrians::TurnRate * DeltaSeconds);
+			Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Raise), Walker.ShownYaw, Pace, DeltaSeconds);
+			return true;
+		}
+		Walker.Shown = Spot;
+		const FVector2D ToMiddle = Ring->At - Walker.Shown;
+		const float Facing = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToMiddle.Y, ToMiddle.X)));
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, Pedestrians::StanderTurnRate * DeltaSeconds);
+		const FVector Location(Walker.Shown, Walker.GroundZ + Raise);
+		switch (Walker.GawkPose)
+		{
+		case 0:
+			if (Ring->bFight)
+			{
+				// Arms up, egging them on.
+				const float Wave = FMath::Sin(static_cast<float>(Now) * Pedestrians::CheerSpeed + Walker.Nosy * 10.f);
+				Person->Hold(Location, FRotator(0.f, Walker.ShownYaw, 0.f), 0.f, 0.f, Pedestrians::CheerArms + Pedestrians::CheerWave * Wave);
+				break;
+			}
+			Person->PointTo(Location, Walker.ShownYaw, Facing, true);
+			break;
+		case 1:
+			Person->PointTo(Location, Walker.ShownYaw, Facing, true);
+			break;
+		case 2:
+			Person->Huddle(Location, Walker.ShownYaw);
+			break;
+		default:
+			Person->PointTo(Location, Walker.ShownYaw, 0.0, false);
+			break;
+		}
+		return true;
+	}
+
+	// Walking by: now and then he looks whether there is anything to see near him.
+	Walker.GawkClock -= DeltaSeconds;
+	if (Gatherings.Num() == 0 || Walker.GawkClock > 0.f)
+	{
+		return false;
+	}
+	Walker.GawkClock = Pedestrians::GawkLook;
+	if (Walker.Nosy >= Pedestrians::GawkShare || Walker.React != EReact::None || !Walker.bPlaced || Walker.bWaiting
+		|| Walker.Shelter != INDEX_NONE || Walker.Stolen > 0 || Lines[Walker.Line].bCrossing)
+	{
+		return false;
+	}
+	for (FGathering& Near : Gatherings)
+	{
+		if (Near.Watchers >= Pedestrians::MostWatchers || FVector2D::Distance(Near.At, Walker.Shown) > Pedestrians::GawkReach)
+		{
+			continue;
+		}
+		// A free place in the ring, not through a wall.
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(PedestrianGawk), false, this);
+		const double EyeZ = Walker.GroundZ + Pedestrians::Middle;
+		for (int32 Try = 0; Try < 6; ++Try)
+		{
+			const int32 Place = Near.NextSpot++;
+			const double Angle = FMath::DegreesToRadians(Place * 137.5 + Random.FRandRange(-12.f, 12.f));
+			const double Radius = Pedestrians::RingNear + (Place % 3) * Pedestrians::RingStep;
+			const FVector2D Offset(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius);
+			if (GetWorld()->LineTraceTestByObjectType(FVector(Near.At, EyeZ), FVector(Near.At + Offset, EyeZ),
+				FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+			{
+				continue;
+			}
+			Walker.Gawk = Near.Id;
+			Walker.GawkOffset = Offset;
+			Walker.GawkPose = Random.RandRange(0, 3);
+			++Near.Watchers;
+			return false;
+		}
+	}
+	return false;
+}
+
+void APedestrians::LeaveGawk(FWalker& Walker)
+{
+	if (Walker.Gawk == INDEX_NONE)
+	{
+		return;
+	}
+	if (FGathering* Ring = FindGathering(Walker.Gawk))
+	{
+		Ring->Watchers = FMath::Max(0, Ring->Watchers - 1);
+	}
+	Walker.Gawk = INDEX_NONE;
 }
 
 double APedestrians::MiddleUp(const FWalker& Walker) const
