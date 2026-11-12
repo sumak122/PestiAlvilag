@@ -656,7 +656,7 @@ void ACityDetails::BuildCityTheatre(const FJsonObject& Root)
 	const double FrontYaw = (*FrontValues)[2]->AsNumber();
 	const double FrontLength = (*FrontValues)[3]->AsNumber();
 	const FVector2D Middle = Start + FVector2D(FRotator(0.0, FrontYaw, 0.0).RotateVector(FVector(0.0, FrontLength * 0.5, 0.0)));
-	const double Ground = GroundAt(Middle + CityDetailsPlace::Ahead(FrontYaw, CityDetailsPlace::OutFromWall + Forward + CanopyDepth));
+	const double Ground = GroundAt(Middle + CityDetailsPlace::Ahead(FrontYaw, CityDetailsPlace::OutFromWall + CityTheatreModel::MiddleOut + CityTheatreModel::CanopyDepth));
 	AShapeSet* Set = PutUp(FVector(Start, Ground), FrontYaw, CityDetailsPlace::ChurchDrawDistance);
 	if (!Set)
 	{

@@ -6,6 +6,7 @@
 #include "SurfaceModel.h"
 
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 
 /**
  * Materials for the ground: cobbles, big setts, paving slabs, gravel and
@@ -22,6 +23,12 @@ namespace GroundSurfaces
 {
 	/** A material showing Kind, or nullptr if it can't be made here. */
 	UMaterialInstanceDynamic* Make(SurfaceModel::EKind Kind, UObject* Outer);
+
+	/**
+	 * Which ground a material made by Make shows (for the footsteps); false
+	 * for any other material, or none.
+	 */
+	bool KindOf(const UMaterialInterface* Material, SurfaceModel::EKind& OutKind);
 
 	/**
 	 * How wet the ground is, 0 dry to 1 soaked (from AWeather): every ground

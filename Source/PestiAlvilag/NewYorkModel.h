@@ -72,7 +72,7 @@ namespace NewYorkModel
 	constexpr double EdgeMargin = 40.0;
 	constexpr double PierWidth = 70.0;
 	/** How far the middle bays of the körút front stand forward. */
-	constexpr double Forward = 45.0;
+	constexpr double BaysOut = 45.0;
 	/** How many café bays the Dohány utca front has, from the corner. */
 	constexpr int32 DohanyCafeBays = 4;
 
@@ -198,7 +198,7 @@ namespace NewYorkModel
 		auto BayY = [&](int32 k) { return EdgeMargin + Bay * (k + 0.5); };
 		// Bays counted from the corner (the körút runs to the corner, Dohány utca from it).
 		auto FromCorner = [&](int32 k) { return bMain ? Bays - 1 - k : k; };
-		auto Forth = [&](int32 k) { return bMain && FMath::Abs(k - MidBay) <= 1 ? Forward : 0.0; };
+		auto Forth = [&](int32 k) { return bMain && FMath::Abs(k - MidBay) <= 1 ? BaysOut : 0.0; };
 
 		// The face over the plain block's wall, the dark plinth, the band and its fascia.
 		Span(Out, Stone, FVector(0, 0, 0), FVector(4, Length, AtticTop), false);
@@ -319,22 +319,22 @@ namespace NewYorkModel
 			const double G0 = EdgeMargin + Bay * (MidBay - 1);
 			const double G1 = EdgeMargin + Bay * (MidBay + 2);
 			const double GY = (G0 + G1) * 0.5;
-			Span(Out, Trim, FVector(Forward, G0 - 10, CorniceAt + 22), FVector(Forward + 75, G1 + 10, CorniceTop), false);
-			Span(Out, Stone, FVector(Forward, G0, CorniceTop), FVector(Forward + 22, G1, AtticTop + 60), false);
-			Add(Out, MarketModel::Cylinder, Stone, FVector(Forward + 12, GY, AtticTop + 60), FVector(560, G1 - G0, 10), 0.0, false, 90.0);
-			Add(Out, MarketModel::Cylinder, Trim, FVector(Forward + 8, GY, AtticTop + 60), FVector(600, G1 - G0 + 40, 10), 0.0, false, 90.0);
-			Add(Out, MarketModel::Cylinder, Gilt, FVector(Forward + 18, GY, AtticTop + 170), FVector(110, 160, 4), 0.0, false, 90.0);
-			Add(Out, MarketModel::Cylinder, StoneDark, FVector(Forward + 20, GY, AtticTop + 170), FVector(90, 140, 4), 0.0, false, 90.0);
-			Signs.Add({ TEXT("NEW-YORK"), FVector(Forward + 24, GY, AtticTop + 70), 0.0, 70.0, Gilt });
-			Signs.Add({ TEXT("1894"), FVector(Forward + 24, GY, AtticTop + 170), 0.0, 34.0, Gilt });
-			Add(Out, MarketModel::Sphere, Gilt, FVector(Forward + 12, GY, AtticTop + 345), FVector(40, 40, 40), 0.0, false);
+			Span(Out, Trim, FVector(BaysOut, G0 - 10, CorniceAt + 22), FVector(BaysOut + 75, G1 + 10, CorniceTop), false);
+			Span(Out, Stone, FVector(BaysOut, G0, CorniceTop), FVector(BaysOut + 22, G1, AtticTop + 60), false);
+			Add(Out, MarketModel::Cylinder, Stone, FVector(BaysOut + 12, GY, AtticTop + 60), FVector(560, G1 - G0, 10), 0.0, false, 90.0);
+			Add(Out, MarketModel::Cylinder, Trim, FVector(BaysOut + 8, GY, AtticTop + 60), FVector(600, G1 - G0 + 40, 10), 0.0, false, 90.0);
+			Add(Out, MarketModel::Cylinder, Gilt, FVector(BaysOut + 18, GY, AtticTop + 170), FVector(110, 160, 4), 0.0, false, 90.0);
+			Add(Out, MarketModel::Cylinder, StoneDark, FVector(BaysOut + 20, GY, AtticTop + 170), FVector(90, 140, 4), 0.0, false, 90.0);
+			Signs.Add({ TEXT("NEW-YORK"), FVector(BaysOut + 24, GY, AtticTop + 70), 0.0, 70.0, Gilt });
+			Signs.Add({ TEXT("1894"), FVector(BaysOut + 24, GY, AtticTop + 170), 0.0, 34.0, Gilt });
+			Add(Out, MarketModel::Sphere, Gilt, FVector(BaysOut + 12, GY, AtticTop + 345), FVector(40, 40, 40), 0.0, false);
 			for (const double Y : { G0, G1 })
 			{
-				Add(Out, MarketModel::Cylinder, Trim, FVector(Forward + 14, Y, AtticTop + 10), FVector(40, 40, 20), 0.0, false);
-				Add(Out, MarketModel::Sphere, Stone, FVector(Forward + 14, Y, AtticTop + 60), FVector(54, 54, 80), 0.0, false);
+				Add(Out, MarketModel::Cylinder, Trim, FVector(BaysOut + 14, Y, AtticTop + 10), FVector(40, 40, 20), 0.0, false);
+				Add(Out, MarketModel::Sphere, Stone, FVector(BaysOut + 14, Y, AtticTop + 60), FVector(54, 54, 80), 0.0, false);
 			}
 			// The café's gilt name along the band, either side of the door.
-			Signs.Add({ TEXT("NEW YORK K\u00C1V\u00C9H\u00C1Z"), FVector(Forward + 42, GY, BandAt + 25), 0.0, 38.0, Gilt });
+			Signs.Add({ TEXT("NEW YORK K\u00C1V\u00C9H\u00C1Z"), FVector(BaysOut + 42, GY, BandAt + 25), 0.0, 38.0, Gilt });
 			const double Third = (Length - G1) * 0.5 + G1;
 			Signs.Add({ TEXT("NEW YORK"), FVector(42, (G0 - EdgeMargin) * 0.5 + EdgeMargin, BandAt + 25), 0.0, 34.0, Gilt });
 			Signs.Add({ TEXT("NEW YORK"), FVector(42, Third, BandAt + 25), 0.0, 34.0, Gilt });

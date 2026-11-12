@@ -9,11 +9,13 @@
 #include "FightSynth.h"
 #include "FreeRun.h"
 #include "PersonKit.h"
+#include "WalkAnim.h"
 #include "PestiPerson.generated.h"
 
 class APestiCar;
 class UCameraComponent;
 class UFightSound;
+class UFootSound;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
@@ -212,6 +214,10 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UFightSound> FightNoise;
 
+	/** His footsteps: made the first time a foot comes down (the player only). */
+	UPROPERTY(Transient)
+	TObjectPtr<UFootSound> FootNoise;
+
 	virtual void BeginPlay() override;
 
 	/** The clothes he wears. */
@@ -265,6 +271,8 @@ private:
 	void Look(APlayerController* PC, float DeltaSeconds);
 	void Walk(const APlayerController* PC);
 	void SwingLimbs(float DeltaSeconds);
+	/** A footstep (Strength 0..1, Running 0 walking to 1 sprinting), sounding of the ground under him. */
+	void PlayFootstep(float Strength, float Running);
 	void TryEnterCar(APlayerController* PC);
 	/** Breaking into a locked car (a tap of F smashes the window, holding it picks the lock); true while that has his F key. */
 	bool TickBreakIn(APlayerController* PC);
@@ -273,7 +281,10 @@ private:
 	void SetInWorld(bool bInWorld);
 	void SetRideView(bool bOutside, APlayerController* PC);
 
-	float StridePhase = 0.f;
+	/** Walking, running, jumping and standing about (WalkAnim). */
+	WalkAnim::FWalker WalkMotion;
+	/** Which way he faced last frame, to tell how fast he turns. */
+	float LastHeading = 0.f;
 	bool bCameraAimed = false;
 	bool bCarrying = false;
 	bool bHoldingInFront = false;
