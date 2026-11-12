@@ -152,6 +152,13 @@ public:
 	 */
 	static bool Witnessed(const UObject* WorldContextObject, const FVector& At, double CarRange);
 
+	/**
+	 * A crowd has gathered at At (a fight, a crash, a spill): the nearest
+	 * pair on its beat walks over and stands looking a while. A fight the
+	 * player is still in when they get there makes him wanted.
+	 */
+	static void Investigate(const UObject* WorldContextObject, const FVector& At);
+
 	/** The furniture file with the boxes and the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	FString DataFile = TEXT("Data/OsmGraybox/street_furniture.json");
@@ -195,6 +202,7 @@ private:
 		Chasing,    // after the player
 		Down,       // knocked down by the player's car
 		Returning,  // back to the beat
+		Looking,    // gone over to see what the crowd is looking at
 	};
 
 	struct FMan
@@ -215,6 +223,9 @@ private:
 		bool bSeesPlayer = false;
 		/** Telephoning for help (not the routine call). */
 		bool bForHelp = false;
+		/** Looking: what at, and whether he has got there. */
+		FVector2D LookTarget = FVector2D::ZeroVector;
+		bool bLookArrived = false;
 	};
 
 	struct FPatrol
@@ -230,6 +241,8 @@ private:
 		/** Whistled and shouted at the player, and telephoned for help, this time he is wanted. */
 		bool bAlarmed = false;
 		bool bPhonedForHelp = false;
+		/** Gone to look at a crowd and seen the player fighting there. */
+		bool bSawFight = false;
 	};
 
 	struct FLine

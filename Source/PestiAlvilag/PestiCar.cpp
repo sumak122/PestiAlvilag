@@ -14,6 +14,7 @@
 #include "EngineSound.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Pedestrians.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PersonModel.h"
@@ -53,6 +54,8 @@ namespace PestiCar
 	// and a crunch is at full strength this much faster than that.
 	constexpr float ThumpSpeed = 120.f;
 	constexpr float CrunchSpeed = 550.f;
+	// Passers-by stand round a crash this long (s).
+	constexpr float CrowdHold = 25.f;
 	constexpr float CrunchRange = 1500.f;
 	// Two crash sounds at least this far apart (s), so one long contact is one crash.
 	constexpr double CrashGap = 0.25;
@@ -581,6 +584,8 @@ void APestiCar::CrashFeedback(const FVector& At, const FVector& Away, float Into
 			{
 				Bits->Burst(At, Away, Strength, (Knocked & CarVisuals::KnockGlass) != 0, Ground);
 			}
+			// A real crash: passers-by stop and stare.
+			APedestrians::Gather(this, At, PestiCar::CrowdHold, false);
 		}
 		if (Knocked & CarVisuals::KnockGlass)
 		{

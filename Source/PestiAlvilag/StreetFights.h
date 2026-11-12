@@ -46,6 +46,12 @@ public:
 	/** True when the player is on foot, free, and has just clicked to punch. */
 	static bool WantsToPunch(const APestiPerson* Player);
 
+	/** The fight just begun is with a pickpocket carrying Filler pengő of the player's: he fights back, and gives it up when beaten. */
+	void SetLoot(int32 Filler);
+
+	/** True when a fight is going on (not beaten, not run off) within Radius of At. */
+	static bool IsFightNear(const UObject* WorldContextObject, const FVector& At, double Radius);
+
 private:
 	struct FFight
 	{
@@ -54,6 +60,10 @@ private:
 		double BeatenAt = -1.0;
 		bool bFightsBack = false;
 		bool bRanOff = false;
+		// Money the man took off the player (a pickpocket), handed back when he is beaten.
+		int32 Loot = 0;
+		// When the street crowd round this fight is next called (s).
+		double NextGather = 0.0;
 	};
 
 	TArray<FFight> Fights;
