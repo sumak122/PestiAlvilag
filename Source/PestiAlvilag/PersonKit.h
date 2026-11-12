@@ -30,6 +30,8 @@ namespace PersonKit
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
 	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket, Baton };
 
+	enum class EMoustache : uint8 { Auto, Brush, Handlebar, Walrus, Pencil };
+	enum class EBeard : uint8 { None, Stubble, Goatee, Full };
 	/** The pale yellow of a bamboo cane (HeldColor for EHeld::Baton). */
 	inline FLinearColor Bamboo() { return FLinearColor(0.60f, 0.47f, 0.24f); }
 
@@ -46,6 +48,18 @@ namespace PersonKit
 		bool bTie = true;
 		bool bScarf = false;
 		bool bMoustache = false;
+		/** The cut of the moustache; Auto picks one from the person's face. */
+		EMoustache MoustacheKind = EMoustache::Auto;
+		/** A beard on a man: a day's stubble, a goatee on the chin, or a full beard. */
+		EBeard Beard = EBeard::None;
+		/**
+		 * The shape of the face (0 round, 1 long, 2 square jawed, 3 thin and
+		 * bony) and of the nose; -1 picks them from the outfit itself, so the
+		 * same person always gets the same face.
+		 */
+		int32 FaceShape = -1;
+		/** An older face: lines on the brow and by the mouth, bags under the eyes. Grey hair turns it on too. */
+		bool bAged = false;
 		bool bApron = false;
 		/** A cloth sash wound round the waist. */
 		bool bSash = false;
@@ -303,6 +317,232 @@ namespace PersonKit
 		Loft(Piece, Color, Rings, Sides, true, true);
 	}
 
+	/** A colour part way from A to B. */
+	inline FLinearColor MixColor(const FLinearColor& A, const FLinearColor& B, float Amount)
+	{
+		return FLinearColor(A.R + (B.R - A.R) * Amount, A.G + (B.G - A.G) * Amount, A.B + (B.B - A.B) * Amount);
+	}
+
+	/**
+	 * The lower face and the features on the head: jaw, cheeks and chin in
+	 * one of four shapes, a nose of three kinds, eyes with whites, brows,
+	 * lips, ears, a moustache or beard, and the lines of an older face.
+	 * HeadAt is the middle of the skull blob (10 x 8.6 x 11.5 cm, times Hr);
+	 * every feature is set on the face's surface, worked out from the lumps
+	 * the face is made of.
+	 */
+	inline void DressFace(const FOutfit& O, FPiece& B, const FVector& HeadAt, double Hr)
+	{
+		const bool W = O.bWoman;
+		// Pick the face from the outfit itself, so one person always looks the same.
+		uint32 FaceSeed = uint32(O.Height * 37.f) * 2654435761u;
+		FaceSeed ^= uint32(O.Skin.R * 997.f) * 40503u ^ uint32(O.Hair.G * 991.f) * 9973u;
+		FaceSeed ^= uint32(O.Coat.B * 983.f) * 7919u ^ uint32(O.Build * 1000.f) * 31u ^ uint32(O.Trousers.R * 977.f) * 613u;
+		FaceSeed ^= FaceSeed >> 15;
+		FaceSeed *= 0x2c1b3c6du;
+		FaceSeed ^= FaceSeed >> 12;
+		const int32 FaceKind = O.FaceShape >= 0 ? O.FaceShape % 4 : (W ? int32(FaceSeed % 2u) : int32(FaceSeed % 4u));
+		const int32 NoseKind = W ? int32((FaceSeed >> 4) % 2u) : int32((FaceSeed >> 4) % 3u);
+		const bool bGrey = O.Hair.R > 0.3f && FMath::Abs(O.Hair.R - O.Hair.B) < 0.06f;
+		const bool bOlder = O.bAged || bGrey;
+
+		const FLinearColor EyeWhite(0.80f, 0.78f, 0.72f);
+		const FLinearColor Pupil(0.03f, 0.03f, 0.03f);
+		const FLinearColor Shade(O.Skin.R * 0.78f, O.Skin.G * 0.74f, O.Skin.B * 0.74f);
+		const FLinearColor Lip = W ? FLinearColor(0.55f, 0.13f, 0.12f) : FLinearColor(O.Skin.R * 0.80f, O.Skin.G * 0.56f, O.Skin.B * 0.56f);
+		const FLinearColor BrowColor = bOlder && !bGrey ? MixColor(O.Hair, FLinearColor(0.42f, 0.42f, 0.40f), 0.5f) : O.Hair;
+
+		// The lumps of the face, in head units (cm before Hr) from HeadAt: the skull first.
+		struct FLump
+		{
+			FVector Center, Radius;
+		};
+		TArray<FLump> Lumps = { { FVector::ZeroVector, FVector(10.0, 8.6, 11.5) } };
+		// How far forward the face's surface is at a point (side Y, height Z).
+		auto FaceFrontAt = [&Lumps](double Y, double Z)
+		{
+			double Best = 0.0;
+			for (const FLump& L : Lumps)
+			{
+				const double Dy = (Y - L.Center.Y) / L.Radius.Y;
+				const double Dz = (Z - L.Center.Z) / L.Radius.Z;
+				const double Rest = 1.0 - Dy * Dy - Dz * Dz;
+				if (Rest > 0.0)
+				{
+					Best = FMath::Max(Best, L.Center.X + L.Radius.X * FMath::Sqrt(Rest));
+				}
+			}
+			return Best;
+		};
+		// The jaw and chin grow stubble or a beard; their colour.
+		const bool bBearded = !W && (O.Beard == EBeard::Stubble || O.Beard == EBeard::Full);
+		const FLinearColor JawColor = !bBearded ? O.Skin : O.Beard == EBeard::Full ? O.Hair : MixColor(O.Skin, O.Hair, 0.45f);
+		auto AddLump = [&Lumps, &B, &HeadAt, Hr](const FLinearColor& Color, const FVector& Center, const FVector& Radius)
+		{
+			Lumps.Add({ Center, Radius });
+			Blob(B, Color, HeadAt + Center * Hr, Radius * Hr, 12, 6);
+		};
+		// A small rounded lump set on the face, Proud cm out from it (the chin).
+		auto AddBump = [&AddLump, &FaceFrontAt](const FLinearColor& Color, double Y, double Z, const FVector& Radius, double Proud)
+		{
+			AddLump(Color, FVector(FaceFrontAt(Y, Z) + Proud - Radius.X, Y, Z), Radius);
+		};
+		// The jaw and chin for each shape: round, long, square jawed, thin and bony.
+		switch (FaceKind)
+		{
+		case 1:
+			AddLump(JawColor, FVector(2.0, 0.0, -6.3), FVector(7.8, 6.6, 6.6));
+			AddBump(JawColor, 0.0, -11.0, FVector(2.2, 2.6, 2.0), 0.6);
+			break;
+		case 2:
+			AddLump(JawColor, FVector(2.0, 0.0, -5.6), FVector(8.0, 7.4, 6.0));
+			AddLump(JawColor, FVector(1.5, 5.0, -8.2), FVector(3.4, 2.3, 2.3));
+			AddLump(JawColor, FVector(1.5, -5.0, -8.2), FVector(3.4, 2.3, 2.3));
+			AddBump(JawColor, 0.0, -9.8, FVector(2.6, 3.4, 2.0), 0.5);
+			break;
+		case 3:
+			AddLump(JawColor, FVector(2.0, 0.0, -5.8), FVector(7.8, 6.3, 6.2));
+			AddBump(JawColor, 0.0, -10.4, FVector(2.2, 2.0, 2.0), 0.5);
+			break;
+		default:
+			AddLump(JawColor, FVector(2.0, 0.0, -5.5), FVector(8.0, 7.4, 6.0));
+			AddBump(JawColor, 0.0, -9.8, FVector(2.2, 2.6, 1.8), 0.3);
+			break;
+		}
+		auto OnFace = [&FaceFrontAt, &HeadAt, Hr](double Y, double Z, double Out)
+		{
+			return HeadAt + FVector(FaceFrontAt(Y, Z) + Out, Y, Z) * Hr;
+		};
+		// A thin line along the face through a few points (brows, wrinkles, lashes).
+		auto FaceLine = [&B, &OnFace, Hr](const FLinearColor& Color, const TArray<FVector2D>& Points, double Out, double Radius)
+		{
+			for (int32 i = 0; i + 1 < Points.Num(); ++i)
+			{
+				Rod(B, Color, OnFace(Points[i].X, Points[i].Y, Out), OnFace(Points[i + 1].X, Points[i + 1].Y, Out), Radius * Hr, 5);
+			}
+		};
+
+		for (const double Side : { -1.0, 1.0 })
+		{
+			// Ears: the shell, a darker bowl on its outer side, and the lobe.
+			Blob(B, O.Skin, HeadAt + FVector(0.0, 8.4 * Side, 0.0) * Hr, FVector(2.0, 1.2, 3.2) * Hr, 6, 4);
+			Blob(B, Shade, HeadAt + FVector(0.2, 9.15 * Side, 0.4) * Hr, FVector(1.2, 0.5, 2.0) * Hr, 6, 3);
+			Blob(B, O.Skin, HeadAt + FVector(0.6, 8.6 * Side, -2.8) * Hr, FVector(1.1, 0.9, 1.0) * Hr, 6, 3);
+
+			// Eyes: the white, the dark of the eye, and a lid over it.
+			const double Ey = 3.3 * Side;
+			Blob(B, EyeWhite, OnFace(Ey, 2.0, -0.45), FVector(0.8, 1.45, 0.85) * Hr, 8, 3);
+			Blob(B, Pupil, OnFace(3.1 * Side, 1.95, -0.05), FVector(0.55, 0.72, 0.72) * Hr, 6, 3);
+			Blob(B, O.Skin, OnFace(Ey, 2.85, -0.25), FVector(0.75, 1.7, 0.45) * Hr, 8, 3);
+			if (W)
+			{
+				// Lashes along the upper lid, flicked up at the outer end.
+				FaceLine(Pupil, { FVector2D(1.9 * Side, 2.55), FVector2D(3.3 * Side, 2.9), FVector2D(4.7 * Side, 2.75) }, 0.15, 0.2);
+			}
+			if (bOlder)
+			{
+				// Bags under the eyes and the lines from the nose to the mouth.
+				FaceLine(Shade, { FVector2D(2.4 * Side, 0.75), FVector2D(3.4 * Side, 0.55), FVector2D(4.3 * Side, 0.8) }, 0.0, 0.22);
+				FaceLine(Shade, { FVector2D(2.0 * Side, -2.6), FVector2D(2.8 * Side, -4.4), FVector2D(3.2 * Side, -6.3) }, 0.0, 0.22);
+			}
+
+			// Brows: an arch from the nose outwards, heavier on a man.
+			const double Thick = (W ? 0.32 : 0.55) * (FaceKind == 2 ? 1.2 : 1.0);
+			FaceLine(BrowColor, { FVector2D(1.5 * Side, 4.2), FVector2D(3.2 * Side, 4.75), FVector2D(4.9 * Side, 4.3) }, 0.15, Thick);
+		}
+		// The nose: a bridge down from between the eyes to a round tip, with
+		// a wing either side and the nostrils under it. Straight, snub or big.
+		{
+			const double NoseOut = NoseKind == 1 ? 1.8 : NoseKind == 2 ? 2.9 : 2.3;
+			const double TipZ = NoseKind == 1 ? -1.3 : NoseKind == 2 ? -2.2 : -1.8;
+			const double TipR = (NoseKind == 2 ? 1.45 : 1.25) * (W ? 0.85 : 1.0);
+			const FVector NoseBall = OnFace(0.0, TipZ, NoseOut - 0.6);
+			const FVector NoseTop = OnFace(0.0, 2.6, -0.3);
+			const FVector NoseMid = OnFace(0.0, 0.6 * (2.6 + TipZ), NoseOut * (NoseKind == 2 ? 0.75 : 0.45));
+			Rod(B, O.Skin, NoseTop, NoseMid, 0.95 * Hr, 8);
+			Rod(B, O.Skin, NoseMid, NoseBall, 1.0 * Hr, 8);
+			Blob(B, O.Skin, NoseMid, FVector(1.0, 0.95, 1.0) * Hr, 8, 4);
+			Blob(B, O.Skin, NoseBall, FVector(TipR, TipR * 1.05, TipR * 0.95) * Hr, 10, 5);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Blob(B, O.Skin, OnFace(1.2 * Side, TipZ - 0.5, 0.15), FVector(0.8, 0.75, 0.65) * TipR * Hr, 8, 3);
+				Blob(B, Shade, NoseBall + FVector(-0.4, 0.62 * Side, -0.85 * TipR) * Hr, FVector(0.45, 0.32, 0.25) * Hr, 6, 2);
+			}
+			if (O.bBandaged)
+			{
+				// A strip of plaster across the bridge.
+				Block(B, FLinearColor(0.93f, 0.92f, 0.87f), NoseMid + FVector(0.7, 0.0, 0.2) * Hr, FVector(0.4, 1.6, 0.6));
+			}
+		}
+		if (O.bBandaged)
+		{
+			// A dark bruise under the left eye.
+			Blob(B, FLinearColor(0.38f, 0.20f, 0.24f), OnFace(-3.3, 0.4, -0.3), FVector(1.1, 1.9, 1.1) * Hr, 6, 3);
+		}
+
+		// The mouth: the upper and lower lip with a dark line between.
+		Blob(B, Lip, OnFace(0.0, -5.7, -0.2), FVector(0.6, 2.2, 0.45) * Hr, 8, 3);
+		Blob(B, Lip, OnFace(0.0, -6.5, -0.25), FVector(0.7, 1.9, 0.6) * Hr, 8, 3);
+		Blob(B, Shade, OnFace(0.0, -6.08, -0.05), FVector(0.3, 2.3, 0.18) * Hr, 8, 2);
+
+		if (W)
+		{
+			return;
+		}
+		// A full beard: fuller round the jaw and chin, up the cheeks to the
+		// ears (stubble is just the jaw's colour); or a goatee on the chin.
+		if (O.Beard == EBeard::Full)
+		{
+			const FLump& Jaw = Lumps[1];
+			Blob(B, O.Hair, HeadAt + FVector(Jaw.Center.X - 1.6, 0.0, Jaw.Center.Z - 1.4) * Hr, (Jaw.Radius + FVector(1.0, 1.0, 1.0)) * Hr, 12, 6);
+			Blob(B, O.Hair, OnFace(0.0, -10.8, -1.8), FVector(2.8, 3.8, 3.0) * Hr, 10, 5);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Blob(B, O.Hair, HeadAt + FVector(3.4, 7.5 * Side, -2.2) * Hr, FVector(1.6, 1.0, 3.4) * Hr, 8, 4);
+			}
+		}
+		else if (O.Beard == EBeard::Goatee)
+		{
+			Blob(B, O.Hair, OnFace(0.0, -9.6, -1.0), FVector(1.5, 1.8, 2.4) * Hr, 8, 4);
+			Blob(B, O.Hair, OnFace(0.0, -7.5, -0.15), FVector(0.5, 0.7, 0.5) * Hr, 6, 3);
+		}
+
+		// The moustache, in one of four cuts.
+		const bool bTache = O.bMoustache || O.Beard == EBeard::Full || O.Beard == EBeard::Goatee;
+		if (bTache)
+		{
+			EMoustache TacheCut = O.MoustacheKind;
+			if (TacheCut == EMoustache::Auto)
+			{
+				const EMoustache TacheCuts[] = { EMoustache::Brush, EMoustache::Handlebar, EMoustache::Walrus, EMoustache::Brush, EMoustache::Pencil };
+				TacheCut = TacheCuts[(FaceSeed >> 8) % 5u];
+			}
+			switch (TacheCut)
+			{
+			case EMoustache::Handlebar:
+				Blob(B, O.Hair, OnFace(0.0, -4.4, 0.1), FVector(0.8, 1.9, 0.75) * Hr, 8, 3);
+				for (const double Side : { -1.0, 1.0 })
+				{
+					FaceLine(O.Hair, { FVector2D(1.2 * Side, -4.4), FVector2D(3.4 * Side, -4.9), FVector2D(5.0 * Side, -4.3), FVector2D(5.5 * Side, -3.1) }, 0.35, 0.45);
+				}
+				break;
+			case EMoustache::Walrus:
+				Blob(B, O.Hair, OnFace(0.0, -4.7, 0.2), FVector(1.3, 3.6, 1.3) * Hr, 10, 4);
+				for (const double Side : { -1.0, 1.0 })
+				{
+					FaceLine(O.Hair, { FVector2D(2.6 * Side, -4.8), FVector2D(3.1 * Side, -6.6) }, 0.3, 0.75);
+				}
+				break;
+			case EMoustache::Pencil:
+				FaceLine(O.Hair, { FVector2D(-2.4, -4.95), FVector2D(-0.6, -4.7), FVector2D(0.6, -4.7), FVector2D(2.4, -4.95) }, 0.1, 0.3);
+				break;
+			default:
+				Blob(B, O.Hair, OnFace(0.0, -4.5, 0.05), FVector(1.0, 2.9, 0.85) * Hr, 8, 3);
+				break;
+			}
+		}
+	}
+
 	/**
 	 * Dresses a person. Sizes are for a man of 178 cm; everything is scaled
 	 * to the outfit's height, and the girth to its build.
@@ -347,20 +587,7 @@ namespace PersonKit
 		const FVector HeadAt(1.5, 0.0, Z(165.5));
 		const double Hr = W ? 0.93 : 1.0;
 		Blob(B, O.Skin, HeadAt, FVector(10.0, 8.6, 11.5) * Hr, 12, 8);
-		Blob(B, O.Skin, HeadAt + FVector(2.0, 0.0, -5.5 * Hr), FVector(8.0, 7.0, 6.0) * Hr, 10, 5);
-		// Nose, ears, eyes, brows and mouth.
-		Rod(B, O.Skin, HeadAt + FVector(9.2, 0.0, 0.5) * Hr, HeadAt + FVector(12.3, 0.0, -2.8) * Hr, 1.4, 5);
-		for (const double Side : { -1.0, 1.0 })
-		{
-			Blob(B, O.Skin, HeadAt + FVector(0.0, 8.4 * Side, 0.0) * Hr, FVector(2.0, 1.2, 3.2) * Hr, 6, 4);
-			Blob(B, FLinearColor(0.03f, 0.03f, 0.03f), HeadAt + FVector(8.7, 3.3 * Side, 2.0) * Hr, FVector(0.9, 1.1, 0.9), 6, 3);
-			Blob(B, O.Hair, HeadAt + FVector(9.0, 3.5 * Side, 4.6) * Hr, FVector(0.8, 2.3, 0.6), 6, 3);
-		}
-		Blob(B, FLinearColor(0.35f, 0.15f, 0.12f), HeadAt + FVector(10.2, 0.0, -6.0) * Hr, FVector(0.6, 2.4, 0.5), 6, 3);
-		if (O.bMoustache && !W)
-		{
-			Blob(B, O.Hair, HeadAt + FVector(10.8, 0.0, -3.9), FVector(1.0, 3.6, 0.9), 8, 3);
-		}
+		DressFace(O, B, HeadAt, Hr);
 		// Hair: a cap over the top and back, longer at the back for a woman, with a bun.
 		Blob(B, O.Hair, HeadAt + FVector(-1.0, 0.0, 1.0), FVector(10.4, 9.2, 11.2) * Hr, 12, 6, W ? -0.55 : -0.2);
 		if (W)
@@ -369,8 +596,8 @@ namespace PersonKit
 		}
 		if (O.bBandaged)
 		{
-			// Gauze wound round the brow over the hair, a strip of plaster
-			// across the nose, and a dark bruise under the left eye.
+			// Gauze wound round the brow over the hair (the plaster on the
+			// nose and the bruise by the eye are put on with the face).
 			const FLinearColor Gauze(0.93f, 0.92f, 0.87f);
 			// The band hugs the head and hair, a little out from both, from the brow up.
 			auto Up = [&HeadAt, Hr](double Cm) { return HeadAt.Z + Cm * Hr; };
@@ -379,8 +606,6 @@ namespace PersonKit
 				Flat(0.57 * Hr, Up(7.25), 9.2 * Hr, 8.1 * Hr),
 				Flat(0.5 * Hr, Up(9.5), 7.3 * Hr, 6.5 * Hr),
 			}, 14, false, false);
-			Block(B, Gauze, HeadAt + FVector(10.9, 0.0, -1.0) * Hr, FVector(0.4, 1.6, 0.6));
-			Blob(B, FLinearColor(0.38f, 0.20f, 0.24f), HeadAt + FVector(8.6, -3.3, 0.4) * Hr, FVector(1.1, 1.9, 1.1), 6, 3);
 		}
 
 		// Shirt front, collar and tie in the open neck of a jacket or waistcoat.

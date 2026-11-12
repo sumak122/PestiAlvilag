@@ -222,6 +222,9 @@ namespace PersonModel
 		O.Height = Random.FRandRange(165.f, 186.f);
 		O.Build = Random.FRandRange(0.95f, 1.22f);
 		O.bMoustache = Random.FRand() < 0.4f;
+		// Now and then a beard: a full one, a goatee, or a few days' stubble.
+		const float BeardRoll = Random.FRand();
+		O.Beard = BeardRoll < 0.05f ? EBeard::Full : BeardRoll < 0.1f ? EBeard::Goatee : BeardRoll < 0.2f ? EBeard::Stubble : EBeard::None;
 		const float Kind = Random.FRand();
 		if (Kind < 0.2f)
 		{
