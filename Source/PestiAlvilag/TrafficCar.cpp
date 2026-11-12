@@ -3,12 +3,14 @@
 #include "TrafficCar.h"
 
 #include "CarBody.h"
+#include "CarHandling.h"
 #include "CarVisuals.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "PestiCar.h"
 #include "PestiPerson.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -58,6 +60,27 @@ namespace TrafficCar
 	constexpr float ShiftRate = 220.f;
 	constexpr float MaxPassingTime = 10.f;
 	constexpr double LostCart = 3000.0;
+
+	// Knocked by a crash: the tyres slow the car rolling along itself and,
+	// much harder, skidding sideways (cm/s each second); the spin dies away
+	// (each second to e^-SpinFade of itself, and by SpinDrag degrees a second).
+	constexpr float KnockRollDrag = 700.f;
+	constexpr float KnockSkidDrag = 1500.f;
+	constexpr float KnockSpinFade = 1.5f;
+	constexpr float KnockSpinDrag = 90.f;
+	// Slower than this (cm/s, degrees a second) it has stopped; it sits shaken this long (s), then drives on.
+	constexpr float KnockStillSpeed = 40.f;
+	constexpr float KnockStillSpin = 8.f;
+	constexpr float KnockShaken = 1.2f;
+	// Knocked into something: how much bounces back from another car, and from a wall; the rub along it.
+	constexpr float KnockCarBounce = 0.3f;
+	constexpr float KnockWallBounce = 0.2f;
+	constexpr float KnockRub = 0.3f;
+	// Meeting at least this fast (cm/s) dents it, and hurts someone on foot.
+	constexpr float KnockDentSpeed = 250.f;
+	// A shove smaller than this (cm/s, degrees a second) only stops a driving car.
+	constexpr float KnockLeast = 30.f;
+	constexpr float KnockLeastSpin = 5.f;
 }
 
 ATrafficCar::ATrafficCar()
@@ -124,6 +147,156 @@ void ATrafficCar::CarryPassenger(const PersonKit::FOutfit& Outfit, float Seconds
 	PassengerTime = Seconds;
 }
 
+FVector ATrafficCar::GetMoveVelocity() const
+{
+	return bKnocked ? KnockVelocity : GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed;
+}
+
+float ATrafficCar::GetMass() const
+{
+	return CarHandling::For(Style.Body).Mass;
+}
+
+void ATrafficCar::TakeHit(const FVector& Push, float Spin)
+{
+	if (!bKnocked)
+	{
+		// A mere touch only stops it; it is not knocked out of its lane.
+		if (Push.Size2D() < TrafficCar::KnockLeast && FMath::Abs(Spin) < TrafficCar::KnockLeastSpin)
+		{
+			CurrentSpeed = 0.f;
+			return;
+		}
+		// Out of the traffic until it has stopped: what it was doing carries on as a slide.
+		KnockVelocity = GetActorForwardVector().GetSafeNormal2D() * CurrentSpeed;
+		KnockSpin = 0.f;
+		bKnocked = true;
+		CurrentSpeed = 0.f;
+		if (Manager)
+		{
+			ReleaseAllJunctions();
+		}
+	}
+	KnockVelocity += FVector(Push.X, Push.Y, 0.0);
+	KnockSpin = FMath::Clamp(KnockSpin + Spin, -CarHandling::MaxSpin, CarHandling::MaxSpin);
+	KnockStill = 0.f;
+}
+
+bool ATrafficCar::TickKnocked(float DeltaSeconds)
+{
+	using namespace TrafficCar;
+	if (!bKnocked)
+	{
+		return false;
+	}
+
+	// The tyres: rolling along the car slows it gently, skidding sideways hard.
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right(-Forward.Y, Forward.X, 0.0);
+	const float Rolling = FMath::FInterpConstantTo(static_cast<float>(FVector::DotProduct(KnockVelocity, Forward)), 0.f, DeltaSeconds, KnockRollDrag);
+	const float Skidding = FMath::FInterpConstantTo(static_cast<float>(FVector::DotProduct(KnockVelocity, Right)), 0.f, DeltaSeconds, KnockSkidDrag);
+	KnockVelocity = Forward * Rolling + Right * Skidding;
+	KnockSpin = FMath::FInterpConstantTo(KnockSpin * FMath::Exp(-KnockSpinFade * DeltaSeconds), 0.f, DeltaSeconds, KnockSpinDrag);
+
+	if (KnockVelocity.Size2D() < KnockStillSpeed && FMath::Abs(KnockSpin) < KnockStillSpin)
+	{
+		KnockVelocity = FVector::ZeroVector;
+		KnockSpin = 0.f;
+		KnockStill += DeltaSeconds;
+		if (KnockStill < KnockShaken)
+		{
+			return true;
+		}
+		// Shaken but fine: back into the traffic from the nearest lane going its way.
+		bKnocked = false;
+		KnockStill = 0.f;
+		CurrentSpeed = 0.f;
+		BlockedTime = 0.f;
+		int32 Lane = INDEX_NONE;
+		int32 Point = 0;
+		if (Manager && Manager->FindLanePointNear(GetActorLocation(), GetActorForwardVector().GetSafeNormal2D(), Lane, Point))
+		{
+			ResumeOnLane(Lane, Point);
+		}
+		return false;
+	}
+
+	AddActorWorldRotation(FRotator(0.f, KnockSpin * DeltaSeconds, 0.f));
+	FHitResult Hit;
+	AddActorWorldOffset(KnockVelocity * DeltaSeconds, true, &Hit);
+	if (Hit.bStartPenetrating)
+	{
+		// Spun a corner into something: step back out.
+		AddActorWorldOffset(FVector(Hit.Normal.X, Hit.Normal.Y, 0.0) * (Hit.PenetrationDepth + 1.0), false);
+		return true;
+	}
+	if (!Hit.bBlockingHit)
+	{
+		return true;
+	}
+
+	// Slid into something: knock it too if it is a car, else bounce off it.
+	const FVector Normal = FVector(Hit.Normal.X, Hit.Normal.Y, 0.0).GetSafeNormal();
+	if (Normal.IsNearlyZero())
+	{
+		return true;
+	}
+	AActor* Other = Hit.GetActor();
+	ATrafficCar* OtherCar = Cast<ATrafficCar>(Other);
+	APestiCar* DrivenCar = Cast<APestiCar>(Other);
+	FVector OtherVelocity = FVector::ZeroVector;
+	float OtherMass = 0.f;
+	if (OtherCar)
+	{
+		OtherVelocity = OtherCar->GetMoveVelocity();
+		OtherMass = OtherCar->GetMass();
+	}
+	else if (DrivenCar)
+	{
+		OtherVelocity = DrivenCar->GetVelocity();
+		OtherMass = DrivenCar->GetMass();
+	}
+	const float Meet = -static_cast<float>(FVector::DotProduct(KnockVelocity - OtherVelocity, Normal));
+	// Sliding into him on foot hurts him.
+	if (APestiPerson* Person = Cast<APestiPerson>(Other))
+	{
+		if (Meet > KnockDentSpeed)
+		{
+			Person->HitByVehicle(Meet, -Normal);
+		}
+	}
+	CarHandling::FBump Bump;
+	if (!CarHandling::Collide(Normal, Hit.ImpactPoint, GetActorLocation(), KnockVelocity, GetMass(),
+		Other ? Other->GetActorLocation() : Hit.ImpactPoint, OtherVelocity, OtherMass,
+		OtherMass > 0.f ? KnockCarBounce : KnockWallBounce, KnockRub, Bump))
+	{
+		return true;
+	}
+	KnockVelocity += Bump.PushA;
+	KnockSpin = FMath::Clamp(KnockSpin + Bump.SpinA, -CarHandling::MaxSpin, CarHandling::MaxSpin);
+	if (Meet > KnockDentSpeed && Visuals)
+	{
+		Visuals->Knock(Hit.ImpactPoint, Normal, Meet);
+	}
+	if (OtherCar)
+	{
+		OtherCar->TakeHit(Bump.PushB, Bump.SpinB);
+		if (Meet > KnockDentSpeed)
+		{
+			if (UCarVisuals* OtherLooks = OtherCar->FindComponentByClass<UCarVisuals>())
+			{
+				OtherLooks->Knock(Hit.ImpactPoint, -Normal, Meet);
+			}
+		}
+	}
+	else if (DrivenCar)
+	{
+		// A soft nudge only shoves; a real knock dents his car and sounds.
+		DrivenCar->Shove(Bump.PushB, Bump.SpinB, Hit.ImpactPoint, Meet > KnockDentSpeed);
+	}
+	return true;
+}
+
 void ATrafficCar::ResumeOnLane(int32 InLaneIndex, int32 InPointIndex)
 {
 	LaneIndex = InLaneIndex;
@@ -160,6 +333,12 @@ void ATrafficCar::Tick(float DeltaSeconds)
 		{
 			Visuals->HidePassenger();
 		}
+	}
+
+	// Knocked about by a crash: no driving until it has stopped.
+	if (TickKnocked(DeltaSeconds))
+	{
+		return;
 	}
 
 	if (!Manager || LaneIndex == INDEX_NONE)
