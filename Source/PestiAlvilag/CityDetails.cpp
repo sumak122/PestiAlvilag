@@ -3,6 +3,7 @@
 #include "CityDetails.h"
 
 #include "ChurchModel.h"
+#include "CityTheatreModel.h"
 #include "CityDetailsModel.h"
 #include "CityLifeModel.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -265,6 +266,7 @@ void ACityDetails::BeginPlay()
 		ReadMapIcons(*Root);
 		BuildChurches(*Root);
 		BuildNewYork(*Root);
+		BuildCityTheatre(*Root);
 		BuildStreetLife(*Root);
 	}
 }
@@ -630,6 +632,40 @@ void ACityDetails::BuildNewYork(const FJsonObject& Root)
 	TArray<FLamp> Lights;
 	TArray<FSign> Lettering;
 	Palace(Pieces, Shapes, Lights, Lettering);
+	Set->AddShapes(Shapes);
+	for (const FLamp& Light : Lights)
+	{
+		Set->AddLamp(Light.At, Light.Radius);
+	}
+	for (const FSign& Sign : Lettering)
+	{
+		Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
+	}
+}
+
+void ACityDetails::BuildCityTheatre(const FJsonObject& Root)
+{
+	using namespace CityTheatreModel;
+	// [x, y, yaw, length]: the front's start at the foot, the way out to the square, its length.
+	const TArray<TSharedPtr<FJsonValue>>* FrontValues = nullptr;
+	if (!Root.TryGetArrayField(TEXT("city_theatre"), FrontValues) || FrontValues->Num() < 4)
+	{
+		return;
+	}
+	const FVector2D Start = CityDetailsPlace::Pair(*FrontValues, 0);
+	const double FrontYaw = (*FrontValues)[2]->AsNumber();
+	const double FrontLength = (*FrontValues)[3]->AsNumber();
+	const FVector2D Middle = Start + FVector2D(FRotator(0.0, FrontYaw, 0.0).RotateVector(FVector(0.0, FrontLength * 0.5, 0.0)));
+	const double Ground = GroundAt(Middle + CityDetailsPlace::Ahead(FrontYaw, CityDetailsPlace::OutFromWall + Forward + CanopyDepth));
+	AShapeSet* Set = PutUp(FVector(Start, Ground), FrontYaw, CityDetailsPlace::ChurchDrawDistance);
+	if (!Set)
+	{
+		return;
+	}
+	TArray<FShape> Shapes;
+	TArray<FLamp> Lights;
+	TArray<FSign> Lettering;
+	Theatre(FrontLength, Shapes, Lights, Lettering);
 	Set->AddShapes(Shapes);
 	for (const FLamp& Light : Lights)
 	{

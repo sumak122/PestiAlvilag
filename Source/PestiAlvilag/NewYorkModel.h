@@ -242,7 +242,7 @@ namespace NewYorkModel
 				{
 					Rod(Out, Iron, FVector(X, Y + S * 190, 640), FVector(X + 220, Y + S * 190, 482), 4.0);
 				}
-				Signs.Add({ TEXT("KÁVÉHÁZ"), FVector(X + 233, Y, 474), 0.0, 10.0, Gilt });
+				Signs.Add({ TEXT("K\u00C1V\u00C9H\u00C1Z"), FVector(X + 233, Y, 474), 0.0, 10.0, Gilt });
 				Lamps.Add({ FVector(X + 150, Y, 440), 700.f });
 				Faun(Out, Lamps, X + 70, Y - Bay * 0.5 + 10, -10.0);
 				Faun(Out, Lamps, X + 70, Y + Bay * 0.5 - 10, 10.0);
@@ -334,7 +334,7 @@ namespace NewYorkModel
 				Add(Out, MarketModel::Sphere, Stone, FVector(Forward + 14, Y, AtticTop + 60), FVector(54, 54, 80), 0.0, false);
 			}
 			// The café's gilt name along the band, either side of the door.
-			Signs.Add({ TEXT("NEW YORK KÁVÉHÁZ"), FVector(Forward + 42, GY, BandAt + 25), 0.0, 38.0, Gilt });
+			Signs.Add({ TEXT("NEW YORK K\u00C1V\u00C9H\u00C1Z"), FVector(Forward + 42, GY, BandAt + 25), 0.0, 38.0, Gilt });
 			const double Third = (Length - G1) * 0.5 + G1;
 			Signs.Add({ TEXT("NEW YORK"), FVector(42, (G0 - EdgeMargin) * 0.5 + EdgeMargin, BandAt + 25), 0.0, 34.0, Gilt });
 			Signs.Add({ TEXT("NEW YORK"), FVector(42, Third, BandAt + 25), 0.0, 34.0, Gilt });
@@ -345,7 +345,7 @@ namespace NewYorkModel
 		else
 		{
 			const double CafeEnd = EdgeMargin + Bay * FMath::Min(DohanyCafeBays, Bays);
-			Signs.Add({ TEXT("NEW YORK KÁVÉHÁZ"), FVector(42, CafeEnd * 0.5, BandAt + 25), 0.0, 32.0, Gilt });
+			Signs.Add({ TEXT("NEW YORK K\u00C1V\u00C9H\u00C1Z"), FVector(42, CafeEnd * 0.5, BandAt + 25), 0.0, 32.0, Gilt });
 			Lamps.Add({ FVector(120, CafeEnd * 0.5, 500), 800.f });
 		}
 	}
