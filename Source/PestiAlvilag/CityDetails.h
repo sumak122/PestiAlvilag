@@ -28,6 +28,9 @@ class UStaticMesh;
  * windows, gathered into one shape set per patch of the map. The flower
  * boxes and washing are in the facades themselves (FacadeLifeModel).
  *
+ * Round 3: the New York palace and café on Erzsébet körút (NewYorkModel),
+ * dressing its plain map block's street walls, with the corner tower.
+ *
  * The houses the gateways run through are cut by AOsmGraybox from the same
  * file; AStreetFurniture leaves those gates standing open (IsOpenGate).
  */
@@ -64,6 +67,7 @@ private:
 	void BuildClocks(const FJsonObject& Root);
 	void ReadMapIcons(const FJsonObject& Root);
 	void BuildChurches(const FJsonObject& Root);
+	void BuildNewYork(const FJsonObject& Root);
 	void BuildStreetLife(const FJsonObject& Root);
 	void PutCoalMan(const FVector& Foot, double FacingYaw, uint32 Seed);
 	void SetHands(float Hour);
