@@ -57,7 +57,7 @@ namespace CityTheatreModel
 	constexpr double MiddleTop = 2050.0;       // the middle's cornice
 	constexpr double GableRise = 380.0;
 	constexpr double PylonTop = 2500.0;
-	constexpr double Forward = 100.0;          // how far the middle stands out
+	constexpr double MiddleOut = 100.0;          // how far the middle stands out
 	constexpr double MiddleBack = -900.0;      // and how deep it runs into the block
 	constexpr double PlinthTop = 50.0;
 	constexpr double CanopyAt = 400.0;
@@ -142,7 +142,7 @@ namespace CityTheatreModel
 		const double M0 = WingWidth;
 		const double M1 = Length - WingWidth;
 		const double Mid = Length * 0.5;
-		const double X = Forward;
+		const double X = MiddleOut;
 
 		Wing(Out, Signs, 0.0, M0, true);
 		Wing(Out, Signs, M1, Length, true);
