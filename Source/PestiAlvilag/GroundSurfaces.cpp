@@ -5,6 +5,7 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TextureResource.h"
+#include "UObject/ObjectKey.h"
 #include "UObject/Package.h"
 
 #if WITH_EDITOR
@@ -442,6 +443,26 @@ namespace GroundSurfaces::Private
 
 #endif
 
+namespace GroundSurfaces::Known
+{
+	// Which ground each material made by Make shows, for the footsteps.
+	TMap<FObjectKey, SurfaceModel::EKind> KindOfMade;
+}
+
+bool GroundSurfaces::KindOf(const UMaterialInterface* Material, SurfaceModel::EKind& OutKind)
+{
+	if (!Material)
+	{
+		return false;
+	}
+	if (const SurfaceModel::EKind* Listed = Known::KindOfMade.Find(FObjectKey(Material)))
+	{
+		OutKind = *Listed;
+		return true;
+	}
+	return false;
+}
+
 UMaterialInstanceDynamic* GroundSurfaces::Make(SurfaceModel::EKind Kind, UObject* Outer)
 {
 #if WITH_EDITOR
@@ -465,6 +486,7 @@ UMaterialInstanceDynamic* GroundSurfaces::Make(SurfaceModel::EKind Kind, UObject
 	Material->SetScalarParameterValue(TEXT("Soak"), SoakOf(Kind));
 	Material->SetScalarParameterValue(TEXT("Wet"), CurrentWet);
 	AllMade.Add(Material);
+	Known::KindOfMade.Add(FObjectKey(Material), Kind);
 	return Material;
 #else
 	return nullptr;

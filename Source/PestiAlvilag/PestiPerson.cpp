@@ -15,6 +15,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "CarBody.h"
 #include "FightSound.h"
+#include "FootSound.h"
+#include "GroundSurfaces.h"
 #include "Bicycle.h"
 #include "HorseCart.h"
 #include "PersonModel.h"
@@ -36,16 +38,13 @@ namespace PestiPerson
 	constexpr float MinPitch = -70.f;
 	constexpr float MaxPitch = 40.f;
 
-	// Limbs swing this far at a run (degrees), and one stride is this many cm.
-	constexpr float MaxSwing = 35.f;
-	constexpr float StrideLength = 120.f;
 	// Holding something in front: how far the arms reach forward, standing
 	// and sitting (degrees).
 	constexpr float HoldPitch = 50.f;
 	constexpr float SeatHoldPitch = 40.f;
-	// Elbows: a little bent standing, more the faster he goes, as a runner pumps his arms (degrees).
-	constexpr float RestElbow = 10.f;
-	constexpr float RunElbow = 75.f;
+	// Footsteps: heard this far (cm), and this loud (kept quiet).
+	constexpr float FootstepFalloff = 1500.f;
+	constexpr float FootstepVolume = 0.55f;
 
 	constexpr double MinTimeOnFoot = 0.3;
 	// How close he must stand to a bicycle's saddle to get on (cm).
@@ -160,6 +159,8 @@ void APestiPerson::BeginPlay()
 	Super::BeginPlay();
 
 	PersonModel::Dress(this, PoseRoot, BaseMaterial, GetDress(), Pieces);
+	WalkMotion.SetSeed(FMath::FRandRange(0.f, 6.28f));
+	LastHeading = static_cast<float>(GetActorRotation().Yaw);
 }
 
 void APestiPerson::Tick(float DeltaSeconds)
@@ -329,41 +330,136 @@ void APestiPerson::Walk(const APlayerController* PC)
 
 void APestiPerson::SwingLimbs(float DeltaSeconds)
 {
-	// No animation rig yet: swing the arms and legs from the hips and
-	// shoulders, legs against arms, faster and wider the faster he goes.
-	const float Speed = GetCharacterMovement()->IsMovingOnGround() ? static_cast<float>(GetVelocity().Size2D()) : 0.f;
-	StridePhase += DeltaSeconds * Speed / PestiPerson::StrideLength * PI;
-	const float Reach = PestiPerson::MaxSwing * FMath::Clamp(Speed / RunSpeed, 0.f, 1.f);
-	const float Swing = FMath::Sin(StridePhase) * Reach;
-	// The knees bend with the stride, more when running.
-	PersonModel::StrideLegs(Pieces, StridePhase, Reach, FMath::Clamp(Speed / JogSpeed, 0.f, 1.7f));
+	// No animation rig: the walker (WalkAnim) works out the arms, legs and
+	// body from how he moves: walk, run, sprint, turns, jumps, standing about.
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const float HeadingNow = static_cast<float>(GetActorRotation().Yaw);
+	WalkAnim::FInput WalkIn;
+	WalkIn.Dt = DeltaSeconds;
+	WalkIn.Speed = static_cast<float>(GetVelocity().Size2D());
+	WalkIn.WalkPace = JogSpeed;
+	WalkIn.SprintPace = RunSpeed;
+	WalkIn.TurnRate = DeltaSeconds > 0.f ? FRotator::NormalizeAxis(HeadingNow - LastHeading) / DeltaSeconds : 0.f;
+	LastHeading = HeadingNow;
+	WalkIn.bInAir = Movement && Movement->IsFalling();
+	WalkIn.UpSpeed = static_cast<float>(GetVelocity().Z);
+	WalkIn.bSeated = bRiding;
+	float LegTurn = 0.f;
+	FVector RootShift = FVector::ZeroVector;
+	int32 FootDown = 0;
+	float FootStrength = 0.f;
+	FreeRun::FPose WalkPose = WalkMotion.Update(WalkIn, LegTurn, RootShift, FootDown, FootStrength);
+
 	// The arm with a load in it hangs still; both arms holding something in front reach forward.
-	const float Hold = bRiding ? PestiPerson::SeatHoldPitch : PestiPerson::HoldPitch;
-	const float LeftArm = bHoldingInFront ? Hold : -Swing;
-	const float RightArm = bHoldingInFront ? Hold : bCarrying ? 0.f : Swing;
-	const float Arms[] = { LeftArm, RightArm };
-	for (int32 i = 0; i < 2; ++i)
+	if (bHoldingInFront)
 	{
-		const int32 Arm = PersonKit::ArmLeft + i;
-		if (Pieces.IsValidIndex(Arm) && Pieces[Arm])
-		{
-			Pieces[Arm]->SetRelativeRotation(FRotator(Arms[i], 0.f, 0.f));
-		}
+		const float Hold = bRiding ? PestiPerson::SeatHoldPitch : PestiPerson::HoldPitch;
+		WalkPose.ArmL = Hold;
+		WalkPose.ArmR = Hold;
+		WalkPose.ArmOutL = 0.f;
+		WalkPose.ArmOutR = 0.f;
+		WalkPose.ElbowL = 0.f;
+		WalkPose.ElbowR = 0.f;
 	}
-	const float Elbow = FMath::Lerp(PestiPerson::RestElbow, PestiPerson::RunElbow, FMath::Clamp(Speed / RunSpeed, 0.f, 1.f));
-	PersonModel::PoseElbows(Pieces, bHoldingInFront ? 0.f : Elbow, bHoldingInFront || bCarrying ? 0.f : Elbow);
+	else if (bCarrying)
+	{
+		WalkPose.ArmR = 0.f;
+		WalkPose.ArmOutR = 0.f;
+		WalkPose.ElbowR = 0.f;
+	}
 
 	// Just after a bad landing: a lurch over the stride.
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (Now < StumbleUntil)
 	{
 		const float T = 1.f - static_cast<float>((StumbleUntil - Now) / FreeRun::StumbleSeconds);
-		ApplyPose(FreeRun::Stumble(T));
+		const float Lurch = FMath::Sin(UE_PI * FMath::Clamp(T, 0.f, 1.f));
+		const FreeRun::FPose Stumbling = FreeRun::Stumble(T);
+		// The stride fades under the lurch.
+		const FreeRun::FPose Kept = FreeRun::Scaled(WalkPose, 1.f - Lurch);
+		WalkPose.Lift = Kept.Lift + Stumbling.Lift;
+		WalkPose.Pitch = Kept.Pitch + Stumbling.Pitch;
+		WalkPose.Roll = Kept.Roll + Stumbling.Roll;
+		WalkPose.Yaw = Kept.Yaw;
+		WalkPose.LegL = Kept.LegL + Stumbling.LegL;
+		WalkPose.LegR = Kept.LegR + Stumbling.LegR;
+		WalkPose.KneeL = Kept.KneeL + Stumbling.KneeL;
+		WalkPose.KneeR = Kept.KneeR + Stumbling.KneeR;
+		WalkPose.ArmL = Kept.ArmL + Stumbling.ArmL;
+		WalkPose.ArmR = Kept.ArmR + Stumbling.ArmR;
+		WalkPose.ArmOutL = Kept.ArmOutL + Stumbling.ArmOutL;
+		WalkPose.ArmOutR = Kept.ArmOutR + Stumbling.ArmOutR;
+		WalkPose.ElbowL = Kept.ElbowL + Stumbling.ElbowL;
+		WalkPose.ElbowR = Kept.ElbowR + Stumbling.ElbowR;
+		LegTurn *= 1.f - Lurch;
 	}
-	else if (PoseRoot && !PoseRoot->GetRelativeTransform().Equals(FTransform::Identity))
+
+	ApplyPose(WalkPose, LegTurn);
+	// Leaning about his feet, not his middle.
+	if (PoseRoot)
 	{
-		PoseRoot->SetRelativeTransform(FTransform::Identity);
+		PoseRoot->SetRelativeLocation(FVector(RootShift.X, RootShift.Y, WalkPose.Lift + RootShift.Z));
 	}
+
+	if (FootDown != 0)
+	{
+		PlayFootstep(FootStrength, FMath::Clamp((WalkIn.Speed - JogSpeed) / FMath::Max(RunSpeed - JogSpeed, 1.f), 0.f, 1.f));
+	}
+}
+
+void APestiPerson::PlayFootstep(float Strength, float Running)
+{
+	// Only the player's own feet are heard: the camera is on him.
+	if (!IsPlayerControlled() || !GetWorld())
+	{
+		return;
+	}
+
+	// The ground under him: the cobbles, slabs, gravel, grass or earth picture painted on it.
+	FootSynth::EGround Underfoot = FootSynth::EGround::Slabs;
+	const FVector FeetFrom = GetActorLocation();
+	FHitResult GroundHit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(Footstep), true, this);
+	Params.bReturnFaceIndex = true;
+	if (GetWorld()->LineTraceSingleByChannel(GroundHit, FeetFrom, FeetFrom - FVector(0.0, 0.0, 160.0), ECC_Visibility, Params)
+		&& GroundHit.GetComponent())
+	{
+		int32 SectionIndex = 0;
+		SurfaceModel::EKind Painted = SurfaceModel::EKind::Slabs;
+		if (GroundSurfaces::KindOf(GroundHit.GetComponent()->GetMaterialFromCollisionFaceIndex(GroundHit.FaceIndex, SectionIndex), Painted))
+		{
+			switch (Painted)
+			{
+			case SurfaceModel::EKind::Setts:
+			case SurfaceModel::EKind::BigSetts: Underfoot = FootSynth::EGround::Cobbles; break;
+			case SurfaceModel::EKind::Gravel: Underfoot = FootSynth::EGround::Gravel; break;
+			case SurfaceModel::EKind::Grass: Underfoot = FootSynth::EGround::Grass; break;
+			case SurfaceModel::EKind::MarketEarth: Underfoot = FootSynth::EGround::Earth; break;
+			default: Underfoot = FootSynth::EGround::Slabs; break;
+			}
+		}
+	}
+	const AWeather* Sky = AWeather::Get(GetWorld());
+	const float Wet = Sky ? FMath::Clamp(Sky->GetWet(), 0.f, 1.f) : 0.f;
+
+	if (!FootNoise)
+	{
+		FootNoise = NewObject<UFootSound>(this);
+		FootNoise->SetupAttachment(GetRootComponent());
+		FootNoise->bAllowSpatialization = true;
+		FootNoise->bOverrideAttenuation = true;
+		FootNoise->AttenuationOverrides.bAttenuate = true;
+		FootNoise->AttenuationOverrides.bSpatialize = true;
+		FootNoise->AttenuationOverrides.FalloffDistance = PestiPerson::FootstepFalloff;
+		FootNoise->RegisterComponent();
+		AddInstanceComponent(FootNoise);
+		FootNoise->SetVolumeMultiplier(PestiPerson::FootstepVolume);
+	}
+	if (!FootNoise->IsPlaying())
+	{
+		FootNoise->Start();
+	}
+	FootNoise->Step(Strength, Underfoot, Wet, Running);
 }
 
 void APestiPerson::StartMove(const FreeRun::FChance& Chance)
@@ -636,6 +732,10 @@ void APestiPerson::HitByVehicle(float Speed, const FVector& Push)
 void APestiPerson::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	// The knees give as he lands, and the feet are heard.
+	const float LandingSpeed = FMath::Max(FallSpeed, static_cast<float>(-GetVelocity().Z));
+	WalkMotion.Land(LandingSpeed);
+	PlayFootstep(FMath::Clamp(LandingSpeed / 700.f, 0.4f, 1.f), 0.f);
 	if (FallSpeed > PestiPerson::SafeFallSpeed)
 	{
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
