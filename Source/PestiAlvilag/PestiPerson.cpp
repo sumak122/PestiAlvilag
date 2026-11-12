@@ -57,6 +57,10 @@ namespace PestiPerson
 	constexpr double PickTime = 6.0;
 	constexpr double BreakInSlack = 120.0;
 	constexpr double PickStillSpeed = 60.0;
+	// The crank of an old car can be turned standing this near its spot at the front (cm).
+	constexpr double CrankReach = 110.0;
+	// One turn of the handle takes this long (s).
+	constexpr float CrankTurnTime = 0.6f;
 
 	// Being hit: slower than this does no harm, and each cm/s over it
 	// takes this much health (a car at 36 km/h takes about half). One bump
@@ -221,6 +225,10 @@ void APestiPerson::Tick(float DeltaSeconds)
 	if (Act != Brawl::EAct::None)
 	{
 		PlayerFight(PC);
+		return;
+	}
+	if (TickCrank(PC))
+	{
 		return;
 	}
 	Walk(PC);
@@ -531,6 +539,66 @@ void APestiPerson::GetIntoCar(APlayerController* PC, APestiCar* Car)
 	SetInWorld(false);
 	Car->TakeDriver(this);
 	PC->Possess(Car);
+}
+
+bool APestiPerson::TickCrank(APlayerController* PC)
+{
+	APestiHUD* Hud = APestiHUD::Get(this);
+	APestiCar* Car = CrankedCar.Get();
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Car && Car->IsCranking() && !Car->GetController())
+	{
+		// Kneeling at the radiator, turning the handle: he stays put.
+		GetCharacterMovement()->StopMovementImmediately();
+		ApplyPose(FreeRun::Crank(static_cast<float>(Now - CrankStart) / PestiPerson::CrankTurnTime));
+		if (Hud)
+		{
+			Hud->Prompt(TEXT("E"), TEXT("Hajtod az ind\u00edt\u00f3kart..."), TEXT("Cranking..."), true);
+		}
+		return true;
+	}
+	CrankedCar = nullptr;
+	if (GetCharacterMovement()->IsFalling() || bHoldingInFront || bCarrying)
+	{
+		return false;
+	}
+	// At the front of an old car with its engine off: E turns the crank.
+	APestiCar* Nearest = nullptr;
+	double NearestDist = PestiPerson::CrankReach;
+	for (TActorIterator<APestiCar> It(GetWorld()); It; ++It)
+	{
+		if (It->GetController() || !It->CanCrank())
+		{
+			continue;
+		}
+		const double Dist = FVector::Dist2D(It->GetCrankSpot(), GetActorLocation());
+		if (Dist < NearestDist)
+		{
+			Nearest = *It;
+			NearestDist = Dist;
+		}
+	}
+	if (!Nearest)
+	{
+		return false;
+	}
+	if (!PC->WasInputKeyJustPressed(EKeys::E) && !PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Left))
+	{
+		if (Hud)
+		{
+			Hud->Prompt(TEXT("E"), TEXT("Ind\u00edt\u00f3kar"), TEXT("Crank the engine"), false);
+		}
+		return false;
+	}
+	// Onto his spot at the radiator, facing the car, and the handle goes round.
+	const FVector Spot = Nearest->GetCrankSpot();
+	SetActorLocation(FVector(Spot.X, Spot.Y, GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorRotation(FRotator(0.0, Nearest->GetActorRotation().Yaw + 180.0, 0.0));
+	GetCharacterMovement()->StopMovementImmediately();
+	Nearest->Crank();
+	CrankedCar = Nearest;
+	CrankStart = Now;
+	return true;
 }
 
 bool APestiPerson::TickBreakIn(APlayerController* PC)

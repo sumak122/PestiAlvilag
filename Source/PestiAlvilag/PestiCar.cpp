@@ -80,13 +80,19 @@ namespace PestiCar
 	// Lifting off sharply above this share of top speed sometimes bangs the exhaust.
 	constexpr float BackfireSpeed = 0.4f;
 	constexpr float BackfireChance = 0.3f;
-	// An old car (CarModel::IsOld) is started with the crank (E): each turn takes
-	// this long (s) and catches this often, cold or warm (its driver got out less
-	// than this long ago, s).
-	constexpr double CrankTime = 0.7;
+	// An old car (CarModel::IsOld) is started with the crank at the front: each
+	// go takes this long (s, two turns of the handle) and catches this often,
+	// cold or warm (its driver got out less than this long ago, s).
+	constexpr double CrankTime = 1.2;
 	constexpr float ColdCrankChance = 0.35f;
 	constexpr float WarmCrankChance = 0.75f;
 	constexpr double WarmEngineTime = 60.0;
+	// Running with nobody in it, it idles this long (s) before it dies.
+	constexpr double IdleAlone = 45.0;
+	// The person cranking stands this far ahead of the nose (cm), and this far
+	// to the car's left, so his right hand is on the handle.
+	constexpr double CrankStandAhead = 60.0;
+	constexpr double CrankStandSide = -26.0;
 	// It stalls slower than this (cm/s): now and then (about once in this many
 	// seconds), sometimes when the pedal goes down hard, and in some crashes.
 	constexpr float StallSpeed = 200.f;
@@ -225,7 +231,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	}
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	// Nobody at the wheel: the engine is off, and so are the lights. Crashed
+	// Nobody at the wheel: the engine is off (an old one idles a while), and so are the lights. Crashed
 	// too often, the engine dies: the car only rolls on and can be steered.
 	const bool bEngineDead = Visuals->IsEngineDead();
 	// An old car's engine runs only once the crank has got it going.
@@ -235,6 +241,11 @@ void APestiCar::Tick(float DeltaSeconds)
 	{
 		CrankUntil = -1.0;
 		bOldEngineOn = bCrankCatches;
+		// Cranked into life from the front: it idles while he gets in.
+		if (bCrankCatches && !PC)
+		{
+			DriverOutTime = Now;
+		}
 		// It catches with a cough of smoke, or dies away with a last putt.
 		if (bCrankCatches || FMath::FRand() < 0.4f)
 		{
@@ -242,17 +253,31 @@ void APestiCar::Tick(float DeltaSeconds)
 			Visuals->Backfire();
 		}
 	}
+	// Left alone too long, it dies.
+	if (!PC && bOld && bOldEngineOn && CrankUntil < 0.0 && Now - DriverOutTime > PestiCar::IdleAlone)
+	{
+		StallEngine();
+	}
 	const bool bCranking = CrankUntil > 0.0;
 	const bool bEngineOff = bEngineDead || (bOld && !bOldEngineOn);
-	Visuals->SetEngineRunning(PC != nullptr && !bEngineOff);
+	// An old engine left running (or cranked from the front) idles on with nobody in the car, for a while.
+	const bool bIdlingAlone = !PC && bOld && !bEngineDead && (bOldEngineOn || bCranking);
+	Visuals->SetEngineRunning((PC != nullptr || bIdlingAlone) && !bEngineOff);
 	if (!PC)
 	{
-		bOldEngineOn = false;
-		CrankUntil = -1.0;
 		Visuals->SetHeadlights(false);
 		Visuals->SetBraking(false);
 		TurnRate = 0.f;
-		if (EngineNoise->IsPlaying())
+		if (bIdlingAlone)
+		{
+			// Ticking over, or turned over by the crank: a slow putter.
+			if (!EngineNoise->IsPlaying())
+			{
+				EngineNoise->Start();
+			}
+			EngineNoise->SetEngine(0.f, 0.f);
+		}
+		else if (EngineNoise->IsPlaying())
 		{
 			EngineNoise->Stop();
 		}
@@ -301,14 +326,6 @@ void APestiCar::Tick(float DeltaSeconds)
 	}
 	const bool bHandbrake = PC->IsInputKeyDown(EKeys::SpaceBar) || PC->IsInputKeyDown(EKeys::Gamepad_FaceButton_Bottom);
 
-	// E turns an old car's crank; a warm engine catches more easily.
-	if (bOld && !bEngineDead && !bOldEngineOn && !bCranking && !bHeld
-		&& (PC->WasInputKeyJustPressed(EKeys::E) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Left)))
-	{
-		const bool bWarm = Now - DriverOutTime < PestiCar::WarmEngineTime;
-		bCrankCatches = FMath::FRand() < (bWarm ? PestiCar::WarmCrankChance : PestiCar::ColdCrankChance);
-		CrankUntil = Now + PestiCar::CrankTime;
-	}
 	// A running old engine stalls now and then when slow, and sometimes when the pedal goes down hard.
 	if (bOld && bOldEngineOn && !bHeld && FMath::Abs(ForwardSpeed) < PestiCar::StallSpeed)
 	{
@@ -417,7 +434,7 @@ void APestiCar::Tick(float DeltaSeconds)
 			FString::Printf(TEXT("%d km/h   %s(F: get out, C: camera, N: traffic view, P: police test)"), FMath::RoundToInt(GetVelocity().Size2D() * 0.036f),
 				bEngineDead ? TEXT("A motor lefulladt / The engine is dead   ")
 				: bCranking ? TEXT("Hajtod az ind\u00edt\u00f3kart... / Cranking...   ")
-				: bEngineOff ? TEXT("A motor \u00e1ll \u00b7 E: ind\u00edt\u00f3kar / Engine off \u00b7 E: crank it   ")
+				: bEngineOff ? TEXT("A motor \u00e1ll \u00b7 sz\u00e1llj ki (F), \u00e9s forgasd meg el\u00f6l az ind\u00edt\u00f3kart / Engine off \u00b7 get out (F) and crank it at the front   ")
 				: TEXT("")));
 	}
 }
@@ -666,6 +683,30 @@ FVector APestiCar::GetRearDoor(const FVector& Towards) const
 {
 	const double Side = FVector::DotProduct(Towards - GetActorLocation(), GetActorRightVector()) >= 0.0 ? 1.0 : -1.0;
 	return GetActorTransform().TransformPosition(CarModel::RearDoor(Style.Body, Side));
+}
+
+bool APestiCar::CanCrank() const
+{
+	return CarModel::IsOld(Style.Body) && Visuals && !Visuals->IsEngineDead() && !bOldEngineOn && CrankUntil < 0.0;
+}
+
+FVector APestiCar::GetCrankSpot() const
+{
+	const FVector Local(CarModel::Layout(Style.Body).Nose + PestiCar::CrankStandAhead, PestiCar::CrankStandSide, 0.0);
+	const FRotator Flat(0.0, GetActorRotation().Yaw, 0.0);
+	return GetActorLocation() + Flat.RotateVector(Local);
+}
+
+void APestiCar::Crank()
+{
+	if (!CanCrank())
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	const bool bWarm = Now - DriverOutTime < PestiCar::WarmEngineTime;
+	bCrankCatches = FMath::FRand() < (bWarm ? PestiCar::WarmCrankChance : PestiCar::ColdCrankChance);
+	CrankUntil = Now + PestiCar::CrankTime;
 }
 
 void APestiCar::StallEngine()
