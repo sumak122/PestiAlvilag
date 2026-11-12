@@ -15,12 +15,18 @@
 #include "PestiHud.h"
 #include "PolicePatrols.h"
 #include "TrafficManager.h"
+#include "Weather.h"
 
 namespace TrafficBikeRide
 {
 	// Riders keep this far towards the kerb from the cars' lane, and this far from a wall (cm).
 	constexpr double KerbOffset = 140.0;
 	constexpr double WallRoom = 60.0;
+	// In the rain: the most of the riders gone home at full rain, and how far
+	// from the camera (out of its view) one goes or comes back (cm).
+	constexpr float HomeInRain = 0.75f;
+	constexpr double RainAwayBeyond = 3000.0;
+	constexpr double RainBackOutOfView = 0.2;
 	// The next point is taken once it is this close (cm).
 	constexpr double ReachRadius = 150.0;
 	// Each rider's easy pace (cm/s: 14 to 19 km/h; errand boys hurry).
@@ -166,6 +172,7 @@ void ATrafficBike::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, in
 	Target = KerbSpot(PointIndex);
 	Speed = Cruise * 0.5f;
 	BellCooldown = FMath::FRandRange(0.f, TrafficBikeRide::BellEveryHigh);
+	RainShy = FMath::FRand();
 }
 
 void ATrafficBike::Tick(float DeltaSeconds)
@@ -177,6 +184,10 @@ void ATrafficBike::Tick(float DeltaSeconds)
 		return;
 	}
 	APawn::Tick(DeltaSeconds);
+	if (TickRain())
+	{
+		return;
+	}
 
 	BumpCooldown = FMath::Max(0.f, BumpCooldown - DeltaSeconds);
 	BellCooldown = FMath::Max(0.f, BellCooldown - DeltaSeconds);
@@ -197,6 +208,40 @@ void ATrafficBike::Tick(float DeltaSeconds)
 		FarClock = 0.f;
 	}
 	UpdateBell(DeltaSeconds);
+}
+
+bool ATrafficBike::TickRain()
+{
+	const AWeather* Sky = AWeather::Get(GetWorld());
+	const bool bHome = RainShy < TrafficBikeRide::HomeInRain * (Sky ? Sky->GetRain() : 0.f);
+	const APlayerCameraManager* Viewer = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Viewer)
+	{
+		return bRainedOff;
+	}
+	const FVector2D FromCamera = FVector2D(GetActorLocation() - Viewer->GetCameraLocation());
+	const bool bFar = FromCamera.Size() > TrafficBikeRide::RainAwayBeyond;
+	if (bRainedOff)
+	{
+		const bool bOutOfView = FVector2D::DotProduct(FromCamera.GetSafeNormal(), FVector2D(Viewer->GetCameraRotation().Vector()).GetSafeNormal())
+			< TrafficBikeRide::RainBackOutOfView;
+		if (bHome || !bFar || !bOutOfView)
+		{
+			return true;
+		}
+		bRainedOff = false;
+		SetActorHiddenInGame(false);
+		SetActorEnableCollision(true);
+		return false;
+	}
+	if (bHome && bFar && !IsDown() && !WasRecentlyRendered(1.f))
+	{
+		bRainedOff = true;
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+		return true;
+	}
+	return false;
 }
 
 bool ATrafficBike::IsDown() const

@@ -662,7 +662,8 @@ namespace ShopModel
 	 * stands it off). bClosed: the iron shutter is down. bOutside: a crate or two, barrels or buckets set out
 	 * on the pavement.
 	 */
-	inline void ShopAtWall(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside)
+	inline void ShopAtWall(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside,
+		bool* OutAwning = nullptr)
 	{
 		using namespace Colors;
 		FDice Dice(Seed);
@@ -750,6 +751,10 @@ namespace ShopModel
 		}
 		const bool bAwning = Trade == ETrade::Greengrocer || ((Trade == ETrade::Grocer || Trade == ETrade::Baker || Trade == ETrade::Drapery
 			|| Trade == ETrade::Butcher || Trade == ETrade::Dairy || Trade == ETrade::Cafe) && Dice.Chance(0.55)) || Dice.Chance(0.12);
+		if (OutAwning)
+		{
+			*OutAwning = bAwning;
+		}
 		if (bAwning)
 		{
 			Awning(P, Width, Stripes[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Stripes)))], Paint);
@@ -888,11 +893,12 @@ namespace ShopModel
 	}
 
 	/** One shop front Width cm wide: its parts go into P and its lettering into Text (see ShopAtWall). */
-	inline void BuildShop(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside)
+	inline void BuildShop(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside,
+		bool* OutAwning = nullptr)
 	{
 		const int32 FirstPart = P.Num();
 		const int32 FirstText = Text.Num();
-		ShopAtWall(P, Text, Width, Trade, Seed, bClosed, bOutside);
+		ShopAtWall(P, Text, Width, Trade, Seed, bClosed, bOutside, OutAwning);
 		StandOut(P, FirstPart, Text, FirstText);
 	}
 

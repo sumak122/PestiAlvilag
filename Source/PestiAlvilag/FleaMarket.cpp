@@ -32,6 +32,7 @@
 #include "StoryPerson.h"
 #include "UObject/ConstructorHelpers.h"
 #include "PestiHud.h"
+#include "Weather.h"
 #include "Wreck.h"
 
 namespace MarketBuild
@@ -91,6 +92,17 @@ namespace MarketBuild
 namespace MarketLife
 {
 	constexpr double Middle = PersonModel::MiddleHeight;
+	// In the rain (AWeather::GetRain 0..1): above how much the covers go on
+	// and below how much they come off, how long a seller takes to spread
+	// one and the most he waits first (s); the most of the shoppers gone home
+	// at full rain, and how far off one comes back when nobody looks (cm).
+	constexpr float CoverOnFrom = 0.3f;
+	constexpr float CoverOffBelow = 0.08f;
+	constexpr float CoverSeconds = 2.5f;
+	constexpr double CoverWaitMost = 8.0;
+	constexpr float ShoppersHome = 0.8f;
+	constexpr double ShopperBackBeyond = 2500.0;
+	constexpr double ShopperBackOutOfView = 0.2;
 	// People further than this from the camera stand still where they are (cm).
 	constexpr double ActiveRange = 6000.0;
 	// The player is noticed within this distance.
@@ -367,8 +379,79 @@ void AFleaMarket::Tick(float DeltaSeconds)
 	{
 		TickTalk(Now);
 	}
+	if (bOutdoors)
+	{
+		const AWeather* Sky = AWeather::Get(GetWorld());
+		Raining = Sky ? Sky->GetRain() : 0.f;
+		CameraLooking = FVector2D(CameraManager->GetCameraRotation().Vector()).GetSafeNormal();
+		TickRainCovers(DeltaSeconds);
+	}
 	TickStalls(Camera, DeltaSeconds, Now);
 	TickCrowd(DeltaSeconds, Camera, Now);
+}
+
+void AFleaMarket::TickRainCovers(float DeltaSeconds)
+{
+	using namespace MarketLife;
+	TSet<int32> Touched;
+	for (FStall& Stall : StallList)
+	{
+		if (Stall.Cover.Num() == 0)
+		{
+			continue;
+		}
+		// A smashed stall loses its cover with the rest; it comes back with it.
+		if (Stall.bBroken)
+		{
+			if (Stall.Covered > 0.f)
+			{
+				Stall.Covered = 0.f;
+				SpreadCover(Stall, 0.f, Touched);
+			}
+			continue;
+		}
+		const bool bWanted = Raining > CoverOnFrom || (Stall.Covered > 0.f && Raining > CoverOffBelow);
+		const float Goal = bWanted ? 1.f : 0.f;
+		if (Stall.Covered == Goal)
+		{
+			continue;
+		}
+		// Each seller in his own time, not all at once.
+		Stall.CoverWait -= DeltaSeconds;
+		if (Stall.CoverWait > 0.f)
+		{
+			continue;
+		}
+		const float Move = DeltaSeconds / CoverSeconds;
+		Stall.Covered = Goal > Stall.Covered ? FMath::Min(Goal, Stall.Covered + Move) : FMath::Max(Goal, Stall.Covered - Move);
+		SpreadCover(Stall, Stall.Covered, Touched);
+		if (Stall.Covered == Goal)
+		{
+			Stall.CoverWait = CrowdRandom.FRandRange(0.f, static_cast<float>(CoverWaitMost));
+		}
+	}
+	for (const int32 Batch : Touched)
+	{
+		Batches[Batch]->MarkRenderStateDirty();
+	}
+}
+
+void AFleaMarket::SpreadCover(FStall& Stall, float Share, TSet<int32>& Touched)
+{
+	// Unrolled from the back of the stall: every piece grows out of the roll.
+	const double Grown = FMath::Max(0.001, static_cast<double>(FMath::SmoothStep(0.f, 1.f, Share)));
+	for (const FPart& Part : Stall.Cover)
+	{
+		if (!Batches.IsValidIndex(Part.Batch) || !Batches[Part.Batch])
+		{
+			continue;
+		}
+		FTransform Spread = Part.Transform;
+		Spread.SetLocation(Stall.CoverRoll + (Part.Transform.GetLocation() - Stall.CoverRoll) * Grown);
+		Spread.SetScale3D(Part.Transform.GetScale3D() * Grown);
+		Batches[Part.Batch]->UpdateInstanceTransform(Part.Instance, Spread, true, false, true);
+		Touched.Add(Part.Batch);
+	}
 }
 
 bool AFleaMarket::TickCarpetSeller()
@@ -438,7 +521,8 @@ void AFleaMarket::Setup(const FJsonObject& Market)
 	// unless it is given (a market under a roof).
 	const TArray<TSharedPtr<FJsonValue>>* Stalls = nullptr;
 	Market.TryGetArrayField(TEXT("stalls"), Stalls);
-	if (!Market.TryGetNumberField(TEXT("ground_z"), GroundZ) && Stalls && Stalls->Num() > 0)
+	bOutdoors = !Market.TryGetNumberField(TEXT("ground_z"), GroundZ);
+	if (bOutdoors && Stalls && Stalls->Num() > 0)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& At = (*Stalls)[0]->AsObject()->GetArrayField(TEXT("at"));
 		const FVector Probe(At[0]->AsNumber(), At[1]->AsNumber(), 0.0);
@@ -550,6 +634,33 @@ void AFleaMarket::Setup(const FJsonObject& Market)
 			if (All.IsValid)
 			{
 				Stall.Half = FVector2D(FMath::Max(FMath::Abs(All.Min.X), FMath::Abs(All.Max.X)), FMath::Max(FMath::Abs(All.Min.Y), FMath::Abs(All.Max.Y)));
+			}
+			// The cover for the rain, made now and kept rolled up out of sight
+			// (sheds have their roof; a market in a hall needs none).
+			if (bOutdoors && Stall.Build != MarketModel::EBuild::Shed)
+			{
+				TArray<MarketModel::FShape> CoverPieces;
+				MarketModel::BuildRainCover(CoverPieces, Stall.Middle, Stall.Yaw, Stall.Build, Stall.Goods, Random);
+				for (const MarketModel::FShape& Piece : CoverPieces)
+				{
+					const FRotator Turn(Piece.Pitch, Piece.Yaw, Piece.Roll);
+					const FIntPoint Made = Add(Piece.Shape, Piece.Color, Piece.At, FVector(0.1), Turn, false);
+					if (Made.X == INDEX_NONE)
+					{
+						continue;
+					}
+					FPart& Part = Stall.Cover.AddDefaulted_GetRef();
+					Part.Batch = Made.X;
+					Part.Instance = Made.Y;
+					Part.Shape = Piece.Shape;
+					Part.Transform = FTransform(Turn, Piece.At, Piece.Size / 100.0);
+				}
+				// Rolled up at the back edge of the stall, at the height of its goods.
+				Stall.CoverRoll = FVector(FVector2D(Stall.Middle) - Forward * (Stall.Build == MarketModel::EBuild::Blanket ? 70.0 : MarketModel::TableDepth * 0.5),
+					GroundZ + (Stall.Build == MarketModel::EBuild::Blanket ? 15.0 : MarketModel::TableTop + 20.0));
+				MarketModel::FRandom Later = Random;
+				Later.Unit();
+				Stall.CoverWait = static_cast<float>(Later.Range(0.0, MarketLife::CoverWaitMost));
 			}
 			if (Solid.IsValid)
 			{
@@ -775,6 +886,7 @@ AMarketPerson* AFleaMarket::SpawnPerson(const FVector& Feet, double Yaw, FRandom
 	}
 
 	FCrowd& Who = Crowd.AddDefaulted_GetRef();
+	Who.RainShy = CrowdRandom.FRand();
 	Who.bSeller = !bShopper;
 	Who.bKeeper = !Keeper.IsEmpty();
 	Who.Home = FVector2D(Feet);
@@ -1093,8 +1205,37 @@ void AFleaMarket::TickCrowd(float DeltaSeconds, const FVector& Camera, double No
 	{
 		FCrowd& Who = Crowd[i];
 		AMarketPerson* Person = People[i];
+		if (!IsValid(Person))
+		{
+			continue;
+		}
+		// Shoppers go home in the rain while nobody sees, and come back
+		// (where they were) once it eases, away from the camera's view.
+		if (bOutdoors && !Who.bSeller && !Who.bKeeper)
+		{
+			const bool bHome = Who.RainShy < ShoppersHome * Raining;
+			if (Who.bRainedOff)
+			{
+				const FVector2D FromCamera = Who.At - FVector2D(Camera);
+				const bool bUnseen = FromCamera.Size() > ShopperBackBeyond
+					|| FVector2D::DotProduct(FromCamera.GetSafeNormal(), CameraLooking) < ShopperBackOutOfView;
+				if (bHome || !bUnseen)
+				{
+					continue;
+				}
+				Who.bRainedOff = false;
+				Person->SetInWorld(true);
+			}
+			else if (bHome && (Who.Act == EAct::Stand || Who.Act == EAct::Walk) && !Person->IsHidden()
+				&& !Person->WasRecentlyRendered(SeenWithin))
+			{
+				Who.bRainedOff = true;
+				Person->SetInWorld(false);
+				continue;
+			}
+		}
 		// A keeper the story has taken away for now.
-		if (!IsValid(Person) || Person->IsHidden())
+		if (Person->IsHidden())
 		{
 			continue;
 		}
@@ -1611,7 +1752,7 @@ void AFleaMarket::Smash(int32 Index, double Now)
 	for (int32 i = 0; i < Crowd.Num(); ++i)
 	{
 		FCrowd& Other = Crowd[i];
-		if (i != Stall.Seller && !Other.bSeller && (Other.Act == EAct::Stand || Other.Act == EAct::Walk)
+		if (i != Stall.Seller && !Other.bSeller && !Other.bRainedOff && (Other.Act == EAct::Stand || Other.Act == EAct::Walk)
 			&& FVector2D::Distance(Other.At, Where) < ScareNear)
 		{
 			Flee(Other, Where, FleeSeconds);

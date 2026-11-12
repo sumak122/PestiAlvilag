@@ -28,6 +28,7 @@
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "StreetFights.h"
+#include "StreetFurniture.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
@@ -93,6 +94,25 @@ namespace Pedestrians
 	constexpr float UmbrellaLean = 7.f;
 	constexpr float UmbrellaSpeed = 0.8f;
 	constexpr float RainHurry = 0.35f;
+	// In a downpour (AWeather::GetRain 0..1): the most of the crowd gone
+	// indoors at full rain; above how much rain those without an umbrella
+	// make for a doorway (AStreetFurniture::TakeShelter) no further than
+	// ShelterReach, how often they look, and below how much they walk on.
+	constexpr float IndoorsShare = 0.55f;
+	constexpr float ShelterFrom = 0.35f;
+	constexpr float ShelterUntil = 0.12f;
+	constexpr double ShelterReach = 900.0;
+	constexpr float ShelterLook = 2.f;
+	constexpr float ShelterHurry = 1.5f;
+	constexpr double ShelterNear = 10.0;
+	constexpr double ShelterMaxOut = 550.0;
+	constexpr double IndoorsBeyond = 2000.0;
+	// Arms folded against the cold in a doorway (degrees).
+	constexpr float FoldUpper = 16.f;
+	constexpr float FoldIn = 4.f;
+	constexpr float FoldElbow = 100.f;
+	constexpr float FoldOver = 6.f;
+	constexpr float FoldAcross = 52.f;
 
 	// Someone on foot who walks into him (closer than this, faster than
 	// that) makes him stumble back; someone running at him makes him step
@@ -230,6 +250,7 @@ APedestrian::APedestrian()
 
 void APedestrian::WalkTo(const FVector& Location, double Yaw, float Speed, float DeltaSeconds, float ArmsUp)
 {
+	Unfold();
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 	if (ArmsUp > 0.f)
 	{
@@ -383,6 +404,7 @@ void APedestrian::DropUmbrella()
 
 void APedestrian::Hold(const FVector& Location, const FRotator& Rotation, float Legs, float Knees, float Arms)
 {
+	Unfold();
 	DropUmbrella();
 	SetActorLocationAndRotation(Location, Rotation);
 	// Not quite the same on both sides, so he does not look like a doll.
@@ -398,6 +420,7 @@ void APedestrian::Hold(const FVector& Location, const FRotator& Rotation, float 
 
 void APedestrian::PointTo(const FVector& Location, double Yaw, double PointYaw, bool bPointing)
 {
+	Unfold();
 	DropUmbrella();
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 	PersonModel::PoseLegs(Pieces, 0.f, 0.f);
@@ -421,6 +444,36 @@ void APedestrian::PointTo(const FVector& Location, double Yaw, double PointYaw, 
 				Part->SetRelativeRotation(FRotator::ZeroRotator);
 			}
 		}
+	}
+}
+
+void APedestrian::Huddle(const FVector& Location, double Yaw)
+{
+	DropUmbrella();
+	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	PersonModel::PoseLegs(Pieces, 0.f, 0.f);
+	// Upper arms a little forward, forearms across the chest, one over the other.
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float Side = i == 0 ? 1.f : -1.f;
+		if (USceneComponent* Upper = Limb(PersonKit::ArmLeft + i))
+		{
+			Upper->SetRelativeRotation(FRotator(Pedestrians::FoldUpper, 0.f, Pedestrians::FoldIn * Side));
+		}
+		if (USceneComponent* Lower = Limb(PersonKit::ForearmLeft + i))
+		{
+			Lower->SetRelativeRotation(FRotator(Pedestrians::FoldElbow + (i == 0 ? 0.f : Pedestrians::FoldOver), Pedestrians::FoldAcross * Side, 0.f));
+		}
+	}
+	bArmsFolded = true;
+}
+
+void APedestrian::Unfold()
+{
+	if (bArmsFolded)
+	{
+		PersonModel::PoseElbows(Pieces, 0.f, 0.f);
+		bArmsFolded = false;
 	}
 }
 
@@ -785,6 +838,7 @@ void APedestrians::PickAFight(APawn* Player)
 		return;
 	}
 	// The fighter stands where he was: the walker himself is gone (another comes along out of sight).
+	LeaveShelter(Walker);
 	if (Walker.Blood)
 	{
 		Walker.Blood->DestroyComponent();
@@ -1088,7 +1142,7 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 		Shout(Pedestrians::WitnessLine.Hu, Pedestrians::WitnessLine.En);
 		for (FWalker& Other : Walkers)
 		{
-			if (&Other != &Walker && IsValid(Other.Person) && (Other.React == EReact::None || Other.React == EReact::Aside)
+			if (&Other != &Walker && IsValid(Other.Person) && !Other.bIndoors && (Other.React == EReact::None || Other.React == EReact::Aside)
 				&& FVector2D::Distance(Other.Shown, Walker.Shown) < Pedestrians::WitnessNear)
 			{
 				if (Other.bStander)
@@ -1291,6 +1345,8 @@ void APedestrians::Tick(float DeltaSeconds)
 		Walker.bHasUmbrella = Dressed.Held == PersonKit::EHeld::Umbrella || Random.FRand() < Pedestrians::UmbrellaShare;
 		Walker.UmbrellaColor = UmbrellaModel::ClothColor(Random.FRand(), Dressed.bWoman);
 		Walker.UmbrellaPatience = Random.FRand();
+		Walker.RainShy = Random.FRand();
+		Walker.ShelterClock = Random.FRand() * Pedestrians::ShelterLook;
 		Walkers.Add(Walker);
 	}
 
@@ -1320,6 +1376,7 @@ void APedestrians::Tick(float DeltaSeconds)
 
 	const AWeather* Sky = AWeather::Get(GetWorld());
 	const float RainNow = Sky ? Sky->GetRain() : 0.f;
+	ComeBackLeft = Pedestrians::SpawnPerFrame;
 
 	for (FWalker& Walker : Walkers)
 	{
@@ -1330,6 +1387,12 @@ void APedestrians::Tick(float DeltaSeconds)
 		if (Walker.bStander)
 		{
 			TickStander(Walker, Camera, bPlayerAbout, Now, DeltaSeconds);
+			continue;
+		}
+
+		// Gone indoors out of the rain: nothing more to do until he comes out again.
+		if (Walker.bIndoors && TickRain(Walker, RainNow, Camera, Looking, DeltaSeconds))
+		{
 			continue;
 		}
 
@@ -1352,6 +1415,10 @@ void APedestrians::Tick(float DeltaSeconds)
 		if (bPlayerAbout && Walker.bPlaced)
 		{
 			ReactToPlayer(Walker, Now);
+		}
+		if (TickRain(Walker, RainNow, Camera, Looking, DeltaSeconds))
+		{
+			continue;
 		}
 		const bool bOnWalk = Walker.React == EReact::None || Walker.React == EReact::Flee;
 		// In the rain: up with the umbrella, or hurry along without one.
@@ -1446,6 +1513,104 @@ void APedestrians::Tick(float DeltaSeconds)
 				Walker.React == EReact::Flee || (bOnCrossing && Walker.bRushing) ? 1.f : 0.f);
 		}
 	}
+}
+
+bool APedestrians::TickRain(FWalker& Walker, float RainNow, const FVector& Camera, const FVector2D& Looking, float DeltaSeconds)
+{
+	APedestrian* Person = Walker.Person;
+
+	// Gone indoors out of a downpour: back out somewhere out of sight once it eases.
+	const bool bWantsIn = Walker.RainShy < Pedestrians::IndoorsShare * RainNow;
+	if (Walker.bIndoors)
+	{
+		if (bWantsIn || ComeBackLeft <= 0)
+		{
+			return true;
+		}
+		--ComeBackLeft;
+		if (!PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
+		{
+			return true;
+		}
+		Walker.bIndoors = false;
+		Walker.bPlaced = false;
+		Walker.bWaiting = false;
+		Walker.bRushing = false;
+		Person->SetInWorld(true);
+		return false;
+	}
+	const double FromCamera = FVector2D::Distance(Walker.Shown, FVector2D(Camera));
+	if (bWantsIn && Walker.bPlaced && Walker.React == EReact::None && FromCamera > Pedestrians::IndoorsBeyond
+		&& !Person->WasRecentlyRendered(Pedestrians::SeenWithin))
+	{
+		LeaveShelter(Walker);
+		Walker.bIndoors = true;
+		Walker.bPlaced = false;
+		Person->SetInWorld(false);
+		return true;
+	}
+
+	// Waiting in a doorway: walks over to it, then stands with his arms
+	// folded until the rain stops (or something makes him move).
+	if (Walker.Shelter != INDEX_NONE)
+	{
+		if (RainNow < Pedestrians::ShelterUntil || Walker.React != EReact::None || !Walker.bPlaced || FromCamera > Range)
+		{
+			LeaveShelter(Walker);
+			return false;
+		}
+		const double Raise = Pedestrians::Middle * Person->GetActorScale3D().Z;
+		const FVector2D Gap = Walker.ShelterAt - Walker.Shown;
+		const double Left = Gap.Size();
+		if (Left > Pedestrians::ShelterNear)
+		{
+			const float Pace = Walker.Speed * Pedestrians::ShelterHurry;
+			const double Step = Pace * DeltaSeconds;
+			Walker.Shown += Left > Step ? Gap / Left * Step : Gap;
+			const float Toward = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Gap.Y, Gap.X)));
+			Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Toward, Pedestrians::TurnRate * DeltaSeconds);
+			Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Raise), Walker.ShownYaw, Pace, DeltaSeconds);
+			return true;
+		}
+		Walker.Shown = Walker.ShelterAt;
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Walker.ShelterYaw, Pedestrians::StanderTurnRate * DeltaSeconds);
+		Person->Huddle(FVector(Walker.Shown, Walker.GroundZ + Raise), Walker.ShownYaw);
+		return true;
+	}
+
+	// Caught in the rain without an umbrella: now and then he looks for a doorway near by.
+	Walker.ShelterClock -= DeltaSeconds;
+	if (RainNow > Pedestrians::ShelterFrom && !Walker.bHasUmbrella && Walker.React == EReact::None && Walker.bPlaced
+		&& !Walker.bWaiting && !Lines[Walker.Line].bCrossing && Walker.ShelterClock <= 0.f)
+	{
+		Walker.ShelterClock = Pedestrians::ShelterLook;
+		if (AStreetFurniture* Street = AStreetFurniture::Get(GetWorld()))
+		{
+			FVector Spot;
+			float Facing = 0.f;
+			int32 Taken = INDEX_NONE;
+			if (Street->TakeShelter(Walker.Shown, Pedestrians::ShelterReach, Pedestrians::ShelterMaxOut, Spot, Facing, Taken))
+			{
+				Walker.Shelter = Taken;
+				Walker.ShelterAt = FVector2D(Spot);
+				Walker.ShelterYaw = Facing;
+			}
+		}
+	}
+	return false;
+}
+
+void APedestrians::LeaveShelter(FWalker& Walker)
+{
+	if (Walker.Shelter == INDEX_NONE)
+	{
+		return;
+	}
+	if (AStreetFurniture* Street = AStreetFurniture::Get(GetWorld()))
+	{
+		Street->LeaveShelter(Walker.Shelter);
+	}
+	Walker.Shelter = INDEX_NONE;
 }
 
 double APedestrians::MiddleUp(const FWalker& Walker) const

@@ -63,6 +63,19 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** The world's street furniture, or none. */
+	static AStreetFurniture* Get(const UWorld* World);
+
+	/**
+	 * A dry spot to wait out the rain in, near At and no further than Reach:
+	 * under a shop's awning, in a shop doorway or a house gate, kept for
+	 * whoever takes it until LeaveShelter. Only on At's own side of the
+	 * street: At no further than MaxOut in front of the wall. Gives where to
+	 * stand (on the pavement) and which way to face (out at the street).
+	 */
+	bool TakeShelter(const FVector2D& At, double Reach, double MaxOut, FVector& OutSpot, float& OutYaw, int32& OutIndex);
+	void LeaveShelter(int32 Index);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -118,6 +131,17 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Batches;
+
+	/** Where people can stand out of the rain (TakeShelter), and whether someone stands there. */
+	struct FShelter
+	{
+		FVector Spot = FVector::ZeroVector;
+		float Yaw = 0.f;
+		bool bTaken = false;
+	};
+	TArray<FShelter> Shelters;
+	/** Adds a shelter spot Out cm in front of a wall's foot and Across along it (the wall faces Yaw). */
+	void AddShelter(const FVector& Foot, double Yaw, double Out, double Across);
 
 	TMap<FString, int32> BatchIndex;
 	TArray<TArray<FTransform>> Pending;

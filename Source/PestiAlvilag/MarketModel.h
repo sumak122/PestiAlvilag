@@ -454,4 +454,73 @@ namespace MarketModel
 		}
 		return bBlanket ? SellerBack + 30.0 : SellerBack;
 	}
+	/** Oilcloths, sacking and old canvas a seller throws over his goods when it rains. */
+	namespace RainCloth
+	{
+		const FLinearColor Cloths[] = {
+			FLinearColor(0.09f, 0.12f, 0.09f), FLinearColor(0.30f, 0.24f, 0.15f), FLinearColor(0.20f, 0.20f, 0.21f),
+			FLinearColor(0.38f, 0.33f, 0.24f), FLinearColor(0.12f, 0.14f, 0.20f) };
+		const FLinearColor Stone(0.36f, 0.34f, 0.31f);
+		const FLinearColor Brick(0.42f, 0.20f, 0.13f);
+	}
+
+	/**
+	 * The cover a seller pulls over his stall in the rain (AFleaMarket keeps
+	 * it rolled up out of sight until then): a sheet sagging over the goods
+	 * from a middle ridge, its edges hanging down all round, a stone or a
+	 * brick or two on top so it does not blow off, and a second sheet over
+	 * the coats on a clothes rail. Same frame as BuildStall (facing +X).
+	 */
+	inline void BuildRainCover(TArray<FShape>& Out, const FVector& Middle, double Yaw, EBuild Build, EGoods Goods, FRandom Random)
+	{
+		FBuilder B{ Out, Middle, Yaw };
+		const bool bBlanket = Build == EBuild::Blanket;
+		const FLinearColor Cloth = Pick(RainCloth::Cloths, Random);
+		// Half its size over the goods, how high its ridge is, and how far down its edges hang.
+		const double HX = bBlanket ? 82.0 : TableDepth * 0.5 + 10.0;
+		const double HY = bBlanket ? 122.0 : TableWidth * 0.5 + 10.0;
+		const double Ridge = bBlanket ? 24.0 : TableTop + 30.0;
+		const double Eaves = bBlanket ? 8.0 : TableTop + 14.0;
+		const double HangTo = bBlanket ? 1.0 : TableTop - 32.0;
+		// The two halves of the sheet, from the ridge down to front and back.
+		const double Drop = Ridge - Eaves;
+		const double Run = FMath::Sqrt(HX * HX + Drop * Drop);
+		const double Tilt = FMath::RadiansToDegrees(FMath::Atan2(Drop, HX));
+		for (const double Side : { 1.0, -1.0 })
+		{
+			B.Add(Cube, Cloth, FVector(Side * HX * 0.5, 0.0, (Ridge + Eaves) * 0.5), FVector(Run + 2.0, HY * 2.0, 1.5), Side * -Tilt);
+			// The edge hanging down in front and behind.
+			B.Add(Cube, Cloth, FVector(Side * (HX + 1.0), 0.0, (Eaves + HangTo) * 0.5), FVector(1.5, HY * 2.0, Eaves - HangTo),
+				Side * 4.0);
+			// The ends, hanging down over each side of the table or blanket.
+			B.Add(Cube, Cloth, FVector(0.0, Side * (HY + 1.0), (Eaves + HangTo) * 0.5 + 4.0), FVector(HX * 2.0, 1.5, Eaves - HangTo + 8.0),
+				0.0, 0.0, Side * -4.0);
+		}
+		// Something heavy on top: a stone, a brick, sometimes both.
+		const int32 Weights = 1 + Random.Index(2);
+		for (int32 k = 0; k < Weights; ++k)
+		{
+			const double Y = (k == 0 ? -1.0 : 1.0) * Random.Range(HY * 0.25, HY * 0.7);
+			const double X = Random.Range(-HX * 0.4, HX * 0.4);
+			const double Z = Ridge - FMath::Abs(X) / HX * Drop;
+			if (Random.Unit() < 0.5)
+			{
+				B.Add(Cube, RainCloth::Brick, FVector(X, Y, Z + 3.5), FVector(12.0, 25.0, 6.5), 0.0, Random.Range(-30.0, 30.0));
+			}
+			else
+			{
+				B.Add(Sphere, RainCloth::Stone, FVector(X, Y, Z + 4.0), FVector(18.0, 15.0, 10.0), 0.0, Random.Range(0.0, 180.0));
+			}
+		}
+		// The coats on a clothes rail get a sheet of their own, over the rail.
+		if (Goods == EGoods::Clothes)
+		{
+			const double RailY = bBlanket ? 145.0 : TableWidth * 0.5 + 40.0;
+			B.Add(Cube, Cloth, FVector(0.0, RailY, 172.0), FVector(136.0, 14.0, 4.0));
+			for (const double Side : { 1.0, -1.0 })
+			{
+				B.Add(Cube, Cloth, FVector(0.0, RailY + Side * 9.0, 122.0), FVector(136.0, 1.5, 100.0), 0.0, 0.0, Side * 3.0);
+			}
+		}
+	}
 }

@@ -58,7 +58,17 @@ public:
 	/** Whether he has his umbrella up (or is opening it). */
 	bool HasUmbrellaUp() const { return UmbrellaOpen > 0.f; }
 
+	/**
+	 * Stands still at Location facing Yaw with his arms folded against the
+	 * cold, waiting out the rain; every other pose unfolds them again.
+	 */
+	void Huddle(const FVector& Location, double Yaw);
+
 private:
+	/** Arms back down from Huddle, if they were folded. */
+	void Unfold();
+	bool bArmsFolded = false;
+
 	/** Which arm holds the umbrella: 0 left, 1 right. */
 	int32 UmbrellaArm() const;
 	/** Opens or shuts it a little more, and makes it the first time. */
@@ -208,6 +218,15 @@ private:
 		bool bHasUmbrella = false;
 		FLinearColor UmbrellaColor = FLinearColor::Black;
 		float UmbrellaPatience = 0.f;
+		/** In the rain: in a doorway out of the wet (its AStreetFurniture shelter, where he stands, which way he faces). */
+		int32 Shelter = INDEX_NONE;
+		FVector2D ShelterAt = FVector2D::ZeroVector;
+		float ShelterYaw = 0.f;
+		/** Seconds until he looks for a doorway again. */
+		float ShelterClock = 0.f;
+		/** Gone indoors out of a downpour (hidden until it eases), and how little rain it takes (0..1). */
+		bool bIndoors = false;
+		float RainShy = 1.f;
 		/** Keeps to one spot (AddStander): there, facing that way, and, when seated, his middle this high over the floor. */
 		bool bStander = false;
 		bool bSeated = false;
@@ -244,6 +263,17 @@ private:
 	void StartReact(FWalker& Walker, EReact React, float Seconds, const FVector2D& Shove);
 	/** The car hit him: knocked down, or killed at speed. */
 	void RunOver(FWalker& Walker, double Speed);
+	/**
+	 * The rain thins the crowd: some go indoors out of sight and come back
+	 * when it eases, those without an umbrella wait in a doorway nearby.
+	 * True when it has moved and posed him itself this frame.
+	 */
+	bool TickRain(FWalker& Walker, float RainNow, const FVector& Camera, const FVector2D& Looking, float DeltaSeconds);
+	/** Out of his doorway (back to walking). */
+	void LeaveShelter(FWalker& Walker);
+	/** How many more may come back out of doors this frame. */
+	int32 ComeBackLeft = 0;
+
 	/** Has him pose as what he is doing now demands; false when just walking. */
 	bool PoseReacting(FWalker& Walker, float DeltaSeconds);
 	/** Back to walking (and the blood gone), once he is cleared away. */
