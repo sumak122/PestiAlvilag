@@ -112,6 +112,18 @@ public:
 	/** The lock is beaten: with a smashed window (glass flies, a crime if the police hear), or quietly picked. */
 	void BreakIn(bool bSmash);
 
+	/**
+	 * An old car's engine is started by hand at the front (APestiPerson::TickCrank):
+	 * whether it can be cranked now (old, engine off, not already turning),
+	 * where the person cranking it stands (on the ground plane, facing the
+	 * radiator: the car's yaw turned round), and a go at the crank, which
+	 * catches or not after a moment.
+	 */
+	bool CanCrank() const;
+	FVector GetCrankSpot() const;
+	void Crank();
+	bool IsCranking() const { return CrankUntil > 0.0; }
+
 	/** The dents, lost parts and wear of the same car as it was in traffic (stolen from it). */
 	void TakeLooksFrom(UCarVisuals* From);
 
@@ -217,12 +229,12 @@ private:
 
 	/** Locked, until broken into or driven. */
 	bool bLocked = false;
-	/** An old car (CarModel::IsOld) is started with the crank (E) and stalls now and then: whether it runs, */
+	/** An old car (CarModel::IsOld) is started with the crank at the front and stalls now and then: whether it runs, */
 	bool bOldEngineOn = false;
 	/** the crank turning the engine over until this time and whether it will catch, */
 	double CrankUntil = -1.0;
 	bool bCrankCatches = false;
-	/** and when the last driver got out (a warm engine catches more easily). */
+	/** and when the last driver got out, or it was cranked into life with nobody in it (a warm engine catches more easily; left alone it idles a while). */
 	double DriverOutTime = -1000.0;
 	/** The old engine stops, with a cough. */
 	void StallEngine();

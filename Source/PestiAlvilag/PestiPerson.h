@@ -268,6 +268,8 @@ private:
 	void TryEnterCar(APlayerController* PC);
 	/** Breaking into a locked car (a tap of F smashes the window, holding it picks the lock); true while that has his F key. */
 	bool TickBreakIn(APlayerController* PC);
+	/** Cranking an old car at the front (E there starts a go); true while he is at it. */
+	bool TickCrank(APlayerController* PC);
 	/** Into the car and behind the wheel. */
 	void GetIntoCar(APlayerController* PC, APestiCar* Car);
 	void SetInWorld(bool bInWorld);
@@ -286,6 +288,9 @@ private:
 	/** The locked car he is breaking into, and when F went down for it. */
 	TWeakObjectPtr<APestiCar> LockedCar;
 	double BreakInStart = 0.0;
+	/** The old car whose crank he is turning, and when he started. */
+	TWeakObjectPtr<APestiCar> CrankedCar;
+	double CrankStart = 0.0;
 	/** The last time a vehicle hurt him, so one bump hurts only once. */
 	double LastHitTime = -100.0;
 	/** The fastest he has been falling since he left the ground (cm/s). */
