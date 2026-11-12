@@ -18,6 +18,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "NewYorkModel.h"
 #include "ParkModel.h"
 #include "Pedestrians.h"
 #include "PersonKit.h"
@@ -263,6 +264,7 @@ void ACityDetails::BeginPlay()
 		BuildClocks(*Root);
 		ReadMapIcons(*Root);
 		BuildChurches(*Root);
+		BuildNewYork(*Root);
 		BuildStreetLife(*Root);
 	}
 }
@@ -576,6 +578,66 @@ void ACityDetails::BuildChurches(const FJsonObject& Root)
 			FolkCall(One.Who, Name, Hu, En);
 			Crowd->AddStander(FVector2D(Spot), Ground + One.Up, FrontYaw + One.Yaw, Clothes, SeatedUp, Name, Hu, En);
 		}
+	}
+}
+
+void ACityDetails::BuildNewYork(const FJsonObject& Root)
+{
+	using namespace NewYorkModel;
+	const TArray<TSharedPtr<FJsonValue>>* Runs = nullptr;
+	if (!Root.TryGetArrayField(TEXT("newyork"), Runs) || Runs->Num() == 0)
+	{
+		return;
+	}
+	// [part, x, y, yaw, length] each, in the city; the set stands at the first one's start.
+	TArray<FPiece> Pieces;
+	FVector2D SetAt = FVector2D::ZeroVector;
+	double SetYaw = 0.0;
+	for (const TSharedPtr<FJsonValue>& RunValue : *Runs)
+	{
+		const TArray<TSharedPtr<FJsonValue>>& R = RunValue->AsArray();
+		if (R.Num() < 5)
+		{
+			continue;
+		}
+		const FString Part = R[0]->AsString();
+		FPiece Piece;
+		Piece.Part = Part == TEXT("korut") ? EPiece::Korut : Part == TEXT("corner") ? EPiece::Corner : EPiece::Dohany;
+		Piece.Start = CityDetailsPlace::Pair(R, 1);
+		Piece.Yaw = R[3]->AsNumber();
+		Piece.Length = R[4]->AsNumber();
+		if (Pieces.Num() == 0)
+		{
+			SetAt = Piece.Start;
+			SetYaw = Piece.Yaw;
+		}
+		// Into the set's frame.
+		Piece.Start = FVector2D(FRotator(0.0, -SetYaw, 0.0).RotateVector(FVector(Piece.Start - SetAt, 0.0)));
+		Piece.Yaw -= SetYaw;
+		Pieces.Add(Piece);
+	}
+	if (Pieces.Num() == 0)
+	{
+		return;
+	}
+	const double Ground = GroundAt(SetAt + CityDetailsPlace::Ahead(SetYaw, CityDetailsPlace::OutFromWall));
+	AShapeSet* Set = PutUp(FVector(SetAt, Ground), SetYaw, CityDetailsPlace::ChurchDrawDistance);
+	if (!Set)
+	{
+		return;
+	}
+	TArray<FShape> Shapes;
+	TArray<FLamp> Lights;
+	TArray<FSign> Lettering;
+	Palace(Pieces, Shapes, Lights, Lettering);
+	Set->AddShapes(Shapes);
+	for (const FLamp& Light : Lights)
+	{
+		Set->AddLamp(Light.At, Light.Radius);
+	}
+	for (const FSign& Sign : Lettering)
+	{
+		Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
 	}
 }
 

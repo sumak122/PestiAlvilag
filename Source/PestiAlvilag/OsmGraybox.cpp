@@ -82,7 +82,8 @@ namespace OsmGraybox
 	// 4: Bözsi néni's block left out (BozsiHouseModel builds it with its courtyard).
 	// 5: the city details' blocks (open gateways, the taller Corvin) from city_details.json.
 	// 6: flower boxes and washing on the windows; the churches' blocks left out (city_details.json "gone").
-	constexpr int32 MeshVersion = 6;
+	// 7: the New York palace's dressed street walls lose their plain facades (city_details.json).
+	constexpr int32 MeshVersion = 7;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");

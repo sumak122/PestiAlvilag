@@ -1961,7 +1961,7 @@ SHOP_KEEP_CLEAR = [
     ((101266, -37678), 900),   # the station address on the delivery round
     ((18173, 30456), 900),     # the attic's door on Berkocsis utca
 ]
-SHOP_SKIP_BUILDINGS = {"w261801166", "w256539415", "w191191238"}  # the Corvin and the two churches (city_details.py)
+SHOP_SKIP_BUILDINGS = {"w261801166", "w256539415", "w191191238", "w259011268"}  # the Corvin, the two churches, the New York palace (city_details.py)
 SHOP_OWNERS = [
     "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
     "TÓTH ISTVÁN", "NAGY FERENC", "FISCHER ADOLF", "LÖWY DÁVID", "ROTH SAMU", "SPITZER HERMAN", "HORVÁTH GYULA",
