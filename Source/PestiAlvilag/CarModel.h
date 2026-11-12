@@ -256,7 +256,9 @@ namespace CarModel
 			L.RearDoorX = -20.0;
 			L.Exhaust = FVector(-185.0, 36.0, -62.0);
 			L.DoorBack = -38.0;
-			// The cowl before the windscreen stays on: the bonnet starts ahead of it.
+			// The door starts behind the body's rounded front corner; the cowl
+			// before the windscreen stays on: the bonnet starts ahead of it.
+			L.DoorFront = 50.0;
 			L.BonnetBack = 86.0;
 			break;
 		case EBody::TownCar:
@@ -661,22 +663,39 @@ namespace CarModel
 	}
 
 	/** Mudguards, running boards, chassis, rear bumper, tail lamps and the tail pipe. */
-	inline void BuildRunningGear(FBuilder& B, const FLayout& L, double Tail, bool bRearBumper = true)
+	inline void BuildRunningGear(FBuilder& B, const FLayout& L, double Tail, bool bRearBumper = true, bool bCrowned = false)
 	{
 		const double R = WheelRadius + 7.0;
 		const double BoardZ = -49.0;
-		// Front mudguard: from in front of the wheel, over it, down onto the running board.
-		TArray<FVector2D> Front;
-		Arc(Front, FVector2D(L.FrontAxle, HubZ), R, 2.0, 150.0, 12);
-		Front.Add(FVector2D(L.FrontAxle - 54.0, BoardZ + 3.0));
-		Front.Add(FVector2D(L.FrontAxle - 66.0, BoardZ));
-		B.Guard(Guards, Front, L.TrackY - 12.0, L.TrackY + 12.0, 3.0);
-		// Rear mudguard.
-		TArray<FVector2D> Rear;
-		Rear.Add(FVector2D(L.RearAxle + 52.0, BoardZ));
-		Arc(Rear, FVector2D(L.RearAxle, HubZ), R, 30.0, 178.0, 10);
-		Rear.Add(FVector2D(L.RearAxle - R - 4.0, HubZ - 6.0));
-		B.Guard(Guards, Rear, L.TrackY - 12.0, L.TrackY + 12.0, 3.0);
+		// The mudguards: each a strip across from Y0 to Y1, dropped Drop below the
+		// middle; a crowned one is several strips, falling away to each side.
+		auto MudGuard = [&](double Y0, double Y1, double Drop, double Thick)
+		{
+			// Front mudguard: from in front of the wheel, over it, down onto the running board.
+			TArray<FVector2D> Front;
+			Arc(Front, FVector2D(L.FrontAxle, HubZ), R - Drop, 2.0, 150.0, 20);
+			Front.Add(FVector2D(L.FrontAxle - 54.0, BoardZ + 3.0 - Drop));
+			Front.Add(FVector2D(L.FrontAxle - 66.0, BoardZ - Drop));
+			B.Guard(Guards, Front, Y0, Y1, Thick);
+			// Rear mudguard.
+			TArray<FVector2D> Rear;
+			Rear.Add(FVector2D(L.RearAxle + 52.0, BoardZ - Drop));
+			Arc(Rear, FVector2D(L.RearAxle, HubZ), R - Drop, 30.0, 178.0, 16);
+			Rear.Add(FVector2D(L.RearAxle - R - 4.0 + Drop, HubZ - 6.0));
+			B.Guard(Guards, Rear, Y0, Y1, Thick);
+		};
+		if (bCrowned)
+		{
+			MudGuard(L.TrackY - 12.0, L.TrackY - 7.0, 1.2, 2.0);
+			MudGuard(L.TrackY - 7.0, L.TrackY + 5.0, 0.0, 2.0);
+			MudGuard(L.TrackY + 5.0, L.TrackY + 10.0, 1.4, 2.0);
+			MudGuard(L.TrackY + 10.0, L.TrackY + 12.5, 3.5, 2.0);
+			MudGuard(L.TrackY + 12.5, L.TrackY + 13.5, 6.5, 2.0);
+		}
+		else
+		{
+			MudGuard(L.TrackY - 12.0, L.TrackY + 12.0, 0.0, 3.0);
+		}
 		// Running boards between them, with rubber treads.
 		B.BothSides(Guards, FVector(L.RearAxle + 50.0, L.HalfWidth - 2.0, BoardZ - 2.0), FVector(L.FrontAxle - 64.0, L.TrackY + 10.0, BoardZ + 1.5));
 		for (double X = L.RearAxle + 58.0; X < L.FrontAxle - 70.0; X += 12.0)
@@ -1636,25 +1655,41 @@ namespace CarModel
 		const double ScuttleFront = L.Cowl + 24.0;
 		const double Front = L.Nose - 8.0;
 
-		// The bonnet, its fine louvres at the back, and the hinge along its top.
-		B.FrontOutline(Paint, { FVector2D(-BonnetHalf, -40.0), FVector2D(BonnetHalf, -40.0), FVector2D(BonnetHalf, Top - 6.0),
-			FVector2D(BonnetHalf - 5.0, Top), FVector2D(-BonnetHalf + 5.0, Top), FVector2D(-BonnetHalf, Top - 6.0) }, ScuttleFront - 1.0, Front + 1.0);
+		// The bonnet, well rounded over its top, its fine louvres at the back, and the hinge along its top.
+		const double HoodRound = 9.0;
+		TArray<FVector2D> Hood;
+		Hood.Add(FVector2D(-BonnetHalf, -40.0));
+		Hood.Add(FVector2D(BonnetHalf, -40.0));
+		for (int32 i = 0; i <= 5; ++i)
+		{
+			const double A = HALF_PI * i / 5.0;
+			Hood.Add(FVector2D(BonnetHalf - HoodRound + HoodRound * FMath::Cos(A), Top - HoodRound + HoodRound * FMath::Sin(A)));
+		}
+		for (int32 i = 0; i <= 5; ++i)
+		{
+			const double A = HALF_PI + HALF_PI * i / 5.0;
+			Hood.Add(FVector2D(-BonnetHalf + HoodRound + HoodRound * FMath::Cos(A), Top - HoodRound + HoodRound * FMath::Sin(A)));
+		}
+		B.FrontOutline(Paint, Hood, ScuttleFront - 1.0, Front + 1.0);
 		B.Bar(Paint, FVector(ScuttleFront, 0.0, Top + 0.3), FVector(Front, 0.0, Top + 0.3), 1.2);
 		for (double X = ScuttleFront + 4.0; X < ScuttleFront + 26.0; X += 3.5)
 		{
 			B.BothSides(Guards, FVector(X, BonnetHalf, -24.0), FVector(X + 1.2, BonnetHalf + 0.5, 10.0));
 		}
-		// The cowl: from the bonnet out to the body's full width at the windscreen.
+		// The cowl: from the bonnet out to the body's full width at the windscreen,
+		// meeting the body where its rounded front corners begin.
+		const double BodyRound = 10.0;
+		const double CowlBack = L.Cowl - BodyRound;
 		for (const double S : { -1.0, 1.0 })
 		{
-			const FVector Normal = FVector(0.82, 0.58 * S, 0.0);
-			B.Quad(Paint, FVector(L.Cowl, S * W, -44.0), FVector(ScuttleFront, S * BonnetHalf, -40.0), FVector(ScuttleFront, S * BonnetHalf, Top - 6.0),
-				FVector(L.Cowl, S * W, Belt), Normal);
-			B.Quad(Paint, FVector(L.Cowl, S * W, Belt), FVector(ScuttleFront, S * BonnetHalf, Top - 6.0), FVector(ScuttleFront, S * (BonnetHalf - 5.0), Top),
-				FVector(L.Cowl, S * (W - 6.0), Belt), FVector(0.4, 0.4 * S, 0.8).GetSafeNormal());
+			const FVector Normal = FVector(0.7, 0.7 * S, 0.0).GetSafeNormal();
+			B.Quad(Paint, FVector(CowlBack, S * W, -44.0), FVector(ScuttleFront, S * BonnetHalf, -40.0), FVector(ScuttleFront, S * BonnetHalf, Top - HoodRound),
+				FVector(CowlBack, S * W, Belt - 3.0), Normal);
+			B.Quad(Paint, FVector(CowlBack, S * W, Belt - 3.0), FVector(ScuttleFront, S * BonnetHalf, Top - HoodRound), FVector(ScuttleFront, S * (BonnetHalf - HoodRound), Top),
+				FVector(CowlBack, S * (W - 8.0), Belt), FVector(0.4, 0.5 * S, 0.8).GetSafeNormal());
 		}
-		B.Quad(Paint, FVector(L.Cowl, -(W - 6.0), Belt), FVector(L.Cowl, W - 6.0, Belt), FVector(ScuttleFront, BonnetHalf - 5.0, Top),
-			FVector(ScuttleFront, -(BonnetHalf - 5.0), Top), FVector(0.16, 0.0, 0.99).GetSafeNormal());
+		B.Quad(Paint, FVector(CowlBack, -(W - 8.0), Belt), FVector(CowlBack, W - 8.0, Belt), FVector(ScuttleFront, BonnetHalf - HoodRound, Top),
+			FVector(ScuttleFront, -(BonnetHalf - HoodRound), Top), FVector(0.1, 0.0, 0.99).GetSafeNormal());
 
 		// The radiator: a nickel shell rounded over at the top, the black core inside it.
 		TArray<FVector2D> Shell;
@@ -1698,17 +1733,20 @@ namespace CarModel
 		for (const double S : { -1.0, 1.0 })
 		{
 			const FVector Bowl(L.Nose - 6.0, S * 47.0, 4.0);
-			B.Bar(Guards, FVector(L.Nose - 8.0, S * 47.0, -16.0), Bowl - FVector(2.0, 0.0, 8.0), 2.4);
-			B.Ball(Guards, Bowl - FVector(6.5, 0.0, 0.0), 10.0, 1.0);
-			B.Cylinder(Chrome, Bowl + FVector(3.0, 0.0, 0.0), 10.6, 2.6, 0, 14);
-			B.Cylinder(Lamp, Bowl + FVector(4.6, 0.0, 0.0), 9.2, 1.0, 0, 14);
+			B.Bar(Guards, FVector(L.Nose - 8.0, S * 47.0, -16.0), Bowl - FVector(4.0, 0.0, 8.0), 2.4);
+			// The bowl narrows to the back in steps, round as a pot.
+			B.Cylinder(Guards, Bowl, 10.0, 4.0, 0, 20);
+			B.Cylinder(Guards, Bowl - FVector(3.8, 0.0, 0.0), 9.0, 3.6, 0, 20);
+			B.Cylinder(Guards, Bowl - FVector(7.0, 0.0, 0.0), 7.0, 3.0, 0, 18);
+			B.Cylinder(Guards, Bowl - FVector(9.4, 0.0, 0.0), 4.0, 2.0, 0, 14);
+			B.Cylinder(Chrome, Bowl + FVector(2.6, 0.0, 0.0), 10.6, 2.0, 0, 20);
+			B.Cylinder(Lamp, Bowl + FVector(3.8, 0.0, 0.0), 9.2, 1.0, 0, 20);
 		}
 		// The dumb irons poking forward under the radiator.
 		B.BarBothSides(Guards, FVector(L.Nose - 20.0, 26.0, -54.0), FVector(L.Nose + 4.0, 26.0, -50.0), 4.0);
 
-		// The body to the belt, flat at the back.
-		B.SideOutline(Paint, { FVector2D(L.Cowl, -44.0), FVector2D(L.Cowl, Belt), FVector2D(Back + 3.0, Belt), FVector2D(Back, Belt - 6.0),
-			FVector2D(Back, -38.0), FVector2D(Back + 4.0, -44.0) }, -W, W);
+		// The body to the belt, its corners rounded seen from above and its top edge rounded over.
+		RoundedTop(B, Paint, Back, L.Cowl, W, -44.0, Belt, 3.0, BodyRound);
 		// The glass house: upright, tucked into the body and the roof.
 		const double Screen = L.Cowl - 2.0;
 		B.SideOutline(Glass, { FVector2D(Screen + 0.5, Belt - 2.0), FVector2D(Screen - 0.5, GlassTop + 2.0), FVector2D(Back + 3.0, GlassTop + 2.0),
@@ -1719,22 +1757,23 @@ namespace CarModel
 		B.Bar(Paint, FVector(Screen - 0.5, -(W - 4.0), Belt + 30.0), FVector(Screen - 0.5, W - 4.0, Belt + 30.0), 2.0);
 		B.BarBothSides(Paint, FVector(L.DoorBack, W - 4.0, Belt), FVector(L.DoorBack, W - 4.0, GlassTop), 8.0);
 		B.BarBothSides(Paint, FVector(L.DoorBack - 4.0, W - 4.0, Belt), FVector(-100.0, W - 4.0, Belt), 3.0);
-		B.BothSides(Paint, FVector(Back + 2.0, W - 4.0, Belt - 1.0), FVector(-100.0, W, GlassTop + 1.0));
-		// The flat back round its small window.
-		B.Box(Paint, FVector(Back, -(W - 1.0), Belt - 1.0), FVector(Back + 3.5, W - 1.0, Belt + 22.0));
-		B.Box(Paint, FVector(Back, -(W - 1.0), GlassTop - 14.0), FVector(Back + 3.5, W - 1.0, GlassTop + 1.0));
-		for (const double S : { -1.0, 1.0 })
+		// The back of the body above the belt, rounded at its corners, with the small back window in it.
+		RoundedTop(B, Paint, Back, -100.0, W, Belt - 1.0, GlassTop + 1.0, 1.0, BodyRound);
+		B.Pane(Glass, FVector(Back - 0.4, -20.0, Belt + 22.0), FVector(Back - 0.4, 20.0, Belt + 22.0), FVector(Back - 0.4, 20.0, GlassTop - 14.0),
+			FVector(Back - 0.4, -20.0, GlassTop - 14.0));
+		for (const double Z : { Belt + 21.0, GlassTop - 13.0 })
 		{
-			B.Box(Paint, FVector(Back, S > 0.0 ? 20.0 : -(W - 1.0), Belt + 22.0), FVector(Back + 3.5, S > 0.0 ? W - 1.0 : -20.0, GlassTop - 14.0));
+			B.Bar(Rubber, FVector(Back - 0.6, -21.0, Z), FVector(Back - 0.6, 21.0, Z), 1.4);
 		}
-		// The roof, its edges rounded over, and the visor over the windscreen.
-		RoundedTop(B, Paint, Back - 1.0, Screen - 1.0, W + 1.0, GlassTop - 1.0, L.RoofTop, 4.0, 9.0);
+		B.BarBothSides(Rubber, FVector(Back - 0.6, 21.0, Belt + 21.0), FVector(Back - 0.6, 21.0, GlassTop - 13.0), 1.4);
+		// The roof, its edges well rounded over, and the visor over the windscreen.
+		RoundedTop(B, Paint, Back - 1.0, Screen - 1.0, W + 1.0, GlassTop - 1.0, L.RoofTop, 6.0, 14.0);
 		B.SideOutline(Paint, { FVector2D(Screen - 2.0, L.RoofTop - 2.0), FVector2D(Screen + 14.0, L.RoofTop - 7.0), FVector2D(Screen + 14.0, L.RoofTop - 9.0),
 			FVector2D(Screen - 2.0, L.RoofTop - 6.0) }, -(W - 1.0), W - 1.0);
 		// The door's seams and its handle.
-		for (const double X : { Screen, L.DoorBack })
+		for (const double X : { L.DoorFront, L.DoorBack })
 		{
-			B.BothSides(Guards, FVector(X - 0.6, W, -40.0), FVector(X + 0.6, W + 0.4, Belt - 2.0));
+			B.BothSides(Guards, FVector(X - 0.6, W, -40.0), FVector(X + 0.6, W + 0.4, Belt - 4.0));
 		}
 		B.BothSides(Chrome, FVector(L.DoorBack + 4.0, W, Belt - 10.0), FVector(L.DoorBack + 10.0, W + 1.4, Belt - 8.0));
 
@@ -1744,15 +1783,15 @@ namespace CarModel
 		B.Box(Leather, FVector(Back + 8.0, -(W - 6.0), -40.0), FVector(Back + 40.0, W - 6.0, L.SeatTop));
 		B.Box(Leather, FVector(Back + 8.0, -(W - 6.0), L.SeatTop), FVector(Back + 16.0, W - 6.0, Belt + 14.0));
 
-		BuildRunningGear(B, L, Back, false);
+		BuildRunningGear(B, L, Back, false, true);
 		// One tail lamp, on the left by the back.
 		B.Bar(Guards, FVector(Back + 1.0, -40.0, -36.0), FVector(Back - 6.0, -44.0, -36.0), 2.0);
 		B.Cylinder(Chrome, FVector(Back - 8.0, -44.0, -36.0), 4.6, 6.0, 0, 10);
 		B.Cylinder(TailLamp, FVector(Back - 11.2, -44.0, -36.0), 3.8, 1.0, 0, 10);
 		// The spare: a tyre on a black rim with a four-armed spider, on a carrier.
 		const FVector Spare(Back - 13.0, 0.0, -28.0);
-		B.Ring(Rubber, Spare, WheelRadius - 1.0, WheelRadius - 9.0, 9.0, 0, 18);
-		B.Ring(Guards, Spare, WheelRadius - 8.5, WheelRadius - 12.0, 6.0, 0, 18);
+		B.Ring(Rubber, Spare, WheelRadius - 1.0, WheelRadius - 9.0, 9.0, 0, 24);
+		B.Ring(Guards, Spare, WheelRadius - 8.5, WheelRadius - 12.0, 6.0, 0, 24);
 		for (int32 i = 0; i < 4; ++i)
 		{
 			const double A = HALF_PI * i + PI * 0.25;
