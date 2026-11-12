@@ -520,6 +520,8 @@ THEATRE_AT = (-3600, 200)
 KELETI_AT = (92766, -43178)
 HALL_AT = (18109, 40941)
 CORVIN_AT = (-9440, 3697)
+# The New York café, the middle of the palace's körút front.
+NEW_YORK_CAFE_AT = (158, -21244)
 # Tram stops with the same name nearer than this share one mark on the map.
 STOP_MARK_SAME = 6000
 
@@ -528,7 +530,7 @@ def place_map_icons(data, f, courtyards):
     """The little pictures on the maps: [kind, x, y] with kind one of cafe,
     market, tram, phone, yard, theatre, station, store, church."""
     icons = [["cafe", *CAFE_AT], ["theatre", *THEATRE_AT], ["station", *KELETI_AT],
-             ["market", *HALL_AT], ["store", *CORVIN_AT]]
+             ["market", *HALL_AT], ["store", *CORVIN_AT], ["cafe", *NEW_YORK_CAFE_AT]]
     stalls = f["market"]["stalls"]
     if stalls:
         icons.append(["market", round(sum(s["at"][0] for s in stalls) / len(stalls)), round(sum(s["at"][1] for s in stalls) / len(stalls))])
@@ -560,6 +562,13 @@ CHURCHES = [
     ("w191191238", "jezus", [6, 7]),    # Jézus Szíve templom, Mária utca
 ]
 BOZSI_ID = "r3333877"
+
+# The New York palace on Erzsébet körút (NewYorkModel.h dresses its street
+# walls): its block keeps only the Osvát utca wall's plain facade, and the
+# game builds the rest from these runs of its outline's corners.
+NEW_YORK_ID = "w259011268"
+NEW_YORK_RUNS = [("korut", 8, 10), ("corner", 10, 12), ("dohany", 12, 0)]
+NEW_YORK_PLAIN_FRONT = [0]
 
 # The facade's sums (AddFacade in OsmGraybox.cpp, Facade:: constants).
 FACADE_STOREY = 380.0
@@ -654,6 +663,27 @@ def place_window_folk(buildings):
             kind = weights[int(chance("folk", round(x), round(y)) * len(weights)) % len(weights)]
             folk.append([round(x), round(y), round(z0, 1), yaw_of(ox, oy), kind, int(chance("folkseed", round(x), round(y)) * 1000)])
     return folk
+
+
+def new_york(data):
+    """The palace's block with the dressed walls' facades taken off, and its
+    pieces: [part, x, y, yaw, length], each run's start at the foot, yaw out
+    of the wall, the run along the frame's Y (NewYorkModel::FPiece)."""
+    building = next(b for b in data["buildings"] if b["id"] == NEW_YORK_ID)
+    form = {k: building[k] for k in ("rings", "tris", "height", "levels")}
+    form["front"] = NEW_YORK_PLAIN_FRONT
+    ring = ring_points(building["rings"][0])
+    shape = Polygon(ring)
+    pieces = []
+    for part, i0, i1 in NEW_YORK_RUNS:
+        a, z = ring[i0], ring[i1]
+        ax, ay = unit(z[0] - a[0], z[1] - a[1])
+        ox, oy = ay, -ax
+        mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
+        # The model's Y runs along out turned a quarter right, so the run must go that way.
+        assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), part
+        pieces.append([part, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
+    return form, pieces
 
 
 def place_churches(data):
@@ -861,6 +891,8 @@ def main():
     space = Space(data)
     courtyards, replaced = place_courtyards(data, f["gates"])
     replaced[CORVIN_ID] = [corvin(data)]
+    new_york_block, new_york_pieces = new_york(data)
+    replaced[NEW_YORK_ID] = [new_york_block]
     churches = place_churches(data)
     for bid, _, _ in CHURCHES:
         replaced[bid] = [{"gone": True}]
@@ -885,6 +917,7 @@ def main():
         "clocks": clocks,
         "map_icons": place_map_icons(data, f, courtyards),
         "churches": churches,
+        "newyork": new_york_pieces,
         "window_folk": folk,
         "hydrants": hydrants,
         "manholes": manholes,
