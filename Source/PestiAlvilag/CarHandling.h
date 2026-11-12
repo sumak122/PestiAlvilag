@@ -12,7 +12,8 @@
  * - the little Fiat and Opel are light and quick to turn but slow at the top;
  * - the limousine and the van are heavy: slow to pull away and to turn, they
  *   lean and wallow, but they shove other cars aside in a crash;
- * - the coupe and the SSK are fast, the SSK very fast and easy to spin.
+ * - the coupe and the SSK are fast, the SSK very fast and easy to spin;
+ * - the old Ford T and town car are slow, with poor brakes.
  * A kind of car not listed here drives like the saloon.
  */
 namespace CarHandling
@@ -72,6 +73,16 @@ namespace CarHandling
 		case CarModel::EBody::Ssk:
 			H.Mass = 1450.f; H.TopShare = 1.38f; H.PullShare = 1.6f; H.BrakeShare = 1.05f;
 			H.SteerShare = 1.f; H.GripShare = 0.95f; H.HandbrakeShare = 0.75f; H.TurnResponse = 8.f; H.ShiftTime = 0.2f;
+			break;
+		case CarModel::EBody::FordT:
+			// Tall, narrow and light, 20 horsepower and two gears: slow, poor brakes, tips into bends.
+			H.Mass = 850.f; H.TopShare = 0.7f; H.PullShare = 0.8f; H.BrakeShare = 0.7f;
+			H.SteerShare = 0.95f; H.GripShare = 0.8f; H.HandbrakeShare = 0.9f; H.TurnResponse = 6.f; H.ShiftTime = 0.15f;
+			break;
+		case CarModel::EBody::TownCar:
+			// Big, old and heavy: slow everywhere, but it shoves others aside.
+			H.Mass = 1600.f; H.TopShare = 0.72f; H.PullShare = 0.7f; H.BrakeShare = 0.7f;
+			H.SteerShare = 0.8f; H.GripShare = 0.85f; H.HandbrakeShare = 1.05f; H.TurnResponse = 4.5f; H.ShiftTime = 0.45f;
 			break;
 		default:
 			break;

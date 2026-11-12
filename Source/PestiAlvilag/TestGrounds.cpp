@@ -547,6 +547,11 @@ void ATestGrounds::SpawnVehicles()
 			// Dr. Halász's Steyr (mission 7) in its own colours.
 			Look = CarModel::SteyrStyle();
 		}
+		else if (Spot.Body == CarModel::EBody::Ssk)
+		{
+			// The car show's black Mercedes SSK in its own colours.
+			Look = CarModel::SskStyle();
+		}
 		else
 		{
 			Look.Body = Spot.Body;
