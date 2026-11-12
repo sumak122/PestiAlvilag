@@ -69,6 +69,12 @@ namespace DayNight
 	// How much of what's behind it a window hides at night (it shows only a
 	// faint, dark view through, like real glass after dark).
 	constexpr float GlassAtNight = 0.88f;
+	// Glass and haze are unlit: shaded only like a lamp-lit wall they shone
+	// in the dark (a car's windows far from any lamp). At night they are
+	// darker still, by this share: glass shows the black night sky, smoke
+	// and dust only a little of the lamps.
+	constexpr float GlassNightShade = 0.15f;
+	constexpr float HazeNightShade = 0.4f;
 
 	// The sky light and fog by night, as a share of the day.
 	constexpr float NightSky = 0.5f;
@@ -570,7 +576,8 @@ void ADayNight::ShadeSeeThrough(const FSeeThrough& Glass) const
 	if (UMaterialInstanceDynamic* Material = Glass.Material.Get())
 	{
 		// As much darker than by day as a lit grey wall looks now.
-		const float Shade = GreyLuminance() / (DayNight::DayGrey * DaySunIntensity);
+		const float Unlit = FMath::Lerp(1.f, Glass.bGlass ? DayNight::GlassNightShade : DayNight::HazeNightShade, Darkness);
+		const float Shade = GreyLuminance() / (DayNight::DayGrey * DaySunIntensity) * Unlit;
 		FLinearColor Tint = Glass.Tint * Shade;
 		Tint.A = Glass.Tint.A;
 		if (Glass.bGlass)
