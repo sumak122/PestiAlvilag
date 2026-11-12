@@ -16,8 +16,8 @@ class UStaticMeshComponent;
 
 /**
  * An AI car that follows the traffic lanes, keeps left, slows for corners
- * and stops behind whatever is in front of it. It moves without physics, so
- * the player's car bumps into it but cannot push it.
+ * and stops behind whatever is in front of it. It moves without physics, but
+ * a crash knocks it sliding and spinning (TakeHit) until it stops and drives on.
  */
 UCLASS()
 class PESTIALVILAG_API ATrafficCar : public AActor
@@ -46,6 +46,19 @@ public:
 
 	/** Out on the other side of the street, passing a horse cart: oncoming traffic slows for it. */
 	bool IsPassing() const { return PassShift > 50.f; }
+
+	/**
+	 * Shoved by a crash: its speed changes by Push (cm/s) and it spins by Spin
+	 * (degrees a second, + turns right). It slides and spins to a stop on its
+	 * tyres, knocking into whatever is in the way, then drives on.
+	 */
+	void TakeHit(const FVector& Push, float Spin);
+	/** Still sliding from a crash (not driving). */
+	bool IsKnocked() const { return bKnocked; }
+	/** How it moves just now (cm/s), driving or knocked about. */
+	FVector GetMoveVelocity() const;
+	/** How heavy it is (kg), by its kind of car (CarHandling). */
+	float GetMass() const;
 
 	/** Lets go of the junctions it holds, before it leaves the traffic for good. */
 	void LeaveTraffic() { ReleaseAllJunctions(); }
@@ -98,6 +111,8 @@ protected:
 	/** Picks up lane driving again from this lane point (e.g. after a police chase). */
 	void ResumeOnLane(int32 InLaneIndex, int32 InPointIndex);
 	void ReleaseAllJunctions();
+	/** While knocked by a crash: slides, spins and slows on its own. True while still knocked (skip the driving). */
+	bool TickKnocked(float DeltaSeconds);
 
 	int32 LaneIndex = INDEX_NONE;
 	/** Chosen as soon as the car enters a lane, so it can signal the turn. */
@@ -133,6 +148,11 @@ private:
 	float PassShift = 0.f;
 	float PassShiftWanted = 0.f;
 	float PassGap = 0.f;
+	/** Knocked by a crash: how it slides (cm/s) and spins (degrees a second), and how long it has lain still. */
+	bool bKnocked = false;
+	FVector KnockVelocity = FVector::ZeroVector;
+	float KnockSpin = 0.f;
+	float KnockStill = 0.f;
 	/** Seconds the passenger in the back still rides. */
 	float PassengerTime = 0.f;
 	TArray<int32> HeldNodes;
