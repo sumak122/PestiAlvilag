@@ -163,6 +163,11 @@ private:
 		bool bSettled = false;
 		/** Its flying pieces (also held in Wreckage). */
 		TArray<UStaticMeshComponent*> Pieces;
+		/** Its rain cover (MarketModel::BuildRainCover), the point it is rolled up to, how far it is spread (0..1) and when the seller starts. */
+		TArray<FPart> Cover;
+		FVector CoverRoll = FVector::ZeroVector;
+		float Covered = 0.f;
+		float CoverWait = 0.f;
 	};
 
 	struct FCrowd
@@ -191,6 +196,9 @@ private:
 		double NextCall = 0.0;
 		int32 Line = 0;
 		int32 Blood = INDEX_NONE;
+		/** A shopper goes home in the rain (hidden) if it rains harder than this share of his, and is gone now. */
+		float RainShy = 1.f;
+		bool bRainedOff = false;
 	};
 
 	/** Moves and poses everyone near the camera, and has them react to the player. */
@@ -213,6 +221,15 @@ private:
 	/** The carpet seller's own lines; true if the player is with him. */
 	bool TickCarpetSeller();
 	void TickStalls(const FVector& Camera, float DeltaSeconds, double Now);
+	/** In the rain the sellers pull covers over their goods, and take them off again once it stops. */
+	void TickRainCovers(float DeltaSeconds);
+	/** Sets a stall's cover Share of the way from rolled up (0, not drawn) to spread over it (1). */
+	void SpreadCover(FStall& Stall, float Share, TSet<int32>& Touched);
+	/** Out under the sky (not a market inside a hall): covers and shoppers going home in the rain. */
+	bool bOutdoors = true;
+	/** How hard it rains now (AWeather::GetRain), and which way the camera looks. */
+	float Raining = 0.f;
+	FVector2D CameraLooking = FVector2D(1.0, 0.0);
 	void Smash(int32 Index, double Now);
 	void PutBack(FStall& Stall);
 	void Shout(const TCHAR* Who, const TCHAR* Hu, const TCHAR* En, bool bOverOthers = false);

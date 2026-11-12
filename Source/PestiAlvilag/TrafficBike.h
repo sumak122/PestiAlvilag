@@ -54,6 +54,12 @@ private:
 	void KnockOver(const FVector& From);
 	/** Lying on its side, or being got up again. */
 	bool IsDown() const;
+	/**
+	 * In the rain most riders go home: once nobody sees him he is gone
+	 * (hidden, still), and he comes back where he was, out of sight, when
+	 * it eases. True while he is gone.
+	 */
+	bool TickRain();
 	void Wobble();
 	/** Where to ride for a point of the current lane: moved off it towards the kerb, short of any wall. */
 	FVector KerbSpot(int32 Point) const;
@@ -81,4 +87,7 @@ private:
 	float BumpCooldown = 0.f;
 	float BellCooldown = 0.f;
 	float FarClock = 0.f;
+	/** He goes home if it rains harder than this share of a downpour (0..1); gone home now. */
+	float RainShy = 1.f;
+	bool bRainedOff = false;
 };

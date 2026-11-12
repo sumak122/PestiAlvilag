@@ -9,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "DayNight.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "FallingLeaves.h"
 #include "FleaMarket.h"
 #include "FoodVendor.h"
@@ -53,6 +54,14 @@ struct FFurniturePart
 namespace Furniture
 {
 	enum EShape : int32 { Cube, Cylinder, Sphere, Cone, NumShapes };
+
+	// Shelter spots from the rain (AStreetFurniture::TakeShelter): how far
+	// out from the wall one stands by a shop door, under an awning and in a
+	// gateway, and how much room each needs along the wall (cm).
+	constexpr double ShelterOut = 42.0;
+	constexpr double ShelterUnderAwning = 55.0;
+	constexpr double ShelterInGate = 30.0;
+	constexpr double ShelterGap = 70.0;
 
 	const FLinearColor Iron(0.035f, 0.05f, 0.04f);
 	const FLinearColor Lantern(0.95f, 0.85f, 0.55f);
@@ -891,9 +900,29 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			const uint32 Seed = static_cast<uint32>(Shop->GetNumberField(TEXT("seed")));
 			TArray<ParkModel::FPart> Model;
 			TArray<ShopModel::FLettering> Lettering;
+			bool bAwning = false;
 			ShopModel::BuildShop(Model, Lettering, Width, ShopModel::TradeOf(*Shop->GetStringField(TEXT("trade"))), Seed,
-				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")));
+				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")), &bAwning);
 			Put(Model, Foot, Yaw);
+
+			// Out of the rain: by the door, and under an awning all along the windows.
+			{
+				const double DoorAt = ShopModel::DoorMiddle(Width, Seed);
+				const double Inner = Width * 0.5 - ShopModel::PilasterWidth - Furniture::ShelterGap * 0.5;
+				const double Out = bAwning ? Furniture::ShelterUnderAwning : Furniture::ShelterOut;
+				for (const double Side : { -1.0, 1.0 })
+				{
+					const int32 Most = bAwning ? 3 : 1;
+					for (int32 k = 0; k < Most; ++k)
+					{
+						const double Across = DoorAt + Side * (ShopModel::DoorWidth * 0.5 + Furniture::ShelterGap * (k + 0.5));
+						if (FMath::Abs(Across) <= Inner)
+						{
+							AddShelter(Foot, Yaw, Out, Across);
+						}
+					}
+				}
+			}
 			for (const ShopModel::FLettering& Line : Lettering)
 			{
 				const TCHAR* Field = Line.Line == ShopModel::ELine::Fascia ? TEXT("fascia") : Line.Line == ShopModel::ELine::Glass ? TEXT("glass") : TEXT("blade");
@@ -958,8 +987,14 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			TArray<ShopModel::FLettering> Lettering;
 			// A few gates stand open onto their courtyards (ACityDetails).
 			const bool bOpen = ACityDetails::IsOpenGate(FVector2D(Foot.X, Foot.Y));
-			ShopModel::BuildGate(Model, Lettering, Gate->GetNumberField(TEXT("width")), bOpen);
+			const double GateWidth = Gate->GetNumberField(TEXT("width"));
+			ShopModel::BuildGate(Model, Lettering, GateWidth, bOpen);
 			Put(Model, Foot, Yaw);
+			// Two can stand in the gateway out of the rain, one each side.
+			for (const double Side : { -1.0, 1.0 })
+			{
+				AddShelter(Foot, Yaw, Furniture::ShelterInGate, Side * FMath::Max(0.0, GateWidth * 0.5 - ShopModel::GateSurround - Furniture::ShelterGap * 0.5));
+			}
 			for (const ShopModel::FLettering& Line : Lettering)
 			{
 				Letter(Line, Gate->GetStringField(TEXT("number")), Foot, Yaw);
@@ -1703,5 +1738,61 @@ void AStreetFurniture::PoseFall(const FBreakable& Thing) const
 		{
 			Thing.Pieces[i]->SetWorldTransform(Thing.FallFrom[i] * Twist * Tip);
 		}
+	}
+}
+
+AStreetFurniture* AStreetFurniture::Get(const UWorld* World)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+	TActorIterator<AStreetFurniture> It(World);
+	return It ? *It : nullptr;
+}
+
+void AStreetFurniture::AddShelter(const FVector& Foot, double Yaw, double Out, double Across)
+{
+	FShelter& Shelter = Shelters.AddDefaulted_GetRef();
+	Shelter.Spot = Foot + FRotator(0.0, Yaw, 0.0).RotateVector(FVector(Out, Across, 0.0));
+	Shelter.Yaw = static_cast<float>(Yaw);
+}
+
+bool AStreetFurniture::TakeShelter(const FVector2D& At, double Reach, double MaxOut, FVector& OutSpot, float& OutYaw, int32& OutIndex)
+{
+	int32 Best = INDEX_NONE;
+	double Nearest = FMath::Square(Reach);
+	for (int32 i = 0; i < Shelters.Num(); ++i)
+	{
+		const FShelter& Shelter = Shelters[i];
+		const double Gap = FVector2D::DistSquared(FVector2D(Shelter.Spot), At);
+		if (Shelter.bTaken || Gap >= Nearest)
+		{
+			continue;
+		}
+		const double Turn = FMath::DegreesToRadians(Shelter.Yaw);
+		const double Front = FVector2D::DotProduct(At - FVector2D(Shelter.Spot), FVector2D(FMath::Cos(Turn), FMath::Sin(Turn)));
+		if (Front > -Furniture::ShelterGap && Front < MaxOut)
+		{
+			Nearest = Gap;
+			Best = i;
+		}
+	}
+	if (Best == INDEX_NONE)
+	{
+		return false;
+	}
+	Shelters[Best].bTaken = true;
+	OutSpot = Shelters[Best].Spot;
+	OutYaw = Shelters[Best].Yaw;
+	OutIndex = Best;
+	return true;
+}
+
+void AStreetFurniture::LeaveShelter(int32 Index)
+{
+	if (Shelters.IsValidIndex(Index))
+	{
+		Shelters[Index].bTaken = false;
 	}
 }

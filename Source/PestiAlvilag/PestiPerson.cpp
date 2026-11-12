@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PestiPerson.h"
+#include "Weather.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -112,6 +113,10 @@ namespace PestiPerson
 	// Short of breath below this much stamina, panting at most this hard
 	// (winded, he pants as hard as he can).
 	constexpr float PantBelow = 30.f;
+	// A big swing that hits nothing on wet cobbles (AWeather::GetWet 0..1):
+	// the chance, when soaked, that his feet slip, and how long the stagger lasts (share of a full one).
+	constexpr float WetSlipChance = 0.45f;
+	constexpr float WetSlipShare = 0.8f;
 	constexpr float LowPant = 0.6f;
 }
 
@@ -464,7 +469,7 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 	for (TActorIterator<ABicycle> It(GetWorld()); It; ++It)
 	{
 		const double Dist = FVector::Dist2D(It->GetSaddleLocation(), GetActorLocation());
-		if (!It->GetController() && Dist < BikeDist)
+		if (!It->GetController() && !It->IsHidden() && Dist < BikeDist)
 		{
 			NearestBike = *It;
 			BikeDist = Dist;
@@ -1603,6 +1608,15 @@ void APestiPerson::LandBlow(Brawl::EBlow Blow)
 	if (Between.Size2D() <= Brawl::Reach && Cos >= FMath::Cos(FMath::DegreesToRadians(Brawl::ReachAngle)))
 	{
 		Other->TakeBlow(Blow, this);
+	}
+	else if (Blow == Brawl::EBlow::Heavy || Blow == Brawl::EBlow::Haymaker || Blow == Brawl::EBlow::Hook || Blow == Brawl::EBlow::Uppercut)
+	{
+		// A big swing at nothing on wet cobbles: his feet go from under him for a moment.
+		const AWeather* Sky = AWeather::Get(GetWorld());
+		if (Sky && FMath::FRand() < PestiPerson::WetSlipChance * Sky->GetWet())
+		{
+			BeginAct(Brawl::EAct::Stagger, Brawl::StaggerSeconds * PestiPerson::WetSlipShare);
+		}
 	}
 }
 
