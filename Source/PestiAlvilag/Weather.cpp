@@ -42,6 +42,19 @@ namespace Weather
 	const FLinearColor DropTint(0.72f, 0.75f, 0.80f, 0.35f);
 	constexpr float RainVolume = 0.8f;
 
+	// No rain under roofs: the map round the camera in squares this wide (cm),
+	// out to this many squares each way; a few of them each frame are looked
+	// down on from this far above the drops' box, and what is found is
+	// forgotten once this many squares are remembered. Roofs without
+	// collision (AddShelter) are drawn onto squares this wide instead.
+	constexpr double CoverSquare = 250.0;
+	constexpr int32 CoverReach = 9;
+	constexpr int32 CoverPerFrame = 24;
+	constexpr double CoverFromAbove = 4000.0;
+	constexpr int32 CoverForget = 6000;
+	constexpr double ShelterSquare = 200.0;
+	constexpr float NoCover = -1.0e9f;
+
 	// The streets: in rain they get as wet as WetFloor plus the rest by how
 	// hard it rains, soaking up in about SoakSeconds and drying in about
 	// DrySeconds after it stops (quicker when set from the test page); the
@@ -293,6 +306,8 @@ void AWeather::UpdateDrops(float DeltaSeconds, const FVector& Eye)
 		bDropsShown = true;
 	}
 
+	LookForCover(Eye);
+
 	const FVector Fall = Wind + FVector(0.0, 0.0, -FallSpeed);
 	const FVector Along = Fall.GetSafeNormal();
 	Vertices.Reset();
@@ -317,7 +332,8 @@ void AWeather::UpdateDrops(float DeltaSeconds, const FVector& Eye)
 		if (Rel.Y < -BoxHalf) { Rel.Y += 2.0 * BoxHalf; }
 		Drop = Eye + Rel;
 
-		if (d >= Showing)
+		// Not shown: more drops than the rain needs, or under a roof.
+		if (d >= Showing || Drop.Z < CoverOver(Drop))
 		{
 			for (int32 c = 0; c < 4; ++c)
 			{
@@ -340,4 +356,131 @@ void AWeather::UpdateDrops(float DeltaSeconds, const FVector& Eye)
 	}
 	Mesh->UpdateMeshSection_LinearColor(0, Vertices, Normals,
 		TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+}
+
+void AWeather::AddShelter(UProceduralMeshComponent* Roof)
+{
+	if (Roof)
+	{
+		FShelter& Shelter = Shelters.AddDefaulted_GetRef();
+		Shelter.Roof = Roof;
+	}
+}
+
+void AWeather::DrawShelter(FShelter& Shelter) const
+{
+	using namespace Weather;
+	UProceduralMeshComponent* Roof = Shelter.Roof.Get();
+	if (!Roof || Roof->GetNumSections() == 0)
+	{
+		return;
+	}
+	Shelter.bDrawn = true;
+
+	const FBox Bounds = Roof->Bounds.GetBox();
+	Shelter.Corner = FVector2D(Bounds.Min.X, Bounds.Min.Y);
+	Shelter.Across = FMath::Clamp(FMath::CeilToInt32((Bounds.Max.X - Bounds.Min.X) / ShelterSquare) + 1, 1, 1024);
+	Shelter.Down = FMath::Clamp(FMath::CeilToInt32((Bounds.Max.Y - Bounds.Min.Y) / ShelterSquare) + 1, 1, 1024);
+	Shelter.Tops.Init(NoCover, Shelter.Across * Shelter.Down);
+
+	// Every triangle of the roof, sampled finely enough to touch each square under it.
+	const FTransform& ToWorld = Roof->GetComponentTransform();
+	for (int32 s = 0; s < Roof->GetNumSections(); ++s)
+	{
+		const FProcMeshSection* Section = Roof->GetProcMeshSection(s);
+		if (!Section)
+		{
+			continue;
+		}
+		const TArray<FProcMeshVertex>& Points = Section->ProcVertexBuffer;
+		const TArray<uint32>& Corners = Section->ProcIndexBuffer;
+		for (int32 t = 0; t + 2 < Corners.Num(); t += 3)
+		{
+			const int32 First = static_cast<int32>(Corners[t]);
+			const int32 Second = static_cast<int32>(Corners[t + 1]);
+			const int32 Third = static_cast<int32>(Corners[t + 2]);
+			if (!Points.IsValidIndex(First) || !Points.IsValidIndex(Second) || !Points.IsValidIndex(Third))
+			{
+				continue;
+			}
+			const FVector A = ToWorld.TransformPosition(Points[First].Position);
+			const FVector B = ToWorld.TransformPosition(Points[Second].Position);
+			const FVector C = ToWorld.TransformPosition(Points[Third].Position);
+			const double Longest = FMath::Max3(FVector::Dist2D(A, B), FVector::Dist2D(B, C), FVector::Dist2D(C, A));
+			const int32 Steps = FMath::Clamp(FMath::CeilToInt32(Longest / (ShelterSquare * 0.5)), 1, 64);
+			for (int32 i = 0; i <= Steps; ++i)
+			{
+				for (int32 j = 0; i + j <= Steps; ++j)
+				{
+					const double U = static_cast<double>(i) / Steps;
+					const double V = static_cast<double>(j) / Steps;
+					const FVector On = A + (B - A) * U + (C - A) * V;
+					const int32 Column = FMath::FloorToInt32((On.X - Shelter.Corner.X) / ShelterSquare);
+					const int32 Row = FMath::FloorToInt32((On.Y - Shelter.Corner.Y) / ShelterSquare);
+					if (Column >= 0 && Column < Shelter.Across && Row >= 0 && Row < Shelter.Down)
+					{
+						float& Top = Shelter.Tops[Row * Shelter.Across + Column];
+						Top = FMath::Max(Top, static_cast<float>(On.Z));
+					}
+				}
+			}
+		}
+	}
+}
+
+void AWeather::LookForCover(const FVector& Eye)
+{
+	using namespace Weather;
+	for (FShelter& Shelter : Shelters)
+	{
+		if (!Shelter.bDrawn)
+		{
+			DrawShelter(Shelter);
+		}
+	}
+
+	if (CoverSquares.Num() > CoverForget)
+	{
+		CoverSquares.Reset();
+	}
+	const int32 Side = 2 * CoverReach + 1;
+	const int32 EyeColumn = FMath::FloorToInt32(Eye.X / CoverSquare);
+	const int32 EyeRow = FMath::FloorToInt32(Eye.Y / CoverSquare);
+	const double From = Eye.Z + BoxAbove + CoverFromAbove;
+	const double To = Eye.Z - BoxBelow - 100.0;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RainCover), false);
+	for (int32 n = 0; n < CoverPerFrame; ++n)
+	{
+		CoverTurn = (CoverTurn + 1) % (Side * Side);
+		const FIntPoint Square(EyeColumn - CoverReach + CoverTurn % Side, EyeRow - CoverReach + CoverTurn / Side);
+		const double X = (Square.X + 0.5) * CoverSquare;
+		const double Y = (Square.Y + 0.5) * CoverSquare;
+		FHitResult Hit;
+		const bool bFound = GetWorld()->LineTraceSingleByChannel(Hit, FVector(X, Y, From), FVector(X, Y, To), ECC_Visibility, Params);
+		CoverSquares.Add(Square, bFound ? static_cast<float>(Hit.ImpactPoint.Z) : NoCover);
+	}
+}
+
+float AWeather::CoverOver(const FVector& At) const
+{
+	using namespace Weather;
+	float Highest = NoCover;
+	if (const float* Found = CoverSquares.Find(FIntPoint(FMath::FloorToInt32(At.X / CoverSquare), FMath::FloorToInt32(At.Y / CoverSquare))))
+	{
+		Highest = *Found;
+	}
+	for (const FShelter& Shelter : Shelters)
+	{
+		if (!Shelter.bDrawn)
+		{
+			continue;
+		}
+		const int32 Column = FMath::FloorToInt32((At.X - Shelter.Corner.X) / ShelterSquare);
+		const int32 Row = FMath::FloorToInt32((At.Y - Shelter.Corner.Y) / ShelterSquare);
+		if (Column >= 0 && Column < Shelter.Across && Row >= 0 && Row < Shelter.Down)
+		{
+			Highest = FMath::Max(Highest, Shelter.Tops[Row * Shelter.Across + Column]);
+		}
+	}
+	return Highest;
 }

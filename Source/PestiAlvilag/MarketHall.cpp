@@ -19,6 +19,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Weather.h"
 
 namespace MarketHallFill
 {
@@ -122,6 +123,12 @@ void AMarketHall::BeginPlay()
 {
 	Super::BeginPlay();
 	Fill();
+	// No rain under the hall's roofs (they have no collision for the weather to find).
+	if (AWeather* Sky = AWeather::Get(GetWorld()))
+	{
+		Sky->AddShelter(Overhead);
+		Sky->AddShelter(Glazing);
+	}
 }
 
 void AMarketHall::EndPlay(const EEndPlayReason::Type EndPlayReason)
