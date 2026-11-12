@@ -522,6 +522,8 @@ HALL_AT = (18109, 40941)
 CORVIN_AT = (-9440, 3697)
 # The New York café, the middle of the palace's körút front.
 NEW_YORK_CAFE_AT = (158, -21244)
+# The Városi Színház, the middle of its front on Tisza Kálmán tér.
+CITY_THEATRE_AT = (51700, -4660)
 # Tram stops with the same name nearer than this share one mark on the map.
 STOP_MARK_SAME = 6000
 
@@ -530,7 +532,7 @@ def place_map_icons(data, f, courtyards):
     """The little pictures on the maps: [kind, x, y] with kind one of cafe,
     market, tram, phone, yard, theatre, station, store, church."""
     icons = [["cafe", *CAFE_AT], ["theatre", *THEATRE_AT], ["station", *KELETI_AT],
-             ["market", *HALL_AT], ["store", *CORVIN_AT], ["cafe", *NEW_YORK_CAFE_AT]]
+             ["market", *HALL_AT], ["store", *CORVIN_AT], ["cafe", *NEW_YORK_CAFE_AT], ["theatre", *CITY_THEATRE_AT]]
     stalls = f["market"]["stalls"]
     if stalls:
         icons.append(["market", round(sum(s["at"][0] for s in stalls) / len(stalls)), round(sum(s["at"][1] for s in stalls) / len(stalls))])
@@ -569,6 +571,15 @@ BOZSI_ID = "r3333877"
 NEW_YORK_ID = "w259011268"
 NEW_YORK_RUNS = [("korut", 8, 10), ("corner", 10, 12), ("dohany", 12, 0)]
 NEW_YORK_PLAIN_FRONT = [0]
+
+# The Városi Színház (the Népopera of 1911) on Tisza Kálmán tér: today's
+# outline steps in and out along the square; in 1932 the front was one
+# straight wall, which CityTheatreModel.h dresses. The block keeps its
+# outline round the back and gets that straight front from the corner
+# after THEATRE_FROM to the one before THEATRE_TO.
+THEATRE_ID = "w26829510"
+THEATRE_FROM, THEATRE_TO = 6, 17
+THEATRE_FRONT_X = 51560
 
 # The facade's sums (AddFacade in OsmGraybox.cpp, Facade:: constants).
 FACADE_STOREY = 380.0
@@ -684,6 +695,27 @@ def new_york(data):
         assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), part
         pieces.append([part, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
     return form, pieces
+
+
+def city_theatre(data):
+    """The theatre's block with one straight front on the square, and that
+    front: [x, y, yaw, length], its start at the foot, yaw out of the wall,
+    the wall along the frame's Y (CityTheatreModel.h)."""
+    building = next(b for b in data["buildings"] if b["id"] == THEATRE_ID)
+    ring = ring_points(building["rings"][0])
+    a = (THEATRE_FRONT_X, ring[THEATRE_FROM][1])
+    z = (THEATRE_FRONT_X, ring[THEATRE_TO][1])
+    outline = ring[:THEATRE_FROM + 1] + [a, z] + ring[THEATRE_TO:]
+    shape = Polygon(outline)
+    assert shape.is_valid
+    keep = [line for line in front_lines_of(building) if min(line.coords[0][0], line.coords[1][0]) < THEATRE_FRONT_X - 2000]
+    form = building_form(shape, building, keep, building["height"], int(building.get("levels", 0)))
+    ax, ay = unit(z[0] - a[0], z[1] - a[1])
+    ox, oy = ay, -ax
+    if shape.contains(Point((a[0] + z[0]) / 2 + ox * 100, (a[1] + z[1]) / 2 + oy * 100)):
+        a, z = z, a
+        ax, ay, ox, oy = -ax, -ay, -ox, -oy
+    return form, [round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))]
 
 
 def place_churches(data):
@@ -893,6 +925,8 @@ def main():
     replaced[CORVIN_ID] = [corvin(data)]
     new_york_block, new_york_pieces = new_york(data)
     replaced[NEW_YORK_ID] = [new_york_block]
+    theatre_block, theatre_front = city_theatre(data)
+    replaced[THEATRE_ID] = [theatre_block]
     churches = place_churches(data)
     for bid, _, _ in CHURCHES:
         replaced[bid] = [{"gone": True}]
@@ -918,6 +952,7 @@ def main():
         "map_icons": place_map_icons(data, f, courtyards),
         "churches": churches,
         "newyork": new_york_pieces,
+        "city_theatre": theatre_front,
         "window_folk": folk,
         "hydrants": hydrants,
         "manholes": manholes,
