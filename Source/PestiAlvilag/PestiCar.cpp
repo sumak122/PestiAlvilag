@@ -427,6 +427,14 @@ FVector APestiCar::GetVelocity() const
 	return GetActorForwardVector() * ForwardSpeed + GetActorRightVector() * SideSpeed;
 }
 
+void APestiCar::TakeLooksFrom(UCarVisuals* From)
+{
+	if (Visuals && From)
+	{
+		Visuals->TakeOverFrom(From);
+	}
+}
+
 void APestiCar::BreakIn(bool bSmash)
 {
 	bLocked = false;

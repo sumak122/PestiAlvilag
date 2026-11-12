@@ -55,6 +55,8 @@ public:
 	void TakeHit(const FVector& Push, float Spin);
 	/** Still sliding from a crash (not driving). */
 	bool IsKnocked() const { return bKnocked; }
+	/** Its body, dents and lost parts (handed on to the player's car when it is stolen). */
+	UCarVisuals* GetVisuals() const;
 	/** How it moves just now (cm/s), driving or knocked about. */
 	FVector GetMoveVelocity() const;
 	/** How heavy it is (kg), by its kind of car (CarHandling). */

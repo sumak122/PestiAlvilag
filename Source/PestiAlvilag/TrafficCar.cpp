@@ -577,3 +577,8 @@ CarModel::FStyle ATrafficTaxi::PickStyle(const FLinearColor& /*Paint*/) const
 {
 	return CarModel::TaxiStyle();
 }
+
+UCarVisuals* ATrafficCar::GetVisuals() const
+{
+	return Visuals.Get();
+}

@@ -9,6 +9,7 @@
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "EngineSound.h"
+#include "CrashBits.h"
 #include "ExhaustSmoke.h"
 #include "PersonModel.h"
 #include "GameFramework/Actor.h"
@@ -107,6 +108,8 @@ namespace CarVisuals
 	constexpr float LooseUp = 250.f;
 	constexpr float LooseOut = 150.f;
 	constexpr double LooseRestTime = 8.0;
+	// ...and are cleared away after this long (s).
+	constexpr double LooseKeepTime = 300.0;
 
 	/** Grows like X when small, but never past 1 (or -1). */
 	float Soft(float X)
@@ -753,6 +756,15 @@ void UCarVisuals::ShowBeams(bool bShow)
 
 void UCarVisuals::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// Parts it lost stay lying where they fell, still.
+	for (UProceduralMeshComponent* Piece : LooseParts)
+	{
+		if (IsValid(Piece) && Piece->IsSimulatingPhysics())
+		{
+			Piece->SetSimulatePhysics(false);
+			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
 	ShowBeams(false);
 	StopStreetEngine();
 	Super::EndPlay(EndPlayReason);
@@ -949,7 +961,9 @@ void UCarVisuals::DropPart(int32 Which)
 		return;
 	}
 
-	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Owner, NAME_None, RF_Transient);
+	// Kept by the crash bits, so the part stays on the street when the car goes (a car the player takes is a new one).
+	AActor* Keeper = ACrashBits::Get(GetWorld());
+	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Keeper ? Keeper : Owner, NAME_None, RF_Transient);
 	Piece->SetWorldTransform(FTransform(Frame->GetComponentQuat(), Frame->GetComponentTransform().TransformPosition(Middle)));
 	Piece->SetCanEverAffectNavigation(false);
 	Piece->bUseComplexAsSimpleCollision = false;
@@ -993,6 +1007,41 @@ void UCarVisuals::DropPart(int32 Which)
 	LooseSince.Add(GetWorld()->GetTimeSeconds());
 }
 
+void UCarVisuals::TakeOverFrom(UCarVisuals* Other)
+{
+	if (!Other || Other == this || !bShown || !Body)
+	{
+		return;
+	}
+	Damage = Other->Damage;
+	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
+	CarModel::FBuilder Dented;
+	bool LampBroken[2] = { false, false };
+	bool TailBroken[2] = { false, false };
+	CarDamage::Apply(CarVisuals::BodyShape(Style), Layout, Damage, Dented, LampBroken, TailBroken);
+	Refill(Body, Dented);
+	GlassLeft = Dented.Parts[CarModel::Glass].Triangles.Num();
+	bLampOut[0] = LampBroken[0];
+	bLampOut[1] = LampBroken[1];
+	LampState = -1;
+	TailState = -1;
+	SagPitch = Other->SagPitch;
+	SagRoll = Other->SagRoll;
+	for (int32 i = 0; i < Wheels.Num(); ++i)
+	{
+		Wheels[i]->SetVisibility((Damage.Fallen & (1 << (CarDamage::WheelFrontLeft + i))) == 0);
+	}
+	if (Beams.Num() > 0)
+	{
+		ShowBeams(bBeamsShown);
+	}
+	// The parts it lost are this car's now: they come to rest and are cleared away as before.
+	LooseParts.Append(Other->LooseParts);
+	LooseSince.Append(Other->LooseSince);
+	Other->LooseParts.Reset();
+	Other->LooseSince.Reset();
+}
+
 void UCarVisuals::DropWheel(int32 Index)
 {
 	AActor* Owner = GetOwner();
@@ -1015,7 +1064,8 @@ void UCarVisuals::DropWheel(int32 Index)
 	{
 		return;
 	}
-	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Owner, NAME_None, RF_Transient);
+	AActor* Keeper = ACrashBits::Get(GetWorld());
+	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(Keeper ? Keeper : Owner, NAME_None, RF_Transient);
 	Piece->SetWorldTransform(FTransform(OnCar->GetComponentQuat(), OnCar->GetComponentLocation()));
 	Piece->SetCanEverAffectNavigation(false);
 	Piece->bUseComplexAsSimpleCollision = false;
@@ -1053,10 +1103,20 @@ void UCarVisuals::UpdateWear(float DeltaTime, double Distance)
 {
 	// Fallen parts stop costing anything once they have come to rest.
 	const double Now = GetWorld()->GetTimeSeconds();
-	for (int32 i = 0; i < LooseParts.Num(); ++i)
+	for (int32 i = LooseParts.Num() - 1; i >= 0; --i)
 	{
 		UProceduralMeshComponent* Piece = LooseParts[i];
-		if (IsValid(Piece) && Piece->IsSimulatingPhysics() && Now - LooseSince[i] > CarVisuals::LooseRestTime)
+		if (!IsValid(Piece) || Now - LooseSince[i] > CarVisuals::LooseKeepTime)
+		{
+			if (IsValid(Piece))
+			{
+				Piece->DestroyComponent();
+			}
+			LooseParts.RemoveAt(i);
+			LooseSince.RemoveAt(i);
+			continue;
+		}
+		if (Piece->IsSimulatingPhysics() && Now - LooseSince[i] > CarVisuals::LooseRestTime)
 		{
 			Piece->SetSimulatePhysics(false);
 			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
