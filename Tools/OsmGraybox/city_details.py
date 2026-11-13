@@ -52,7 +52,9 @@ import math
 import mapbox_earcut as earcut
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import box
 from shapely.ops import polylabel, unary_union
+from shapely.prepared import prep
 
 from street_furniture import Space, Spread, chance, in_cart_gate, ring_points, unit, yaw_of
 
@@ -581,6 +583,26 @@ THEATRE_ID = "w26829510"
 THEATRE_FROM, THEATRE_TO = 6, 17
 THEATRE_FRONT_X = 51560
 
+# The Kerepesi cemetery (CemeteryModel.h): its wall round the part inside
+# the map, the gates on Fiumei út, and graves in rows between the alleys
+# (street_furniture.json "kerepesi" has the outline, alleys and trees).
+CEMETERY_MAP_EDGE = 300          # the wall stops this far in from the map's edge
+CEMETERY_MAIN_GATE_PATH = "Fő út"   # the main gate is where this alley meets the wall
+CEMETERY_SIDE_GATES = [2, 3]     # outline corners with a side gate ("2. kapu", "3. kapu")
+CEMETERY_GATE_WIDTH = {"main": 1500, "side": 600}
+CEMETERY_ROW_GAP = 300           # graves: rows this far apart
+CEMETERY_GRAVE_GAP = 175         # and graves this far apart along a row
+CEMETERY_KEEP = 0.55             # share of the grid's spots with a grave
+CEMETERY_NEAR_ALLEY = 8000       # graves only this near an alley
+CEMETERY_MAX_GRAVES = 8000
+CEMETERY_GRAVE_KINDS = [0, 0, 0, 1, 1, 2, 2, 3, 4, 4, 5]   # CemeteryModel::EGrave, weighted
+# Built after 1932 (the workers' pantheon of 1959, the Károlyi tomb of 1962): left out.
+# Buildings inside the cemetery the map makes four floors tall: lodges,
+# offices, chapels and tombs are lower (by name; anything else one floor).
+CEMETERY_HEIGHTS = {"Árkádsor": 750, "kápolna": 1100, "Batthyány": 1300, "Kossuth": 1500, "mauzóleum": 800}
+CEMETERY_LOW = 650
+CEMETERY_LATER = ["w526250716", "w526250726"]
+
 # The facade's sums (AddFacade in OsmGraybox.cpp, Facade:: constants).
 FACADE_STOREY = 380.0
 FACADE_GROUND_FLOOR = 450.0
@@ -716,6 +738,113 @@ def city_theatre(data):
         a, z = z, a
         ax, ay, ox, oy = -ax, -ay, -ox, -oy
     return form, [round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))]
+
+
+def cemetery_buildings(data, f):
+    """The cemetery's tall graybox buildings made low, by id."""
+    k = f.get("kerepesi")
+    if not k:
+        return {}
+    grounds = Polygon(k["outline"]).buffer(300)
+    out = {}
+    for b in data["buildings"]:
+        footprint = Polygon(ring_points(b["rings"][0]))
+        if b["id"] in CEMETERY_LATER or b["height"] <= CEMETERY_LOW or not grounds.contains(footprint.representative_point()):
+            continue
+        name = b.get("name", "")
+        height = next((h for word, h in CEMETERY_HEIGHTS.items() if word in name), CEMETERY_LOW)
+        if height < b["height"]:
+            out[b["id"]] = [building_form(footprint, b, front_lines_of(b), height, 1)]
+    return out
+
+
+def place_cemetery(data, f):
+    """The cemetery's wall runs [x0, y0, x1, y1] (outside on the right as
+    the run goes, as house fronts), gates [kind, x, y, yaw out, width] and
+    graves [x, y, yaw, kind, seed]."""
+    k = f.get("kerepesi")
+    if not k:
+        return None, []
+    outline = [tuple(p) for p in k["outline"]]
+    shape = Polygon(outline)
+    b = data["bounds"]
+    inside = box(b["minX"] + CEMETERY_MAP_EDGE, b["minY"] + CEMETERY_MAP_EDGE, b["maxX"] - CEMETERY_MAP_EDGE, b["maxY"] - CEMETERY_MAP_EDGE)
+    # Run the outline the way that puts the street on the right.
+    a, z = outline[0], outline[1]
+    ax, ay = unit(z[0] - a[0], z[1] - a[1])
+    if shape.contains(Point((a[0] + z[0]) / 2 + ay * 100, (a[1] + z[1]) / 2 - ax * 100)):
+        outline.reverse()
+    ring = outline + [outline[0]]
+
+    gates = []
+    def gate_at(kind, x, y, dx, dy):
+        gates.append([kind, round(x), round(y), yaw_of(dy, -dx), CEMETERY_GATE_WIDTH[kind]])
+    alley = next((c for c in data["centerlines"] if c.get("name") == CEMETERY_MAIN_GATE_PATH), None)
+    edges = LineString(ring)
+    if alley:
+        start = Point(ring_points(alley["points"])[0])
+        t = edges.project(start)
+        p, q = edges.interpolate(t - 50), edges.interpolate(t + 50)
+        dx, dy = unit(q.x - p.x, q.y - p.y)
+        hit = edges.interpolate(t)
+        gate_at("main", hit.x, hit.y, dx, dy)
+    original = [tuple(p) for p in k["outline"]]
+    for corner in CEMETERY_SIDE_GATES:
+        cx, cy = original[corner]
+        t = edges.project(Point(cx, cy))
+        p, q = edges.interpolate(t - 50), edges.interpolate(t + 50)
+        dx, dy = unit(q.x - p.x, q.y - p.y)
+        gate_at("side", cx, cy, dx, dy)
+
+    # The wall: each outline edge inside the map, cut open at the gates.
+    openings = unary_union([Point(g[1], g[2]).buffer(g[4] * 0.5) for g in gates])
+    walls = []
+    for p0, p1 in zip(ring, ring[1:]):
+        line = LineString([p0, p1]).intersection(inside).difference(openings)
+        for piece in getattr(line, "geoms", [line]):
+            if piece.is_empty or piece.geom_type != "LineString" or piece.length < 5:
+                continue
+            (x0, y0), (x1, y1) = piece.coords[0], piece.coords[-1]
+            # Keep the run's direction (shapely may turn a piece round).
+            if (x1 - x0) * (p1[0] - p0[0]) + (y1 - y0) * (p1[1] - p0[1]) < 0:
+                (x0, y0), (x1, y1) = (x1, y1), (x0, y0)
+            walls.append([round(x0), round(y0), round(x1), round(y1)])
+
+    # Graves in rows square to Fiumei út, between the alleys and trees.
+    area = shape.buffer(-350).intersection(inside.buffer(-500))
+    alleys = [LineString([(p[0], p[1]), (p[2], p[3])]) for p in k["paths"]]
+    keep_off = unary_union([l.buffer(p[4] * 0.5 + 130) for l, p in zip(alleys, k["paths"])]
+                           + [Point(t[0], t[1]).buffer(140) for t in k["trees"]]
+                           + [Point(bn[0], bn[1]).buffer(150) for bn in k["benches"]]
+                           + [Point(g[1], g[2]).buffer(1600) for g in gates]
+                           + [Polygon(ring_points(bl["rings"][0])).buffer(200) for bl in data["buildings"]
+                              if area.intersects(Point(ring_points(bl["rings"][0])[0]))])
+    near = unary_union([l.buffer(CEMETERY_NEAR_ALLEY) for l in alleys])
+    ground = prep(area.intersection(near).difference(keep_off))
+    fx, fy = unit(original[1][0] - original[0][0], original[1][1] - original[0][1])
+    rx, ry = -fy, fx
+    yaw = yaw_of(rx, ry)
+    x0, y0, x1, y1 = area.bounds
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    reach = math.hypot(x1 - x0, y1 - y0) / 2
+    graves = []
+    for i in range(int(-reach // CEMETERY_ROW_GAP), int(reach // CEMETERY_ROW_GAP) + 1):
+        for j in range(int(-reach // CEMETERY_GRAVE_GAP), int(reach // CEMETERY_GRAVE_GAP) + 1):
+            x = cx + rx * i * CEMETERY_ROW_GAP + fx * j * CEMETERY_GRAVE_GAP
+            y = cy + ry * i * CEMETERY_ROW_GAP + fy * j * CEMETERY_GRAVE_GAP
+            if chance("grave", i, j) >= CEMETERY_KEEP or not ground.contains(Point(x, y)):
+                continue
+            kind = CEMETERY_GRAVE_KINDS[int(chance("gravekind", i, j) * len(CEMETERY_GRAVE_KINDS)) % len(CEMETERY_GRAVE_KINDS)]
+            graves.append([round(x), round(y), round(yaw + (chance("graveyaw", i, j) - 0.5) * 6, 1), kind, int(chance("graveseed", i, j) * 1000)])
+    if len(graves) > CEMETERY_MAX_GRAVES:
+        step = len(graves) / CEMETERY_MAX_GRAVES
+        graves = [graves[int(n * step)] for n in range(CEMETERY_MAX_GRAVES)]
+    # Grass over the whole ground inside the wall (OsmGraybox adds it as a park area).
+    park = next(pg for a in data["areas"] if a["layer"] == "park" for pg in a["polygons"])
+    lawn_shape = shape.intersection(inside)
+    lawn = building_form(lawn_shape, park, [], 0, 0)
+    areas = [{"layer": "park", "polygons": [{"rings": lawn["rings"], "tris": lawn["tris"]}]}]
+    return {"walls": walls, "gates": gates, "graves": graves}, areas
 
 
 def place_churches(data):
@@ -927,6 +1056,10 @@ def main():
     replaced[NEW_YORK_ID] = [new_york_block]
     theatre_block, theatre_front = city_theatre(data)
     replaced[THEATRE_ID] = [theatre_block]
+    for bid in CEMETERY_LATER:
+        replaced[bid] = [{"gone": True}]
+    replaced.update(cemetery_buildings(data, f))
+    cemetery, extra_areas = place_cemetery(data, f)
     churches = place_churches(data)
     for bid, _, _ in CHURCHES:
         replaced[bid] = [{"gone": True}]
@@ -953,6 +1086,8 @@ def main():
         "churches": churches,
         "newyork": new_york_pieces,
         "city_theatre": theatre_front,
+        "cemetery": cemetery,
+        "areas": extra_areas,
         "window_folk": folk,
         "hydrants": hydrants,
         "manholes": manholes,

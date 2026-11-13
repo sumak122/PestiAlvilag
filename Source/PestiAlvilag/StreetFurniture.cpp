@@ -713,6 +713,11 @@ void AStreetFurniture::BeginPlay()
 	{
 		BuildPark(**Park);
 	}
+	// The Kerepesi cemetery's alleys, trees and benches (its wall and graves are ACityDetails').
+	if (Root->TryGetObjectField(TEXT("kerepesi"), Park))
+	{
+		BuildPark(**Park);
+	}
 
 	// Hand each batch all its instances at once; one by one is slow.
 	int32 Count = 0;

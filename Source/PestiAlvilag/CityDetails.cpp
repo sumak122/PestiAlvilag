@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "CityDetails.h"
+#include "CemeteryModel.h"
 
 #include "ChurchModel.h"
 #include "CityTheatreModel.h"
@@ -54,6 +55,11 @@ namespace CityDetailsPlace
 	constexpr double LifePatch = 12000.0;
 	constexpr float LifeDrawDistance = 12000.f;
 	constexpr float ChurchDrawDistance = 80000.f;
+	// The Kerepesi cemetery: its wall and gates are seen from far off, the graves (one set per patch) only near.
+	constexpr float CemeteryWallDrawDistance = 40000.f;
+	constexpr float GraveDrawDistance = 9000.f;
+	// The graves' ground is looked for from just above it, so the trees' crowns are not hit.
+	constexpr double GraveTraceTop = 200.0;
 	// The coal man stands this far out from the wall and along it from the hatch (cm), and is not drawn beyond this.
 	const FVector2D CoalManAt(110.0, -60.0);
 	constexpr float CoalManDistance = 9000.f;
@@ -267,6 +273,7 @@ void ACityDetails::BeginPlay()
 		BuildChurches(*Root);
 		BuildNewYork(*Root);
 		BuildCityTheatre(*Root);
+		BuildCemetery(*Root);
 		BuildStreetLife(*Root);
 	}
 }
@@ -675,6 +682,111 @@ void ACityDetails::BuildCityTheatre(const FJsonObject& Root)
 	{
 		Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
 	}
+}
+
+void ACityDetails::BuildCemetery(const FJsonObject& Root)
+{
+	const TSharedPtr<FJsonObject>* CemeteryObject = nullptr;
+	if (!Root.TryGetObjectField(TEXT("cemetery"), CemeteryObject))
+	{
+		return;
+	}
+	const FJsonObject& Cemetery = **CemeteryObject;
+	auto ForEachRow = [&Cemetery](const TCHAR* Field, int32 MinCount, TFunctionRef<void(const TArray<TSharedPtr<FJsonValue>>&)> Use)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!Cemetery.TryGetArrayField(Field, Rows))
+		{
+			return;
+		}
+		for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& E = RowValue->AsArray();
+			if (E.Num() >= MinCount)
+			{
+				Use(E);
+			}
+		}
+	};
+
+	// The wall: [x0, y0, x1, y1], the street on the right as the run goes.
+	int32 Runs = 0;
+	ForEachRow(TEXT("walls"), 4, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D From = CityDetailsPlace::Pair(E, 0);
+		const FVector2D To = CityDetailsPlace::Pair(E, 2);
+		const double RunLength = FVector2D::Distance(From, To);
+		if (RunLength < 1.0)
+		{
+			return;
+		}
+		const double AlongYaw = FMath::RadiansToDegrees(FMath::Atan2(To.Y - From.Y, To.X - From.X));
+		const double RunYaw = AlongYaw - 90.0;
+		const FVector2D Middle = (From + To) * 0.5;
+		AShapeSet* Set = PutUp(FVector(From, GroundAt(Middle + CityDetailsPlace::Ahead(RunYaw, CityDetailsPlace::OutFromWall))),
+			RunYaw, CityDetailsPlace::CemeteryWallDrawDistance);
+		if (!Set)
+		{
+			return;
+		}
+		TArray<MarketModel::FShape> Shapes;
+		CemeteryModel::WallRun(RunLength, static_cast<uint32>(FMath::Abs(From.X * 7.0 + From.Y)), Shapes);
+		Set->AddShapes(Shapes);
+		++Runs;
+	});
+
+	// The gates: [kind, x, y, yaw out, width].
+	ForEachRow(TEXT("gates"), 5, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const bool bMain = E[0]->AsString() == TEXT("main");
+		const FVector2D Spot = CityDetailsPlace::Pair(E, 1);
+		const double OutYaw = E[3]->AsNumber();
+		AShapeSet* Set = PutUp(FVector(Spot, GroundAt(Spot + CityDetailsPlace::Ahead(OutYaw, CityDetailsPlace::OutFromWall))),
+			OutYaw, CityDetailsPlace::CemeteryWallDrawDistance);
+		if (!Set)
+		{
+			return;
+		}
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lights;
+		CemeteryModel::Gate(bMain, E[4]->AsNumber(), Shapes, Lights);
+		Set->AddShapes(Shapes);
+		for (const BozsiHouseModel::FLamp& Light : Lights)
+		{
+			Set->AddLamp(Light.At, Light.Radius);
+		}
+	});
+
+	// The graves: [x, y, yaw, kind, seed], gathered into one set per patch.
+	TMap<FIntPoint, TArray<MarketModel::FShape>> Patches;
+	auto MiddleOf = [](const FIntPoint& Patch)
+	{
+		return FVector((Patch.X + 0.5) * CityDetailsPlace::LifePatch, (Patch.Y + 0.5) * CityDetailsPlace::LifePatch, 0.0);
+	};
+	FCollisionQueryParams TraceParams;
+	TraceParams.AddIgnoredActor(this);
+	ForEachRow(TEXT("graves"), 5, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E, 0);
+		FHitResult Hit;
+		const double Ground = GetWorld()->LineTraceSingleByChannel(Hit, FVector(Spot, CityDetailsPlace::GraveTraceTop),
+			FVector(Spot, -CityDetailsPlace::GraveTraceTop), ECC_Visibility, TraceParams) ? Hit.ImpactPoint.Z : 0.0;
+		const int32 Kind = FMath::Clamp(static_cast<int32>(E[3]->AsNumber()), 0, static_cast<int32>(CemeteryModel::EGrave::Figure));
+		TArray<MarketModel::FShape> Local;
+		CemeteryModel::Grave(static_cast<CemeteryModel::EGrave>(Kind), static_cast<uint32>(E[4]->AsNumber()), Local);
+		const FIntPoint Patch(FMath::FloorToInt(Spot.X / CityDetailsPlace::LifePatch), FMath::FloorToInt(Spot.Y / CityDetailsPlace::LifePatch));
+		CityLifeModel::Place(Local, FVector(Spot, Ground) - MiddleOf(Patch), E[2]->AsNumber(), Patches.FindOrAdd(Patch));
+	});
+	int32 Count = 0;
+	for (const TPair<FIntPoint, TArray<MarketModel::FShape>>& Patch : Patches)
+	{
+		if (AShapeSet* Set = PutUp(MiddleOf(Patch.Key), 0.0, CityDetailsPlace::GraveDrawDistance))
+		{
+			Set->AddShapes(Patch.Value);
+			Count += Patch.Value.Num();
+		}
+	}
+	UE_LOG(LogCityDetails, Log, TEXT("Cemetery: %d wall runs, %d grave shapes in %d sets"), Runs, Count, Patches.Num());
 }
 
 void ACityDetails::BuildStreetLife(const FJsonObject& Root)
