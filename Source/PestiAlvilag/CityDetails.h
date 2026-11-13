@@ -70,6 +70,7 @@ private:
 	void BuildChurches(const FJsonObject& Root);
 	void BuildNewYork(const FJsonObject& Root);
 	void BuildCityTheatre(const FJsonObject& Root);
+	void BuildCemetery(const FJsonObject& Root);
 	void BuildStreetLife(const FJsonObject& Root);
 	void PutCoalMan(const FVector& Foot, double FacingYaw, uint32 Seed);
 	void SetHands(float Hour);
