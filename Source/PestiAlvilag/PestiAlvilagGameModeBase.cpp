@@ -61,6 +61,7 @@
 #include "PestiHud.h"
 #include "PestiMenu.h"
 #include "PestiPerson.h"
+#include "StreetFights.h"
 #include "CarjackedDriver.h"
 #include "LighterModel.h"
 #include "StreetName.h"
@@ -205,6 +206,8 @@ namespace PestiStart
 	// the dark, and the hours he spends in the cells.
 	constexpr int32 FinePerStar = 200;
 	constexpr int32 RenownLostPerStar = 2;
+	// Beaten down by a constable he is taken in with this share of his health back.
+	constexpr float BeatenByPoliceHealth = 0.4f;
 	constexpr float BustedFade = 1.2f;
 	constexpr float BustedDark = 2.5f;
 	constexpr float CellHours = 6.f;
@@ -718,6 +721,17 @@ void APestiAlvilagGameModeBase::UpdateFaint()
 		{
 			return;
 		}
+		// Down under a constable's truncheon: not home to wake up, but taken in.
+		if (AStreetFights::IsPoliceFighting(this))
+		{
+			Health = MaxHealth * PestiStart::BeatenByPoliceHealth;
+			if (WantedLevel == 0)
+			{
+				WantedLevel = 2;
+			}
+			Busted();
+			return;
+		}
 		// Down he goes: the picture darkens and the police lose interest.
 		FaintUntil = Now + PestiStart::FaintDark;
 		PC->SetIgnoreMoveInput(true);
@@ -859,7 +873,10 @@ void APestiAlvilagGameModeBase::UpdateWanted(float DeltaSeconds)
 	}
 
 	const bool bPoliceNear = GetWorld()->GetTimeSeconds() - LastPoliceNearTime < 0.2;
-	if (Player && bPoliceNear && Player->GetVelocity().Size2D() < PestiStart::CaughtSpeed)
+	// In a fist fight they can't lay hands on him: a constable who gets there wades in instead (AStreetFights).
+	const APestiPerson* OnFoot = Cast<APestiPerson>(Player);
+	const bool bInFight = OnFoot && OnFoot->IsFighting();
+	if (!bInFight && Player && bPoliceNear && Player->GetVelocity().Size2D() < PestiStart::CaughtSpeed)
 	{
 		ArrestProgress += DeltaSeconds;
 		if (ArrestProgress > ArrestTime)

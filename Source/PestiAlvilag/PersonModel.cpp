@@ -2,6 +2,8 @@
 
 #include "PersonModel.h"
 
+#include "PoliceModel.h"
+
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -109,6 +111,29 @@ namespace PersonModel
 
 		FPerson Person;
 		Build(Outfit, Person);
+		// A constable in a fight: the rest of his uniform on the body, the truncheon in his right fist.
+		if (Outfit.bUniform)
+		{
+			PoliceModel::BuildUniform(Outfit, Person.Pieces[Body]);
+			FPiece Club;
+			PoliceModel::BuildTruncheon(Outfit, Club);
+			FPiece& Lower = Person.Pieces[ForearmRight];
+			const FVector Shift = Club.Pivot - Lower.Pivot;
+			for (const FSection& From : Club.Sections)
+			{
+				FSection& Into = Lower.Section(From.Color);
+				const int32 Base = Into.Vertices.Num();
+				for (const FVector& V : From.Vertices)
+				{
+					Into.Vertices.Add(V + Shift);
+				}
+				Into.Normals.Append(From.Normals);
+				for (const int32 T : From.Triangles)
+				{
+					Into.Triangles.Add(Base + T);
+				}
+			}
+		}
 		for (int32 p = 0; p < NumPieces; ++p)
 		{
 			const FPiece& Piece = Person.Pieces[p];

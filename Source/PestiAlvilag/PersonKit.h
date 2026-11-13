@@ -66,6 +66,8 @@ namespace PersonKit
 		bool bBoots = false;
 		/** Beaten up and patched: a gauze band round the head, a plaster on the nose, a bruise by the eye. */
 		bool bBandaged = false;
+		/** A constable in a fight: the rest of the uniform (shako, brass, sabre) and the truncheon in his right hand, put on by PersonModel::Dress (PoliceModel). */
+		bool bUniform = false;
 		EHeld Held = EHeld::None;
 		/**
 		 * Sitting on a chair: thighs forward, shins down, a lap instead of

@@ -16,6 +16,7 @@
 #include "PestiPerson.h"
 #include "PoliceModel.h"
 #include "PolicePatrols.h"
+#include "StreetFights.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -545,6 +546,9 @@ bool APoliceCar::TickOfficers(const APawn* Player, APestiAlvilagGameModeBase* Ga
 	const FVector PlayerAt = Player ? Player->GetActorLocation() : GetActorLocation();
 	const APestiCar* PlayerCar = Cast<APestiCar>(Player);
 	const double HandsOn = PlayerCar ? PoliceCar::HandsOnCar : PoliceCar::HandsOnWalker;
+	// The player on foot may punch one of them (a click close in front), or they wade into a fist fight he is in.
+	APestiPerson* OnFoot = Cast<APestiPerson>(UGameplayStatics::GetPlayerPawn(this, 0));
+	bool bClicked = AStreetFights::WantsToPunch(OnFoot);
 	bool bAllIn = true;
 	for (int32 i = 0; i < Officers.Num(); ++i)
 	{
@@ -556,12 +560,43 @@ bool APoliceCar::TickOfficers(const APawn* Player, APestiAlvilagGameModeBase* Ga
 		}
 		bAllIn = false;
 
+		// In a fist fight: his fighter stands in for him till it is over.
+		if (Officer.bFighting)
+		{
+			FVector2D Where = Officer.At;
+			const EConstableFight State = AStreetFights::ConstableState(this, Man, Where);
+			Officer.At = Where;
+			if (State == EConstableFight::Fighting)
+			{
+				continue;
+			}
+			Officer.bFighting = false;
+			if (State == EConstableFight::Down)
+			{
+				Officer.DownLeft = PoliceCar::DownSeconds;
+				continue;
+			}
+		}
+
 		// Knocked down by his car: on his back a while, then up and on.
 		if (Officer.DownLeft > 0.f)
 		{
 			Officer.DownLeft -= DeltaSeconds;
 			Man->Hold(FVector(Officer.At, Officer.GroundZ + PoliceCar::LyingHeight), FRotator(90.0, Officer.Yaw, 0.0), 10.f, -20.f, 20.f);
 			continue;
+		}
+		if (OnFoot && (bClicked || (!bBack && AStreetFights::CanJoinIn(OnFoot))))
+		{
+			const bool bPunch = bClicked && AStreetFights::InPunchReach(OnFoot, FVector(Officer.At, Officer.GroundZ + PersonModel::MiddleHeight));
+			const bool bWadeIn = !bPunch && !bBack && AStreetFights::CanJoinIn(OnFoot)
+				&& FVector2D::Distance(Officer.At, FVector2D(PlayerAt)) < HandsOn;
+			AStreetFights* Fights = (bPunch || bWadeIn) ? AStreetFights::Get(this) : nullptr;
+			if (Fights && Fights->BeginConstable(OnFoot, Man, FVector(Officer.At, Officer.GroundZ), Officer.Yaw, bPunch))
+			{
+				Officer.bFighting = true;
+				bClicked = false;
+				continue;
+			}
 		}
 		if (PlayerCar && FMath::Abs(PlayerCar->ForwardSpeed) > PoliceCar::CarHitSpeed
 			&& FVector2D::Distance(Officer.At, FVector2D(PlayerAt)) < PoliceCar::CarHitRadius)

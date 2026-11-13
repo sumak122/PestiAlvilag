@@ -134,6 +134,10 @@ private:
  * and then the police cars of the whole district come (see
  * APestiAlvilagGameModeBase::CallInPolice). Knocking one down with the car
  * makes it worse. When he is no longer wanted they walk back to their beat.
+ *
+ * The player can fight them (AStreetFights::BeginConstable): a click at one
+ * close in front throws a punch, and one who reaches him while he is in a
+ * fist fight wades in with his truncheon.
  */
 UCLASS()
 class PESTIALVILAG_API APolicePatrols : public AActor
@@ -203,6 +207,7 @@ private:
 		Down,       // knocked down by the player's car
 		Returning,  // back to the beat
 		Looking,    // gone over to see what the crowd is looking at
+		Fighting,   // in a fist fight with the player (AStreetFights stands in for him)
 	};
 
 	struct FMan
@@ -277,6 +282,8 @@ private:
 	bool CanSee(const FMan& Man, const FVector& Target) const;
 
 	void StartChase(FPatrol& Patrol, bool bSawIt);
+	/** Into a fist fight with the player (bPlayerStarts: he punched first, else the constable wades in); true if it began. */
+	bool HandOver(FMan& Man, bool bPlayerStarts);
 	void SendToPhone(FPatrol& Patrol, int32 Which, bool bForHelp);
 	void BackToBeat(FPatrol& Patrol, int32 Which);
 	void Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En);
