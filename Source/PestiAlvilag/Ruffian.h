@@ -43,7 +43,9 @@ enum class ERuffian : uint8
 	BoxGyuri,
 	BoxVasoklu,
 	// Anyone off the street the player picks a fight with (AStreetFights): dressed as he walked.
-	Passerby
+	Passerby,
+	// A constable who fights the player (AStreetFights::BeginConstable): his uniform in StreetDress, the truncheon in his fist.
+	Constable
 };
 
 UCLASS()
@@ -59,7 +61,7 @@ public:
 	/** Which of them he is; set before he is spawned for good (SpawnActorDeferred). */
 	ERuffian Kind = ERuffian::Bika;
 
-	/** A passer-by's own clothes (Kind Passerby); set before he is spawned for good. */
+	/** A passer-by's own clothes (Kind Passerby, or a constable's uniform for Kind Constable); set before he is spawned for good. */
 	PersonKit::FOutfit StreetDress;
 
 	/** His name over the fight bar and on what he says. */

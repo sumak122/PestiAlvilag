@@ -21,6 +21,7 @@
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
+#include "PestiPerson.h"
 #include "PoliceCar.h"
 #include "PersonModel.h"
 #include "PoliceModel.h"
@@ -666,10 +667,58 @@ void APolicePatrols::Tick(float DeltaSeconds)
 	}
 	bWasWanted = bWanted;
 
+	// A click at a constable close in front: the player throws a punch at him.
+	APestiPerson* OnFoot = Cast<APestiPerson>(Player);
+	if (AStreetFights::WantsToPunch(OnFoot))
+	{
+		FMan* Picked = nullptr;
+		double Nearest = TNumericLimits<double>::Max();
+		for (FPatrol& Patrol : Patrols)
+		{
+			for (FMan& Man : Patrol.Men)
+			{
+				if (!Man.Person || Man.Doing == EDoing::Down || Man.Doing == EDoing::Fighting
+					|| !AStreetFights::InPunchReach(OnFoot, MiddleOf(Man)))
+				{
+					continue;
+				}
+				const double Gap = FVector2D::DistSquared(Man.At, FVector2D(PlayerAt));
+				if (Gap < Nearest)
+				{
+					Nearest = Gap;
+					Picked = &Man;
+				}
+			}
+		}
+		if (Picked)
+		{
+			HandOver(*Picked, true);
+		}
+	}
+
 	for (FPatrol& Patrol : Patrols)
 	{
 		TickPatrol(Patrol, DeltaSeconds);
 	}
+}
+
+bool APolicePatrols::HandOver(FMan& Man, bool bPlayerStarts)
+{
+	APestiPerson* OnFoot = Cast<APestiPerson>(LastPlayer.Get());
+	if (!Man.Person || !OnFoot || (!bPlayerStarts && !AStreetFights::CanJoinIn(OnFoot)))
+	{
+		return false;
+	}
+	AStreetFights* Fights = AStreetFights::Get(this);
+	if (!Fights || !Fights->BeginConstable(OnFoot, Man.Person.Get(), FVector(Man.At, Man.GroundZ), Man.Yaw, bPlayerStarts))
+	{
+		return false;
+	}
+	Man.Doing = EDoing::Fighting;
+	Man.Path.Reset();
+	Man.bForHelp = false;
+	Man.Clock = 0.f;
+	return true;
 }
 
 void APolicePatrols::TickPatrol(FPatrol& Patrol, float DeltaSeconds)
@@ -736,7 +785,7 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 	UpdateGround(Man, DeltaSeconds);
 
 	// The player's car coming through knocks him down: a crime in itself.
-	if (bPlayerDriving && Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning
+	if (bPlayerDriving && Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning && Man.Doing != EDoing::Fighting
 		&& FVector2D::Distance(Man.At, FVector2D(PlayerAt)) < PolicePatrol::CarHitRadius
 		&& PlayerVelocity.Size2D() > PolicePatrol::CarHitSpeed)
 	{
@@ -835,6 +884,11 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 	{
 		const FVector2D Target(PlayerAt);
 		const double Distance = FVector2D::Distance(Man.At, Target);
+		// Reached him in the middle of a fist fight: in he wades, truncheon out.
+		if (Distance < PolicePatrol::ArrestRange && HandOver(Man, false))
+		{
+			break;
+		}
 		Man.SightClock -= DeltaSeconds;
 		if (Man.SightClock <= 0.f)
 		{
@@ -894,6 +948,31 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 			FollowPath(Man, RunSpeed, DeltaSeconds);
 			Man.Person->RunTo(MiddleOf(Man), Man.Yaw, RunSpeed, DeltaSeconds);
 		}
+		break;
+	}
+	case EDoing::Fighting:
+	{
+		// His fighter stands in for him; once it is over he is down, or after the player again.
+		FVector2D Where = Man.At;
+		const EConstableFight State = AStreetFights::ConstableState(this, Man.Person.Get(), Where);
+		Man.At = Where;
+		if (State == EConstableFight::Fighting)
+		{
+			break;
+		}
+		Man.Clock = 0.f;
+		if (State == EConstableFight::Down)
+		{
+			Man.Doing = EDoing::Down;
+			Man.Person->ShowTruncheon(false);
+			break;
+		}
+		Man.Doing = EDoing::Chasing;
+		Man.Path.Reset();
+		Man.ReplanClock = 0.f;
+		Man.SightClock = 0.f;
+		Man.bSeesPlayer = true;
+		Man.Person->ShowTruncheon(true);
 		break;
 	}
 	case EDoing::Down:
@@ -1093,7 +1172,7 @@ void APolicePatrols::StartChase(FPatrol& Patrol, bool bSawIt)
 	for (int32 m = 0; m < 2; ++m)
 	{
 		FMan& Man = Patrol.Men[m];
-		if (Man.Doing == EDoing::Down)
+		if (Man.Doing == EDoing::Down || Man.Doing == EDoing::Fighting)
 		{
 			continue;
 		}
@@ -1255,7 +1334,7 @@ bool APolicePatrols::Witnessed(const UObject* WorldContextObject, const FVector&
 			bool bThisPair = false;
 			for (const FMan& Man : Patrol.Men)
 			{
-				if (Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning
+				if (Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning && Man.Doing != EDoing::Fighting
 					&& FVector2D::Distance(Man.At, FVector2D(At)) < Police->SightRange && Police->CanSee(Man, At))
 				{
 					bThisPair = true;

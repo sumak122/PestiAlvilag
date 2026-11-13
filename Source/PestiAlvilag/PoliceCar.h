@@ -103,6 +103,8 @@ private:
 		/** Knocked down by the player's car: seconds still lying there. */
 		float DownLeft = 0.f;
 		bool bIn = false;
+		/** In a fist fight with the player (AStreetFights stands in for him). */
+		bool bFighting = false;
 	};
 	TArray<FOfficer> Officers;
 	bool bOfficersOut = false;
