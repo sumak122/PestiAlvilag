@@ -1241,6 +1241,72 @@ RAKOCZI_TREE_CLEAR = 330          # from paths, the oval and the edge
 RAKOCZI_LAMPS = 10
 
 
+# The Kerepesi cemetery (Fiumei úti sírkert): its wall's outline from
+# OpenStreetMap way 228345157, in map cm. The part inside the map gets
+# gravel paths along its alleys and trees, here; city_details.py puts up
+# the wall, the gates and the graves (CemeteryModel.h).
+KEREPESI_OUTLINE = [
+    (92519, -8042), (104209, 7398), (117199, 24425), (125670, 35529), (136340, 49954), (136629, 50161),
+    (136620, 50245), (136667, 50352), (136764, 50413), (136881, 50409), (136960, 50361), (137372, 50577),
+    (175115, 57322), (199661, 61748), (202288, 45703), (214137, 47331), (214179, 46873), (215605, 31366),
+    (216436, 21816), (205683, 20227), (205037, 18885), (197750, -2350), (197334, -4060), (194730, -4164),
+    (194582, -8512), (186687, -8572), (138397, -8653), (112329, -8698), (110857, -8702), (93020, -8766),
+    (92826, -8702),
+]
+KEREPESI_EDGE = 600          # nothing is laid out this near the map's edge (cm)
+KEREPESI_PATH_WIDTH = 420
+KEREPESI_TREE_GAP = 1100     # trees along the alleys, both sides
+KEREPESI_TREE_OUT = 420      # out from the alley's middle line
+KEREPESI_BENCH_GAP = 5200
+
+
+def kerepesi_area(data):
+    """The cemetery inside the map, a little in from the wall and the map's edge."""
+    b = data["bounds"]
+    inside = box(b["minX"] + KEREPESI_EDGE, b["minY"] + KEREPESI_EDGE, b["maxX"] - KEREPESI_EDGE, b["maxY"] - KEREPESI_EDGE)
+    return Polygon(KEREPESI_OUTLINE).buffer(-250).intersection(inside)
+
+
+def layout_kerepesi(data):
+    """The cemetery's alleys as gravel paths, the trees along them, a few benches."""
+    area = kerepesi_area(data)
+    buildings = unary_union([Polygon(ring_points(bl["rings"][0])) for bl in data["buildings"]
+                             if area.intersects(Point(ring_points(bl["rings"][0])[0]))]).buffer(250)
+    paths, trees, benches = [], [], []
+    alleys = []
+    for c in data["centerlines"]:
+        if c.get("highway") != "service":
+            continue
+        line = LineString(ring_points(c["points"])).intersection(area)
+        for piece in getattr(line, "geoms", [line]):
+            if piece.is_empty or piece.geom_type != "LineString" or piece.length < 300:
+                continue
+            alleys.append(piece)
+            pts = list(piece.coords)
+            for a, z in zip(pts, pts[1:]):
+                paths.append([round(a[0]), round(a[1]), round(z[0]), round(z[1]), KEREPESI_PATH_WIDTH])
+    near_alley = unary_union([a.buffer(KEREPESI_PATH_WIDTH * 0.5 + 60) for a in alleys])
+    spread = Spread(700)
+    for alley in alleys:
+        for (x, y), (dx, dy), s in walk(list(alley.coords), KEREPESI_TREE_GAP, 400, 400):
+            for side in (-1, 1):
+                tx = x - dy * side * KEREPESI_TREE_OUT + dx * (chance("kt", round(x), round(y), side) - 0.5) * 300
+                ty = y + dx * side * KEREPESI_TREE_OUT + dy * (chance("kt", round(y), round(x), side) - 0.5) * 300
+                spot = Point(tx, ty)
+                if chance("kgap", round(tx), round(ty)) < 0.2 or not area.contains(spot) or buildings.contains(spot) or near_alley.contains(spot):
+                    continue
+                if not spread.ok(tx, ty):
+                    continue
+                spread.add(tx, ty)
+                trees.append([round(tx), round(ty), round(0.85 + 0.4 * chance("ksize", round(tx), round(ty)), 2)])
+        for (x, y), (dx, dy), s in walk(list(alley.coords), KEREPESI_BENCH_GAP, 1500, 1500):
+            bx, by = x - dy * (KEREPESI_PATH_WIDTH * 0.5 + 60), y + dx * (KEREPESI_PATH_WIDTH * 0.5 + 60)
+            if area.contains(Point(bx, by)) and not buildings.contains(Point(bx, by)) and spread.ok(bx, by):
+                spread.add(bx, by)
+                benches.append([round(bx), round(by), yaw_of(dy, -dx)])
+    return {"outline": [list(p) for p in KEREPESI_OUTLINE], "paths": paths, "trees": trees, "benches": benches}
+
+
 def layout_rakoczi(space, garden):
     """Paths, trees, benches, lamps, fences and the fountain for Rákóczi tér's garden."""
     cx, cy = RAKOCZI_MIDDLE
@@ -2169,6 +2235,7 @@ def main():
         gates += more_gates
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
+    kerepesi = layout_kerepesi(data)
     spots += [tuple(v["at"][:2]) for v in shops + gates]
     police_boxes = place_police_boxes(space, sidewalks, spots)
     # After everything else, so nothing that was already placed moves.
@@ -2194,6 +2261,7 @@ def main():
         "tisza": park,
         "baross": baross,
         "rakoczi": rakoczi,
+        "kerepesi": kerepesi,
         "police_boxes": police_boxes,
     }
     with open(args.output, "w", encoding="utf-8") as f:

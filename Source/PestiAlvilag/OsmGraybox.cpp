@@ -84,7 +84,8 @@ namespace OsmGraybox
 	// 6: flower boxes and washing on the windows; the churches' blocks left out (city_details.json "gone").
 	// 7: the New York palace's dressed street walls lose their plain facades (city_details.json).
 	// 8: the Városi Színház's block gets one straight front on Tisza Kálmán tér.
-	constexpr int32 MeshVersion = 8;
+	// 9: the Kerepesi cemetery: grass inside its wall, the gate lodges one floor (city_details.json "areas").
+	constexpr int32 MeshVersion = 9;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");
@@ -628,6 +629,16 @@ TSharedPtr<FJsonObject> AOsmGraybox::LoadData() const
 			}
 		}
 		Root->SetArrayField(TEXT("buildings"), Merged);
+
+		// Extra ground areas (the grass inside the Kerepesi cemetery wall).
+		const TArray<TSharedPtr<FJsonValue>>* ExtraAreas = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* MapAreas = nullptr;
+		if (Details->TryGetArrayField(TEXT("areas"), ExtraAreas) && Root->TryGetArrayField(TEXT("areas"), MapAreas))
+		{
+			TArray<TSharedPtr<FJsonValue>> AllAreas = *MapAreas;
+			AllAreas.Append(*ExtraAreas);
+			Root->SetArrayField(TEXT("areas"), AllAreas);
+		}
 	}
 	return Root;
 }
