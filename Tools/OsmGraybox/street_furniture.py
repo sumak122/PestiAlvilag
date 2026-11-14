@@ -1307,6 +1307,160 @@ def layout_kerepesi(data):
     return {"outline": [list(p) for p in KEREPESI_OUTLINE], "paths": paths, "trees": trees, "benches": benches}
 
 
+# Rózsák tere round the Szent Erzsébet church (ErzsebetChurchModel.h): a
+# gravel forecourt out from the towers, a path round the church with benches
+# facing it, paths out to the sides and the corners, a walk inside a low hedge
+# round the square, rows of trees, and the rose beds the square is named for.
+ROZSAK_NEAR = (44000, -51000)
+ROZSAK_CHURCH = "w25277227"
+ROZSAK_FRONT = (42709, -53573)    # the middle of the church's front (city_details.py "churches")
+ROZSAK_INTO = 59.5                # degrees, from the front into the church
+ROZSAK_CROSSING = 4100            # the transept's middle back from the front (cm)
+ROZSAK_FORECOURT = 1600
+ROZSAK_RING_OUT = 520             # the path round the church, out from its walls
+ROZSAK_PATH = 360
+ROZSAK_WALK_IN = 380              # the walk round the square, in from its edge
+ROZSAK_HEDGE_IN = 90
+ROZSAK_TREE_IN = 760
+ROZSAK_TREE_GAP = 950
+ROZSAK_BENCH_GAP = 1150
+ROZSAK_LAMP_GAP = 2600
+ROZSAK_BED = (320, 230)           # gravel round and rose bed
+ROZSAK_BED_GAP = 1400
+ROZSAK_DOT_GAP = 1300            # trees dotted over the lawns
+
+
+def layout_rozsak(space, data, park):
+    """Rózsák tere's paths, hedge, trees, rose beds, benches, bins and lamps."""
+    church = next(Polygon(ring_points(b["rings"][0])) for b in data["buildings"] if b["id"] == ROZSAK_CHURCH)
+    fx, fy = ROZSAK_FRONT
+    ux, uy = math.cos(math.radians(ROZSAK_INTO)), math.sin(math.radians(ROZSAK_INTO))
+    vx, vy = -uy, ux
+    inner = park.buffer(-ROZSAK_WALK_IN)
+    paths, lines = [], []
+
+    def add_line(line, width):
+        line = line.intersection(park.buffer(-150))
+        for part in getattr(line, "geoms", [line]):
+            if part.geom_type != "LineString" or part.length < 100:
+                continue
+            pts = list(part.coords)
+            for a, z in zip(pts, pts[1:]):
+                paths.append([round(a[0]), round(a[1]), round(z[0]), round(z[1]), width])
+            lines.append((part, width))
+
+    def ray(x, y, dx, dy):
+        return LineString([(x, y), (x + dx * 30000, y + dy * 30000)]).difference(church.buffer(ROZSAK_RING_OUT - 10))
+
+    # The forecourt and the ring round the church.
+    add_line(LineString([(fx + ux * 200, fy + uy * 200), (fx - ux * 30000, fy - uy * 30000)]), ROZSAK_FORECOURT)
+    ring = church.buffer(ROZSAK_RING_OUT, join_style=2).simplify(80)
+    add_line(LineString(list(ring.exterior.coords)), ROZSAK_PATH)
+    # Out from the transepts' ends and the apse, and from the corners in.
+    cx, cy = fx + ux * ROZSAK_CROSSING, fy + uy * ROZSAK_CROSSING
+    add_line(ray(cx, cy, vx, vy), ROZSAK_PATH)
+    add_line(ray(cx, cy, -vx, -vy), ROZSAK_PATH)
+    add_line(ray(fx + ux * 5000, fy + uy * 5000, ux, uy), ROZSAK_PATH)
+    for corner in list(park.simplify(200).exterior.coords)[:-1]:
+        towards = ring.exterior.interpolate(ring.exterior.project(Point(corner)))
+        add_line(LineString([corner, (towards.x, towards.y)]), ROZSAK_PATH)
+    # The walk round the square, inside the hedge.
+    add_line(LineString(list(inner.exterior.coords)), ROZSAK_PATH)
+
+    ways = unary_union([l.buffer(w * 0.5) for l, w in lines])
+    clear = unary_union([ways.buffer(140), church.buffer(ROZSAK_RING_OUT + 250)])
+    # The hedge round the square, open where the paths come out.
+    hedges = []
+    edge = park.buffer(-ROZSAK_HEDGE_IN).exterior
+    for (x, y), (dx, dy), _ in walk(list(edge.coords), 200, 0, 200):
+        a, z = (x, y), (x + dx * 200, y + dy * 200)
+        seg = LineString([a, z])
+        if not any(seg.distance(l) < w * 0.5 + 120 for l, w in lines if l.distance(Point(x, y)) < 3000 and not l.equals(LineString(list(inner.exterior.coords)))):
+            hedges.append([round(a[0]), round(a[1]), round(z[0]), round(z[1])])
+    # Merge the hedge's short pieces into runs.
+    runs = []
+    for h in hedges:
+        if runs and abs(runs[-1][2] - h[0]) < 2 and abs(runs[-1][3] - h[1]) < 2 and len(runs[-1]) == 4:
+            prev = runs[-1]
+            if abs(yaw_of(prev[2] - prev[0], prev[3] - prev[1]) - yaw_of(h[2] - h[0], h[3] - h[1])) < 3:
+                prev[2], prev[3] = h[2], h[3]
+                continue
+        runs.append(list(h))
+
+    # Trees in a row inside the walk, and a second row along the forecourt.
+    trees = []
+    spread = Spread(600)
+    tree_lines = [park.buffer(-ROZSAK_TREE_IN).exterior]
+    for side in (-1, 1):
+        off = ROZSAK_FORECOURT * 0.5 + 330
+        tree_lines.append(LineString([(fx + vx * off * side, fy + vy * off * side), (fx + vx * off * side - ux * 30000, fy + vy * off * side - uy * 30000)]).intersection(park.buffer(-ROZSAK_TREE_IN)))
+    for line in tree_lines:
+        for part in getattr(line, "geoms", [line]):
+            if part.geom_type != "LineString" and part.geom_type != "LinearRing":
+                continue
+            for (x, y), _, _ in walk(list(part.coords), ROZSAK_TREE_GAP, 300, 300):
+                if clear.contains(Point(x, y)) or not spread.ok(x, y) or not space.free(x, y, 150, True):
+                    continue
+                spread.add(x, y)
+                trees.append([round(x), round(y), round(0.9 + 0.3 * chance("rozsak", round(x), round(y)), 2)])
+
+    # Rose beds on the lawns, a few to a lawn, and trees dotted between them.
+    lawns = park.buffer(-ROZSAK_WALK_IN).difference(clear)
+    rounds = []
+    beds = Spread(ROZSAK_BED_GAP)
+    for lawn in getattr(lawns, "geoms", [lawns]):
+        room = lawn.buffer(-ROZSAK_BED[0] - 20)
+        if room.is_empty or lawn.area < 30e4:
+            continue
+        x0, y0, x1, y1 = room.bounds
+        spots = [room.representative_point().coords[0]]
+        spots += [(x0 + (i + 0.5) * ROZSAK_BED_GAP, y0 + (j + 0.5) * ROZSAK_BED_GAP)
+                  for i in range(int((x1 - x0) // ROZSAK_BED_GAP) + 1) for j in range(int((y1 - y0) // ROZSAK_BED_GAP) + 1)]
+        for x, y in spots:
+            if room.contains(Point(x, y)) and beds.ok(x, y) and spread.ok(x, y):
+                beds.add(x, y)
+                rounds.append([round(x), round(y), ROZSAK_BED[0], ROZSAK_BED[1]])
+    dotted = lawns.buffer(-250)
+    if not dotted.is_empty:
+        x0, y0, x1, y1 = dotted.bounds
+        gx = x0
+        while gx < x1:
+            gy = y0
+            while gy < y1:
+                x = gx + (chance("rdot", round(gx), round(gy)) - 0.5) * 500
+                y = gy + (chance("rdot", round(gy), round(gx)) - 0.5) * 500
+                if (dotted.contains(Point(x, y)) and chance("rkeep", round(gx), round(gy)) < 0.6 and spread.ok(x, y)
+                        and beds.ok(x, y) and space.free(x, y, 150, True)):
+                    spread.add(x, y)
+                    trees.append([round(x), round(y), round(0.9 + 0.35 * chance("rozsak", round(x), round(y)), 2)])
+                gy += ROZSAK_DOT_GAP
+            gx += ROZSAK_DOT_GAP
+
+    # Benches along the ring facing the church, a bin by every other one; lamps along the ring and the walk.
+    benches, bins, lamps = [], [], []
+    others = unary_union([l.buffer(w * 0.5 + 200) for l, w in lines if not l.equals(LineString(list(ring.exterior.coords)).intersection(park.buffer(-150)))])
+    for (x, y), (dx, dy), _ in walk(list(ring.exterior.coords), ROZSAK_BENCH_GAP, 300, 300):
+        nx, ny = dy, -dx
+        if church.distance(Point(x + nx * 100, y + ny * 100)) < church.distance(Point(x, y)):
+            nx, ny = -nx, -ny
+        bx, by = x + nx * (ROZSAK_PATH * 0.5 + 60), y + ny * (ROZSAK_PATH * 0.5 + 60)
+        if others.contains(Point(bx, by)) or not park.buffer(-300).contains(Point(bx, by)):
+            continue
+        benches.append([round(bx), round(by), yaw_of(-nx, -ny)])
+        if len(benches) % 2 == 0:
+            bins.append([round(bx + dx * 120), round(by + dy * 120), yaw_of(-nx, -ny)])
+    lamp_spread = Spread(1200)
+    for line in (ring.exterior, inner.exterior):
+        for (x, y), (dx, dy), _ in walk(list(line.coords), ROZSAK_LAMP_GAP, 600, 600):
+            lx, ly = x + dy * (ROZSAK_PATH * 0.5 + 40), y - dx * (ROZSAK_PATH * 0.5 + 40)
+            if not park.buffer(-200).contains(Point(lx, ly)) or church.distance(Point(lx, ly)) < 300 or not lamp_spread.ok(lx, ly):
+                continue
+            lamp_spread.add(lx, ly)
+            lamps.append([round(lx), round(ly), yaw_of(dx, dy)])
+    return {"paths": paths, "hedges": runs, "trees": trees, "rounds": rounds,
+            "benches": benches, "bins": bins, "lamps": lamps}
+
+
 def layout_rakoczi(space, garden):
     """Paths, trees, benches, lamps, fences and the fountain for Rákóczi tér's garden."""
     cx, cy = RAKOCZI_MIDDLE
@@ -2208,7 +2362,8 @@ def main():
     columns = place_columns(data, space, tisza)
     bins = []
     garden = min(space.parks, key=lambda p: p.centroid.distance(Point(*RAKOCZI_NEAR)))
-    benches = place_park_benches(space, tisza, bins, [garden])
+    rozsak_park = min(space.parks, key=lambda p: p.centroid.distance(Point(*ROZSAK_NEAR)))
+    benches = place_park_benches(space, tisza, bins, [garden, rozsak_park])
     bins += place_lamp_bins(lamps, space, tisza)
     park = layout_tisza(space, tisza)
     sidewalks, crossings = place_sidewalks(data, space, tisza, park)
@@ -2236,6 +2391,7 @@ def main():
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
     kerepesi = layout_kerepesi(data)
+    rozsak = layout_rozsak(space, data, rozsak_park)
     spots += [tuple(v["at"][:2]) for v in shops + gates]
     police_boxes = place_police_boxes(space, sidewalks, spots)
     # After everything else, so nothing that was already placed moves.
@@ -2262,6 +2418,7 @@ def main():
         "baross": baross,
         "rakoczi": rakoczi,
         "kerepesi": kerepesi,
+        "rozsak": rozsak,
         "police_boxes": police_boxes,
     }
     with open(args.output, "w", encoding="utf-8") as f:

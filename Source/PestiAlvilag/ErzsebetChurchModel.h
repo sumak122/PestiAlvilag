@@ -211,6 +211,9 @@ namespace ErzsebetChurchModel
 			// Its roof runs across the nave's: built along X, then turned.
 			TArray<FShape> Roof;
 			TiledRoof(Roof, -TransReach, TransReach, TransHalf + 40.0, NaveEaves, NaveRise);
+			// Brick gables close the roof's ends over the rounded ends.
+			ChurchModel::Gable(Roof, Brick, -TransReach + 20.0, 40.0, TransHalf, NaveEaves, NaveRise);
+			ChurchModel::Gable(Roof, Brick, TransReach - 20.0, 40.0, TransHalf, NaveEaves, NaveRise);
 			for (FShape Piece : Roof)
 			{
 				const FVector Local = Piece.At;
@@ -223,21 +226,22 @@ namespace ErzsebetChurchModel
 		{
 			const double EndY = Side * TransReach;
 			Add(Out, MarketModel::Cylinder, Brick, FVector(CrossX, EndY, (NaveEaves - 100.0) * 0.5), FVector(TransHalf * 2.0, TransHalf * 2.0, NaveEaves - 100.0), 22.5);
-			Add(Out, MarketModel::Cone, TileBrown, FVector(CrossX, EndY, NaveEaves - 100.0 + NaveRise * 0.45), FVector(TransHalf * 2.0 + 60.0, TransHalf * 2.0 + 60.0, NaveRise * 0.9), 22.5, false);
+			// The end's cone roof rises to the ridge, so it meets the gable.
+			Add(Out, MarketModel::Cone, TileBrown, FVector(CrossX, EndY, NaveEaves - 100.0 + (NaveRise + 100.0) * 0.5), FVector(TransHalf * 2.0 + 60.0, TransHalf * 2.0 + 60.0, NaveRise + 100.0), 22.5, false);
 			for (const double Turn : { -50.0, 0.0, 50.0 })
 			{
 				const double FaceYaw = Side * 90.0 + Turn;
 				const FVector Foot = FVector(CrossX, EndY, 0) + FRotator(0.0, FaceYaw, 0.0).RotateVector(FVector(TransHalf - 15.0, 0, 0));
 				ChurchModel::TallWindow(Out, Foot + FVector(0, 0, 400), FaceYaw, 140.0, 900.0, Stone, true);
 			}
-			Rose(Out, CrossX, Side * (TransReach - TransHalf * 0.2), NaveEaves + NaveRise * 0.35, 380.0, Side * 90.0);
 		}
 
 		// The chancel and its rounded apse.
 		Add(Out, MarketModel::Cube, Brick, FVector((CrossX + ChancelEnd) * 0.5, 0, NaveEaves * 0.5), FVector(CrossX - ChancelEnd, NaveHalf * 2.0, NaveEaves));
 		TiledRoof(Out, ChancelEnd, CrossX, NaveHalf + 40.0, NaveEaves, NaveRise);
 		Add(Out, MarketModel::Cylinder, Brick, FVector(ChancelEnd, 0, (NaveEaves - 100.0) * 0.5), FVector(ApseRadius * 2.0, ApseRadius * 2.0, NaveEaves - 100.0), 22.5);
-		Add(Out, MarketModel::Cone, TileBrown, FVector(ChancelEnd, 0, NaveEaves - 100.0 + NaveRise * 0.45), FVector(ApseRadius * 2.0 + 60.0, ApseRadius * 2.0 + 60.0, NaveRise * 0.9), 22.5, false);
+		Add(Out, MarketModel::Cone, TileBrown, FVector(ChancelEnd, 0, NaveEaves - 100.0 + (NaveRise + 100.0) * 0.5), FVector(ApseRadius * 2.0 + 60.0, ApseRadius * 2.0 + 60.0, NaveRise + 100.0), 22.5, false);
+		ChurchModel::Gable(Out, Brick, ChancelEnd + 20.0, 40.0, NaveHalf, NaveEaves, NaveRise);
 		for (const double Side : { -1.0, 1.0 })
 		{
 			SideWindows(Out, ChancelEnd, CrossX - TransHalf, Side * NaveHalf, Side * 90.0, 450.0, 1000.0, NaveEaves);
