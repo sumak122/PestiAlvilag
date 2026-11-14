@@ -1040,6 +1040,94 @@ int32 ATrafficManager::PickNextLane(int32 LaneIndex) const
 	return UTurn != INDEX_NONE ? UTurn : LaneIndex;
 }
 
+int32 ATrafficManager::PickLaneToward(int32 LaneIndex, const FVector& Goal) const
+{
+	const FTrafficLane& Current = Lanes[LaneIndex];
+	if (!LanesFromNode.IsValidIndex(Current.ToNode))
+	{
+		return LaneIndex;
+	}
+	int32 Best = INDEX_NONE;
+	double BestGap = TNumericLimits<double>::Max();
+	int32 UTurn = INDEX_NONE;
+	for (const int32 Next : LanesFromNode[Current.ToNode])
+	{
+		const FTrafficLane& Candidate = Lanes[Next];
+		if (Candidate.Way == Current.Way && Candidate.ToNode == Current.FromNode)
+		{
+			UTurn = Next;
+			continue;
+		}
+		if (Candidate.Points.Num() == 0)
+		{
+			continue;
+		}
+		const double Gap = FVector::Dist2D(Candidate.Points.Last(), Goal);
+		if (Gap < BestGap)
+		{
+			BestGap = Gap;
+			Best = Next;
+		}
+	}
+	if (Best != INDEX_NONE)
+	{
+		return Best;
+	}
+	return UTurn != INDEX_NONE ? UTurn : LaneIndex;
+}
+
+void ATrafficManager::SetRoadBlock(int32 Slot, const TArray<FVector>& Points)
+{
+	if (Points.Num() == 0)
+	{
+		RoadBlocks.Remove(Slot);
+		return;
+	}
+	RoadBlocks.FindOrAdd(Slot) = Points;
+}
+
+ATrafficCart* ATrafficManager::SpawnHearse(int32 LaneIdx, int32 PointIdx)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Lanes.IsValidIndex(LaneIdx) || PointIdx < 0 || PointIdx + 1 >= Lanes[LaneIdx].Points.Num())
+	{
+		return nullptr;
+	}
+	const FTrafficLane& Lane = Lanes[LaneIdx];
+	const FVector Spot = Lane.Points[PointIdx];
+	FVector Location = Spot;
+	FHitResult Hit;
+	if (World->LineTraceSingleByChannel(Hit, Spot + FVector(0.0, 0.0, 200.0), Spot - FVector(0.0, 0.0, 1000.0), ECC_Visibility))
+	{
+		Location.Z = Hit.ImpactPoint.Z;
+	}
+	// As high as SpawnCarts puts them, so the cart settles onto the road.
+	Location.Z += HorseCartModel::RigHalf().Z + 20.0;
+	const FTransform Place((Lane.Points[PointIdx + 1] - Spot).GetSafeNormal2D().Rotation(), Location);
+	ATrafficCart* Cart = World->SpawnActorDeferred<ATrafficCart>(ATrafficCart::StaticClass(), Place, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Cart)
+	{
+		return nullptr;
+	}
+	FRandomStream Dice(FMath::Rand());
+	Cart->MakeHearse(Dice);
+	Cart->FinishSpawning(Place);
+	Cart->StartOnLane(this, LaneIdx, PointIdx + 1);
+	Carts.Add(Cart);
+	return Cart;
+}
+
+void ATrafficManager::RemoveCart(ATrafficCart* Cart)
+{
+	if (!Cart)
+	{
+		return;
+	}
+	Carts.Remove(Cart);
+	Cart->Destroy();
+}
+
 bool ATrafficManager::TryClaimNode(int32 Node, const ATrafficCar* Car, bool bForce)
 {
 	if (!IsJunction(Node))
@@ -1144,6 +1232,14 @@ float ATrafficManager::ClearDistanceAhead(const AActor* Car, float LookAhead, bo
 			ConsiderPoint(Other->GetActorLocation());
 			ConsiderPoint(Other->GetActorLocation() + Along);
 			ConsiderPoint(Other->GetActorLocation() - Along);
+		}
+	}
+	// People walking in the road, a fire engine: stop for them whichever way they go.
+	for (const TPair<int32, TArray<FVector>>& Block : RoadBlocks)
+	{
+		for (const FVector& Point : Block.Value)
+		{
+			ConsiderPoint(Point);
 		}
 	}
 	// A tram or bus is long: its middle and both ends.

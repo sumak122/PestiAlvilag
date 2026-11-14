@@ -24,6 +24,7 @@
 #include "VargaRuns.h"
 #include "LaciYard.h"
 #include "LaciYardModel.h"
+#include "DailyLife.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "Bicycle.h"
@@ -349,6 +350,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<APoliceChase>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<APoliceChase>();
+	}
+
+	// The daily life of the streets: lamplighters, courtyards, street sellers, rare processions, tram riders, shop shutters.
+	if (!TActorIterator<ADailyLife>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ADailyLife>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first

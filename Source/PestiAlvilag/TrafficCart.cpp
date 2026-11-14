@@ -32,6 +32,9 @@ namespace TrafficCartRide
 	constexpr float BeerHigh = 290.f;
 	constexpr float MilkLow = 300.f;
 	constexpr float MilkHigh = 345.f;
+	// The hearse goes at a slow walk, so the mourners keep up behind it.
+	constexpr float HearseLow = 105.f;
+	constexpr float HearseHigh = 125.f;
 	constexpr float SpeedUp = 140.f;
 	constexpr float SlowDown = 380.f;
 	// The carter turns the horse this far at most (degrees), this fast, this much for each degree off course.
@@ -123,6 +126,23 @@ void ATrafficCart::PickLoad(FRandomStream& Random)
 		: Random.FRandRange(TrafficCartRide::MilkLow, TrafficCartRide::MilkHigh);
 }
 
+void ATrafficCart::MakeHearse(FRandomStream& Dice)
+{
+	using HorseCartModel::ELoad;
+	CartLoad = ELoad::Hearse;
+	HorseCoat = HorseCartModel::ECoat::Black;
+	bBlaze = false;
+	DriverLook = HorseCartModel::CarterLook(ELoad::Hearse, Dice.RandRange(0, 11));
+	bOwnDriverLook = true;
+	// At the mourners' slow walk.
+	Cruise = Dice.FRandRange(TrafficCartRide::HearseLow, TrafficCartRide::HearseHigh);
+}
+
+int32 ATrafficCart::ChooseNextLane() const
+{
+	return bHasGoal ? Manager->PickLaneToward(LaneIndex, Goal) : Manager->PickNextLane(LaneIndex);
+}
+
 void ATrafficCart::BeginPlay()
 {
 	Super::BeginPlay();
@@ -135,7 +155,7 @@ void ATrafficCart::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, in
 {
 	Manager = InManager;
 	LaneIndex = InLaneIndex;
-	NextLaneIndex = Manager->PickNextLane(LaneIndex);
+	NextLaneIndex = ChooseNextLane();
 	PointIndex = InPointIndex;
 	Target = Manager->GetLane(LaneIndex).Points[FMath::Clamp(PointIndex, 0, Manager->GetLane(LaneIndex).Points.Num() - 1)];
 	Speed = Cruise * 0.6f;
@@ -202,7 +222,7 @@ void ATrafficCart::FollowLane(float DeltaSeconds)
 				break;
 			}
 			LaneIndex = NextLaneIndex;
-			NextLaneIndex = Manager->PickNextLane(LaneIndex);
+			NextLaneIndex = ChooseNextLane();
 			Lane = &Manager->GetLane(LaneIndex);
 			PointIndex = 0;
 		}
@@ -323,7 +343,8 @@ void ATrafficCart::CheckBumps()
 
 void ATrafficCart::Shy()
 {
-	if (!Manager || BoltTime > 0.f || ShyTime > 0.f)
+	// The undertaker's old horse has heard it all before.
+	if (!Manager || BoltTime > 0.f || ShyTime > 0.f || IsHearse())
 	{
 		return;
 	}
@@ -338,6 +359,11 @@ void ATrafficCart::Shy()
 
 void ATrafficCart::Bolt()
 {
+	if (IsHearse())
+	{
+		// The hearse's horse never bolts, and nothing falls off it.
+		return;
+	}
 	if (BoltTime <= 0.f)
 	{
 		SpilledThisBolt = 0;
@@ -377,6 +403,10 @@ void ATrafficCart::WhileBolting(float DeltaSeconds)
 void ATrafficCart::SpillOne()
 {
 	using namespace HorseCartModel;
+	if (IsHearse())
+	{
+		return;
+	}
 	if (SpilledThisBolt >= TrafficCartRide::MaxSpillsPerBolt)
 	{
 		return;
