@@ -45,6 +45,9 @@ public:
 	bool IsInTraffic() const { return Manager != nullptr; }
 	bool IsBolting() const { return BoltTime > 0.f; }
 
+	/** Spooked (a dog barking at its head): the horse rears up for a moment, and now and then bolts after. */
+	void Shy();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -84,6 +87,8 @@ private:
 
 	/** Seconds left of the horse's bolt, till the next thing goes over, and how many went this time. */
 	float BoltTime = 0.f;
+	/** Seconds left of rearing up when spooked. */
+	float ShyTime = 0.f;
 	float SpillClock = 0.f;
 	int32 SpilledThisBolt = 0;
 	/** Held up this long (s); then it pushes through for a moment, as a stuck car does. */

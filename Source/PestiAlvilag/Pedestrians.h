@@ -64,6 +64,35 @@ public:
 	 */
 	void Huddle(const FVector& Location, double Yaw);
 
+	/** At a police telephone: the right hand on the crank (turning it while bCranking), the left hand at his ear. */
+	void PhoneAt(const FVector& Location, double Yaw, bool bCranking, float Seconds);
+
+	/** Standing, one fist raised and shaking (Seconds drives the shake). */
+	void ShakeFist(const FVector& Location, double Yaw, float Seconds);
+
+	/** Standing, the right hand raised to the hat brim by Raise (0..1); a woman only stands and faces. */
+	void TipHat(const FVector& Location, double Yaw, float Raise);
+
+	/** Standing, the right arm up and waving (Seconds drives the wave). */
+	void Wave(const FVector& Location, double Yaw, float Seconds);
+
+	/** Standing squared up, fists raised before his face, bobbing a little (Seconds drives it). */
+	void FistsUp(const FVector& Location, double Yaw, float Seconds);
+
+	/** After WalkTo: a drunk's lurch, leaning Roll/Pitch (degrees), one arm out for balance by ArmOut (0..1). */
+	void Sway(double Yaw, float Roll, float Pitch, float ArmOut);
+
+	/**
+	 * The street sweeper's broom, made the first time. After WalkTo he walks
+	 * with it upright in his right hand; after a standing pose with bSweeping
+	 * both hands hold it before him and the twigs swing side to side (Seconds
+	 * drives the swing). ShowBroom false puts it away.
+	 */
+	void CarryBroom(bool bSweeping, float Seconds);
+	void ShowBroom(bool bShow);
+	/** After WalkTo: the broom put away and both arms held out in front, carrying something. */
+	void CarryInArms();
+
 private:
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
@@ -88,6 +117,9 @@ private:
 	FLinearColor UmbrellaCloth = FLinearColor::Black;
 	/** He came out with a furled umbrella, taken out of his hand while it is open. */
 	bool bFurledInUse = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Broom;
 };
 
 /**
@@ -120,7 +152,7 @@ public:
 	 * when Hu is empty).
 	 */
 	void AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
-		const FString& Who, const FString& Hu, const FString& En);
+		const FString& Who, const FString& Hu, const FString& En, bool bNightOnly = false, bool bNewsboy = false);
 
 	/**
 	 * Something worth a look happened at At (a street fight, a crash, a spilled
@@ -130,6 +162,15 @@ public:
 	 * they cheer the fighters on.
 	 */
 	static void Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight);
+
+	/**
+	 * A passer-by walking within Reach of At, at least NotNear from the
+	 * player, is taken off the street to be someone else's (AWitnesses):
+	 * his clothes, where he stood on the ground and his facing. False when
+	 * nobody fits.
+	 */
+	static bool TakeWitness(const UObject* WorldContextObject, const FVector& At, double Reach, double NotNear,
+		PersonKit::FOutfit& OutDress, FVector& OutGround, float& OutYaw);
 
 	/** The furniture file with the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")
@@ -170,7 +211,7 @@ private:
 	 * off from a car on the pavement, knocked down (and getting up again), or
 	 * run over at speed and lying still, or stopped to show the player the way.
 	 */
-	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead, Point };
+	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead, Point, Respect, Wave, Challenge, Backing };
 
 	struct FLine
 	{
@@ -256,6 +297,17 @@ private:
 		FString CallHu;
 		FString CallEn;
 		double NextCall = 0.0;
+		/** A stander: not before this time does he wave to the player again. */
+		double NextWave = 0.0;
+		/** A tough picking on the player: there in front of him with his fists up (not still walking over). */
+		bool bSquared = false;
+		/** One of the few who have had too much: at night he sways home (see Pedestrians::DrunkShare). */
+		bool bTipsy = false;
+		/** A stander only out after dark (a courtyard gang at its gate), arms folded; indoors (bIndoors) by day. */
+		bool bNightOnly = false;
+		/** A newsboy by a kiosk: he calls out the morning paper's headline, waving a paper while he does. */
+		bool bNewsboy = false;
+		double WaveUntil = 0.0;
 	};
 
 	bool LoadLines();
@@ -334,6 +386,12 @@ private:
 	void AskTheWay(APawn* Player, double Now);
 	/** A click on foot next to someone: the player picks a fight with him (AStreetFights). */
 	void PickAFight(APawn* Player);
+	/** The player's street name rank (StreetName::Ranks), 0 without a game mode. */
+	int32 PlayerRank() const;
+	/** Now and then, while his name is still small, a tough walks up and squares up to him. */
+	void TickChallenge(double Now, bool bPlayerAbout);
+	/** The tough (and his mates) back to walking, with a parting line if he gives up. */
+	void EndChallenge(bool bJeer);
 	/** The map direction to point from From to get to To along the streets, and how far that is (cm). */
 	float WayFrom(const FVector2D& From, const FVector2D& To, double& OutDistance) const;
 
@@ -359,4 +417,21 @@ private:
 	FVector2D PlayerForward = FVector2D(1.0, 0.0);
 	bool bPlayerDriving = false;
 	double LastShout = -10.0;
+	/** The street name at work: not before these times does anyone show respect, bump into him, or pick on him. */
+	double NextRespect = 0.0;
+	double NextBump = 0.0;
+	double NextChallenge = -1.0;
+	/** Where the tough picking on the player stands, while one does. */
+	FVector2D ChallengerAt = FVector2D::ZeroVector;
+	bool bChallenge = false;
+	/** 0 by day, up to 1 late at night (ADayNight): walkers go in, drunks come out. */
+	float Lateness = 0.f;
+	/** ADayNight's darkness this frame (0 day, 1 night). */
+	float Dark = 0.f;
+	/** Not before this time does a drunk sing out again. */
+	double NextSong = 0.0;
+	/** Not before this time do two passers-by gossip about his deeds again. */
+	double NextGossip = 0.0;
+	/** Now and then two passers-by near him talk about something he did (GameMode::PickGossip). */
+	void TickGossip(double Now, bool bPlayerAbout);
 };

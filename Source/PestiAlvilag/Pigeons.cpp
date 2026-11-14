@@ -10,7 +10,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "OsmGraybox.h"
+#include "EngineUtils.h"
 #include "PestiCar.h"
+#include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 
 namespace Pigeons
@@ -67,6 +69,10 @@ namespace Pigeons
 	constexpr float CalmBeforeLanding = 5.f;
 	constexpr float LandSpeed = 420.f;
 	constexpr double Touchdown = 25.0;
+
+	// Trouble this near a flock's square sends it up (cm); constables this far off see the birds go up.
+	constexpr double TroubleNear = 3000.0;
+	constexpr double TipOffRange = 10000.0;
 
 	// The wings beat this fast (beats a second) and this far (degrees).
 	constexpr float FlapRate = 7.f;
@@ -426,4 +432,39 @@ void APigeons::Tick(float DeltaSeconds)
 			PoseBird(Birds[Index]);
 		}
 	}
+}
+
+bool APigeons::Trouble(const UObject* WorldContextObject, const FVector& At)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	bool bTipped = false;
+	for (TActorIterator<APigeons> It(World); It; ++It)
+	{
+		APigeons* Squares = *It;
+		for (FFlock& Flock : Squares->Flocks)
+		{
+			if (FVector::Dist2D(Flock.Middle, At) > Pigeons::TroubleNear)
+			{
+				continue;
+			}
+			// Only a flock still down makes a sight of it, going up all at once.
+			bool bAnyDown = false;
+			for (const int32 Index : Flock.Birds)
+			{
+				const EState State = Squares->Birds[Index].State;
+				bAnyDown = bAnyDown || State == EState::Ground || State == EState::Landing;
+			}
+			Squares->Startle(Flock, At);
+			bTipped = bTipped || bAnyDown;
+		}
+	}
+	if (bTipped)
+	{
+		APolicePatrols::Investigate(WorldContextObject, At, Pigeons::TipOffRange);
+	}
+	return bTipped;
 }

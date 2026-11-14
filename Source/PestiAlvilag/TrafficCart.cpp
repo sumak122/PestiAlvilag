@@ -17,7 +17,9 @@
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
+#include "SpillLife.h"
 #include "TrafficManager.h"
+#include "Witnesses.h"
 
 namespace TrafficCartRide
 {
@@ -69,6 +71,11 @@ namespace TrafficCartRide
 	constexpr double SpillScatter = 70.0;
 	// A bolting horse knocks down whoever it runs into, faster than this (cm/s).
 	constexpr float RunDownFrom = 150.f;
+	// Spooked, the horse rears for this long (s), up this fast and down this slowly (s); then it may bolt.
+	constexpr float ShySeconds = 1.8f;
+	constexpr float ShyUp = 0.35f;
+	constexpr float ShyDown = 0.45f;
+	constexpr float BoltAfterShy = 0.3f;
 	// Spilt things stay at least this long (s), and go when the camera is this far off (cm);
 	// an emptied cart is loaded again when the camera is farther than this.
 	constexpr double SpillsLast = 40.0;
@@ -147,6 +154,23 @@ void ATrafficCart::Tick(float DeltaSeconds)
 
 	BumpCooldown = FMath::Max(0.f, BumpCooldown - DeltaSeconds);
 	FollowLane(DeltaSeconds);
+	if (ShyTime > 0.f)
+	{
+		// Reared up and stopped dead, then down again; now and then it bolts after.
+		ShyTime -= DeltaSeconds;
+		Speed = FMath::FInterpTo(Speed, 0.f, DeltaSeconds, 5.f);
+		const float Into = TrafficCartRide::ShySeconds - ShyTime;
+		RearUp = FMath::Clamp(FMath::Min(Into / TrafficCartRide::ShyUp, ShyTime / TrafficCartRide::ShyDown), 0.f, 1.f);
+		if (ShyTime <= 0.f)
+		{
+			ShyTime = 0.f;
+			RearUp = 0.f;
+			if (FMath::FRand() < TrafficCartRide::BoltAfterShy)
+			{
+				Bolt();
+			}
+		}
+	}
 
 	// Pushing through after a long wait, it slips past what holds it up.
 	const bool bSqueezing = SqueezeTime > 0.f;
@@ -297,6 +321,21 @@ void ATrafficCart::CheckBumps()
 	LastPlayerVelocity = PlayerVelocity;
 }
 
+void ATrafficCart::Shy()
+{
+	if (!Manager || BoltTime > 0.f || ShyTime > 0.f)
+	{
+		return;
+	}
+	ShyTime = TrafficCartRide::ShySeconds;
+	if (!Sound->IsPlaying())
+	{
+		Sound->Start();
+	}
+	Sound->Whinny();
+	CallOut(TEXT("\u201eH\u00f3, h\u00f3! Takarodj innen, te korcs!\u201d   (Whoa, whoa! Get away, you mutt!)"));
+}
+
 void ATrafficCart::Bolt()
 {
 	if (BoltTime <= 0.f)
@@ -396,6 +435,8 @@ void ATrafficCart::SpillOne()
 		Spilled.Add(Piece);
 		SpilledAt.Add(Now);
 	}
+	// Cats come for the milk, kids for the coal, and a barrel rolls off.
+	ASpillLife::Spilled(this, CartLoad, Lying, Puddle, At, FVector2D(GetActorForwardVector()));
 }
 
 void ATrafficCart::TidySpills()
@@ -489,15 +530,22 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 		if (ACarjackedDriver* Runner = GetWorld()->SpawnActor<ACarjackedDriver>(ACarjackedDriver::StaticClass(), RunnerAt, GetActorRotation(), RunnerParams))
 		{
 			Runner->SetOutfit(DriverLook);
-			Runner->RunFrom(Danger);
+			// He runs after the thief, runs for a constable, or runs off.
+			Runner->AfterThief(Danger, false, DriverLook);
 		}
 		CallOut(TEXT("\u201eH\u00e9! A lovam! A kocsim! Tolvaj!\u201d   (Hey! My horse! My cart! Thief!)"));
+		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::CartStolen, Bench);
 		if (APolicePatrols::Witnessed(this, Bench, TrafficCartRide::TheftSeen))
 		{
 			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 			{
 				Game->ReportCrime(1);
 			}
+		}
+		else
+		{
+			// Nobody from the police saw it: now and then a passer-by runs to tell them.
+			AWitnesses::Report(this, Bench, 1);
 		}
 
 		// Out of the traffic: an ordinary cart for the player, still loaded.

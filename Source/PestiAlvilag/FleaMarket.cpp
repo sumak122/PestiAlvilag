@@ -33,7 +33,9 @@
 #include "UObject/ConstructorHelpers.h"
 #include "PestiHud.h"
 #include "Weather.h"
+#include "DayNight.h"
 #include "Wreck.h"
+#include "Witnesses.h"
 
 namespace MarketBuild
 {
@@ -101,6 +103,9 @@ namespace MarketLife
 	constexpr float CoverSeconds = 2.5f;
 	constexpr double CoverWaitMost = 8.0;
 	constexpr float ShoppersHome = 0.8f;
+	// The open-air market's hours (ADayNight hour): it packs up at dusk and sets up again in the morning.
+	constexpr float ClosesAt = 19.5f;
+	constexpr float OpensAt = 6.f;
 	constexpr double ShopperBackBeyond = 2500.0;
 	constexpr double ShopperBackOutOfView = 0.2;
 	// People further than this from the camera stand still where they are (cm).
@@ -383,6 +388,14 @@ void AFleaMarket::Tick(float DeltaSeconds)
 	{
 		const AWeather* Sky = AWeather::Get(GetWorld());
 		Raining = Sky ? Sky->GetRain() : 0.f;
+		// Closed for the night: the stalls are covered, sellers and shoppers go home.
+		const ADayNight* Clock = ADayNight::Get(GetWorld());
+		const float Hour = Clock ? Clock->GetHour() : 12.f;
+		bClosed = Hour >= MarketLife::ClosesAt || Hour < MarketLife::OpensAt;
+		if (bClosed)
+		{
+			Raining = 1.f;
+		}
 		CameraLooking = FVector2D(CameraManager->GetCameraRotation().Vector()).GetSafeNormal();
 		TickRainCovers(DeltaSeconds);
 	}
@@ -1170,6 +1183,7 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
 		Game->AddRenown(bKilled ? StreetName::ForRunningOver : StreetName::ForKnockingDown, TEXT("elg\u00e1zolt valakit"), TEXT("ran someone down"));
+		Game->NoteDeed(StreetName::EDeed::RunOver, FVector(Who.At, 0.0));
 	}
 
 	// A police car or a constable close by sees it.
@@ -1179,6 +1193,11 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 		{
 			Game->ReportCrime(bKilled ? 2 : 1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, PlayerAt, bKilled ? 2 : 1);
 	}
 
 	if (bKilled)
@@ -1211,9 +1230,9 @@ void AFleaMarket::TickCrowd(float DeltaSeconds, const FVector& Camera, double No
 		}
 		// Shoppers go home in the rain while nobody sees, and come back
 		// (where they were) once it eases, away from the camera's view.
-		if (bOutdoors && !Who.bSeller && !Who.bKeeper)
+		if (bOutdoors && !Who.bKeeper && (!Who.bSeller || bClosed || Who.bRainedOff))
 		{
-			const bool bHome = Who.RainShy < ShoppersHome * Raining;
+			const bool bHome = bClosed || (!Who.bSeller && Who.RainShy < ShoppersHome * Raining);
 			if (Who.bRainedOff)
 			{
 				const FVector2D FromCamera = Who.At - FVector2D(Camera);
@@ -1620,6 +1639,11 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 						{
 							Game->ReportCrime(1);
 						}
+					}
+					else
+					{
+						// Nobody from the police saw it: now and then a passer-by runs to tell them.
+						AWitnesses::Report(this, FVector(Stall.Middle), 1);
 					}
 					break;
 				}

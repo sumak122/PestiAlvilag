@@ -30,6 +30,7 @@
 #include "PoliceChase.h"
 #include "Bus.h"
 #include "Tram.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
 
@@ -244,6 +245,7 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 		Driver->RunFrom(Danger);
 	}
 
+	APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::CarStolen, Location);
 	// A police car or a constable close by sees it.
 	if (APolicePatrols::Witnessed(this, Location, Traffic::PoliceSeeTheft))
 	{
@@ -251,6 +253,11 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Location, 1);
 	}
 	return Stolen;
 }
@@ -866,6 +873,31 @@ void ATrafficManager::SpawnCarts()
 		Carts.Add(Cart);
 	}
 	UE_LOG(LogTraffic, Log, TEXT("Spawned %d horse carts"), Carts.Num());
+}
+
+FString ATrafficManager::StreetNear(const FVector& At, double Within) const
+{
+	const FString* Best = nullptr;
+	double BestGap = FMath::Square(Within);
+	for (const FTrafficLane& Lane : Lanes)
+	{
+		const FString* Name = StreetNames.Find(Lane.Way);
+		if (!Name || Name->IsEmpty())
+		{
+			continue;
+		}
+		for (int32 i = 0; i + 1 < Lane.Points.Num(); ++i)
+		{
+			const FVector OnLane = FMath::ClosestPointOnSegment2D(At, Lane.Points[i], Lane.Points[i + 1]);
+			const double Gap = FVector::DistSquared2D(OnLane, At);
+			if (Gap < BestGap)
+			{
+				BestGap = Gap;
+				Best = Name;
+			}
+		}
+	}
+	return Best ? *Best : FString();
 }
 
 int32 ATrafficManager::NearestNode(const FVector& Location) const

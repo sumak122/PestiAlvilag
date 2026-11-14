@@ -11,6 +11,7 @@ class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
 class UStaticMesh;
+class UTextRenderComponent;
 
 /**
  * Basic shapes (MarketModel::FShape), painted lettering and small lamps put
@@ -30,7 +31,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	void AddShapes(const TArray<MarketModel::FShape>& Shapes);
-	void AddSign(const FString& Text, const FVector& At, double Yaw, double Height, const FLinearColor& Color);
+	/** Lettering at At; the returned component may have its text changed later. */
+	UTextRenderComponent* AddSign(const FString& Text, const FVector& At, double Yaw, double Height, const FLinearColor& Color);
 	/** A small warm light at At, reaching Radius (cm), lit from dusk to dawn. */
 	void AddLamp(const FVector& At, float Radius);
 	/** Things further off than this are not drawn (cm). */

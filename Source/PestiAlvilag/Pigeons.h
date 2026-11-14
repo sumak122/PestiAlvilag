@@ -18,7 +18,8 @@ class USceneComponent;
  * Keleti. On the ground they strut about, bobbing their heads, and peck.
  * When the player runs at them, comes too close, or drives up in a car,
  * the whole flock takes off (not all at once), climbs and circles high over
- * the square, and once all is quiet again comes back down to land.
+ * the square, and once all is quiet again comes back down to land. Trouble
+ * nearby (Trouble) sends them up too, and the constables come to look.
  */
 UCLASS()
 class PESTIALVILAG_API APigeons : public AActor
@@ -29,6 +30,14 @@ public:
 	APigeons();
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	/**
+	 * Trouble at At (a fight, a crash, smashed glass): the flocks of the
+	 * square nearby take off, and the burst of wings brings the nearest
+	 * constables over from further off than a crowd would. True when the
+	 * police were told that way.
+	 */
+	static bool Trouble(const UObject* WorldContextObject, const FVector& At);
 
 	/** Flocks further than this from the camera are hidden and left still (cm). */
 	UPROPERTY(EditAnywhere, Category = "Pigeons")

@@ -5,6 +5,7 @@
 #include "StreetName.h"
 #include "Camera/PlayerCameraManager.h"
 #include "CarBody.h"
+#include "DayNight.h"
 #include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -25,6 +26,7 @@
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
+#include "Pigeons.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "StreetFights.h"
@@ -35,8 +37,10 @@
 #include "TrafficManager.h"
 #include "Tram.h"
 #include "UObject/ConstructorHelpers.h"
+#include "SweeperModel.h"
 #include "UmbrellaModel.h"
 #include "Weather.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPedestrians, Log, All);
 
@@ -189,6 +193,115 @@ namespace Pedestrians
 		{ TEXT("Jaj, a l\u00e1bam! Maga vad\u00e1llat!"), TEXT("Ow, my leg! You brute!") },
 		{ TEXT("Rend\u0151r! Elg\u00e1zoltak!"), TEXT("Police! I've been run over!") },
 	};
+	// The street name at work (StreetName ranks). Someone just ahead of a walking player, from rank 1,
+	// now and then touches his hat (from rank 3 stepping aside to the wall too): not more often than
+	// every so many seconds, with this chance; at rank 0 one may brush his shoulder instead.
+	constexpr double RespectNear = 280.0;
+	constexpr double RespectSlowest = 40.0;
+	constexpr float RespectEveryLow = 10.f;
+	constexpr float RespectEveryHigh = 20.f;
+	constexpr float RespectChance = 0.3f;
+	constexpr float RespectSeconds = 1.8f;
+	constexpr double RespectStep = 200.0;
+	constexpr int32 RespectRank = 1;
+	constexpr int32 StepAsideRank = 3;
+	constexpr double BrushNear = 120.0;
+	constexpr float BrushEveryLow = 40.f;
+	constexpr float BrushEveryHigh = 80.f;
+	constexpr float BrushChance = 0.3f;
+	// The folk keeping to a spot (courtyard gates, church steps) wave to him from rank 2, now and then.
+	constexpr int32 WaveRank = 2;
+	constexpr double WaveNear = 800.0;
+	constexpr double WaveEvery = 150.0;
+	constexpr float WaveChance = 0.3f;
+	constexpr float WaveSeconds = 2.2f;
+	// A tough picks on him while his name is small: first after a while, then seldom (s), with a chance
+	// that falls with his rank (none at the top); one from this near, walking over at this pace to stand
+	// this far in front of him; he gives up after so long squared up, or once the player is this far.
+	constexpr float ChallengeFirstLow = 300.f;
+	constexpr float ChallengeFirstHigh = 600.f;
+	constexpr float ChallengeEveryLow = 420.f;
+	constexpr float ChallengeEveryHigh = 900.f;
+	constexpr float ChallengeChance = 0.5f;
+	constexpr double ChallengeFromNear = 400.0;
+	constexpr double ChallengeFromFar = 1000.0;
+	constexpr float ChallengeWalk = 210.f;
+	constexpr double ChallengeStand = 130.0;
+	constexpr float ChallengeWait = 10.f;
+	constexpr float ChallengeApproach = 12.f;
+	constexpr double ChallengeGiveUp = 900.0;
+	constexpr double MatesNear = 900.0;
+	constexpr double MatesBehind = 240.0;
+	constexpr int32 MaxMates = 2;
+	constexpr float ChallengeLate = 0.6f;
+	const FLine2 RespectLines[] = {
+		{ TEXT("Tiszteletem, uram."), TEXT("My respects, sir.") },
+		{ TEXT("J\u00f3 napot k\u00edv\u00e1nok!"), TEXT("Good day to you!") },
+	};
+	const FLine2 BrushLines[] = {
+		{ TEXT("N\u00e9zzen a l\u00e1ba el\u00e9, fiatalember!"), TEXT("Watch where you're going, young man!") },
+		{ TEXT("Na, mi van, nem f\u00e9r el?"), TEXT("What, not enough room for you?") },
+	};
+	const FLine2 WaveLines[] = {
+		{ TEXT("Szervusz! Erre j\u00e1rsz?"), TEXT("Hello! Out this way?") },
+		{ TEXT("Na, itt van a mi ember\u00fcnk!"), TEXT("Well, here's our man!") },
+	};
+	const FLine2 ChallengeLines[] = {
+		{ TEXT("Mit b\u00e1mulsz, te? Gyere, ha mersz!"), TEXT("What are you staring at? Come on, if you dare!") },
+		{ TEXT("Nagy leg\u00e9ny vagy, mi? L\u00e1ssuk!"), TEXT("Think you're a big man, eh? Let's see!") },
+	};
+	const FLine2 JeerLines[] = {
+		{ TEXT("Na, fuss csak, gy\u00e1va!"), TEXT("Go on, run, coward!") },
+		{ TEXT("Tudtam \u00e9n, hogy nincs benned semmi."), TEXT("I knew there was nothing to you.") },
+	};
+	const TCHAR* const ToughName = TEXT("K\u00f6teked\u0151");
+	// Late at night (ADayNight hour): from LateFrom to LateFull more and more walkers go in, up to
+	// LateIndoors of them, until EarlyFrom..EarlyFull in the morning; those still out walk a little faster.
+	// The courtyard gangs stand out at their gates once it is this dark.
+	constexpr float GangOutDark = 0.6f;
+	// A newsboy waves his paper this long as he calls out (s).
+	constexpr double NewsboyWave = 2.5;
+	// Gossip about the player's deeds: two passers-by within GossipNear of him, at most this often
+	// (s, the first a while after the start), with this chance each time.
+	constexpr double GossipNear = 900.0;
+	constexpr double GossipPair = 300.0;
+	constexpr float GossipEveryLow = 120.f;
+	constexpr float GossipEveryHigh = 240.f;
+	constexpr float GossipChance = 0.5f;
+	constexpr float LateFrom = 21.f;
+	constexpr float LateFull = 23.f;
+	constexpr float EarlyFrom = 4.f;
+	constexpr float EarlyFull = 6.f;
+	constexpr float LateIndoors = 0.7f;
+	constexpr float LateHurry = 0.15f;
+	// Of the men out late, this share have had too much: they sway, lurch and go slowly, and now and
+	// then one near the player sings (not more often than every so many seconds).
+	constexpr float DrunkShare = 0.12f;
+	constexpr float DrunkFrom = 0.4f;
+	constexpr float DrunkPace = 0.6f;
+	constexpr double DrunkWeave = 35.0;
+	constexpr double SongNear = 1500.0;
+	constexpr float SongEveryLow = 40.f;
+	constexpr float SongEveryHigh = 80.f;
+	const FLine2 SongLines[] = {
+		{ TEXT("Csak egy kisl\u00e1ny van a vil\u00e1gon..."), TEXT("There's only one girl in the world...") },
+		{ TEXT("Az a sz\u00e9p, az a sz\u00e9p..."), TEXT("Oh how fair, oh how fair...") },
+		{ TEXT("Hukk... m\u00e9g egy f\u00e9lliter, kocsm\u00e1ros!"), TEXT("Hic... one more half-litre, landlord!") },
+	};
+	/** How late it is: 0 by day, 1 deep in the night. */
+	float LatenessAt(float Hour)
+	{
+		if (Hour >= LateFrom)
+		{
+			return FMath::Clamp((Hour - LateFrom) / (LateFull - LateFrom), 0.f, 1.f);
+		}
+		if (Hour < EarlyFrom)
+		{
+			return 1.f;
+		}
+		return FMath::Clamp(1.f - (Hour - EarlyFrom) / (EarlyFull - EarlyFrom), 0.f, 1.f);
+	}
+
 	const FLine2 WitnessLine = { TEXT("\u00daristen! Ment\u0151t! H\u00edvjanak ment\u0151t!"), TEXT("Good God! Call an ambulance!") };
 	// Crowds round trouble (APedestrians::Gather): how far off a passer-by
 	// notices it, how many of them stop (share), how many watch at most, how
@@ -427,6 +540,92 @@ void APedestrian::PlaceUmbrella(int32 HoldingArm, float Raised)
 	Umbrella->SetRelativeScale3D(FVector(Width, Width, 1.0));
 }
 
+void APedestrian::ShowBroom(bool bShow)
+{
+	if (!bShow)
+	{
+		if (Broom)
+		{
+			Broom->SetVisibility(false);
+		}
+		return;
+	}
+	if (!Broom)
+	{
+		Broom = NewObject<UProceduralMeshComponent>(this);
+		Broom->SetupAttachment(Capsule);
+		Broom->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Broom->SetCanEverAffectNavigation(false);
+		// It moves with him all the time: kept out of the ray-traced lighting and the distance fields.
+		Broom->bVisibleInRayTracing = false;
+		Broom->bAffectDistanceFieldLighting = false;
+		PersonKit::FPiece Shape;
+		SweeperModel::Broom(Shape);
+		for (int32 s = 0; s < Shape.Sections.Num(); ++s)
+		{
+			const PersonKit::FSection& Section = Shape.Sections[s];
+			Broom->CreateMeshSection_LinearColor(s, Section.Vertices, Section.Triangles, Section.Normals,
+				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+			if (BaseMaterial)
+			{
+				UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+				Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+				Broom->SetMaterial(s, Paint);
+			}
+		}
+		Broom->RegisterComponent();
+		AddInstanceComponent(Broom);
+	}
+	Broom->SetVisibility(true);
+}
+
+void APedestrian::CarryBroom(bool bSweeping, float Seconds)
+{
+	ShowBroom(true);
+	// The grip stands this high over his middle so the twigs just reach the ground.
+	const double GripUp = SweeperModel::HandleBelow + SweeperModel::TwigLength - 90.0;
+	if (bSweeping)
+	{
+		// Both hands forward and low on the handle, the twigs swept from side to side ahead of him.
+		const float Swing = 28.f * FMath::Sin(Seconds * 4.5f);
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+			{
+				Part->SetRelativeRotation(FRotator(38.f, 0.f, (i == 0 ? -6.f : 6.f) + Swing * 0.4f));
+			}
+		}
+		PersonModel::PoseElbows(Pieces, 35.f, 35.f);
+		Broom->SetRelativeLocationAndRotation(FVector(32.0, 0.0, -2.0), FRotator(28.f, Swing, 0.f));
+	}
+	else
+	{
+		// Walking: upright in the right hand like a staff, the twigs by his foot.
+		if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+		{
+			Part->SetRelativeRotation(FRotator(30.f, 0.f, -8.f));
+		}
+		PersonModel::PoseElbows(Pieces, 0.f, 55.f);
+		Broom->SetRelativeLocationAndRotation(FVector(14.0, 27.0, GripUp + 6.0), FRotator(4.f, 0.f, 6.f));
+	}
+	// Unfold puts the elbows straight again once he walks on without it.
+	bArmsFolded = true;
+}
+
+void APedestrian::CarryInArms()
+{
+	ShowBroom(false);
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+		{
+			Part->SetRelativeRotation(FRotator(45.f, 0.f, i == 0 ? -6.f : 6.f));
+		}
+	}
+	PersonModel::PoseElbows(Pieces, 40.f, 40.f);
+	bArmsFolded = true;
+}
+
 void APedestrian::DropUmbrella()
 {
 	if (UmbrellaOpen <= 0.f && (!Umbrella || !Umbrella->IsVisible()) && !bFurledInUse)
@@ -512,6 +711,92 @@ void APedestrian::Huddle(const FVector& Location, double Yaw)
 		}
 	}
 	bArmsFolded = true;
+}
+
+void APedestrian::PhoneAt(const FVector& Location, double Yaw, bool bCranking, float Seconds)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	const float Crank = bCranking ? 10.f * FMath::Sin(Seconds * 14.f) : 0.f;
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(35.f + Crank * 0.5f, 0.f, 0.f));
+	}
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(30.f, 0.f, 35.f));
+	}
+	PersonModel::PoseElbows(Pieces, 145.f, 55.f + Crank);
+}
+
+void APedestrian::ShakeFist(const FVector& Location, double Yaw, float Seconds)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	const float Shake = 12.f * FMath::Sin(Seconds * 16.f);
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(150.f + Shake, 0.f, 0.f));
+	}
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(5.f, 0.f, 0.f));
+	}
+	PersonModel::PoseElbows(Pieces, 0.f, 60.f + Shake);
+}
+
+void APedestrian::TipHat(const FVector& Location, double Yaw, float Raise)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	if (Outfit.bWoman)
+	{
+		return;
+	}
+	// The right hand up to the brim.
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(125.f * Raise, 0.f, 20.f * Raise));
+	}
+	PersonModel::PoseElbows(Pieces, 0.f, 125.f * Raise);
+	// Unfold puts the elbow straight again once he walks on.
+	bArmsFolded = true;
+}
+
+void APedestrian::Wave(const FVector& Location, double Yaw, float Seconds)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	const float Up = FMath::Clamp(Seconds / 0.35f, 0.f, 1.f);
+	const float Swing = 18.f * FMath::Sin(Seconds * 9.f) * Up;
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(170.f * Up, 0.f, -15.f * Up - Swing));
+	}
+	PersonModel::PoseElbows(Pieces, 0.f, 25.f * Up);
+	bArmsFolded = true;
+}
+
+void APedestrian::FistsUp(const FVector& Location, double Yaw, float Seconds)
+{
+	// Squared up: a little crouched, weight shifting, fists before his face.
+	const float Bob = FMath::Sin(Seconds * 4.f);
+	Hold(Location + FVector(0.0, 0.0, -3.0 + 1.5 * Bob), FRotator(-4.0, Yaw, 0.0), 10.f, -12.f, 0.f);
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(70.f + 4.f * Bob, 0.f, -12.f));
+	}
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(80.f - 4.f * Bob, 0.f, 12.f));
+	}
+	PersonModel::PoseElbows(Pieces, 100.f, 105.f);
+	bArmsFolded = true;
+}
+
+void APedestrian::Sway(double Yaw, float Roll, float Pitch, float ArmOut)
+{
+	SetActorRotation(FRotator(Pitch, Yaw, Roll));
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(35.f * ArmOut, 0.f, 40.f * ArmOut));
+	}
 }
 
 void APedestrian::Unfold()
@@ -847,7 +1132,8 @@ void APedestrians::PickAFight(APawn* Player)
 	{
 		const FWalker& Walker = Walkers[i];
 		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Stumble
-			|| Walker.React == EReact::Point || Walker.React == EReact::Flee;
+			|| Walker.React == EReact::Point || Walker.React == EReact::Flee || Walker.React == EReact::Respect
+			|| Walker.React == EReact::Wave || Walker.React == EReact::Challenge || Walker.React == EReact::Backing;
 		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree
 			|| FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) > Pedestrians::AskHeight)
 		{
@@ -875,6 +1161,16 @@ void APedestrians::PickAFight(APawn* Player)
 		return;
 	}
 	LeaveGawk(Walker);
+	// The tough who picked on him: he fights back, and beating him is to the player's credit.
+	if (Walker.React == EReact::Challenge)
+	{
+		Fights->SetChallenger();
+		EndChallenge(false);
+	}
+	else if (Walker.React == EReact::Backing && bChallenge)
+	{
+		EndChallenge(false);
+	}
 	// The pickpocket: beaten, he hands the wallet back.
 	if (Walker.Stolen > 0)
 	{
@@ -1036,7 +1332,8 @@ void APedestrians::ClearReact(FWalker& Walker)
 
 void APedestrians::ReactToPlayer(FWalker& Walker, double Now)
 {
-	if (Walker.React == EReact::Down || Walker.React == EReact::GetUp || Walker.React == EReact::Dead)
+	if (Walker.React == EReact::Down || Walker.React == EReact::GetUp || Walker.React == EReact::Dead
+		|| Walker.React == EReact::Challenge || Walker.React == EReact::Backing)
 	{
 		return;
 	}
@@ -1154,6 +1451,236 @@ void APedestrians::ReactToPlayer(FWalker& Walker, double Now)
 		const FVector2D Right(-Going.Y, Going.X);
 		const double Side = FVector2D::DotProduct(Offset, Right) >= 0.0 ? 1.0 : -1.0;
 		StartReact(Walker, EReact::Aside, 0.8f, Right * (Side * 170.0));
+		return;
+	}
+
+	// His street name: those who keep to a spot wave to someone known in the district...
+	if (Walker.bStander)
+	{
+		if (!Walker.bSeated && Walker.React == EReact::None && Distance < Pedestrians::WaveNear && Now >= Walker.NextWave)
+		{
+			Walker.NextWave = Now + Pedestrians::WaveEvery;
+			if (PlayerRank() >= Pedestrians::WaveRank && Random.FRand() < Pedestrians::WaveChance)
+			{
+				StartReact(Walker, EReact::Wave, Pedestrians::WaveSeconds, FVector2D::ZeroVector);
+				const Pedestrians::FLine2& Line = Pedestrians::WaveLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::WaveLines)) - 1)];
+				Shout(Line.Hu, Line.En);
+			}
+		}
+		return;
+	}
+	// ...and the one just ahead of him on the pavement touches his hat (stepping aside for a man of
+	// standing), or, while he is nobody, may brush past his shoulder and grumble.
+	if (Walker.bSeated || Walker.React != EReact::None || Speed < Pedestrians::RespectSlowest || Speed > Pedestrians::RunningSpeed
+		|| Distance > Pedestrians::RespectNear || FVector2D::DotProduct(Offset, Going) < 0.5 * Distance)
+	{
+		return;
+	}
+	const int32 Rank = PlayerRank();
+	if (Rank >= Pedestrians::RespectRank)
+	{
+		if (Now < NextRespect)
+		{
+			return;
+		}
+		NextRespect = Now + Random.FRandRange(Pedestrians::RespectEveryLow, Pedestrians::RespectEveryHigh);
+		if (Random.FRand() < Pedestrians::RespectChance)
+		{
+			const FVector2D Right(-Going.Y, Going.X);
+			const double Side = FVector2D::DotProduct(Offset, Right) >= 0.0 ? 1.0 : -1.0;
+			const FVector2D Step = Rank >= Pedestrians::StepAsideRank ? Right * (Side * Pedestrians::RespectStep) : FVector2D::ZeroVector;
+			StartReact(Walker, EReact::Respect, Pedestrians::RespectSeconds, Step);
+			if (Random.FRand() < 0.5f)
+			{
+				const Pedestrians::FLine2& Line = Pedestrians::RespectLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::RespectLines)) - 1)];
+				Shout(Line.Hu, Line.En);
+			}
+		}
+	}
+	else if (Distance < Pedestrians::BrushNear && Now >= NextBump)
+	{
+		NextBump = Now + Random.FRandRange(Pedestrians::BrushEveryLow, Pedestrians::BrushEveryHigh);
+		if (Random.FRand() < Pedestrians::BrushChance)
+		{
+			StartReact(Walker, EReact::Stumble, 0.6f, Offset.GetSafeNormal() * 90.0);
+			const Pedestrians::FLine2& Line = Pedestrians::BrushLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::BrushLines)) - 1)];
+			Shout(Line.Hu, Line.En);
+		}
+	}
+}
+
+void APedestrians::TickGossip(double Now, bool bPlayerAbout)
+{
+	if (NextGossip <= 0.0)
+	{
+		NextGossip = Now + Random.FRandRange(Pedestrians::GossipEveryLow, Pedestrians::GossipEveryHigh);
+		return;
+	}
+	if (!bPlayerAbout || bPlayerDriving || Now < NextGossip)
+	{
+		return;
+	}
+	NextGossip = Now + Random.FRandRange(Pedestrians::GossipEveryLow, Pedestrians::GossipEveryHigh);
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Game || !Hud || Hud->IsSaying() || Random.FRand() >= Pedestrians::GossipChance)
+	{
+		return;
+	}
+	// Two walkers near him, close to each other: one tells the other.
+	const FVector2D Here(PlayerAt);
+	int32 Teller = INDEX_NONE;
+	for (int32 i = 0; i < Walkers.Num() && Teller == INDEX_NONE; ++i)
+	{
+		const FWalker& One = Walkers[i];
+		if (!IsValid(One.Person) || !One.bPlaced || One.bIndoors || One.React != EReact::None || One.bStander
+			|| FVector2D::Distance(One.Shown, Here) > Pedestrians::GossipNear)
+		{
+			continue;
+		}
+		for (int32 j = 0; j < Walkers.Num(); ++j)
+		{
+			const FWalker& Other = Walkers[j];
+			if (j != i && IsValid(Other.Person) && Other.bPlaced && !Other.bIndoors && Other.React == EReact::None
+				&& FVector2D::Distance(Other.Shown, One.Shown) < Pedestrians::GossipPair)
+			{
+				Teller = i;
+				break;
+			}
+		}
+	}
+	FString Hu;
+	FString En;
+	if (Teller == INDEX_NONE || !Game->PickGossip(Random, Hu, En))
+	{
+		return;
+	}
+	Hud->Say(TEXT("J\u00e1r\u00f3kel\u0151"), Hu, En, 4.f);
+	LastShout = Now;
+}
+
+int32 APedestrians::PlayerRank() const
+{
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	return Game ? Game->GetRenownRank() : 0;
+}
+
+void APedestrians::EndChallenge(bool bJeer)
+{
+	for (FWalker& Walker : Walkers)
+	{
+		if (Walker.React == EReact::Challenge || Walker.React == EReact::Backing)
+		{
+			StartReact(Walker, EReact::None, 0.f, FVector2D::ZeroVector);
+			Walker.bSquared = false;
+			Walker.GawkOffset = FVector2D::ZeroVector;
+		}
+	}
+	bChallenge = false;
+	if (bJeer)
+	{
+		if (APestiHUD* Hud = APestiHUD::Get(this))
+		{
+			const Pedestrians::FLine2& Line = Pedestrians::JeerLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::JeerLines)) - 1)];
+			Hud->Say(Pedestrians::ToughName, Line.Hu, Line.En, 3.f);
+		}
+	}
+}
+
+void APedestrians::TickChallenge(double Now, bool bPlayerAbout)
+{
+	const APestiPerson* Hero = Cast<APestiPerson>(LastPlayer.Get());
+	const bool bOnFootFree = bPlayerAbout && Hero && !bPlayerDriving && !Hero->IsRiding() && Hero->GetAct() == Brawl::EAct::None && !Hero->IsFighting();
+	if (bChallenge)
+	{
+		const FWalker* Tough = nullptr;
+		for (const FWalker& Walker : Walkers)
+		{
+			if (Walker.React == EReact::Challenge && IsValid(Walker.Person))
+			{
+				Tough = &Walker;
+				break;
+			}
+		}
+		if (!Tough)
+		{
+			EndChallenge(false);
+			return;
+		}
+		// Off he goes if the player walks away, drives off, or just stands there and lets him talk.
+		const bool bGone = !bPlayerAbout || bPlayerDriving || FVector2D::Distance(FVector2D(PlayerAt), Tough->Shown) > Pedestrians::ChallengeGiveUp;
+		const bool bTired = Tough->bSquared ? Tough->ReactTime > Pedestrians::ChallengeWait : Tough->ReactTime > Pedestrians::ChallengeApproach;
+		if (bGone || bTired)
+		{
+			EndChallenge(true);
+		}
+		return;
+	}
+
+	if (NextChallenge < 0.0)
+	{
+		NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeFirstLow, Pedestrians::ChallengeFirstHigh);
+		return;
+	}
+	if (Now < NextChallenge || !bOnFootFree)
+	{
+		return;
+	}
+	NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeEveryLow, Pedestrians::ChallengeEveryHigh);
+	// Less likely the better his name; never at the top.
+	const int32 Rank = PlayerRank();
+	const float Share = 1.f - static_cast<float>(Rank) / static_cast<float>(FMath::Max(1, StreetName::NumRanks - 1));
+	// Toughs are bolder after dark.
+	if (Random.FRand() >= Pedestrians::ChallengeChance * Share * (1.f + Pedestrians::ChallengeLate * Lateness))
+	{
+		return;
+	}
+
+	// A man walking near him (not keeping to a spot, not busy with anything).
+	auto IsFreeMan = [](const FWalker& Walker)
+	{
+		return IsValid(Walker.Person) && Walker.bPlaced && Walker.React == EReact::None && !Walker.bStander && !Walker.bSeated
+			&& !Walker.bIndoors && Walker.Shelter == INDEX_NONE && Walker.Gawk == INDEX_NONE && Walker.Stolen == 0
+			&& !Walker.Person->GetOutfit().bWoman;
+	};
+	int32 Picked = INDEX_NONE;
+	double Nearest = FMath::Square(Pedestrians::ChallengeFromFar);
+	for (int32 i = 0; i < Walkers.Num(); ++i)
+	{
+		const FWalker& Walker = Walkers[i];
+		const double Gap = FVector2D::DistSquared(Walker.Shown, FVector2D(PlayerAt));
+		if (IsFreeMan(Walker) && Gap < Nearest && Gap > FMath::Square(Pedestrians::ChallengeFromNear)
+			&& FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) < Pedestrians::AskHeight)
+		{
+			Nearest = Gap;
+			Picked = i;
+		}
+	}
+	if (Picked == INDEX_NONE)
+	{
+		return;
+	}
+	FWalker& Tough = Walkers[Picked];
+	StartReact(Tough, EReact::Challenge, 1000.f, FVector2D::ZeroVector);
+	Tough.bSquared = false;
+	ChallengerAt = Tough.Shown;
+	bChallenge = true;
+
+	// A mate or two come and stand behind him, arms folded.
+	const FVector2D Back = (Tough.Shown - FVector2D(PlayerAt)).GetSafeNormal();
+	int32 Mates = 0;
+	for (FWalker& Walker : Walkers)
+	{
+		if (Mates >= Pedestrians::MaxMates)
+		{
+			break;
+		}
+		if (&Walker != &Tough && IsFreeMan(Walker) && FVector2D::Distance(Walker.Shown, Tough.Shown) < Pedestrians::MatesNear)
+		{
+			StartReact(Walker, EReact::Backing, 1000.f, FVector2D::ZeroVector);
+			Walker.GawkOffset = Back.GetRotated(Mates == 0 ? 35.0 : -35.0) * Pedestrians::MatesBehind;
+			++Mates;
+		}
 	}
 }
 
@@ -1184,6 +1711,7 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
 		Game->AddRenown(bKilled ? StreetName::ForRunningOver : StreetName::ForKnockingDown, TEXT("elg\u00e1zolt valakit"), TEXT("ran someone down"));
+		Game->NoteDeed(StreetName::EDeed::RunOver, FVector(Walker.Shown, Walker.GroundZ));
 	}
 
 	// A police car or a constable close by sees it.
@@ -1193,6 +1721,11 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 		{
 			Game->ReportCrime(bKilled ? 2 : 1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, PlayerAt, bKilled ? 2 : 1);
 	}
 
 	if (bKilled)
@@ -1348,6 +1881,88 @@ bool APedestrians::PoseReacting(FWalker& Walker, float DeltaSeconds)
 		}
 		return true;
 	}
+	case EReact::Respect:
+	case EReact::Wave:
+	{
+		// Turned to the player: a hand to the hat (after a step aside), or a wave.
+		Walker.Shove *= FMath::Max(0.0, 1.0 - 4.0 * DeltaSeconds);
+		const FVector2D ToPlayer = FVector2D(PlayerAt) - Walker.Shown;
+		const float Facing = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToPlayer.Y, ToPlayer.X)));
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, 360.f * DeltaSeconds);
+		if (Walker.React == EReact::Wave)
+		{
+			Person->Wave(Location, Walker.ShownYaw, Walker.ReactTime);
+		}
+		else
+		{
+			Person->TipHat(Location, Walker.ShownYaw, FMath::Clamp(FMath::Min(Walker.ReactTime, Walker.ReactLeft) / 0.4f, 0.f, 1.f));
+		}
+		if (Walker.ReactLeft <= 0.f)
+		{
+			StartReact(Walker, EReact::None, 0.f, FVector2D::ZeroVector);
+		}
+		return true;
+	}
+	case EReact::Challenge:
+	{
+		// Walks over to stand in his way, then squares up and waits for him.
+		const FVector2D ToPlayer = FVector2D(PlayerAt) - Walker.Shown;
+		const double Gap = ToPlayer.Size();
+		const FVector2D Toward = Gap > 1.0 ? ToPlayer / Gap : FVector2D(1.0, 0.0);
+		const float Facing = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(Toward.Y, Toward.X)));
+		Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, 540.f * DeltaSeconds);
+		if (!Walker.bSquared)
+		{
+			if (Gap > Pedestrians::ChallengeStand)
+			{
+				Walker.Shown += Toward * FMath::Min(static_cast<double>(Pedestrians::ChallengeWalk * DeltaSeconds), Gap - Pedestrians::ChallengeStand);
+			}
+			Person->WalkTo(FVector(Walker.Shown, Standing), Walker.ShownYaw, Pedestrians::ChallengeWalk, DeltaSeconds);
+			if (Gap <= Pedestrians::ChallengeStand + 15.0)
+			{
+				Walker.bSquared = true;
+				Walker.ReactTime = 0.f;
+				if (APestiHUD* Hud = APestiHUD::Get(this))
+				{
+					const Pedestrians::FLine2& Line = Pedestrians::ChallengeLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::ChallengeLines)) - 1)];
+					Hud->Say(Pedestrians::ToughName, Line.Hu, Line.En, 4.f);
+				}
+			}
+		}
+		else
+		{
+			// Keeps in his way if he steps back a little.
+			if (Gap > Pedestrians::ChallengeStand + 60.0)
+			{
+				Walker.Shown += Toward * FMath::Min(static_cast<double>(Pedestrians::ChallengeWalk * 0.6f * DeltaSeconds), Gap - Pedestrians::ChallengeStand);
+			}
+			Person->FistsUp(FVector(Walker.Shown, Standing), Walker.ShownYaw, Walker.ReactTime);
+		}
+		ChallengerAt = Walker.Shown;
+		return true;
+	}
+	case EReact::Backing:
+	{
+		// His mates: over to stand behind him, arms folded, watching.
+		const FVector2D Spot = ChallengerAt + Walker.GawkOffset;
+		const FVector2D ToSpot = Spot - Walker.Shown;
+		const double Gap = ToSpot.Size();
+		if (Gap > 20.0)
+		{
+			Walker.Shown += ToSpot / Gap * FMath::Min(static_cast<double>(160.f * DeltaSeconds), Gap);
+			const float Going = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToSpot.Y, ToSpot.X)));
+			Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Going, 540.f * DeltaSeconds);
+			Person->WalkTo(FVector(Walker.Shown, Standing), Walker.ShownYaw, 160.f, DeltaSeconds);
+		}
+		else
+		{
+			const FVector2D ToPlayer = FVector2D(PlayerAt) - Walker.Shown;
+			const float Facing = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToPlayer.Y, ToPlayer.X)));
+			Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, 360.f * DeltaSeconds);
+			Person->Huddle(FVector(Walker.Shown, Standing), Walker.ShownYaw);
+		}
+		return true;
+	}
 	case EReact::GetUp:
 	{
 		// Sits up, crouches, and stands.
@@ -1405,6 +2020,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		Walker.UmbrellaColor = UmbrellaModel::ClothColor(Random.FRand(), Dressed.bWoman);
 		Walker.UmbrellaPatience = Random.FRand();
 		Walker.RainShy = Random.FRand();
+		Walker.bTipsy = !Dressed.bWoman && Random.FRand() < Pedestrians::DrunkShare;
 		Walker.ShelterClock = Random.FRand() * Pedestrians::ShelterLook;
 		Walker.Nosy = Random.FRand();
 		Walker.GawkClock = Random.FRand() * Pedestrians::GawkLook;
@@ -1432,11 +2048,16 @@ void APedestrians::Tick(float DeltaSeconds)
 		AskTheWay(Player, Now);
 		PickAFight(Player);
 	}
+	TickChallenge(Now, bPlayerAbout);
+	TickGossip(Now, bPlayerAbout);
 
 	GatherMovers(Camera);
 
 	const AWeather* Sky = AWeather::Get(GetWorld());
 	const float RainNow = Sky ? Sky->GetRain() : 0.f;
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	Lateness = Clock ? Pedestrians::LatenessAt(Clock->GetHour()) : 0.f;
+	Dark = Clock ? Clock->GetDarkness() : 0.f;
 	ComeBackLeft = Pedestrians::SpawnPerFrame;
 	TickGatherings(Now, bPlayerAbout);
 
@@ -1494,7 +2115,9 @@ void APedestrians::Tick(float DeltaSeconds)
 		Walker.Person->WantUmbrella(Walker.bHasUmbrella
 			&& RainNow > (bUmbrellaUp ? Pedestrians::UmbrellaUntil : Pedestrians::UmbrellaFrom + Pedestrians::UmbrellaSpread * Walker.UmbrellaPatience),
 			Walker.UmbrellaColor);
-		const float Hurry = bUmbrellaUp ? 1.f : 1.f + Pedestrians::RainHurry * RainNow;
+		const bool bDrunkNow = Walker.bTipsy && Lateness > Pedestrians::DrunkFrom && Walker.React == EReact::None && !Lines[Walker.Line].bCrossing;
+		const float Hurry = bDrunkNow ? Pedestrians::DrunkPace
+			: (bUmbrellaUp ? 1.f : 1.f + Pedestrians::RainHurry * RainNow) * (1.f + Pedestrians::LateHurry * Lateness);
 		// At a crossing: wait at the kerb while the road is busy, then go over
 		// briskly, running if something comes after all.
 		const bool bOnCrossing = Lines[Walker.Line].bCrossing;
@@ -1577,8 +2200,26 @@ void APedestrians::Tick(float DeltaSeconds)
 		if (!PoseReacting(Walker, DeltaSeconds))
 		{
 			const double Size = Walker.Person->GetActorScale3D().Z;
-			Walker.Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Pace, DeltaSeconds,
-				Walker.React == EReact::Flee || (bOnCrossing && Walker.bRushing) ? 1.f : 0.f);
+			if (bDrunkNow)
+			{
+				// Weaving along, leaning one way and then the other, an arm out.
+				const float Lurch = static_cast<float>(Now * 1.3 + Walker.Nosy * 20.0);
+				const FVector2D Across(-Heading.Y, Heading.X);
+				const FVector2D Weave = Across * (Pedestrians::DrunkWeave * FMath::Sin(Lurch * 0.6f));
+				Walker.Person->WalkTo(FVector(Walker.Shown + Weave, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Pace, DeltaSeconds);
+				Walker.Person->Sway(Walker.ShownYaw + 12.f * FMath::Cos(Lurch * 0.6f), 9.f * FMath::Sin(Lurch), -4.f, 0.6f + 0.4f * FMath::Sin(Lurch * 0.5f));
+				if (bPlayerAbout && Now >= NextSong && FVector2D::Distance(Walker.Shown, FVector2D(PlayerAt)) < Pedestrians::SongNear)
+				{
+					NextSong = Now + Random.FRandRange(Pedestrians::SongEveryLow, Pedestrians::SongEveryHigh);
+					const Pedestrians::FLine2& Song = Pedestrians::SongLines[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Pedestrians::SongLines)) - 1)];
+					Shout(Song.Hu, Song.En);
+				}
+			}
+			else
+			{
+				Walker.Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Pace, DeltaSeconds,
+					Walker.React == EReact::Flee || (bOnCrossing && Walker.bRushing) ? 1.f : 0.f);
+			}
 		}
 	}
 }
@@ -1588,7 +2229,9 @@ bool APedestrians::TickRain(FWalker& Walker, float RainNow, const FVector& Camer
 	APedestrian* Person = Walker.Person;
 
 	// Gone indoors out of a downpour: back out somewhere out of sight once it eases.
-	const bool bWantsIn = Walker.RainShy < Pedestrians::IndoorsShare * RainNow;
+	// Rain, or the late hour (the drunks are the last to go in).
+	const float LateIn = Walker.bTipsy ? 0.f : Pedestrians::LateIndoors * Lateness;
+	const bool bWantsIn = Walker.RainShy < FMath::Max(Pedestrians::IndoorsShare * RainNow, LateIn);
 	if (Walker.bIndoors)
 	{
 		if (bWantsIn || ComeBackLeft <= 0)
@@ -1718,8 +2361,12 @@ void APedestrians::AddGathering(const FVector& At, float Seconds, bool bFight)
 	Ring.Until = Now + Seconds;
 	Ring.bFight = bFight;
 	Ring.NextShout = Now + Random.FRandRange(1.f, Pedestrians::CrowdShoutMin);
-	// The nearest constables come to see what is going on.
-	APolicePatrols::Investigate(this, At);
+	// The square's pigeons go up, and the nearest constables come to see what is going on
+	// (from further off when the birds give it away).
+	if (!APigeons::Trouble(this, At))
+	{
+		APolicePatrols::Investigate(this, At);
+	}
 }
 
 APedestrians::FGathering* APedestrians::FindGathering(int32 Id)
@@ -1937,13 +2584,66 @@ void APedestrians::LeaveGawk(FWalker& Walker)
 	Walker.Gawk = INDEX_NONE;
 }
 
+bool APedestrians::TakeWitness(const UObject* WorldContextObject, const FVector& At, double Reach, double NotNear,
+	PersonKit::FOutfit& OutDress, FVector& OutGround, float& OutYaw)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	TActorIterator<APedestrians> It(World);
+	if (!It)
+	{
+		return false;
+	}
+	APedestrians* Street = *It;
+	int32 Picked = INDEX_NONE;
+	double Nearest = FMath::Square(Reach);
+	for (int32 i = 0; i < Street->Walkers.Num(); ++i)
+	{
+		const FWalker& Walker = Street->Walkers[i];
+		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Point || Walker.React == EReact::Flee;
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree || Walker.bStander || Walker.bSeated || Walker.Stolen > 0
+			|| Walker.Shelter != INDEX_NONE || FVector2D::Distance(Walker.Shown, FVector2D(Street->PlayerAt)) < NotNear)
+		{
+			continue;
+		}
+		const double Gap = FVector2D::DistSquared(Walker.Shown, FVector2D(At));
+		if (Gap < Nearest)
+		{
+			Nearest = Gap;
+			Picked = i;
+		}
+	}
+	if (Picked == INDEX_NONE)
+	{
+		return false;
+	}
+	FWalker& Walker = Street->Walkers[Picked];
+	OutDress = Walker.Person->GetOutfit();
+	OutDress.bSeated = false;
+	OutGround = FVector(Walker.Shown, Walker.GroundZ);
+	OutYaw = Walker.ShownYaw;
+	// Gone from the walkers: another comes along out of sight.
+	Street->LeaveGawk(Walker);
+	Street->LeaveShelter(Walker);
+	if (Walker.Blood)
+	{
+		Walker.Blood->DestroyComponent();
+	}
+	Walker.Person->Destroy();
+	Street->Walkers.RemoveAt(Picked);
+	return true;
+}
+
 double APedestrians::MiddleUp(const FWalker& Walker) const
 {
 	return Walker.bSeated ? Walker.SeatedUp : Pedestrians::Middle * Walker.Person->GetActorScale3D().Z;
 }
 
 void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
-	const FString& Who, const FString& Hu, const FString& En)
+	const FString& Who, const FString& Hu, const FString& En, bool bNightOnly, bool bNewsboy)
 {
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -1975,7 +2675,16 @@ void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw
 	Walker.CallWho = Who;
 	Walker.CallHu = Hu;
 	Walker.CallEn = En;
+	Walker.bNightOnly = bNightOnly;
+	Walker.bNewsboy = bNewsboy;
 	Person->PointTo(FVector(At, Ground + MiddleUp(Walker)), FaceYaw, 0.0, false);
+	if (bNightOnly)
+	{
+		// Out only after dark: TickStander brings him out once nobody is looking.
+		Walker.bIndoors = true;
+		Walker.bPlaced = false;
+		Person->SetInWorld(false);
+	}
 	Walkers.Add(Walker);
 	++NumStanders;
 }
@@ -1983,6 +2692,32 @@ void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw
 void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPlayerAbout, double Now, float DeltaSeconds)
 {
 	APedestrian* Person = Walker.Person;
+	if (Walker.bNightOnly)
+	{
+		// The gang at its gate: out after dark, in by day, coming and going while nobody sees.
+		const bool bOutTime = Dark > Pedestrians::GangOutDark;
+		if (Walker.bIndoors)
+		{
+			if (bOutTime && !Person->WasRecentlyRendered(Pedestrians::SeenWithin))
+			{
+				Walker.bIndoors = false;
+				Walker.bPlaced = true;
+				Walker.Shown = Walker.Home;
+				Walker.ShownYaw = Walker.HomeYaw;
+				Person->SetInWorld(true);
+				Person->Huddle(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.HomeYaw);
+			}
+			return;
+		}
+		if (!bOutTime && Walker.bPlaced && Walker.React == EReact::None && !Person->WasRecentlyRendered(Pedestrians::SeenWithin))
+		{
+			LeaveGawk(Walker);
+			Walker.bIndoors = true;
+			Walker.bPlaced = false;
+			Person->SetInWorld(false);
+			return;
+		}
+	}
 	if (!Walker.bPlaced)
 	{
 		// Handed over to a street fight: back on his spot, as he was, once the player is far off.
@@ -2048,7 +2783,19 @@ void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPla
 		const float Most = Walker.bSeated ? Pedestrians::SeatedLookAside : Pedestrians::StanderLookAside;
 		Facing = Walker.HomeYaw + FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(Toward - Walker.HomeYaw)), -Most, Most);
 		APestiHUD* Hud = APestiHUD::Get(this);
-		if (!Walker.CallHu.IsEmpty() && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
+		if (Walker.bNewsboy && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
+		{
+			// "Extra!": the morning paper's headline.
+			if (const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+			{
+				Hud->Say(Walker.CallWho, FString(TEXT("Friss \u00fajs\u00e1g! ")) + Game->GetHeadlineHu() + TEXT("!"),
+					FString(TEXT("Morning paper! ")) + Game->GetHeadlineEn() + TEXT("!"), 3.5f);
+				Walker.NextCall = Now + Random.FRandRange(Pedestrians::MinCallEvery, Pedestrians::MaxCallEvery);
+				Walker.WaveUntil = Now + Pedestrians::NewsboyWave;
+				LastShout = Now;
+			}
+		}
+		else if (!Walker.CallHu.IsEmpty() && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
 		{
 			Hud->Say(Walker.CallWho, Walker.CallHu, Walker.CallEn, 3.f);
 			Walker.NextCall = Now + Random.FRandRange(Pedestrians::MinCallEvery, Pedestrians::MaxCallEvery);
@@ -2056,5 +2803,16 @@ void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPla
 		}
 	}
 	Walker.ShownYaw = FMath::FixedTurn(Walker.ShownYaw, Facing, Pedestrians::StanderTurnRate * DeltaSeconds);
+	if (Walker.bNightOnly)
+	{
+		Person->Huddle(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw);
+		return;
+	}
+	if (Walker.bNewsboy && Now < Walker.WaveUntil)
+	{
+		Person->Wave(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw,
+			static_cast<float>(Pedestrians::NewsboyWave - (Walker.WaveUntil - Now)));
+		return;
+	}
 	Person->PointTo(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw, 0.0, false);
 }

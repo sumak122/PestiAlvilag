@@ -71,6 +71,12 @@ public:
 	/** The fight just begun is with a pickpocket carrying Filler pengő of the player's: he fights back, and gives it up when beaten. */
 	void SetLoot(int32 Filler);
 
+	/** The fight just begun is with a tough who picked on the player: he fights back, and beating him is good for the player's name. */
+	void SetChallenger();
+
+	/** The fight just begun is with someone who came after the player (a robbed owner): he fights back. */
+	void SetFightsBack();
+
 	/** True when a fight is going on (not beaten, not run off) within Radius of At. */
 	static bool IsFightNear(const UObject* WorldContextObject, const FVector& At, double Radius);
 
@@ -109,6 +115,8 @@ private:
 		bool bRanOff = false;
 		// Money the man took off the player (a pickpocket), handed back when he is beaten.
 		int32 Loot = 0;
+		// A tough who came up to pick a fight (APedestrians::TickChallenge).
+		bool bChallenger = false;
 		// When the street crowd round this fight is next called (s).
 		double NextGather = 0.0;
 		// A constable's fight: the man he really is (hidden meanwhile), and his fighter's last spot on the map.

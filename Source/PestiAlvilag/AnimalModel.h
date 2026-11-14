@@ -25,7 +25,7 @@ namespace AnimalModel
 
 	enum class EKind : uint8 { Lafi, Butyok, TabbyCat, BlackCat, GingerCat, Mutt, Puli, Count };
 
-	enum class EPose : uint8 { Stand, Walk, Run, Sit, Lie, Count };
+	enum class EPose : uint8 { Stand, Walk, Run, Sit, Lie, Lap, Count };
 
 	struct FAnimal
 	{
@@ -507,6 +507,22 @@ namespace AnimalModel
 			P.Parts[Head].Yaw = 8.0 * Swing;
 			P.Parts[Tail].Pitch = 15.0;
 			P.Parts[Tail].Yaw = 35.0;
+			break;
+		}
+		case EPose::Lap:
+		{
+			// Crouched over a puddle, lapping: front low, front legs splayed forward, hind legs folded, head down and bobbing.
+			P.BodyTurn.Pitch = -14.0;
+			P.Drop = 0.28 * F.Leg;
+			P.Parts[FrontLeft].Pitch = 38.0;
+			P.Parts[FrontRight].Pitch = 34.0;
+			P.Parts[FrontLeft].Yaw = 8.0;
+			P.Parts[FrontRight].Yaw = -8.0;
+			P.Parts[HindLeft].Pitch = 62.0;
+			P.Parts[HindRight].Pitch = 62.0;
+			P.Parts[Head].Pitch = -38.0 - 6.0 * FMath::Max(0.0, FMath::Sin(8.0 * PI * Phase));
+			P.Parts[Tail].Pitch = 20.0;
+			P.Parts[Tail].Yaw = 25.0 * Swing;
 			break;
 		}
 		default:

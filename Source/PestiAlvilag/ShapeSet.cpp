@@ -97,7 +97,7 @@ void AShapeSet::AddShapes(const TArray<MarketModel::FShape>& Shapes)
 	}
 }
 
-void AShapeSet::AddSign(const FString& Text, const FVector& At, double Yaw, double Height, const FLinearColor& Color)
+UTextRenderComponent* AShapeSet::AddSign(const FString& Text, const FVector& At, double Yaw, double Height, const FLinearColor& Color)
 {
 	UTextRenderComponent* Lettering = NewObject<UTextRenderComponent>(this, NAME_None, RF_Transient);
 	Lettering->SetupAttachment(RootComponent);
@@ -109,6 +109,7 @@ void AShapeSet::AddSign(const FString& Text, const FVector& At, double Yaw, doub
 	Lettering->SetTextRenderColor(Color.ToFColor(true));
 	Lettering->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Lettering->RegisterComponent();
+	return Lettering;
 }
 
 void AShapeSet::AddLamp(const FVector& At, float Radius)
