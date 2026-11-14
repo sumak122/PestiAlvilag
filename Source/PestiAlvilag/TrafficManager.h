@@ -103,6 +103,9 @@ public:
 	/** Today's name of the street a lane belongs to, or null if it has none. */
 	const FString* FindStreetName(int32 LaneIndex) const { return StreetNames.Find(Lanes[LaneIndex].Way); }
 
+	/** Today's name of the street nearest At (within Within cm), or empty. */
+	FString StreetNear(const FVector& At, double Within = 3000.0) const;
+
 	/** A random lane leaving the end of this one; U-turns only at dead ends. */
 	int32 PickNextLane(int32 LaneIndex) const;
 

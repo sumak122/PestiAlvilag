@@ -7,6 +7,7 @@
 #include "CityDetails.generated.h"
 
 class AShapeSet;
+class UTextRenderComponent;
 class FJsonObject;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
@@ -67,6 +68,8 @@ private:
 	void AddGateGang(const FVector2D& Foot, double GateYaw, double Width, double Ground, uint32 Seed);
 	void BuildAdverts(const FJsonObject& Root);
 	void BuildKiosks(const FJsonObject& Root);
+	/** A newsboy by a kiosk (APedestrians::AddStander bNewsboy): he calls out the morning paper's headline. */
+	void AddNewsboy(const FVector2D& KioskAt, double KioskYaw, double Ground, int32 Seed);
 	void BuildClocks(const FJsonObject& Root);
 	void ReadMapIcons(const FJsonObject& Root);
 	void BuildChurches(const FJsonObject& Root);
@@ -99,4 +102,11 @@ private:
 	TArray<FVector2D> IconSpots;
 	TArray<uint8> IconKinds;
 	bool bIconsSent = false;
+
+	/** The news boards' headline lines (three per board), and the edition they show. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextRenderComponent>> NewsLetters;
+	int32 ShownEdition = -1;
+	/** Puts the morning paper's headline on every news board. */
+	void UpdateNewsBoards();
 };

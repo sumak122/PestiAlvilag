@@ -140,6 +140,9 @@ namespace PestiStart
 	constexpr double BozsiGap = 120.0;
 	// A new rank is announced this long after it is reached (s).
 	constexpr double RankAnnounceDelay = 6.5;
+	// News and gossip: the deeds remembered, and the hour the morning paper comes out.
+	constexpr int32 DeedsKept = 12;
+	constexpr float PaperOutHour = 6.f;
 
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
@@ -690,6 +693,7 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 	UpdateBusted();
 	TickPlaceAtRing();
 	TickGreetings();
+	TickNews();
 
 	if (NextMissionAt > 0.0 && GetWorld()->GetTimeSeconds() >= NextMissionAt)
 	{
@@ -929,6 +933,7 @@ void APestiAlvilagGameModeBase::Busted()
 	}
 
 	// The fine and the name it gives him, then a night in the cells.
+	NoteDeed(StreetName::EDeed::Arrested, Player->GetActorLocation());
 	BustedStars = Stars;
 	BustedFine = FMath::Min(Money, PestiStart::FinePerStar * Stars);
 	AddMoney(-BustedFine);
@@ -1235,6 +1240,10 @@ void APestiAlvilagGameModeBase::AddBoxingWin()
 {
 	BoxingWins = FMath::Min(BoxingWins + 1, 5);
 	AddRenown(StreetName::ForBoxingWin, TEXT("gy\u0151zelem Bandi ringj\u00e9ben"), TEXT("won in Bandi's ring"));
+	if (const APawn* Boxer = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		NoteDeed(StreetName::EDeed::BoxingWin, Boxer->GetActorLocation());
+	}
 }
 
 int32 APestiAlvilagGameModeBase::GetRenownRank() const
@@ -1330,6 +1339,102 @@ void APestiAlvilagGameModeBase::ReadLetter(int32 Index)
 	AddMoney(Enclosed);
 	APestiHUD::Show(this, PestiStart::RenownNoteKey, 5.f, FColor(255, 210, 60),
 		FString::Printf(TEXT("+%s a bor\u00edt\u00e9kban  (+%s in the envelope)"), *FormatMoney(Enclosed), *FormatMoney(Enclosed)));
+}
+
+void APestiAlvilagGameModeBase::Deed(const UObject* WorldContextObject, StreetName::EDeed Kind, const FVector& At)
+{
+	if (APestiAlvilagGameModeBase* Game = Get(WorldContextObject))
+	{
+		Game->NoteDeed(Kind, At);
+	}
+}
+
+void APestiAlvilagGameModeBase::NoteDeed(StreetName::EDeed Kind, const FVector& At)
+{
+	FDeedNote Note;
+	Note.Kind = Kind;
+	Note.OnDay = DayCount;
+	TActorIterator<ATrafficManager> Roads(GetWorld());
+	if (Roads)
+	{
+		Note.Street = Roads->StreetNear(At);
+	}
+	Deeds.Add(Note);
+	if (Deeds.Num() > PestiStart::DeedsKept)
+	{
+		Deeds.RemoveAt(0);
+	}
+}
+
+void APestiAlvilagGameModeBase::TickNews()
+{
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	if (!Clock)
+	{
+		return;
+	}
+	const float Hour = Clock->GetHour();
+	const bool bFirst = LastHour < 0.f;
+	// Midnight: a new day.
+	if (!bFirst && Hour < LastHour)
+	{
+		++DayCount;
+	}
+	const bool bPaperOut = !bFirst && LastHour < PestiStart::PaperOutHour && Hour >= PestiStart::PaperOutHour;
+	LastHour = Hour;
+	if (!bFirst && !bPaperOut)
+	{
+		return;
+	}
+	// The morning paper: the biggest deed since the last one (yesterday's), or the ordinary news.
+	++Edition;
+	const FDeedNote* Biggest = nullptr;
+	for (const FDeedNote& Note : Deeds)
+	{
+		if (!bFirst && Note.OnDay >= DayCount - 1
+			&& (!Biggest || StreetName::DeedNews[static_cast<int32>(Note.Kind)].Weight >= StreetName::DeedNews[static_cast<int32>(Biggest->Kind)].Weight))
+		{
+			Biggest = &Note;
+		}
+	}
+	if (Biggest)
+	{
+		const StreetName::FDeedNews& News = StreetName::DeedNews[static_cast<int32>(Biggest->Kind)];
+		HeadlineHu = FString(News.HeadHu).Replace(TEXT("{HOL}"), *StreetName::InStreetHu(Biggest->Street).ToUpper());
+		HeadlineEn = FString(News.HeadEn).Replace(TEXT("{WHERE}"), *StreetName::OnStreetEn(Biggest->Street).ToUpper());
+	}
+	else
+	{
+		const StreetName::FLine& Quiet = StreetName::QuietHeadlines[(DayCount + Edition) % StreetName::NumQuietHeadlines];
+		HeadlineHu = Quiet.Hu;
+		HeadlineEn = Quiet.En;
+	}
+}
+
+bool APestiAlvilagGameModeBase::PickGossip(FRandomStream& Dice, FString& OutHu, FString& OutEn) const
+{
+	TArray<const FDeedNote*> Recent;
+	for (const FDeedNote& Note : Deeds)
+	{
+		if (Note.OnDay >= DayCount - 1)
+		{
+			Recent.Add(&Note);
+		}
+	}
+	if (Recent.Num() == 0)
+	{
+		return false;
+	}
+	const FDeedNote& Picked = *Recent[Dice.RandRange(0, Recent.Num() - 1)];
+	const StreetName::FDeedNews& News = StreetName::DeedNews[static_cast<int32>(Picked.Kind)];
+	const bool bToday = Picked.OnDay == DayCount;
+	OutHu = FString(News.GossipHu)
+		.Replace(TEXT("{MIKOR}"), bToday ? TEXT("Ma") : TEXT("Tegnap"))
+		.Replace(TEXT("{HOL}"), *StreetName::InStreetHu(Picked.Street));
+	OutEn = FString(News.GossipEn)
+		.Replace(TEXT("{WHEN}"), bToday ? TEXT("Today") : TEXT("Yesterday"))
+		.Replace(TEXT("{WHERE}"), *StreetName::OnStreetEn(Picked.Street));
+	return true;
 }
 
 void APestiAlvilagGameModeBase::TickGreetings()

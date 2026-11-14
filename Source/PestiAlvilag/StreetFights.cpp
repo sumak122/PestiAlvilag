@@ -505,6 +505,7 @@ void AStreetFights::Tick(float DeltaSeconds)
 					{
 						Game->ReportCrime(3);
 						Game->AddRenown(StreetName::ForBeatingPolice, TEXT("le\u00fct\u00f6tt egy rend\u0151rt"), TEXT("knocked down a policeman"));
+						Game->NoteDeed(StreetName::EDeed::ConstableBeaten, Man->GetActorLocation());
 					}
 				}
 				else if (Fight.Loot > 0)
@@ -530,6 +531,7 @@ void AStreetFights::Tick(float DeltaSeconds)
 					if (Game)
 					{
 						Game->AddRenown(StreetName::ForBeatingChallenger, TEXT("lerendezett egy k\u00f6teked\u0151t"), TEXT("saw off a tough who picked on him"));
+						Game->NoteDeed(StreetName::EDeed::ToughBeaten, Man->GetActorLocation());
 					}
 				}
 				else
@@ -538,6 +540,7 @@ void AStreetFights::Tick(float DeltaSeconds)
 					if (Game)
 					{
 						Game->AddRenown(StreetName::ForBeatingUp, TEXT("megvert egy j\u00e1r\u00f3kel\u0151t"), TEXT("beat up a passer-by"));
+						Game->NoteDeed(StreetName::EDeed::PasserbyBeaten, Man->GetActorLocation());
 					}
 				}
 			}

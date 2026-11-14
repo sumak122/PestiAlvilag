@@ -11,6 +11,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "DayNight.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -26,6 +27,7 @@
 #include "Pedestrians.h"
 #include "PersonKit.h"
 #include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "PestiHud.h"
 #include "SeminaryModel.h"
 #include "OtiModel.h"
@@ -478,6 +480,32 @@ void ACityDetails::BuildAdverts(const FJsonObject& Root)
 	}
 }
 
+void ACityDetails::AddNewsboy(const FVector2D& KioskAt, double KioskYaw, double Ground, int32 Seed)
+{
+	TActorIterator<APedestrians> Crowd(GetWorld());
+	if (!Crowd)
+	{
+		return;
+	}
+	FRandomStream Dice(Seed * 4243 + 17);
+	PersonKit::FOutfit Boy;
+	Boy.Height = Dice.FRandRange(132.f, 146.f);
+	Boy.Build = 0.9f;
+	const FLinearColor Coats[] = { FLinearColor(0.25f, 0.22f, 0.18f), FLinearColor(0.16f, 0.17f, 0.20f), FLinearColor(0.28f, 0.19f, 0.12f) };
+	Boy.Coat = Coats[Dice.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Coats)) - 1)];
+	Boy.Trousers = FLinearColor(0.08f, 0.07f, 0.07f);
+	Boy.Top = PersonKit::ETop::Jacket;
+	Boy.Hat = PersonKit::EHat::FlatCap;
+	Boy.HatColor = FLinearColor(0.12f, 0.10f, 0.08f);
+	Boy.bTie = false;
+	Boy.bMoustache = false;
+	Boy.Beard = PersonKit::EBeard::None;
+	// On the other side of the kiosk from the board, a step out towards the street.
+	const FRotator Turn(0.0, KioskYaw, 0.0);
+	const FVector At = FVector(KioskAt, 0.0) + Turn.RotateVector(FVector(60.0, -175.0, 0.0));
+	Crowd->AddStander(FVector2D(At), Ground, KioskYaw, Boy, 0.0, TEXT("\u00dajs\u00e1gos fi\u00fa"), FString(), FString(), false, true);
+}
+
 void ACityDetails::BuildKiosks(const FJsonObject& Root)
 {
 	using namespace CityDetailsModel;
@@ -486,6 +514,7 @@ void ACityDetails::BuildKiosks(const FJsonObject& Root)
 	{
 		return;
 	}
+	int32 KioskIndex = 0;
 	for (const TSharedPtr<FJsonValue>& KioskValue : *Kiosks)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& K = KioskValue->AsArray();
@@ -503,6 +532,32 @@ void ACityDetails::BuildKiosks(const FJsonObject& Root)
 		TArray<FLamp> Lights;
 		TArray<FSign> Lettering;
 		Kiosk(static_cast<int32>(K[3]->AsNumber()), Shapes, Lights, Lettering);
+		// The news board beside it, with the day's headline (UpdateNewsBoards).
+		{
+			TArray<FShape> BoardShapes;
+			NewsBoard(BoardShapes);
+			for (FShape& Part : BoardShapes)
+			{
+				Part.At += NewsBoardFromKiosk;
+			}
+			Shapes.Append(BoardShapes);
+			TArray<FString> Blank = { FString(), FString(), FString() };
+			TArray<FSign> BoardSigns;
+			NewsBoardLines(StreetName::NewsPaperName, Blank, BoardSigns);
+			for (int32 i = 0; i < BoardSigns.Num(); ++i)
+			{
+				UTextRenderComponent* Letters = Set->AddSign(BoardSigns[i].Text, BoardSigns[i].At + NewsBoardFromKiosk, BoardSigns[i].Yaw, BoardSigns[i].Height, BoardSigns[i].Color);
+				if (i > 0 && Letters)
+				{
+					NewsLetters.Add(Letters);
+				}
+			}
+		}
+		// Every other kiosk has a newsboy by it, calling out the headline.
+		if (KioskIndex++ % 2 == 0)
+		{
+			AddNewsboy(Spot, K[2]->AsNumber(), GroundAt(Spot), KioskIndex);
+		}
 		Set->AddShapes(Shapes);
 		for (const FLamp& Light : Lights)
 		{
@@ -1160,6 +1215,28 @@ void ACityDetails::SetHands(float Hour)
 	}
 }
 
+void ACityDetails::UpdateNewsBoards()
+{
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Game || NewsLetters.Num() == 0 || Game->GetEdition() == ShownEdition)
+	{
+		return;
+	}
+	ShownEdition = Game->GetEdition();
+	TArray<FString> Lines = StreetName::BoardLines(Game->GetHeadlineHu());
+	Lines.SetNum(3);
+	// Fewer lines sit in the middle of the board.
+	const int32 Skip = (3 - FMath::Min(3, StreetName::BoardLines(Game->GetHeadlineHu()).Num())) / 2;
+	for (int32 i = 0; i < NewsLetters.Num(); ++i)
+	{
+		const int32 Row = i % 3 - Skip;
+		if (UTextRenderComponent* Letters = NewsLetters[i])
+		{
+			Letters->SetText(FText::FromString(Lines.IsValidIndex(Row) ? Lines[Row] : FString()));
+		}
+	}
+}
+
 void ACityDetails::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1179,6 +1256,8 @@ void ACityDetails::Tick(float DeltaSeconds)
 			bIconsSent = true;
 		}
 	}
+
+	UpdateNewsBoards();
 
 	HandsCheckIn -= DeltaSeconds;
 	if (HandsCheckIn > 0.f || ClockSpots.Num() == 0 || !Hands)

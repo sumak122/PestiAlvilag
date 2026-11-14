@@ -450,6 +450,7 @@ void ATrafficBike::TakeRider(APawn* InRider)
 			Runner->SetOutfit(RiderLook);
 			Runner->RunFrom(Danger, true);
 		}
+		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::BikeStolen, Here);
 		if (APolicePatrols::Witnessed(this, Here, TrafficBikeRide::TheftSeen))
 		{
 			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))

@@ -14,6 +14,8 @@
 #include "LaciYardModel.h"
 #include "Mission.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiText.h"
@@ -699,6 +701,10 @@ void ANightRaces::Finish(int32 Place)
 	}
 	Game->MarkRaceWon(Race);
 	Game->AddRenown(StreetName::ForRaceWin, TEXT("\u00E9jszakai verseny megnyer\u00E9se"), TEXT("winning a night race"));
+	if (const APawn* Racer = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		Game->NoteDeed(StreetName::EDeed::RaceWin, Racer->GetActorLocation());
+	}
 	bool bAll = true;
 	for (int32 i = 0; i < NightRace::NumRaces; ++i)
 	{

@@ -1183,6 +1183,7 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
 		Game->AddRenown(bKilled ? StreetName::ForRunningOver : StreetName::ForKnockingDown, TEXT("elg\u00e1zolt valakit"), TEXT("ran someone down"));
+		Game->NoteDeed(StreetName::EDeed::RunOver, FVector(Who.At, 0.0));
 	}
 
 	// A police car or a constable close by sees it.

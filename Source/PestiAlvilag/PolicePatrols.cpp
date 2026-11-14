@@ -493,6 +493,7 @@ void APoliceBox::Smash(const FVector& At, const FVector& Away, bool bLean)
 	// Loud: a constable near enough hears it.
 	// The square's pigeons go up at the crash of glass.
 	APigeons::Trouble(this, Middle);
+	APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::BoxSmashed, Middle);
 	if (APolicePatrols::Witnessed(this, Middle, PoliceBox::SmashHeard))
 	{
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))

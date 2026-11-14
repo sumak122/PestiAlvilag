@@ -781,6 +781,10 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 		{
 			Game->ReportCrime(Rammed->IsA<APoliceCar>() ? 2 : 1);
+			if (Rammed->IsA<APoliceCar>())
+			{
+				Game->NoteDeed(StreetName::EDeed::PoliceRammed, Hit.ImpactPoint);
+			}
 		}
 	}
 

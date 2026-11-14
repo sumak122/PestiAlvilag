@@ -258,6 +258,15 @@ namespace Pedestrians
 	// LateIndoors of them, until EarlyFrom..EarlyFull in the morning; those still out walk a little faster.
 	// The courtyard gangs stand out at their gates once it is this dark.
 	constexpr float GangOutDark = 0.6f;
+	// A newsboy waves his paper this long as he calls out (s).
+	constexpr double NewsboyWave = 2.5;
+	// Gossip about the player's deeds: two passers-by within GossipNear of him, at most this often
+	// (s, the first a while after the start), with this chance each time.
+	constexpr double GossipNear = 900.0;
+	constexpr double GossipPair = 300.0;
+	constexpr float GossipEveryLow = 120.f;
+	constexpr float GossipEveryHigh = 240.f;
+	constexpr float GossipChance = 0.5f;
 	constexpr float LateFrom = 21.f;
 	constexpr float LateFull = 23.f;
 	constexpr float EarlyFrom = 4.f;
@@ -1413,6 +1422,56 @@ void APedestrians::ReactToPlayer(FWalker& Walker, double Now)
 	}
 }
 
+void APedestrians::TickGossip(double Now, bool bPlayerAbout)
+{
+	if (NextGossip <= 0.0)
+	{
+		NextGossip = Now + Random.FRandRange(Pedestrians::GossipEveryLow, Pedestrians::GossipEveryHigh);
+		return;
+	}
+	if (!bPlayerAbout || bPlayerDriving || Now < NextGossip)
+	{
+		return;
+	}
+	NextGossip = Now + Random.FRandRange(Pedestrians::GossipEveryLow, Pedestrians::GossipEveryHigh);
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	APestiHUD* Hud = APestiHUD::Get(this);
+	if (!Game || !Hud || Hud->IsSaying() || Random.FRand() >= Pedestrians::GossipChance)
+	{
+		return;
+	}
+	// Two walkers near him, close to each other: one tells the other.
+	const FVector2D Here(PlayerAt);
+	int32 Teller = INDEX_NONE;
+	for (int32 i = 0; i < Walkers.Num() && Teller == INDEX_NONE; ++i)
+	{
+		const FWalker& One = Walkers[i];
+		if (!IsValid(One.Person) || !One.bPlaced || One.bIndoors || One.React != EReact::None || One.bStander
+			|| FVector2D::Distance(One.Shown, Here) > Pedestrians::GossipNear)
+		{
+			continue;
+		}
+		for (int32 j = 0; j < Walkers.Num(); ++j)
+		{
+			const FWalker& Other = Walkers[j];
+			if (j != i && IsValid(Other.Person) && Other.bPlaced && !Other.bIndoors && Other.React == EReact::None
+				&& FVector2D::Distance(Other.Shown, One.Shown) < Pedestrians::GossipPair)
+			{
+				Teller = i;
+				break;
+			}
+		}
+	}
+	FString Hu;
+	FString En;
+	if (Teller == INDEX_NONE || !Game->PickGossip(Random, Hu, En))
+	{
+		return;
+	}
+	Hud->Say(TEXT("J\u00e1r\u00f3kel\u0151"), Hu, En, 4.f);
+	LastShout = Now;
+}
+
 int32 APedestrians::PlayerRank() const
 {
 	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
@@ -1565,6 +1624,7 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 	{
 		Game->AddRenown(bKilled ? StreetName::ForRunningOver : StreetName::ForKnockingDown, TEXT("elg\u00e1zolt valakit"), TEXT("ran someone down"));
+		Game->NoteDeed(StreetName::EDeed::RunOver, FVector(Walker.Shown, Walker.GroundZ));
 	}
 
 	// A police car or a constable close by sees it.
@@ -1902,6 +1962,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		PickAFight(Player);
 	}
 	TickChallenge(Now, bPlayerAbout);
+	TickGossip(Now, bPlayerAbout);
 
 	GatherMovers(Camera);
 
@@ -2495,7 +2556,7 @@ double APedestrians::MiddleUp(const FWalker& Walker) const
 }
 
 void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
-	const FString& Who, const FString& Hu, const FString& En, bool bNightOnly)
+	const FString& Who, const FString& Hu, const FString& En, bool bNightOnly, bool bNewsboy)
 {
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -2528,6 +2589,7 @@ void APedestrians::AddStander(const FVector2D& At, double Ground, double FaceYaw
 	Walker.CallHu = Hu;
 	Walker.CallEn = En;
 	Walker.bNightOnly = bNightOnly;
+	Walker.bNewsboy = bNewsboy;
 	Person->PointTo(FVector(At, Ground + MiddleUp(Walker)), FaceYaw, 0.0, false);
 	if (bNightOnly)
 	{
@@ -2634,7 +2696,19 @@ void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPla
 		const float Most = Walker.bSeated ? Pedestrians::SeatedLookAside : Pedestrians::StanderLookAside;
 		Facing = Walker.HomeYaw + FMath::Clamp(static_cast<float>(FRotator::NormalizeAxis(Toward - Walker.HomeYaw)), -Most, Most);
 		APestiHUD* Hud = APestiHUD::Get(this);
-		if (!Walker.CallHu.IsEmpty() && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
+		if (Walker.bNewsboy && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
+		{
+			// "Extra!": the morning paper's headline.
+			if (const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+			{
+				Hud->Say(Walker.CallWho, FString(TEXT("Friss \u00fajs\u00e1g! ")) + Game->GetHeadlineHu() + TEXT("!"),
+					FString(TEXT("Morning paper! ")) + Game->GetHeadlineEn() + TEXT("!"), 3.5f);
+				Walker.NextCall = Now + Random.FRandRange(Pedestrians::MinCallEvery, Pedestrians::MaxCallEvery);
+				Walker.WaveUntil = Now + Pedestrians::NewsboyWave;
+				LastShout = Now;
+			}
+		}
+		else if (!Walker.CallHu.IsEmpty() && Now >= Walker.NextCall && Hud && !Hud->IsSaying())
 		{
 			Hud->Say(Walker.CallWho, Walker.CallHu, Walker.CallEn, 3.f);
 			Walker.NextCall = Now + Random.FRandRange(Pedestrians::MinCallEvery, Pedestrians::MaxCallEvery);
@@ -2645,6 +2719,12 @@ void APedestrians::TickStander(FWalker& Walker, const FVector& Camera, bool bPla
 	if (Walker.bNightOnly)
 	{
 		Person->Huddle(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw);
+		return;
+	}
+	if (Walker.bNewsboy && Now < Walker.WaveUntil)
+	{
+		Person->Wave(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw,
+			static_cast<float>(Pedestrians::NewsboyWave - (Walker.WaveUntil - Now)));
 		return;
 	}
 	Person->PointTo(FVector(Walker.Home, Walker.GroundZ + MiddleUp(Walker)), Walker.ShownYaw, 0.0, false);

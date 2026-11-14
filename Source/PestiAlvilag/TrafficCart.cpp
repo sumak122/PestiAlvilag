@@ -533,6 +533,7 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 			Runner->RunFrom(Danger);
 		}
 		CallOut(TEXT("\u201eH\u00e9! A lovam! A kocsim! Tolvaj!\u201d   (Hey! My horse! My cart! Thief!)"));
+		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::CartStolen, Bench);
 		if (APolicePatrols::Witnessed(this, Bench, TrafficCartRide::TheftSeen))
 		{
 			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))

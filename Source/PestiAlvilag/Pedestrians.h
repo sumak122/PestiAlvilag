@@ -138,7 +138,7 @@ public:
 	 * when Hu is empty).
 	 */
 	void AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
-		const FString& Who, const FString& Hu, const FString& En, bool bNightOnly = false);
+		const FString& Who, const FString& Hu, const FString& En, bool bNightOnly = false, bool bNewsboy = false);
 
 	/**
 	 * Something worth a look happened at At (a street fight, a crash, a spilled
@@ -291,6 +291,9 @@ private:
 		bool bTipsy = false;
 		/** A stander only out after dark (a courtyard gang at its gate), arms folded; indoors (bIndoors) by day. */
 		bool bNightOnly = false;
+		/** A newsboy by a kiosk: he calls out the morning paper's headline, waving a paper while he does. */
+		bool bNewsboy = false;
+		double WaveUntil = 0.0;
 	};
 
 	bool LoadLines();
@@ -413,4 +416,8 @@ private:
 	float Dark = 0.f;
 	/** Not before this time does a drunk sing out again. */
 	double NextSong = 0.0;
+	/** Not before this time do two passers-by gossip about his deeds again. */
+	double NextGossip = 0.0;
+	/** Now and then two passers-by near him talk about something he did (GameMode::PickGossip). */
+	void TickGossip(double Now, bool bPlayerAbout);
 };
