@@ -64,6 +64,12 @@ public:
 	 */
 	void Huddle(const FVector& Location, double Yaw);
 
+	/** At a police telephone: the right hand on the crank (turning it while bCranking), the left hand at his ear. */
+	void PhoneAt(const FVector& Location, double Yaw, bool bCranking, float Seconds);
+
+	/** Standing, one fist raised and shaking (Seconds drives the shake). */
+	void ShakeFist(const FVector& Location, double Yaw, float Seconds);
+
 private:
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
@@ -130,6 +136,15 @@ public:
 	 * they cheer the fighters on.
 	 */
 	static void Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight);
+
+	/**
+	 * A passer-by walking within Reach of At, at least NotNear from the
+	 * player, is taken off the street to be someone else's (AWitnesses):
+	 * his clothes, where he stood on the ground and his facing. False when
+	 * nobody fits.
+	 */
+	static bool TakeWitness(const UObject* WorldContextObject, const FVector& At, double Reach, double NotNear,
+		PersonKit::FOutfit& OutDress, FVector& OutGround, float& OutYaw);
 
 	/** The furniture file with the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Pedestrians")

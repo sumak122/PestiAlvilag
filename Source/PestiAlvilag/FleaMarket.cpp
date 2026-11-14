@@ -34,6 +34,7 @@
 #include "PestiHud.h"
 #include "Weather.h"
 #include "Wreck.h"
+#include "Witnesses.h"
 
 namespace MarketBuild
 {
@@ -1180,6 +1181,11 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 			Game->ReportCrime(bKilled ? 2 : 1);
 		}
 	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, PlayerAt, bKilled ? 2 : 1);
+	}
 
 	if (bKilled)
 	{
@@ -1620,6 +1626,11 @@ void AFleaMarket::TickStalls(const FVector& Camera, float DeltaSeconds, double N
 						{
 							Game->ReportCrime(1);
 						}
+					}
+					else
+					{
+						// Nobody from the police saw it: now and then a passer-by runs to tell them.
+						AWitnesses::Report(this, FVector(Stall.Middle), 1);
 					}
 					break;
 				}

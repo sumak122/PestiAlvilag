@@ -37,6 +37,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "UmbrellaModel.h"
 #include "Weather.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPedestrians, Log, All);
 
@@ -512,6 +513,36 @@ void APedestrian::Huddle(const FVector& Location, double Yaw)
 		}
 	}
 	bArmsFolded = true;
+}
+
+void APedestrian::PhoneAt(const FVector& Location, double Yaw, bool bCranking, float Seconds)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	const float Crank = bCranking ? 10.f * FMath::Sin(Seconds * 14.f) : 0.f;
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(35.f + Crank * 0.5f, 0.f, 0.f));
+	}
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(30.f, 0.f, 35.f));
+	}
+	PersonModel::PoseElbows(Pieces, 145.f, 55.f + Crank);
+}
+
+void APedestrian::ShakeFist(const FVector& Location, double Yaw, float Seconds)
+{
+	Hold(Location, FRotator(0.0, Yaw, 0.0), 0.f, 0.f, 0.f);
+	const float Shake = 12.f * FMath::Sin(Seconds * 16.f);
+	if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+	{
+		Part->SetRelativeRotation(FRotator(150.f + Shake, 0.f, 0.f));
+	}
+	if (USceneComponent* Part = Limb(PersonKit::ArmLeft))
+	{
+		Part->SetRelativeRotation(FRotator(5.f, 0.f, 0.f));
+	}
+	PersonModel::PoseElbows(Pieces, 0.f, 60.f + Shake);
 }
 
 void APedestrian::Unfold()
@@ -1193,6 +1224,11 @@ void APedestrians::RunOver(FWalker& Walker, double Speed)
 		{
 			Game->ReportCrime(bKilled ? 2 : 1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, PlayerAt, bKilled ? 2 : 1);
 	}
 
 	if (bKilled)
@@ -1935,6 +1971,59 @@ void APedestrians::LeaveGawk(FWalker& Walker)
 		Ring->Watchers = FMath::Max(0, Ring->Watchers - 1);
 	}
 	Walker.Gawk = INDEX_NONE;
+}
+
+bool APedestrians::TakeWitness(const UObject* WorldContextObject, const FVector& At, double Reach, double NotNear,
+	PersonKit::FOutfit& OutDress, FVector& OutGround, float& OutYaw)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	TActorIterator<APedestrians> It(World);
+	if (!It)
+	{
+		return false;
+	}
+	APedestrians* Street = *It;
+	int32 Picked = INDEX_NONE;
+	double Nearest = FMath::Square(Reach);
+	for (int32 i = 0; i < Street->Walkers.Num(); ++i)
+	{
+		const FWalker& Walker = Street->Walkers[i];
+		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Point || Walker.React == EReact::Flee;
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree || Walker.bStander || Walker.bSeated || Walker.Stolen > 0
+			|| Walker.Shelter != INDEX_NONE || FVector2D::Distance(Walker.Shown, FVector2D(Street->PlayerAt)) < NotNear)
+		{
+			continue;
+		}
+		const double Gap = FVector2D::DistSquared(Walker.Shown, FVector2D(At));
+		if (Gap < Nearest)
+		{
+			Nearest = Gap;
+			Picked = i;
+		}
+	}
+	if (Picked == INDEX_NONE)
+	{
+		return false;
+	}
+	FWalker& Walker = Street->Walkers[Picked];
+	OutDress = Walker.Person->GetOutfit();
+	OutDress.bSeated = false;
+	OutGround = FVector(Walker.Shown, Walker.GroundZ);
+	OutYaw = Walker.ShownYaw;
+	// Gone from the walkers: another comes along out of sight.
+	Street->LeaveGawk(Walker);
+	Street->LeaveShelter(Walker);
+	if (Walker.Blood)
+	{
+		Walker.Blood->DestroyComponent();
+	}
+	Walker.Person->Destroy();
+	Street->Walkers.RemoveAt(Picked);
+	return true;
 }
 
 double APedestrians::MiddleUp(const FWalker& Walker) const

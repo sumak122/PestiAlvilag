@@ -13,6 +13,7 @@
 #include "PolicePatrols.h"
 #include "Ruffian.h"
 #include "StreetName.h"
+#include "Witnesses.h"
 
 namespace StreetFight
 {
@@ -144,6 +145,11 @@ bool AStreetFights::Begin(APestiPerson* Player, const PersonKit::FOutfit& Dress,
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Ground, 1);
 	}
 	return true;
 }

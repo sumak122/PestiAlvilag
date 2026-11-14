@@ -18,6 +18,7 @@
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "TrafficManager.h"
+#include "Witnesses.h"
 
 namespace TrafficCartRide
 {
@@ -498,6 +499,11 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 			{
 				Game->ReportCrime(1);
 			}
+		}
+		else
+		{
+			// Nobody from the police saw it: now and then a passer-by runs to tell them.
+			AWitnesses::Report(this, Bench, 1);
 		}
 
 		// Out of the traffic: an ordinary cart for the player, still loaded.

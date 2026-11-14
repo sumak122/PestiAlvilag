@@ -33,6 +33,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPolicePatrols, Log, All);
 
@@ -488,6 +489,11 @@ void APoliceBox::Smash(const FVector& At, const FVector& Away, bool bLean)
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Middle, 1);
 	}
 }
 

@@ -25,6 +25,7 @@
 #include "Weather.h"
 #include "PestiHud.h"
 #include "PestiMenu.h"
+#include "Witnesses.h"
 
 namespace PestiCar
 {
@@ -461,6 +462,11 @@ void APestiCar::BreakIn(bool bSmash)
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Window, 1);
 	}
 }
 
