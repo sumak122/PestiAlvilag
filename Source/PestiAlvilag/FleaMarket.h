@@ -199,6 +199,9 @@ private:
 		/** A shopper goes home in the rain (hidden) if it rains harder than this share of his, and is gone now. */
 		float RainShy = 1.f;
 		bool bRainedOff = false;
+		/** Pista bácsi and Bözsi néni: they go home for the night like the sellers, and are home now. */
+		bool bGoesHomeAtNight = false;
+		bool bHomeForNight = false;
 	};
 
 	/** Moves and poses everyone near the camera, and has them react to the player. */
