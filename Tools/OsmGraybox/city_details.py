@@ -608,6 +608,12 @@ SEMINARY_ID = "w256568273"
 SEMINARY_EDGES = [23, 24, 25, 26, 27, 28, 29, 30, 0, 1, 2, 3, 4]
 SEMINARY_MAIN = 29
 
+# The OTI palace on Fiumei út (map: "Nyugdíjbiztosítási Székház"): its street walls,
+# the long Fiumei út front (edge 3) gets the wings, the gate and the tower.
+OTI_ID = "r3331750"
+OTI_EDGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 23, 24]
+OTI_MAIN = 3
+
 # A later little block in Rózsák tere's garden (not there in 1932).
 ROZSAK_LATER = ["w374844687"]
 CEMETERY_LATER = ["w526250716", "w526250726"]
@@ -731,17 +737,27 @@ def new_york(data):
 def seminary(data):
     """The seminary's runs: [main, x, y, yaw, length], each from its start at
     the foot, yaw out of the wall, the wall along the frame's Y."""
-    building = next(b for b in data["buildings"] if b["id"] == SEMINARY_ID)
+    return dressed_runs(data, SEMINARY_ID, SEMINARY_EDGES, SEMINARY_MAIN)
+
+
+def oti(data):
+    """The OTI palace's runs, as the seminary's."""
+    return dressed_runs(data, OTI_ID, OTI_EDGES, OTI_MAIN)
+
+
+def dressed_runs(data, building_id, edges, main):
+    """[main, x, y, yaw, length] for the given edges of a block's outer ring."""
+    building = next(b for b in data["buildings"] if b["id"] == building_id)
     ring = ring_points(building["rings"][0])
     shape = Polygon(ring)
     runs = []
-    for i in SEMINARY_EDGES:
+    for i in edges:
         a, z = ring[i], ring[(i + 1) % len(ring)]
         ax, ay = unit(z[0] - a[0], z[1] - a[1])
         ox, oy = ay, -ax
         mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
         assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), i
-        runs.append([1 if i == SEMINARY_MAIN else 0, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
+        runs.append([1 if i == main else 0, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
     return runs
 
 
@@ -1095,7 +1111,7 @@ def main():
     clocks = place_clocks(space, spots)
     place_square_kiosks(space, f, spots, kiosks)
     fronts = facade_buildings(data, replaced)
-    folk = place_window_folk(fronts)
+    folk = place_window_folk([b for b in fronts if b.get("id") not in (SEMINARY_ID, OTI_ID)])
     troughs = place_troughs(space, f, spots)
     hydrants = place_hydrants(space, f, spots)
     hatches = place_hatches(space, fronts, f, spots, {CORVIN_ID})
@@ -1114,6 +1130,7 @@ def main():
         "city_theatre": theatre_front,
         "cemetery": cemetery,
         "seminary": seminary(data),
+        "oti": oti(data),
         "areas": extra_areas,
         "window_folk": folk,
         "hydrants": hydrants,
