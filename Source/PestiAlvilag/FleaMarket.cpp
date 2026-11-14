@@ -15,6 +15,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Mission.h"
 #include "GameFramework/Pawn.h"
 #include "GroundSurfaces.h"
 #include "GameFramework/PlayerController.h"
@@ -902,6 +903,7 @@ AMarketPerson* AFleaMarket::SpawnPerson(const FVector& Feet, double Yaw, FRandom
 	Who.RainShy = CrowdRandom.FRand();
 	Who.bSeller = !bShopper;
 	Who.bKeeper = !Keeper.IsEmpty();
+	Who.bGoesHomeAtNight = Keeper == TEXT("Pista b\u00e1csi") || Keeper == TEXT("B\u00f6zsi n\u00e9ni");
 	Who.Home = FVector2D(Feet);
 	Who.HomeYaw = static_cast<float>(Yaw);
 	Who.At = Who.Home;
@@ -1220,6 +1222,12 @@ void AFleaMarket::RunOver(int32 Index, double Speed)
 void AFleaMarket::TickCrowd(float DeltaSeconds, const FVector& Camera, double Now)
 {
 	using namespace MarketLife;
+	// While a mission is on, the story keepers stay at their stalls whatever the hour.
+	bool bStoryOn = false;
+	for (TActorIterator<AMission> It(GetWorld()); It && !bStoryOn; ++It)
+	{
+		bStoryOn = It->IsUnderway();
+	}
 	for (int32 i = 0; i < Crowd.Num() && i < People.Num(); ++i)
 	{
 		FCrowd& Who = Crowd[i];
@@ -1227,6 +1235,23 @@ void AFleaMarket::TickCrowd(float DeltaSeconds, const FVector& Camera, double No
 		if (!IsValid(Person))
 		{
 			continue;
+		}
+		// Pista bácsi and Bözsi néni go home for the night too, while nobody sees,
+		// and are back at the stall by morning (or at once when a mission needs them).
+		if (bOutdoors && Who.bGoesHomeAtNight)
+		{
+			if (Who.bHomeForNight && (!bClosed || bStoryOn))
+			{
+				Who.bHomeForNight = false;
+				Person->SetInWorld(true);
+			}
+			else if (!Who.bHomeForNight && bClosed && !bStoryOn && !Person->IsHidden()
+				&& (Who.Act == EAct::Stand || Who.Act == EAct::Walk) && !Person->WasRecentlyRendered(SeenWithin))
+			{
+				Who.bHomeForNight = true;
+				Person->SetInWorld(false);
+				continue;
+			}
 		}
 		// Shoppers go home in the rain while nobody sees, and come back
 		// (where they were) once it eases, away from the camera's view.

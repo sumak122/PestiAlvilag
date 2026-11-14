@@ -149,7 +149,7 @@ void APistaRuns::Tick(float DeltaSeconds)
 		}
 	}
 	const APestiPerson* Person = Cast<APestiPerson>(Player);
-	const bool bByPista = Pista && Person && !Person->IsRiding() && !Person->IsCarrying()
+	const bool bByPista = Pista && !Pista->IsHidden() && Person && !Person->IsRiding() && !Person->IsCarrying()
 		&& FVector::Dist2D(Person->GetActorLocation(), Pista->GetActorLocation()) < PistaRun::TalkRange;
 	if (bByPista && !bMission)
 	{
