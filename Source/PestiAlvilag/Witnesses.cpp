@@ -58,11 +58,11 @@ namespace Witness
 	constexpr float MarkSize = 46.f;
 
 	struct FLine2 { const TCHAR* Hu; const TCHAR* En; };
-	const FLine2 OffLine = { TEXT("Ezt jelentem a rendőrségnek!"), TEXT("I'm reporting this to the police!") };
-	const FLine2 CallLine = { TEXT("Halló, rendőrség? Itt egy gazember garázdálkodik!"), TEXT("Hello, police? There's a scoundrel running riot here!") };
-	const FLine2 PaidLine = { TEXT("Jól van, jól van... nem láttam semmit."), TEXT("All right, all right... I saw nothing.") };
-	const FLine2 BrokeLine = { TEXT("Ennyi pénze sincs? Akkor is szólok!"), TEXT("Not even that much on you? I'm telling them anyway!") };
-	const FLine2 SmashedLine = { TEXT("Összetörték a fülkét! Na megállj..."), TEXT("They've smashed the box! Just you wait...") };
+	const FLine2 OffLine = { TEXT("Ezt jelentem a rend\u0151rs\u00e9gnek!"), TEXT("I'm reporting this to the police!") };
+	const FLine2 CallLine = { TEXT("Hall\u00f3, rend\u0151rs\u00e9g? Itt egy gazember gar\u00e1zd\u00e1lkodik!"), TEXT("Hello, police? There's a scoundrel running riot here!") };
+	const FLine2 PaidLine = { TEXT("J\u00f3l van, j\u00f3l van... nem l\u00e1ttam semmit."), TEXT("All right, all right... I saw nothing.") };
+	const FLine2 BrokeLine = { TEXT("Ennyi p\u00e9nze sincs? Akkor is sz\u00f3lok!"), TEXT("Not even that much on you? I'm telling them anyway!") };
+	const FLine2 SmashedLine = { TEXT("\u00d6sszet\u00f6rt\u00e9k a f\u00fclk\u00e9t! Na meg\u00e1llj..."), TEXT("They've smashed the box! Just you wait...") };
 }
 
 AWitnesses::AWitnesses()
@@ -228,7 +228,7 @@ void AWitnesses::Say(const TCHAR* Hu, const TCHAR* En)
 {
 	if (APestiHUD* Hud = APestiHUD::Get(this))
 	{
-		Hud->Say(TEXT("Szemtanú"), Hu, En, 3.f);
+		Hud->Say(TEXT("Szemtan\u00fa"), Hu, En, 3.f);
 	}
 }
 
