@@ -2751,7 +2751,7 @@ void ADailyLife::TickShutters(float DeltaSeconds)
 		ShopFoot(Shop, Foot);
 		const FVector2D Foot2D = Flat(Foot);
 		const double Far = FVector2D::Distance(Foot2D, Flat(PlayerAt));
-		const bool bSeen = IsSeen(Foot + Heading(Shop.Yaw) * 60.0);
+		const bool bSeen = IsSeen(Foot + FVector(Heading(Shop.Yaw) * 60.0, 0.0));
 		APedestrian* Keeper = Shutter.Keeper.Get();
 
 		// The keeper comes along, pushes it up with his hook and goes in.
@@ -2874,7 +2874,7 @@ void ADailyLife::TickShutters(float DeltaSeconds)
 			bHas |= Other.Shop == s;
 		}
 		FVector Foot = FVector::ZeroVector;
-		if (bHas || !ShopFoot(Shop, Foot) || IsSeen(Foot + Heading(Shop.Yaw) * 60.0))
+		if (bHas || !ShopFoot(Shop, Foot) || IsSeen(Foot + FVector(Heading(Shop.Yaw) * 60.0, 0.0)))
 		{
 			continue;
 		}
