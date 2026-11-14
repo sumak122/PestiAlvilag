@@ -888,8 +888,8 @@ FString ATrafficManager::StreetNear(const FVector& At, double Within) const
 		}
 		for (int32 i = 0; i + 1 < Lane.Points.Num(); ++i)
 		{
-			const FVector OnLane = FMath::ClosestPointOnSegment2D(At, Lane.Points[i], Lane.Points[i + 1]);
-			const double Gap = FVector::DistSquared2D(OnLane, At);
+			const FVector2D OnLane = FMath::ClosestPointOnSegment2D(FVector2D(At), FVector2D(Lane.Points[i]), FVector2D(Lane.Points[i + 1]));
+			const double Gap = FVector2D::DistSquared(OnLane, FVector2D(At));
 			if (Gap < BestGap)
 			{
 				BestGap = Gap;
