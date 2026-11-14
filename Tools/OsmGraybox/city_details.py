@@ -614,6 +614,19 @@ OTI_ID = "r3331750"
 OTI_EDGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 23, 24]
 OTI_MAIN = 3
 
+# The two grand hotels by Blaha: (block, hotel 0 Nemzeti / 1 Metropol, part
+# 0 plain / 1 main front / 2 cut corner, from ring point, to ring point). The
+# Nemzeti is the corner of József körút and the square (today's Europeum block),
+# the Metropol the corner of Rákóczi út and Osvát utca.
+HOTEL_SPANS = [
+    ("w308551954", 0, 0, 17, 18),
+    ("w308551954", 0, 2, 18, 19),
+    ("w308551954", 0, 1, 19, 25),
+    ("r3476312", 1, 0, 8, 9),
+    ("r3476312", 1, 2, 9, 10),
+    ("r3476312", 1, 1, 10, 11),
+]
+
 # A later little block in Rózsák tere's garden (not there in 1932).
 ROZSAK_LATER = ["w374844687"]
 CEMETERY_LATER = ["w526250716", "w526250726"]
@@ -743,6 +756,37 @@ def seminary(data):
 def oti(data):
     """The OTI palace's runs, as the seminary's."""
     return dressed_runs(data, OTI_ID, OTI_EDGES, OTI_MAIN)
+
+
+def undressed_forms(data):
+    """The seminary's, the OTI palace's and the hotels' blocks with the dressed
+    walls taken off their facade fronts (the game's own walls stand there)."""
+    dressed = {SEMINARY_ID: set(SEMINARY_EDGES), OTI_ID: set(OTI_EDGES)}
+    for building_id, _, _, i, j in HOTEL_SPANS:
+        dressed.setdefault(building_id, set()).update(range(i, j))
+    forms = {}
+    for building_id, edges in dressed.items():
+        building = next(b for b in data["buildings"] if b["id"] == building_id)
+        form = {k: building[k] for k in ("rings", "tris", "height", "levels") if k in building}
+        form["front"] = [e for e in building.get("front", []) if e not in edges]
+        forms[building_id] = [form]
+    return forms
+
+
+def hotels(data):
+    """[hotel, part, x, y, yaw, length, height] per dressed wall of the two hotels."""
+    rows = []
+    for building_id, hotel, part, i, j in HOTEL_SPANS:
+        building = next(b for b in data["buildings"] if b["id"] == building_id)
+        ring = ring_points(building["rings"][0])
+        shape = Polygon(ring)
+        a, z = ring[i], ring[j % len(ring)]
+        ax, ay = unit(z[0] - a[0], z[1] - a[1])
+        ox, oy = ay, -ax
+        mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
+        assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), (building_id, i)
+        rows.append([hotel, part, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z)), building["height"]])
+    return rows
 
 
 def dressed_runs(data, building_id, edges, main):
@@ -1110,8 +1154,9 @@ def main():
     kiosks = place_kiosks(space, f, spots)
     clocks = place_clocks(space, spots)
     place_square_kiosks(space, f, spots, kiosks)
+    replaced.update(undressed_forms(data))
     fronts = facade_buildings(data, replaced)
-    folk = place_window_folk([b for b in fronts if b.get("id") not in (SEMINARY_ID, OTI_ID)])
+    folk = place_window_folk(fronts)
     troughs = place_troughs(space, f, spots)
     hydrants = place_hydrants(space, f, spots)
     hatches = place_hatches(space, fronts, f, spots, {CORVIN_ID})
@@ -1131,6 +1176,7 @@ def main():
         "cemetery": cemetery,
         "seminary": seminary(data),
         "oti": oti(data),
+        "hotels": hotels(data),
         "areas": extra_areas,
         "window_folk": folk,
         "hydrants": hydrants,
