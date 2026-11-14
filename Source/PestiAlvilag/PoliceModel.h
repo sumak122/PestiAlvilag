@@ -47,6 +47,8 @@ namespace PoliceModel
 	const FLinearColor BoxFloor(0.20f, 0.19f, 0.17f);
 	const FLinearColor Wood(0.30f, 0.16f, 0.07f);
 	const FLinearColor Lamp(0.95f, 0.90f, 0.75f);
+	/** Broken glass: the jagged bits left in the frames and the shards on the ground (drawn solid, not see-through). */
+	const FLinearColor ShardGlass(0.55f, 0.63f, 0.64f);
 
 	/** The box's footprint (half the width and depth) and its height to the eaves (cm). */
 	constexpr double BoxHalf = 58.0;
@@ -290,5 +292,104 @@ namespace PoliceModel
 		Rod(P, Bakelite, FVector(WallX + 15.0, 18.0, 140.0), FVector(WallX + 15.0, 21.0, 140.0), 1.2, 6);
 		Rod(P, Bakelite, FVector(WallX + 10.0, -16.0, 158.0), FVector(WallX + 10.0, -16.0, 142.0), 1.6, 6);
 		Loft(P, Bakelite, { Flat(WallX + 10.0, 141.0, 1.6, 1.6), Flat(WallX + 10.0, 138.0, 3.4, 3.4) }, 10, false, true);
+	}
+
+	/** One flat bit of glass, faced both ways (the game draws only front faces). */
+	inline void Shard(FPiece& P, const FVector& A, const FVector& B, const FVector& C)
+	{
+		FSection& S = P.Section(ShardGlass);
+		const FVector Normal = FVector::CrossProduct(C - A, B - A).GetSafeNormal();
+		for (const double Side : { 1.0, -1.0 })
+		{
+			const int32 First = S.Vertices.Num();
+			S.Vertices.Append({ A, B, C });
+			S.Normals.Append({ Normal * Side, Normal * Side, Normal * Side });
+			if (Side > 0.0)
+			{
+				S.Triangles.Append({ First, First + 1, First + 2 });
+			}
+			else
+			{
+				S.Triangles.Append({ First, First + 2, First + 1 });
+			}
+		}
+	}
+
+	/**
+	 * The box smashed: jagged bits of glass left in the corners of each pane
+	 * of the three glazed walls, and shards strewn on the floor and the
+	 * pavement round it. Drawn over BuildBox with its panes hidden.
+	 */
+	inline void BuildBroken(FPiece& P, uint32 Seed)
+	{
+		uint32 State = Seed * 2654435761u + 12345u;
+		auto Next = [&State]() { State = State * 1664525u + 1013904223u; return static_cast<double>(State >> 8) / 16777216.0; };
+		const double Hf = BoxHalf;
+		const double Post = 4.0;
+		const double Dado = 100.0;
+		const double Frieze = BoxEaves - 24.0;
+		const double Len = Hf - Post;
+		const double BarZ = Dado + (Frieze - Dado) * 0.62;
+		struct FWallFrame { FVector Mid; FVector Along; };
+		const FWallFrame Walls[] = {
+			{ FVector(-Hf + 1.5, 0.0, 0.0), FVector(0.0, 1.0, 0.0) },
+			{ FVector(0.0, -Hf + 1.5, 0.0), FVector(1.0, 0.0, 0.0) },
+			{ FVector(0.0, Hf - 1.5, 0.0), FVector(1.0, 0.0, 0.0) },
+		};
+		const double Columns[] = { -Len, -Len / 3.0, Len / 3.0, Len };
+		const double Rows[] = { Dado + 4.0, BarZ, Frieze - 3.0 };
+		for (const FWallFrame& W : Walls)
+		{
+			for (int32 c = 0; c < 3; ++c)
+			{
+				for (int32 r = 0; r < 2; ++r)
+				{
+					const double A0 = Columns[c] + 1.2;
+					const double A1 = Columns[c + 1] - 1.2;
+					const double Z0 = Rows[r] + (r == 1 ? 1.0 : 0.0);
+					const double Z1 = Rows[r + 1] - (r == 0 ? 1.0 : 0.0);
+					// Each corner keeps a jagged bit now and then, the bottom ones more often.
+					for (int32 k = 0; k < 4; ++k)
+					{
+						const bool bBottom = k < 2;
+						if (Next() > (bBottom ? 0.75 : 0.45))
+						{
+							continue;
+						}
+						const double Ca = (k % 2 == 0) ? A0 : A1;
+						const double Cz = bBottom ? Z0 : Z1;
+						const double Da = (k % 2 == 0) ? 1.0 : -1.0;
+						const double Dz = bBottom ? 1.0 : -1.0;
+						const double LegA = 5.0 + Next() * 12.0;
+						const double LegZ = 6.0 + Next() * (bBottom ? 22.0 : 12.0);
+						const FVector Corner = W.Mid + W.Along * Ca + FVector(0.0, 0.0, Cz);
+						Shard(P, Corner, Corner + W.Along * (Da * LegA), Corner + FVector(0.0, 0.0, Dz * LegZ));
+						// A second, smaller point beside it.
+						if (Next() < 0.5)
+						{
+							const FVector Base = Corner + W.Along * (Da * LegA * 0.6);
+							Shard(P, Base, Base + W.Along * (Da * (4.0 + Next() * 6.0)), Base + W.Along * (Da * 1.5) + FVector(0.0, 0.0, Dz * (4.0 + Next() * 8.0)));
+						}
+					}
+				}
+			}
+		}
+		// Shards on the floor inside and on the pavement round it.
+		for (int32 i = 0; i < 46; ++i)
+		{
+			const bool bInside = i < 10;
+			const double Angle = Next() * 2.0 * PI;
+			const double Reach = bInside ? Next() * (Hf - 8.0) : Hf + 8.0 + Next() * Next() * 90.0;
+			const FVector Middle = bInside
+				? FVector(-Hf * 0.5 + Next() * Hf, -Hf * 0.7 + Next() * Hf * 1.4, 11.3)
+				: FVector(FMath::Cos(Angle) * Reach, FMath::Sin(Angle) * Reach, 1.2);
+			const double Size = 3.0 + Next() * 6.0;
+			const double Turn = Next() * 2.0 * PI;
+			auto Point = [&](double Off, double Scale)
+			{
+				return Middle + FVector(FMath::Cos(Turn + Off), FMath::Sin(Turn + Off), 0.0) * (Size * Scale);
+			};
+			Shard(P, Point(0.0, 1.0), Point(2.2, 0.6 + Next() * 0.4), Point(4.1, 0.5 + Next() * 0.5));
+		}
 	}
 }

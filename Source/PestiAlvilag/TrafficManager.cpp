@@ -30,6 +30,7 @@
 #include "PoliceChase.h"
 #include "Bus.h"
 #include "Tram.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTraffic, Log, All);
 
@@ -251,6 +252,11 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Location, 1);
 	}
 	return Stolen;
 }

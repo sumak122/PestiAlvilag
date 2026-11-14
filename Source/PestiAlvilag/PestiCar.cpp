@@ -25,6 +25,7 @@
 #include "Weather.h"
 #include "PestiHud.h"
 #include "PestiMenu.h"
+#include "Witnesses.h"
 
 namespace PestiCar
 {
@@ -462,6 +463,11 @@ void APestiCar::BreakIn(bool bSmash)
 			Game->ReportCrime(1);
 		}
 	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Window, 1);
+	}
 }
 
 void APestiCar::TakeDriver(APawn* InDriver)
@@ -788,6 +794,14 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 	const bool bSoft = Rammed && Rammed->IsA<APawn>() && !Rammed->FindComponentByClass<UCarVisuals>();
 	const float AlongSpeed = static_cast<float>(FVector::VectorPlaneProject(Going, WallNormal).Size());
 	CrashFeedback(Hit.ImpactPoint, WallNormal, CrashSpeed, AlongSpeed, Knocked, bSoft);
+	// A police telephone box run into hard: its glass bursts and it leans.
+	if (APoliceBox* Box = Cast<APoliceBox>(Hit.GetActor()))
+	{
+		if (CrashSpeed > APoliceBox::SmashSpeed)
+		{
+			Box->Smash(Hit.ImpactPoint, -WallNormal, true);
+		}
+	}
 	if (Rammed)
 	{
 		if (UCarVisuals* RammedLooks = Rammed->FindComponentByClass<UCarVisuals>())

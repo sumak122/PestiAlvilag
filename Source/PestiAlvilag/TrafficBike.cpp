@@ -16,6 +16,7 @@
 #include "PolicePatrols.h"
 #include "TrafficManager.h"
 #include "Weather.h"
+#include "Witnesses.h"
 
 namespace TrafficBikeRide
 {
@@ -455,6 +456,11 @@ void ATrafficBike::TakeRider(APawn* InRider)
 			{
 				Game->ReportCrime(1);
 			}
+		}
+		else
+		{
+			// Nobody from the police saw it: now and then a passer-by runs to tell them.
+			AWitnesses::Report(this, Here, 1);
 		}
 
 		// Out of the traffic: an ordinary bicycle for the player.

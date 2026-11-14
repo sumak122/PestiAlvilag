@@ -17,7 +17,9 @@
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
+#include "SpillLife.h"
 #include "TrafficManager.h"
+#include "Witnesses.h"
 
 namespace TrafficCartRide
 {
@@ -396,6 +398,8 @@ void ATrafficCart::SpillOne()
 		Spilled.Add(Piece);
 		SpilledAt.Add(Now);
 	}
+	// Cats come for the milk, kids for the coal, and a barrel rolls off.
+	ASpillLife::Spilled(this, CartLoad, Lying, Puddle, At, FVector2D(GetActorForwardVector()));
 }
 
 void ATrafficCart::TidySpills()
@@ -498,6 +502,11 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 			{
 				Game->ReportCrime(1);
 			}
+		}
+		else
+		{
+			// Nobody from the police saw it: now and then a passer-by runs to tell them.
+			AWitnesses::Report(this, Bench, 1);
 		}
 
 		// Out of the traffic: an ordinary cart for the player, still loaded.
