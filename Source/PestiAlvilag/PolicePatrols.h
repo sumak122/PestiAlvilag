@@ -13,6 +13,7 @@ class ATrafficManager;
 class UBoxComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
+class UCrashSound;
 class UTextRenderComponent;
 class UTexture;
 
@@ -75,6 +76,22 @@ public:
 	/** On the pavement just outside the door. */
 	FVector2D DoorStep() const;
 
+	/** A car into it at least this fast (cm/s) smashes it. */
+	static constexpr float SmashSpeed = 350.f;
+
+	/** Smashed: no glass, nobody can telephone from it until it is mended. */
+	bool IsSmashed() const { return bSmashed; }
+	double GetSmashedAt() const { return SmashedAt; }
+
+	/** A blow from the player's fists at At: the glass cracks, and the third smashes it. */
+	void Knock(const FVector& At);
+
+	/** Smashed at once (a car ran into it, going Away): the glass bursts and the box leans. */
+	void Smash(const FVector& At, const FVector& Away, bool bLean);
+
+	/** Glass back in, standing straight again. */
+	void Mend();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -92,6 +109,28 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
+
+	/** The smashed look: jagged bits in the frames (lean with the box) and shards on the ground (don't). */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> BrokenFrames;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> BrokenGround;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCrashSound> Noise;
+
+private:
+	void BuildBrokenLook();
+	void PlayNoise(float Strength);
+
+	/** Body's mesh sections that are the panes. */
+	TArray<int32> GlassSections;
+	int32 Knocks = 0;
+	double LastKnock = -10.0;
+	bool bSmashed = false;
+	bool bBrokenBuilt = false;
+	double SmashedAt = -1.0;
 };
 
 /** A pea whistle's two shrill blasts, made as it plays. */
@@ -269,6 +308,8 @@ private:
 	/** Where each man walks on the beat now. */
 	FVector2D BeatSpot(const FPatrol& Patrol, int32 Which, FVector2D& OutTangent) const;
 
+	/** The boxes: the player's fists at their glass, and mending the smashed ones. */
+	void TickBoxes(AActor* Player);
 	void TickPatrol(FPatrol& Patrol, float DeltaSeconds);
 	void TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds);
 	/** Moves him towards Goal at Speed; true once he is there. */

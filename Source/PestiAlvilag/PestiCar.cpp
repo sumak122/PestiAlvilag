@@ -788,6 +788,14 @@ void APestiCar::MoveWithSlide(const FVector& Delta)
 	const bool bSoft = Rammed && Rammed->IsA<APawn>() && !Rammed->FindComponentByClass<UCarVisuals>();
 	const float AlongSpeed = static_cast<float>(FVector::VectorPlaneProject(Going, WallNormal).Size());
 	CrashFeedback(Hit.ImpactPoint, WallNormal, CrashSpeed, AlongSpeed, Knocked, bSoft);
+	// A police telephone box run into hard: its glass bursts and it leans.
+	if (APoliceBox* Box = Cast<APoliceBox>(Hit.GetActor()))
+	{
+		if (CrashSpeed > APoliceBox::SmashSpeed)
+		{
+			Box->Smash(Hit.ImpactPoint, -WallNormal, true);
+		}
+	}
 	if (Rammed)
 	{
 		if (UCarVisuals* RammedLooks = Rammed->FindComponentByClass<UCarVisuals>())
