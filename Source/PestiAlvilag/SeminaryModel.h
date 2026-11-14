@@ -119,7 +119,7 @@ namespace SeminaryModel
 		using namespace Colors;
 		const double Mid = Length * 0.5;
 		// Stands a little forward of the wall, stone quoins at its sides.
-		Add(Out, MarketModel::Cube, Brick, FVector(Skin + 15, Mid, WallTop * 0.5), FVector(Skin + 30, Length, WallTop));
+		Add(Out, MarketModel::Cube, Brick, FVector((Skin + 30) * 0.5, Mid, WallTop * 0.5), FVector(Skin + 30, Length, WallTop));
 		Add(Out, MarketModel::Cube, Plinth, FVector(Skin + 21, Mid, 45), FVector(Skin + 42, Length, 90), 0.0, false);
 		for (const double Y : { 25.0, Length - 25.0 })
 		{
@@ -131,7 +131,7 @@ namespace SeminaryModel
 		Add(Out, MarketModel::Cube, Trim, FVector(Skin + 36, Mid, 160), FVector(16, DoorW + 60, 320), 0.0, false);
 		Add(Out, MarketModel::Cylinder, Trim, FVector(Skin + 36, Mid, 320), FVector(DoorW + 60, DoorW + 60, 16), 0.0, false, 90.0);
 		Add(Out, MarketModel::Cube, Door, FVector(Skin + 46, Mid, 150), FVector(4, DoorW, 300), 0.0, false);
-		Add(Out, MarketModel::Cylinder, Glass, FVector(Skin + 46, Mid, 300), FVector(DoorW, DoorW, 4), 0.0, false, 90.0);
+		Add(Out, MarketModel::Cylinder, Glass, FVector(Skin + 43, Mid, 300), FVector(DoorW, DoorW, 4), 0.0, false, 90.0);
 		for (int32 Step = 0; Step < 3; ++Step)
 		{
 			Add(Out, MarketModel::Cube, Plinth, FVector(Skin + 60 + Step * 25, Mid, 8 + (2 - Step) * 16), FVector(50, DoorW + 80, 16));
@@ -146,7 +146,7 @@ namespace SeminaryModel
 		for (int32 Step = 0; Step < 4; ++Step)
 		{
 			const double W = AtticW * (1.0 - Step * 0.22);
-			Add(Out, MarketModel::Cube, Brick, FVector(Skin + 15, Mid, WallTop + 50 + Step * 90), FVector(Skin + 30, W, 90));
+			Add(Out, MarketModel::Cube, Brick, FVector((Skin + 30) * 0.5, Mid, WallTop + 50 + Step * 90), FVector(Skin + 30, W, 90));
 			Add(Out, MarketModel::Cube, Trim, FVector(Skin + 15, Mid, WallTop + 98 + Step * 90), FVector(Skin + 46, W + 16, 10), 0.0, false);
 		}
 		Add(Out, MarketModel::Cube, Plate, FVector(Skin + 33, Mid, WallTop + 60), FVector(4, AtticW - 60, 70), 0.0, false);
