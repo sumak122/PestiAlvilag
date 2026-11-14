@@ -3,6 +3,7 @@
 #include "PolicePatrols.h"
 
 #include "CarBody.h"
+#include "DayNight.h"
 #include "Components/BoxComponent.h"
 #include "CrashBits.h"
 #include "CrashSound.h"
@@ -121,6 +122,12 @@ namespace PolicePatrol
 	constexpr double LookSide = 90.0;
 	// The player fighting this close to where they look (cm) is caught at it.
 	constexpr double FightSeen = 900.0;
+	// After dark: a constable sees this share less far at full darkness, and every other pair goes
+	// off the streets once it is this dark (out of the player's sight, at least this far from him).
+	constexpr double NightSightLoss = 0.35;
+	constexpr float OffDutyDark = 0.7f;
+	constexpr double OffDutyBeyond = 4000.0;
+	constexpr float OffDutySeen = 2.f;
 	const FLine2 LookLine = { TEXT("Mi folyik itt? Sz\u00e9tmenni!"), TEXT("What's going on here? Move along!") };
 	const FLine2 DownLine = { TEXT("Jaj! Elg\u00e1zolt egy rend\u0151rt, az \u00e1tkozott!"), TEXT("Ow! The devil ran down a policeman!") };
 
@@ -866,6 +873,10 @@ void APolicePatrols::Tick(float DeltaSeconds)
 		double Nearest = TNumericLimits<double>::Max();
 		for (FPatrol& Patrol : Patrols)
 		{
+			if (Patrol.bOffDuty)
+			{
+				continue;
+			}
 			for (FMan& Man : Patrol.Men)
 			{
 				if (!Man.Person || Man.Doing == EDoing::Down || Man.Doing == EDoing::Fighting
@@ -889,10 +900,53 @@ void APolicePatrols::Tick(float DeltaSeconds)
 
 	TickBoxes(Player);
 
-	for (FPatrol& Patrol : Patrols)
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	Darkness = Clock ? Clock->GetDarkness() : 0.f;
+	for (int32 i = 0; i < Patrols.Num(); ++i)
 	{
-		TickPatrol(Patrol, DeltaSeconds);
+		if (!UpdateDuty(Patrols[i], i, bWanted))
+		{
+			TickPatrol(Patrols[i], DeltaSeconds);
+		}
 	}
+}
+
+bool APolicePatrols::UpdateDuty(FPatrol& Patrol, int32 Index, bool bWanted)
+{
+	const bool bNightOff = Index % 2 == 1 && Darkness > PolicePatrol::OffDutyDark && !bWanted;
+	const bool bFar = FVector2D::Distance(Patrol.Men[0].At, FVector2D(PlayerAt)) > PolicePatrol::OffDutyBeyond;
+	if (Patrol.bOffDuty)
+	{
+		if (!bNightOff && bFar)
+		{
+			Patrol.bOffDuty = false;
+			for (FMan& Man : Patrol.Men)
+			{
+				if (Man.Person)
+				{
+					Man.Person->SetInWorld(true);
+				}
+			}
+		}
+		return Patrol.bOffDuty;
+	}
+	if (!bNightOff || !bFar || Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
+		|| !Patrol.Men[0].Person || !Patrol.Men[1].Person
+		|| Patrol.Men[0].Person->WasRecentlyRendered(PolicePatrol::OffDutySeen) || Patrol.Men[1].Person->WasRecentlyRendered(PolicePatrol::OffDutySeen))
+	{
+		return false;
+	}
+	Patrol.bOffDuty = true;
+	for (FMan& Man : Patrol.Men)
+	{
+		Man.Person->SetInWorld(false);
+	}
+	return true;
+}
+
+double APolicePatrols::SeeRange() const
+{
+	return SightRange * (1.0 - PolicePatrol::NightSightLoss * Darkness);
 }
 
 void APolicePatrols::TickBoxes(AActor* Player)
@@ -1118,7 +1172,7 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 		if (Man.SightClock <= 0.f)
 		{
 			Man.SightClock = PolicePatrol::SightEvery;
-			Man.bSeesPlayer = Distance < SightRange * 1.5f && CanSee(Man, PlayerAt);
+			Man.bSeesPlayer = Distance < SeeRange() * 1.5 && CanSee(Man, PlayerAt);
 		}
 		if (Man.bSeesPlayer && Game)
 		{
@@ -1468,7 +1522,7 @@ void APolicePatrols::Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En)
 	APestiHUD* Hud = APestiHUD::Get(this);
 	// Only one the player can hear.
 	if (!Hud || Hud->IsSaying() || Now - LastShout < PolicePatrol::ShoutEvery
-		|| FVector2D::Distance(Man.At, FVector2D(PlayerAt)) > SightRange * 1.5f)
+		|| FVector2D::Distance(Man.At, FVector2D(PlayerAt)) > SeeRange() * 1.5)
 	{
 		return;
 	}
@@ -1496,7 +1550,7 @@ void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVecto
 		double NearestDistance = Range > 0.0 ? Range : PolicePatrol::LookRange;
 		for (FPatrol& Patrol : Police->Patrols)
 		{
-			if (Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
+			if (Patrol.bOffDuty || Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
 				|| !Patrol.Men[0].Person || !Patrol.Men[1].Person)
 			{
 				continue;
@@ -1556,11 +1610,15 @@ bool APolicePatrols::Witnessed(const UObject* WorldContextObject, const FVector&
 		}
 		for (FPatrol& Patrol : Police->Patrols)
 		{
+			if (Patrol.bOffDuty)
+			{
+				continue;
+			}
 			bool bThisPair = false;
 			for (const FMan& Man : Patrol.Men)
 			{
 				if (Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning && Man.Doing != EDoing::Fighting
-					&& FVector2D::Distance(Man.At, FVector2D(At)) < Police->SightRange && Police->CanSee(Man, At))
+					&& FVector2D::Distance(Man.At, FVector2D(At)) < Police->SeeRange() && Police->CanSee(Man, At))
 				{
 					bThisPair = true;
 					break;

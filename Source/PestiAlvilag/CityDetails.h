@@ -63,6 +63,8 @@ private:
 	AShapeSet* PutUp(const FVector& At, double SetYaw, float DrawDistance) const;
 	void BuildCorvin();
 	void BuildCourtyards(const FJsonObject& Root);
+	/** Two or three young men who stand out by a courtyard gate after dark (APedestrians::AddStander, night only). */
+	void AddGateGang(const FVector2D& Foot, double GateYaw, double Width, double Ground, uint32 Seed);
 	void BuildAdverts(const FJsonObject& Root);
 	void BuildKiosks(const FJsonObject& Root);
 	void BuildClocks(const FJsonObject& Root);

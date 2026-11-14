@@ -289,6 +289,8 @@ private:
 		bool bPhonedForHelp = false;
 		/** Gone to look at a crowd and seen the player fighting there. */
 		bool bSawFight = false;
+		/** Off the streets for the night (every other pair, after dark): not drawn, sees nothing. */
+		bool bOffDuty = false;
 	};
 
 	struct FLine
@@ -323,6 +325,12 @@ private:
 	void UpdateGround(FMan& Man, float DeltaSeconds);
 	FVector MiddleOf(const FMan& Man) const;
 	bool CanSee(const FMan& Man, const FVector& Target) const;
+	/** How far a constable sees: less in the dark. */
+	double SeeRange() const;
+	/** Every other pair goes off the streets after dark and comes back by day, while nobody sees; true while off. */
+	bool UpdateDuty(FPatrol& Patrol, int32 Index, bool bWanted);
+	/** ADayNight's darkness this frame (0 day, 1 night). */
+	float Darkness = 0.f;
 
 	void StartChase(FPatrol& Patrol, bool bSawIt);
 	/** Into a fist fight with the player (bPlayerStarts: he punched first, else the constable wades in); true if it began. */

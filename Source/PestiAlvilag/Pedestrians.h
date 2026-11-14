@@ -79,6 +79,9 @@ public:
 	/** Standing squared up, fists raised before his face, bobbing a little (Seconds drives it). */
 	void FistsUp(const FVector& Location, double Yaw, float Seconds);
 
+	/** After WalkTo: a drunk's lurch, leaning Roll/Pitch (degrees), one arm out for balance by ArmOut (0..1). */
+	void Sway(double Yaw, float Roll, float Pitch, float ArmOut);
+
 private:
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
@@ -135,7 +138,7 @@ public:
 	 * when Hu is empty).
 	 */
 	void AddStander(const FVector2D& At, double Ground, double FaceYaw, const PersonKit::FOutfit& Outfit, double SeatedUp,
-		const FString& Who, const FString& Hu, const FString& En);
+		const FString& Who, const FString& Hu, const FString& En, bool bNightOnly = false);
 
 	/**
 	 * Something worth a look happened at At (a street fight, a crash, a spilled
@@ -284,6 +287,10 @@ private:
 		double NextWave = 0.0;
 		/** A tough picking on the player: there in front of him with his fists up (not still walking over). */
 		bool bSquared = false;
+		/** One of the few who have had too much: at night he sways home (see Pedestrians::DrunkShare). */
+		bool bTipsy = false;
+		/** A stander only out after dark (a courtyard gang at its gate), arms folded; indoors (bIndoors) by day. */
+		bool bNightOnly = false;
 	};
 
 	bool LoadLines();
@@ -400,4 +407,10 @@ private:
 	/** Where the tough picking on the player stands, while one does. */
 	FVector2D ChallengerAt = FVector2D::ZeroVector;
 	bool bChallenge = false;
+	/** 0 by day, up to 1 late at night (ADayNight): walkers go in, drunks come out. */
+	float Lateness = 0.f;
+	/** ADayNight's darkness this frame (0 day, 1 night). */
+	float Dark = 0.f;
+	/** Not before this time does a drunk sing out again. */
+	double NextSong = 0.0;
 };

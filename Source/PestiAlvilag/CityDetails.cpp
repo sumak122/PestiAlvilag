@@ -309,6 +309,49 @@ void ACityDetails::BuildCorvin()
 	}
 }
 
+void ACityDetails::AddGateGang(const FVector2D& Foot, double GateYaw, double Width, double Ground, uint32 Seed)
+{
+	TActorIterator<APedestrians> Crowd(GetWorld());
+	if (!Crowd)
+	{
+		return;
+	}
+	FRandomStream Dice(static_cast<int32>(Seed * 7919u + 13u));
+	const int32 Count = Dice.RandRange(2, 3);
+	const FVector2D Out = CityDetailsPlace::Ahead(GateYaw, 1.0);
+	const FVector2D Along(-Out.Y, Out.X);
+	// Spots on the pavement either side of the gateway, a step out from the wall.
+	const double Side[] = { -1.0, 1.0, 1.0 };
+	const double Further[] = { 0.0, 0.0, 75.0 };
+	const TCHAR* const Calls[][2] = {
+		{ TEXT("Mi j\u00e1ratban erre, uras\u00e1g?"), TEXT("What brings you round here, sir?") },
+		{ TEXT("Van egy cigid, haver?"), TEXT("Got a smoke, pal?") },
+		{ TEXT("Este ez a mi utc\u00e1nk."), TEXT("At night this is our street.") },
+	};
+	for (int32 i = 0; i < Count; ++i)
+	{
+		PersonKit::FOutfit Clothes = PersonModel::RandomOutfit(Dice);
+		for (int32 Try = 0; Try < 10 && Clothes.bWoman; ++Try)
+		{
+			Clothes = PersonModel::RandomOutfit(Dice);
+		}
+		if (Clothes.bWoman)
+		{
+			continue;
+		}
+		Clothes.Hat = Dice.FRand() < 0.75f ? PersonKit::EHat::FlatCap : PersonKit::EHat::None;
+		Clothes.Top = Dice.FRand() < 0.5f ? PersonKit::ETop::Waistcoat : PersonKit::ETop::Jacket;
+		Clothes.Held = PersonKit::EHeld::None;
+		Clothes.bTie = false;
+		Clothes.bSeated = false;
+		const double Offset = Side[i] * (Width * 0.5 + 70.0 + Further[i]);
+		const FVector2D Spot = Foot + Out * (CityDetailsPlace::OutFromWall - 40.0) + Along * Offset;
+		// Facing the street, half turned towards each other.
+		const double FaceYaw = GateYaw - Side[i] * 35.0;
+		Crowd->AddStander(Spot, Ground, FaceYaw, Clothes, 0.0, TEXT("Vag\u00e1ny"), Calls[i][0], Calls[i][1], true);
+	}
+}
+
 void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 {
 	using namespace CityDetailsModel;
@@ -344,6 +387,9 @@ void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 				Way->AddLamp(Light.At, Light.Radius);
 			}
 		}
+
+		// Its gang: two or three young men who stand out by the gate after dark, arms folded.
+		AddGateGang(Foot, GateYaw, Width, Ground, Seed);
 
 		// The courtyard, in a frame not turned, round the gate's foot.
 		AShapeSet* Court = PutUp(FVector(Foot, Ground), 0.0, CityDetailsPlace::YardDrawDistance);

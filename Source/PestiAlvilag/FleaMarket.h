@@ -229,6 +229,8 @@ private:
 	bool bOutdoors = true;
 	/** How hard it rains now (AWeather::GetRain), and which way the camera looks. */
 	float Raining = 0.f;
+	/** The open-air market is shut for the night (covers on, nobody but the keepers). */
+	bool bClosed = false;
 	FVector2D CameraLooking = FVector2D(1.0, 0.0);
 	void Smash(int32 Index, double Now);
 	void PutBack(FStall& Stall);
