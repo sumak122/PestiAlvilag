@@ -564,6 +564,7 @@ def place_map_icons(data, f, courtyards):
 CHURCHES = [
     ("w256539415", "rokus", [6]),       # Szent Rókus-kápolna, Rákóczi út
     ("w191191238", "jezus", [6, 7]),    # Jézus Szíve templom, Mária utca
+    ("w25277227", "erzsebet", [1]),     # Szent Erzsébet templom, Rózsák tere (ErzsebetChurchModel.h)
 ]
 BOZSI_ID = "r3333877"
 
