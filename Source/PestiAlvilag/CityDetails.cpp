@@ -4,6 +4,7 @@
 #include "CemeteryModel.h"
 
 #include "ChurchModel.h"
+#include "ErzsebetChurchModel.h"
 #include "CityTheatreModel.h"
 #include "CityDetailsModel.h"
 #include "CityLifeModel.h"
@@ -548,7 +549,8 @@ void ACityDetails::BuildChurches(const FJsonObject& Root)
 		}
 		const FVector2D Front = CityDetailsPlace::Pair(C, 1);
 		const double FrontYaw = C[3]->AsNumber();
-		const EChurch Which = C[0]->AsString() == TEXT("rokus") ? EChurch::Rokus : EChurch::JezusSzive;
+		const FString ChurchKind = C[0]->AsString();
+		const EChurch Which = ChurchKind == TEXT("rokus") ? EChurch::Rokus : ChurchKind == TEXT("erzsebet") ? EChurch::Erzsebet : EChurch::JezusSzive;
 		const double Ground = GroundAt(Front + CityDetailsPlace::Ahead(FrontYaw, 300.0));
 		AShapeSet* Set = PutUp(FVector(Front, Ground), FrontYaw, CityDetailsPlace::ChurchDrawDistance);
 		if (!Set)
@@ -557,7 +559,14 @@ void ACityDetails::BuildChurches(const FJsonObject& Root)
 		}
 		TArray<FShape> Shapes;
 		TArray<FLamp> Lights;
-		Church(Which, C[4]->AsNumber(), C[5]->AsNumber(), Shapes, Lights);
+		if (Which == EChurch::Erzsebet)
+		{
+			ErzsebetChurchModel::Church(C[5]->AsNumber(), Shapes, Lights);
+		}
+		else
+		{
+			Church(Which, C[4]->AsNumber(), C[5]->AsNumber(), Shapes, Lights);
+		}
 		// Its steps and flower stall, and the folk about the door.
 		TArray<FChurchFolk> Folk;
 		Forecourt(Which, Shapes, Folk);

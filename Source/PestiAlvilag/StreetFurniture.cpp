@@ -718,6 +718,11 @@ void AStreetFurniture::BeginPlay()
 	{
 		BuildPark(**Park);
 	}
+	// Rózsák tere's garden round the Szent Erzsébet church.
+	if (Root->TryGetObjectField(TEXT("rozsak"), Park))
+	{
+		BuildPark(**Park);
+	}
 
 	// Hand each batch all its instances at once; one by one is slow.
 	int32 Count = 0;

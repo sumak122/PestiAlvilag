@@ -30,7 +30,7 @@ namespace ChurchModel
 	using BozsiHouseModel::FLamp;
 	using CityDetailsModel::Rod;
 
-	enum class EChurch : uint8 { Rokus, JezusSzive };
+	enum class EChurch : uint8 { Rokus, JezusSzive, Erzsebet };	// Erzsebet's shapes are ErzsebetChurchModel's
 
 	namespace Colors
 	{
@@ -517,11 +517,16 @@ namespace ChurchModel
 	inline void Forecourt(EChurch Which, TArray<FShape>& Out, TArray<FChurchFolk>& Folk)
 	{
 		// Where the door's threshold is, out from the front.
-		const double Door = Which == EChurch::Rokus ? 30.0 : 270.0;
-		Steps(Out, Door + 60.0, Which == EChurch::Rokus ? 360.0 : 440.0);
+		// The Szent Erzsébet's own steps run along its whole front (ErzsebetChurchModel).
+		const bool bErzsebet = Which == EChurch::Erzsebet;
+		const double Door = Which == EChurch::Rokus ? 30.0 : bErzsebet ? 170.0 : 270.0;
+		if (!bErzsebet)
+		{
+			Steps(Out, Door + 60.0, Which == EChurch::Rokus ? 360.0 : 440.0);
+		}
 		// The Jézus Szíve's pavement is narrower: the folk keep closer to the door there.
-		const double Reach = Which == EChurch::Rokus ? 1.0 : 0.65;
-		const FVector2D Stall(Door + 230.0 * Reach, Which == EChurch::Rokus ? 520.0 : 440.0);
+		const double Reach = Which == EChurch::JezusSzive ? 0.65 : 1.0;
+		const FVector2D Stall(Door + 230.0 * Reach, Which == EChurch::Rokus ? 520.0 : bErzsebet ? 600.0 : 440.0);
 		FlowerStall(Out, FVector(Stall, 0.0));
 		// The priest on the steps, seeing people out.
 		Folk.Add({ FVector2D(Door + 40.0, 70.0), 0.0, EChurchFolk::Priest, 0.0, 14.0 });

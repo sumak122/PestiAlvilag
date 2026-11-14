@@ -85,7 +85,8 @@ namespace OsmGraybox
 	// 7: the New York palace's dressed street walls lose their plain facades (city_details.json).
 	// 8: the Városi Színház's block gets one straight front on Tisza Kálmán tér.
 	// 9: the Kerepesi cemetery: grass inside its wall, the gate lodges one floor (city_details.json "areas").
-	constexpr int32 MeshVersion = 9;
+	// 10: the Szent Erzsébet church's block left out (ErzsebetChurchModel builds it).
+	constexpr int32 MeshVersion = 10;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");
