@@ -27,6 +27,7 @@
 #include "PersonKit.h"
 #include "PersonModel.h"
 #include "PestiHud.h"
+#include "SeminaryModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "ShapeSet.h"
@@ -275,6 +276,7 @@ void ACityDetails::BeginPlay()
 		BuildNewYork(*Root);
 		BuildCityTheatre(*Root);
 		BuildCemetery(*Root);
+		BuildSeminary(*Root);
 		BuildStreetLife(*Root);
 	}
 }
@@ -690,6 +692,55 @@ void ACityDetails::BuildCityTheatre(const FJsonObject& Root)
 	for (const FSign& Sign : Lettering)
 	{
 		Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
+	}
+}
+
+void ACityDetails::BuildSeminary(const FJsonObject& Root)
+{
+	// [main, x, y, yaw, length] per street wall: its start at the foot, the way out to the street, its length.
+	const TArray<TSharedPtr<FJsonValue>>* WallRows = nullptr;
+	if (!Root.TryGetArrayField(TEXT("seminary"), WallRows))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& RowValue : *WallRows)
+	{
+		const TArray<TSharedPtr<FJsonValue>>& E = RowValue->AsArray();
+		if (E.Num() < 5)
+		{
+			continue;
+		}
+		const bool bMainDoor = E[0]->AsNumber() > 0.5;
+		const FVector2D Start = CityDetailsPlace::Pair(E, 1);
+		const double WallYaw = E[3]->AsNumber();
+		const double WallLength = E[4]->AsNumber();
+		const FVector2D Middle = Start + FVector2D(FRotator(0.0, WallYaw, 0.0).RotateVector(FVector(0.0, WallLength * 0.5, 0.0)));
+		const double Ground = GroundAt(Middle + CityDetailsPlace::Ahead(WallYaw, CityDetailsPlace::OutFromWall));
+		AShapeSet* Set = PutUp(FVector(Start, Ground), WallYaw, CityDetailsPlace::ChurchDrawDistance);
+		if (!Set)
+		{
+			continue;
+		}
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lights;
+		TArray<BozsiHouseModel::FSign> Lettering;
+		if (bMainDoor)
+		{
+			SeminaryModel::Corner(WallLength, Shapes, Lights, Lettering);
+		}
+		else
+		{
+			SeminaryModel::Run(WallLength, Shapes);
+		}
+		Set->AddShapes(Shapes);
+		for (const BozsiHouseModel::FLamp& Light : Lights)
+		{
+			Set->AddLamp(Light.At, Light.Radius);
+		}
+		for (const BozsiHouseModel::FSign& Sign : Lettering)
+		{
+			Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
+		}
 	}
 }
 
