@@ -128,6 +128,8 @@ namespace PolicePatrol
 	constexpr float OffDutyDark = 0.7f;
 	constexpr double OffDutyBeyond = 4000.0;
 	constexpr float OffDutySeen = 2.f;
+	// Someone telling on the player reaches the constables when this near them (cm).
+	constexpr double TipOffNear = 500.0;
 	const FLine2 LookLine = { TEXT("Mi folyik itt? Sz\u00e9tmenni!"), TEXT("What's going on here? Move along!") };
 	const FLine2 DownLine = { TEXT("Jaj! Elg\u00e1zolt egy rend\u0151rt, az \u00e1tkozott!"), TEXT("Ow! The devil ran down a policeman!") };
 
@@ -1583,6 +1585,73 @@ void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVecto
 			Man.Clock = 0.f;
 		}
 		return;
+	}
+}
+
+bool APolicePatrols::FindConstable(const UObject* WorldContextObject, const FVector& From, double Within, FVector& OutAt)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	double Nearest = Within;
+	bool bFound = false;
+	for (TActorIterator<APolicePatrols> It(World); It; ++It)
+	{
+		const APolicePatrols* Police = *It;
+		if (!Police->bReady)
+		{
+			continue;
+		}
+		for (const FPatrol& Patrol : Police->Patrols)
+		{
+			const FMan& Man = Patrol.Men[0];
+			if (Patrol.bOffDuty || !Man.Person || Man.Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat)
+			{
+				continue;
+			}
+			const double Distance = FVector2D::Distance(Man.At, FVector2D(From));
+			if (Distance < Nearest)
+			{
+				Nearest = Distance;
+				OutAt = FVector(Man.At, Man.GroundZ);
+				bFound = true;
+			}
+		}
+	}
+	return bFound;
+}
+
+void APolicePatrols::TipOff(const UObject* WorldContextObject, const FVector& At)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<APolicePatrols> It(World); It; ++It)
+	{
+		APolicePatrols* Police = *It;
+		if (!Police->bReady)
+		{
+			continue;
+		}
+		for (FPatrol& Patrol : Police->Patrols)
+		{
+			if (!Patrol.bOffDuty && FVector2D::Distance(Patrol.Men[0].At, FVector2D(At)) < PolicePatrol::TipOffNear
+				&& Patrol.Men[0].Doing != EDoing::Down && Patrol.Men[1].Doing != EDoing::Down
+				&& Patrol.Men[0].Doing != EDoing::Fighting && Patrol.Men[1].Doing != EDoing::Fighting)
+			{
+				Patrol.bAlarmed = false;
+				Police->StartChase(Patrol, true);
+				if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(WorldContextObject))
+				{
+					Game->ReportCrime(1);
+				}
+				return;
+			}
+		}
 	}
 }
 

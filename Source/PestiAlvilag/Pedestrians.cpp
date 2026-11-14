@@ -37,6 +37,7 @@
 #include "TrafficManager.h"
 #include "Tram.h"
 #include "UObject/ConstructorHelpers.h"
+#include "SweeperModel.h"
 #include "UmbrellaModel.h"
 #include "Weather.h"
 #include "Witnesses.h"
@@ -537,6 +538,92 @@ void APedestrian::PlaceUmbrella(int32 HoldingArm, float Raised)
 	const float Swung = FMath::Lerp(Pedestrians::UmbrellaHang, Pedestrians::UmbrellaTilt, Raised);
 	Umbrella->SetRelativeLocationAndRotation(InHand, FRotator(Swung, 0.f, Pedestrians::UmbrellaLean * Side * Raised));
 	Umbrella->SetRelativeScale3D(FVector(Width, Width, 1.0));
+}
+
+void APedestrian::ShowBroom(bool bShow)
+{
+	if (!bShow)
+	{
+		if (Broom)
+		{
+			Broom->SetVisibility(false);
+		}
+		return;
+	}
+	if (!Broom)
+	{
+		Broom = NewObject<UProceduralMeshComponent>(this);
+		Broom->SetupAttachment(Capsule);
+		Broom->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Broom->SetCanEverAffectNavigation(false);
+		// It moves with him all the time: kept out of the ray-traced lighting and the distance fields.
+		Broom->bVisibleInRayTracing = false;
+		Broom->bAffectDistanceFieldLighting = false;
+		PersonKit::FPiece Shape;
+		SweeperModel::Broom(Shape);
+		for (int32 s = 0; s < Shape.Sections.Num(); ++s)
+		{
+			const PersonKit::FSection& Section = Shape.Sections[s];
+			Broom->CreateMeshSection_LinearColor(s, Section.Vertices, Section.Triangles, Section.Normals,
+				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+			if (BaseMaterial)
+			{
+				UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+				Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+				Broom->SetMaterial(s, Paint);
+			}
+		}
+		Broom->RegisterComponent();
+		AddInstanceComponent(Broom);
+	}
+	Broom->SetVisibility(true);
+}
+
+void APedestrian::CarryBroom(bool bSweeping, float Seconds)
+{
+	ShowBroom(true);
+	// The grip stands this high over his middle so the twigs just reach the ground.
+	const double GripUp = SweeperModel::HandleBelow + SweeperModel::TwigLength - 90.0;
+	if (bSweeping)
+	{
+		// Both hands forward and low on the handle, the twigs swept from side to side ahead of him.
+		const float Swing = 28.f * FMath::Sin(Seconds * 4.5f);
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+			{
+				Part->SetRelativeRotation(FRotator(38.f, 0.f, (i == 0 ? -6.f : 6.f) + Swing * 0.4f));
+			}
+		}
+		PersonModel::PoseElbows(Pieces, 35.f, 35.f);
+		Broom->SetRelativeLocationAndRotation(FVector(32.0, 0.0, -2.0), FRotator(28.f, Swing, 0.f));
+	}
+	else
+	{
+		// Walking: upright in the right hand like a staff, the twigs by his foot.
+		if (USceneComponent* Part = Limb(PersonKit::ArmRight))
+		{
+			Part->SetRelativeRotation(FRotator(30.f, 0.f, -8.f));
+		}
+		PersonModel::PoseElbows(Pieces, 0.f, 55.f);
+		Broom->SetRelativeLocationAndRotation(FVector(14.0, 27.0, GripUp + 6.0), FRotator(4.f, 0.f, 6.f));
+	}
+	// Unfold puts the elbows straight again once he walks on without it.
+	bArmsFolded = true;
+}
+
+void APedestrian::CarryInArms()
+{
+	ShowBroom(false);
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+		{
+			Part->SetRelativeRotation(FRotator(45.f, 0.f, i == 0 ? -6.f : 6.f));
+		}
+	}
+	PersonModel::PoseElbows(Pieces, 40.f, 40.f);
+	bArmsFolded = true;
 }
 
 void APedestrian::DropUmbrella()

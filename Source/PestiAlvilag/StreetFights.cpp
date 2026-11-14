@@ -361,6 +361,14 @@ void AStreetFights::TakeTurns(FFight& Fight, ARuffian* Man, APestiPerson* Player
 	}
 }
 
+void AStreetFights::SetFightsBack()
+{
+	if (Fights.Num() > 0)
+	{
+		Fights.Last().bFightsBack = true;
+	}
+}
+
 void AStreetFights::SetChallenger()
 {
 	if (Fights.Num() > 0)

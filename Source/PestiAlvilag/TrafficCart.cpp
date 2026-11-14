@@ -530,7 +530,8 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 		if (ACarjackedDriver* Runner = GetWorld()->SpawnActor<ACarjackedDriver>(ACarjackedDriver::StaticClass(), RunnerAt, GetActorRotation(), RunnerParams))
 		{
 			Runner->SetOutfit(DriverLook);
-			Runner->RunFrom(Danger);
+			// He runs after the thief, runs for a constable, or runs off.
+			Runner->AfterThief(Danger, false, DriverLook);
 		}
 		CallOut(TEXT("\u201eH\u00e9! A lovam! A kocsim! Tolvaj!\u201d   (Hey! My horse! My cart! Thief!)"));
 		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::CartStolen, Bench);

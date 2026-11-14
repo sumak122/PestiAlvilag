@@ -82,6 +82,17 @@ public:
 	/** After WalkTo: a drunk's lurch, leaning Roll/Pitch (degrees), one arm out for balance by ArmOut (0..1). */
 	void Sway(double Yaw, float Roll, float Pitch, float ArmOut);
 
+	/**
+	 * The street sweeper's broom, made the first time. After WalkTo he walks
+	 * with it upright in his right hand; after a standing pose with bSweeping
+	 * both hands hold it before him and the twigs swing side to side (Seconds
+	 * drives the swing). ShowBroom false puts it away.
+	 */
+	void CarryBroom(bool bSweeping, float Seconds);
+	void ShowBroom(bool bShow);
+	/** After WalkTo: the broom put away and both arms held out in front, carrying something. */
+	void CarryInArms();
+
 private:
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
@@ -106,6 +117,9 @@ private:
 	FLinearColor UmbrellaCloth = FLinearColor::Black;
 	/** He came out with a furled umbrella, taken out of his hand while it is open. */
 	bool bFurledInUse = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Broom;
 };
 
 /**

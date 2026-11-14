@@ -74,6 +74,9 @@ public:
 	/** The fight just begun is with a tough who picked on the player: he fights back, and beating him is good for the player's name. */
 	void SetChallenger();
 
+	/** The fight just begun is with someone who came after the player (a robbed owner): he fights back. */
+	void SetFightsBack();
+
 	/** True when a fight is going on (not beaten, not run off) within Radius of At. */
 	static bool IsFightNear(const UObject* WorldContextObject, const FVector& At, double Radius);
 

@@ -204,6 +204,12 @@ public:
 	 */
 	static void Investigate(const UObject* WorldContextObject, const FVector& At, double Range = 0.0);
 
+	/** Where the nearest constable on his beat (on duty, not busy) stands, within Within of From; false when there is none. */
+	static bool FindConstable(const UObject* WorldContextObject, const FVector& From, double Within, FVector& OutAt);
+
+	/** Someone has run up to the constables near At to tell on the player: that pair goes after him, and he is wanted. */
+	static void TipOff(const UObject* WorldContextObject, const FVector& At);
+
 	/** The furniture file with the boxes and the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Police")
 	FString DataFile = TEXT("Data/OsmGraybox/street_furniture.json");

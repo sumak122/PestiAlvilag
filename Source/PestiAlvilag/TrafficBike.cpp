@@ -448,7 +448,8 @@ void ATrafficBike::TakeRider(APawn* InRider)
 			Here + Right * (Side * TrafficBikeRide::RunnerOut), GetActorRotation(), RunnerParams))
 		{
 			Runner->SetOutfit(RiderLook);
-			Runner->RunFrom(Danger, true);
+			// He runs after the thief, runs for a constable, or runs off.
+			Runner->AfterThief(Danger, true, RiderLook);
 		}
 		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::BikeStolen, Here);
 		if (APolicePatrols::Witnessed(this, Here, TrafficBikeRide::TheftSeen))
