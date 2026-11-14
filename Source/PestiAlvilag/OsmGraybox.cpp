@@ -86,7 +86,8 @@ namespace OsmGraybox
 	// 8: the Városi Színház's block gets one straight front on Tisza Kálmán tér.
 	// 9: the Kerepesi cemetery: grass inside its wall, the gate lodges one floor (city_details.json "areas").
 	// 10: the Szent Erzsébet church's block left out (ErzsebetChurchModel builds it).
-	constexpr int32 MeshVersion = 10;
+	// 11: a later little block in Rózsák tere's garden left out.
+	constexpr int32 MeshVersion = 11;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");

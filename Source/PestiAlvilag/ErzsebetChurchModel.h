@@ -164,16 +164,19 @@ namespace ErzsebetChurchModel
 		Lamps.Add({ FVector(60.0, Y * 0.5, 650), 700.f });
 	}
 
-	/** Tall pointed windows and buttresses down one long wall from X0 to X1 at Y, facing Yaw. */
-	inline void SideWindows(TArray<FShape>& Out, double X0, double X1, double Y, double Yaw, double Z, double Height, double Eaves)
+	/** Tall pointed windows and (unless bPlain) buttresses with pinnacles down one long wall from X0 to X1 at Y, facing Yaw. */
+	inline void SideWindows(TArray<FShape>& Out, double X0, double X1, double Y, double Yaw, double Z, double Height, double Eaves, bool bPlain = false)
 	{
 		const int32 Bays = FMath::Max(1, FMath::RoundToInt((X1 - X0) / 520.0));
 		const double Side = Yaw > 0.0 ? 1.0 : -1.0;
 		for (int32 k = 0; k <= Bays; ++k)
 		{
 			const double X = X0 + (X1 - X0) * k / Bays;
-			Add(Out, MarketModel::Cube, Colors::Stone, FVector(X, Y + Side * 35.0, Eaves * 0.45), FVector(70, 70, Eaves * 0.9));
-			Add(Out, MarketModel::Cone, Colors::SpireStone, FVector(X, Y + Side * 35.0, Eaves + 110.0), FVector(60, 60, 220), 0.0, false);
+			if (!bPlain)
+			{
+				Add(Out, MarketModel::Cube, Colors::Stone, FVector(X, Y + Side * 35.0, Eaves * 0.45), FVector(70, 70, Eaves * 0.9));
+				Add(Out, MarketModel::Cone, Colors::SpireStone, FVector(X, Y + Side * 35.0, Eaves + 110.0), FVector(60, 60, 220), 0.0, false);
+			}
 			if (k < Bays)
 			{
 				ChurchModel::TallWindow(Out, FVector(X0 + (X1 - X0) * (k + 0.5) / Bays, Y, Z), Yaw, 140.0, Height, Colors::Stone, true);
@@ -199,10 +202,10 @@ namespace ErzsebetChurchModel
 			Add(Out, MarketModel::Cube, Brick, FVector((NaveStart + CrossX) * 0.5, AisleY, AisleEaves * 0.5), FVector(NaveStart - CrossX, AisleOut, AisleEaves));
 			// A lean-to roof from the aisle wall up to the nave.
 			const double Tilt = FMath::RadiansToDegrees(FMath::Atan2(250.0, AisleOut));
-			Add(Out, MarketModel::Cube, TileBrown, FVector((NaveStart + CrossX) * 0.5, AisleY, AisleEaves + 125.0), FVector(NaveStart - CrossX + 30.0, AisleOut / FMath::Cos(FMath::DegreesToRadians(Tilt)) + 20.0, 14.0), 0.0, true, 0.0, -Side * Tilt);
+			Add(Out, MarketModel::Cube, TileBrown, FVector((NaveStart + CrossX) * 0.5, AisleY, AisleEaves + 125.0), FVector(NaveStart - CrossX + 30.0, AisleOut / FMath::Cos(FMath::DegreesToRadians(Tilt)) + 20.0, 14.0), 0.0, true, 0.0, Side * Tilt);
 			SideWindows(Out, CrossX + TransHalf, NaveStart, Side * (NaveHalf + AisleOut), Side * 90.0, 250.0, 600.0, AisleEaves);
-			// The high windows over the aisle roofs.
-			SideWindows(Out, CrossX + TransHalf, NaveStart, Side * NaveHalf, Side * 90.0, AisleEaves + 330.0, 480.0, NaveEaves);
+			// The high windows over the aisle roofs (no buttresses: they would come up through the aisle roof).
+			SideWindows(Out, CrossX + TransHalf, NaveStart, Side * NaveHalf, Side * 90.0, AisleEaves + 330.0, 480.0, NaveEaves, true);
 		}
 
 		// The transept with its rounded ends and a rose window in each.
