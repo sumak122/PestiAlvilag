@@ -32,6 +32,13 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/**
+	 * Milk spilt on the road at At (a churn off a bolting cart): a stray cat
+	 * or two come out from somewhere out of sight and lap it up for about
+	 * Seconds, then wander off again.
+	 */
+	static void CallToMilk(const UObject* WorldContextObject, const FVector& At, float Seconds);
+
 	/** Animals further than this from the camera are hidden and left still (cm). */
 	UPROPERTY(EditAnywhere, Category = "Animals")
 	float ShowWithin = 7000.f;
@@ -47,7 +54,7 @@ protected:
 	TObjectPtr<UAnimalSound> Voice;
 
 private:
-	enum class EMood : uint8 { Rest, Walk, Watch, Leap, Flee };
+	enum class EMood : uint8 { Rest, Walk, Watch, Leap, Flee, Lap };
 
 	struct FPet
 	{
@@ -87,6 +94,22 @@ private:
 		float Blend = 1.f;
 		AnimalModel::EPose Showing = AnimalModel::EPose::Sit;
 		bool bShown = true;
+		/** A stray come for spilt milk: laps it while it lasts, then goes; put away (hidden) once out of sight. */
+		bool bVisitor = false;
+		bool bAway = false;
+		bool bLeaving = false;
+		FVector MilkAt = FVector::ZeroVector;
+		double MilkUntil = 0.0;
+		int32 MilkTries = 0;
+		float AwayClock = 0.f;
+	};
+
+	/** Spilt milk the strays come to, till that time (world seconds). */
+	struct FMilk
+	{
+		FVector At = FVector::ZeroVector;
+		double Until = 0.0;
+		int32 Called = 0;
 	};
 
 	/** Something that moves and can frighten them: the player (on foot or driving) or a car in the traffic. */
@@ -111,6 +134,12 @@ private:
 	void SetMood(FPet& Pet, EMood Mood, float Seconds);
 	void RunFrom(FPet& Pet, const FVector2D& Away, bool bLeap);
 	void Speak(const FPet& Pet, uint8 Kind, float Strength, float Delay = 0.f);
+	/** Brings a stray to a milk spill from out of sight; false when no spot was found. */
+	bool SendVisitor(FMilk& Milk);
+	/** A visitor's next step: to the milk, lapping, or off and away. */
+	void ThinkVisitor(FPet& Pet);
+	/** The cat comes back for the milk at this spot (cm), a little way from its middle. */
+	FVector LapSpot(const FPet& Pet) const;
 	UMaterialInstanceDynamic* Paint(const FLinearColor& Color);
 
 	TMap<FString, UMaterialInstanceDynamic*> Paints;
@@ -119,7 +148,10 @@ private:
 	TArray<FMover> Movers;
 	TMap<TWeakObjectPtr<AActor>, FVector> LastSeen;
 	TArray<const AActor*> Ignore;
+	TArray<FMilk> Milks;
+	float VisitorClock = 0.f;
 	FVector Camera = FVector::ZeroVector;
+	FVector CameraAhead = FVector::ForwardVector;
 	bool bSetUp = false;
 	float SetUpWait = 1.f;
 	FRandomStream Random;

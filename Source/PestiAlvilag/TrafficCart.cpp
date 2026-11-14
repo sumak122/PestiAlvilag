@@ -17,6 +17,7 @@
 #include "PestiPerson.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
+#include "SpillLife.h"
 #include "TrafficManager.h"
 #include "Witnesses.h"
 
@@ -397,6 +398,8 @@ void ATrafficCart::SpillOne()
 		Spilled.Add(Piece);
 		SpilledAt.Add(Now);
 	}
+	// Cats come for the milk, kids for the coal, and a barrel rolls off.
+	ASpillLife::Spilled(this, CartLoad, Lying, Puddle, At, FVector2D(GetActorForwardVector()));
 }
 
 void ATrafficCart::TidySpills()
