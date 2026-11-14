@@ -12,11 +12,13 @@
 
 namespace PestiMapBake
 {
-	// The same file the graybox city is built from.
+	// The same file the graybox city is built from, and the files that dress it.
 	const TCHAR* const DataFile = TEXT("Data/OsmGraybox/blaha_test_area.json");
+	const TCHAR* const DetailsFile = TEXT("Data/OsmGraybox/city_details.json");
+	const TCHAR* const FurnitureFile = TEXT("Data/OsmGraybox/street_furniture.json");
 
-	// The picture is this many pixels square (about 90 cm a pixel).
-	constexpr int32 Size = 2048;
+	// The picture is this many pixels square (about 44 cm a pixel).
+	constexpr int32 Size = 4096;
 
 	// The printed plan's inks.
 	const FColor Ground(43, 37, 28);
@@ -24,8 +26,33 @@ namespace PestiMapBake
 	const FColor Plaza(214, 200, 165);
 	const FColor Park(84, 96, 56);
 	const FColor Building(92, 76, 55);
-	const FColor Landmark(128, 98, 62);
+	const FColor BuildingEdge(66, 53, 37);
+	const FColor Landmark(140, 104, 62);
+	const FColor LandmarkEdge(212, 176, 104);
 	const FColor Tram(150, 62, 48);
+	const FColor Rail(78, 70, 58);
+	const FColor PathInk(176, 160, 118);
+	const FColor Tree(52, 66, 34);
+	const FColor Hedge(44, 58, 30);
+	const FColor Bed(124, 58, 48);
+	const FColor Kerb(170, 152, 112);
+	const FColor Grave(132, 126, 112);
+	const FColor CemeteryWall(150, 138, 112);
+
+	// Sizes drawn on the plan (cm): a hedge's width, a tree's crown for size 1, a grave, the cemetery wall.
+	constexpr double HedgeWidth = 90.0;
+	constexpr double CrownRadius = 330.0;
+	constexpr double GraveRadius = 45.0;
+	constexpr double WallWidth = 60.0;
+	constexpr double TramWidth = 90.0;
+
+	// The Nepszinhaz's walls on the plan, as ANepszinhaz builds them at PestiStart::TheatreAt facing west (cm).
+	constexpr double TheatreX = -3600.0;
+	constexpr double TheatreY = 200.0;
+	constexpr double TheatreFront = 2900.0;
+	constexpr double TheatreBack = 2200.0;
+	constexpr double TheatreHalfWidth = 2200.0;
+	constexpr double TheatreApse = 1300.0;
 
 	// A street further than this from the player is not named (cm).
 	constexpr double NameDistance = 2500.0;
@@ -146,8 +173,40 @@ namespace PestiMapBake
 			}
 		}
 
-		/** A polygon as the map data has it: rings of [x, y, ...] and triangles counted through all rings. */
-		void Polygon(const FJsonObject& Shape, const FColor& Color)
+		/** A line Width cm wide between two world spots, at least a pixel. */
+		void Band(double X0, double Y0, double X1, double Y1, double Width, const FColor& Color)
+		{
+			const FVector2D A = ToPixel(X0, Y0);
+			const FVector2D B = ToPixel(X1, Y1);
+			const double HalfWide = Width * PixelsPerCm * 0.5;
+			if (HalfWide < 0.75)
+			{
+				Line(A, B, Color);
+				return;
+			}
+			const FVector2D Along = (B - A).GetSafeNormal();
+			const FVector2D Across(-Along.Y * HalfWide, Along.X * HalfWide);
+			Triangle(A + Across, B + Across, B - Across, Color);
+			Triangle(A + Across, B - Across, A - Across, Color);
+		}
+
+		/** A round spot of Radius cm at a world spot, at least a pixel. */
+		void Disc(double X, double Y, double Radius, const FColor& Color)
+		{
+			const FVector2D Middle = ToPixel(X, Y);
+			const double R = FMath::Max(Radius * PixelsPerCm, 0.6);
+			const int32 FirstRow = FMath::FloorToInt(Middle.Y - R);
+			const int32 LastRow = FMath::FloorToInt(Middle.Y + R);
+			for (int32 Row = FirstRow; Row <= LastRow; ++Row)
+			{
+				const double Dy = FMath::Clamp(Row + 0.5 - Middle.Y, -R, R);
+				const double Dx = FMath::Sqrt(FMath::Max(R * R - Dy * Dy, 0.0));
+				Span(Row, FMath::FloorToInt(Middle.X - Dx), FMath::FloorToInt(Middle.X + Dx), Color);
+			}
+		}
+
+		/** A polygon as the map data has it: rings of [x, y, ...] and triangles counted through all rings; with Edge, its rings drawn round it. */
+		void Polygon(const FJsonObject& Shape, const FColor& Color, const FColor* Edge = nullptr)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* Rings = nullptr;
 			const TArray<TSharedPtr<FJsonValue>>* Corners = nullptr;
@@ -155,29 +214,51 @@ namespace PestiMapBake
 			{
 				return;
 			}
+			Fill(*Rings, *Corners, Color, Edge);
+		}
+
+		/** Rings of [x, y, ...] filled by triangles counted through all rings. */
+		void Fill(const TArray<TSharedPtr<FJsonValue>>& Rings, const TArray<TSharedPtr<FJsonValue>>& Corners, const FColor& Color, const FColor* Edge)
+		{
 			TArray<FVector2D> Points;
-			for (const TSharedPtr<FJsonValue>& RingValue : *Rings)
+			TArray<int32> RingStarts;
+			for (const TSharedPtr<FJsonValue>& RingValue : Rings)
 			{
+				RingStarts.Add(Points.Num());
 				const TArray<TSharedPtr<FJsonValue>>& Coords = RingValue->AsArray();
 				for (int32 i = 0; i + 1 < Coords.Num(); i += 2)
 				{
 					Points.Add(ToPixel(Coords[i]->AsNumber(), Coords[i + 1]->AsNumber()));
 				}
 			}
-			for (int32 i = 0; i + 2 < Corners->Num(); i += 3)
+			for (int32 i = 0; i + 2 < Corners.Num(); i += 3)
 			{
-				const int32 A = static_cast<int32>((*Corners)[i]->AsNumber());
-				const int32 B = static_cast<int32>((*Corners)[i + 1]->AsNumber());
-				const int32 C = static_cast<int32>((*Corners)[i + 2]->AsNumber());
+				const int32 A = static_cast<int32>(Corners[i]->AsNumber());
+				const int32 B = static_cast<int32>(Corners[i + 1]->AsNumber());
+				const int32 C = static_cast<int32>(Corners[i + 2]->AsNumber());
 				if (Points.IsValidIndex(A) && Points.IsValidIndex(B) && Points.IsValidIndex(C))
 				{
 					Triangle(Points[A], Points[B], Points[C], Color);
 				}
 			}
+			if (!Edge)
+			{
+				return;
+			}
+			RingStarts.Add(Points.Num());
+			for (int32 r = 0; r + 1 < RingStarts.Num(); ++r)
+			{
+				const int32 First = RingStarts[r];
+				const int32 End = RingStarts[r + 1];
+				for (int32 i = First; i < End; ++i)
+				{
+					Line(Points[i], Points[i + 1 < End ? i + 1 : First], *Edge);
+				}
+			}
 		}
 
 		/** Every polygon of a list of objects that each hold one (buildings, landmarks). */
-		void Polygons(const FJsonObject& Root, const TCHAR* Field, const FColor& Color)
+		void Polygons(const FJsonObject& Root, const TCHAR* Field, const FColor& Color, const FColor* Edge = nullptr)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
 			if (Root.TryGetArrayField(Field, List))
@@ -186,12 +267,68 @@ namespace PestiMapBake
 				{
 					if (const TSharedPtr<FJsonObject> Shape = Value->AsObject())
 					{
-						Polygon(*Shape, Color);
+						Polygon(*Shape, Color, Edge);
 					}
 				}
 			}
 		}
 	};
+
+	/** The JSON file at a path under the project, or null. */
+	TSharedPtr<FJsonObject> LoadJson(const TCHAR* File)
+	{
+		FString Text;
+		TSharedPtr<FJsonObject> Root;
+		if (FFileHelper::LoadFileToString(Text, *FPaths::Combine(FPaths::ProjectDir(), File)))
+		{
+			FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root);
+		}
+		return Root;
+	}
+
+	/** Each row of numbers of a list field of an object (rows shorter than MinCount left out). */
+	void ForEachRow(const FJsonObject& Object, const TCHAR* Field, int32 MinCount, TFunctionRef<void(const TArray<TSharedPtr<FJsonValue>>&)> Use)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!Object.TryGetArrayField(Field, Rows))
+		{
+			return;
+		}
+		for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Numbers = nullptr;
+			if (RowValue.IsValid() && RowValue->TryGetArray(Numbers) && Numbers->Num() >= MinCount)
+			{
+				Use(*Numbers);
+			}
+		}
+	}
+
+	/** A park's or square's paths, beds, hedges and trees (street_furniture.json). */
+	void PaintGarden(FCanvas& Canvas, const FJsonObject& Garden)
+	{
+		ForEachRow(Garden, TEXT("paths"), 5, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+		{
+			Canvas.Band(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber(), E[3]->AsNumber(), E[4]->AsNumber(), PathInk);
+		});
+		ForEachRow(Garden, TEXT("islands"), 5, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+		{
+			Canvas.Band(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber(), E[3]->AsNumber(), E[4]->AsNumber(), Plaza);
+		});
+		ForEachRow(Garden, TEXT("rounds"), 4, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+		{
+			Canvas.Disc(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber(), PathInk);
+			Canvas.Disc(E[0]->AsNumber(), E[1]->AsNumber(), E[3]->AsNumber(), Bed);
+		});
+		ForEachRow(Garden, TEXT("hedges"), 4, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+		{
+			Canvas.Band(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber(), E[3]->AsNumber(), HedgeWidth, Hedge);
+		});
+		ForEachRow(Garden, TEXT("trees"), 3, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+		{
+			Canvas.Disc(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber() * CrownRadius, Tree);
+		});
+	}
 
 	/** Points of a flat [x, y, ...] list. */
 	TArray<FVector2D> ReadPoints(const FJsonObject& Object)
@@ -307,11 +444,23 @@ namespace PestiMapBake
 		Canvas.Corner = Plan.Corner;
 		Canvas.PixelsPerCm = Size / Plan.Side;
 
-		// Roads, squares and parks first, then the blocks over them.
+		// The dressing files: blocks the game builds differently, the cemetery's lawn and graves, the gardens.
+		const TSharedPtr<FJsonObject> Details = LoadJson(DetailsFile);
+		const TSharedPtr<FJsonObject> Furniture = LoadJson(FurnitureFile);
+
+		// Roads, squares, parks and rails first, then the gardens, then the blocks over them.
+		TArray<TSharedPtr<FJsonValue>> AllAreas;
 		const TArray<TSharedPtr<FJsonValue>>* Areas = nullptr;
 		if (Root->TryGetArrayField(TEXT("areas"), Areas))
 		{
-			for (const TSharedPtr<FJsonValue>& Value : *Areas)
+			AllAreas.Append(*Areas);
+		}
+		if (Details.IsValid() && Details->TryGetArrayField(TEXT("areas"), Areas))
+		{
+			AllAreas.Append(*Areas);
+		}
+		{
+			for (const TSharedPtr<FJsonValue>& Value : AllAreas)
 			{
 				const TSharedPtr<FJsonObject> Area = Value->AsObject();
 				if (!Area.IsValid())
@@ -319,7 +468,8 @@ namespace PestiMapBake
 					continue;
 				}
 				const FString Layer = Area->GetStringField(TEXT("layer"));
-				const FColor* Color = Layer == TEXT("road") ? &Road : Layer == TEXT("plaza") ? &Plaza : Layer == TEXT("park") ? &Park : nullptr;
+				const FColor* Color = Layer == TEXT("road") ? &Road : Layer == TEXT("plaza") ? &Plaza : Layer == TEXT("park") ? &Park
+					: Layer == TEXT("rail") ? &Rail : nullptr;
 				const TArray<TSharedPtr<FJsonValue>>* Shapes = nullptr;
 				if (Color && Area->TryGetArrayField(TEXT("polygons"), Shapes))
 				{
@@ -333,8 +483,121 @@ namespace PestiMapBake
 				}
 			}
 		}
-		Canvas.Polygons(*Root, TEXT("buildings"), Building);
-		Canvas.Polygons(*Root, TEXT("landmarks"), Landmark);
+		if (Furniture.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Market = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* MarketGround = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* MarketCorners = nullptr;
+			if (Furniture->TryGetObjectField(TEXT("market"), Market) && (*Market)->TryGetArrayField(TEXT("ground"), MarketGround)
+				&& (*Market)->TryGetArrayField(TEXT("tris"), MarketCorners))
+			{
+				const TArray<TSharedPtr<FJsonValue>> GroundRings = { MakeShared<FJsonValueArray>(*MarketGround) };
+				Canvas.Fill(GroundRings, *MarketCorners, Plaza, nullptr);
+			}
+			for (const TCHAR* GardenName : { TEXT("tisza"), TEXT("baross"), TEXT("rakoczi"), TEXT("kerepesi"), TEXT("rozsak") })
+			{
+				const TSharedPtr<FJsonObject>* Garden = nullptr;
+				if (Furniture->TryGetObjectField(GardenName, Garden))
+				{
+					PaintGarden(Canvas, **Garden);
+				}
+			}
+			ForEachRow(*Furniture, TEXT("sidewalks"), 4, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+			{
+				Canvas.Line(Canvas.ToPixel(E[0]->AsNumber(), E[1]->AsNumber()), Canvas.ToPixel(E[2]->AsNumber(), E[3]->AsNumber()), Kerb);
+			});
+		}
+
+		// The cemetery's graves and wall.
+		const TSharedPtr<FJsonObject>* Cemetery = nullptr;
+		if (Details.IsValid() && Details->TryGetObjectField(TEXT("cemetery"), Cemetery))
+		{
+			ForEachRow(**Cemetery, TEXT("graves"), 2, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+			{
+				Canvas.Disc(E[0]->AsNumber(), E[1]->AsNumber(), GraveRadius, Grave);
+			});
+			ForEachRow(**Cemetery, TEXT("walls"), 4, [&Canvas](const TArray<TSharedPtr<FJsonValue>>& E)
+			{
+				Canvas.Band(E[0]->AsNumber(), E[1]->AsNumber(), E[2]->AsNumber(), E[3]->AsNumber(), WallWidth, CemeteryWall);
+			});
+		}
+
+		// The blocks: the game's own landmarks lighter with a gilt edge, blocks it builds differently as it builds them.
+		TSet<FString> LandmarkIds;
+		TMap<FString, TArray<TSharedPtr<FJsonObject>>> Replaced;
+		if (Details.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Ids = nullptr;
+			if (Details->TryGetArrayField(TEXT("map_landmarks"), Ids))
+			{
+				for (const TSharedPtr<FJsonValue>& Id : *Ids)
+				{
+					LandmarkIds.Add(Id->AsString());
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Pieces = nullptr;
+			if (Details->TryGetArrayField(TEXT("buildings"), Pieces))
+			{
+				for (const TSharedPtr<FJsonValue>& PieceValue : *Pieces)
+				{
+					const TSharedPtr<FJsonObject> Piece = PieceValue->AsObject();
+					FString Replaces;
+					if (Piece.IsValid() && Piece->TryGetStringField(TEXT("replaces"), Replaces))
+					{
+						Replaced.FindOrAdd(Replaces).Add(Piece);
+					}
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Blocks = nullptr;
+		if (Root->TryGetArrayField(TEXT("buildings"), Blocks))
+		{
+			for (const TSharedPtr<FJsonValue>& BlockValue : *Blocks)
+			{
+				const TSharedPtr<FJsonObject> Block = BlockValue->AsObject();
+				if (!Block.IsValid())
+				{
+					continue;
+				}
+				const FString Id = Block->GetStringField(TEXT("id"));
+				if (LandmarkIds.Contains(Id))
+				{
+					Canvas.Polygon(*Block, Landmark, &LandmarkEdge);
+				}
+				else if (const TArray<TSharedPtr<FJsonObject>>* Instead = Replaced.Find(Id))
+				{
+					for (const TSharedPtr<FJsonObject>& Piece : *Instead)
+					{
+						bool bGone = false;
+						if (!Piece->TryGetBoolField(TEXT("gone"), bGone) || !bGone)
+						{
+							Canvas.Polygon(*Piece, Building, &BuildingEdge);
+						}
+					}
+				}
+				else
+				{
+					Canvas.Polygon(*Block, Building, &BuildingEdge);
+				}
+			}
+		}
+		Canvas.Polygons(*Root, TEXT("landmarks"), Landmark, &LandmarkEdge);
+
+		// The Nepszinhaz (an actor of its own, not in the map data): the rounded back first, then the walls over it.
+		{
+			const double FrontX = TheatreX - TheatreFront;
+			const double BackX = TheatreX + TheatreBack;
+			const double North = TheatreY - TheatreHalfWidth;
+			const double South = TheatreY + TheatreHalfWidth;
+			Canvas.Disc(BackX, TheatreY, TheatreApse, LandmarkEdge);
+			Canvas.Disc(BackX, TheatreY, TheatreApse - 60.0, Landmark);
+			Canvas.Band(FrontX, TheatreY, BackX, TheatreY, 2.0 * TheatreHalfWidth, Landmark);
+			Canvas.Line(Canvas.ToPixel(FrontX, North), Canvas.ToPixel(BackX, North), LandmarkEdge);
+			Canvas.Line(Canvas.ToPixel(FrontX, South), Canvas.ToPixel(BackX, South), LandmarkEdge);
+			Canvas.Line(Canvas.ToPixel(FrontX, North), Canvas.ToPixel(FrontX, South), LandmarkEdge);
+			Canvas.Line(Canvas.ToPixel(BackX, North), Canvas.ToPixel(BackX, TheatreY - TheatreApse), LandmarkEdge);
+			Canvas.Line(Canvas.ToPixel(BackX, TheatreY + TheatreApse), Canvas.ToPixel(BackX, South), LandmarkEdge);
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* Trams = nullptr;
 		if (Root->TryGetArrayField(TEXT("trams"), Trams))
@@ -346,7 +609,7 @@ namespace PestiMapBake
 					const TArray<FVector2D> Points = ReadPoints(*Line);
 					for (int32 i = 0; i + 1 < Points.Num(); ++i)
 					{
-						Canvas.Line(Canvas.ToPixel(Points[i].X, Points[i].Y), Canvas.ToPixel(Points[i + 1].X, Points[i + 1].Y), Tram);
+						Canvas.Band(Points[i].X, Points[i].Y, Points[i + 1].X, Points[i + 1].Y, TramWidth, Tram);
 					}
 				}
 			}

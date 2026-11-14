@@ -532,7 +532,8 @@ STOP_MARK_SAME = 6000
 
 def place_map_icons(data, f, courtyards):
     """The little pictures on the maps: [kind, x, y] with kind one of cafe,
-    market, tram, phone, yard, theatre, station, store, church."""
+    market, tram, phone, yard, theatre, station, store, church (and hotel,
+    sight from landmark_icons)."""
     icons = [["cafe", *CAFE_AT], ["theatre", *THEATRE_AT], ["station", *KELETI_AT],
              ["market", *HALL_AT], ["store", *CORVIN_AT], ["cafe", *NEW_YORK_CAFE_AT], ["theatre", *CITY_THEATRE_AT]]
     stalls = f["market"]["stalls"]
@@ -771,6 +772,26 @@ def undressed_forms(data):
         form["front"] = [e for e in building.get("front", []) if e not in edges]
         forms[building_id] = [form]
     return forms
+
+
+def front_spot(row, out=900):
+    """A spot out in the street from the middle of a dressed wall row [x, y, yaw, length, ...]."""
+    x, y, yaw, length = row[:4]
+    a = math.radians(yaw)
+    return [round(x - math.sin(a) * length / 2 + math.cos(a) * out), round(y + math.cos(a) * length / 2 + math.sin(a) * out)]
+
+
+def landmark_icons(data):
+    """The maps' pictures for the grand buildings: hotels and sights (the
+    seminary and the OTI palace; the cemetery has its name on the big map)."""
+    icons = [["hotel", *front_spot(r[2:])] for r in hotels(data) if r[1] == 1]
+    icons += [["sight", *front_spot(r[1:])] for r in seminary(data) + oti(data) if r[0] == 1]
+    return icons
+
+
+def map_landmarks():
+    """Blocks the maps draw as landmarks (lighter, with a gilt edge)."""
+    return sorted({CORVIN_ID, NEW_YORK_ID, THEATRE_ID, SEMINARY_ID, OTI_ID} | {b for b, _, _ in CHURCHES} | {span[0] for span in HOTEL_SPANS})
 
 
 def hotels(data):
@@ -1179,7 +1200,8 @@ def main():
         "wall_ads": ads,
         "kiosks": kiosks,
         "clocks": clocks,
-        "map_icons": place_map_icons(data, f, courtyards),
+        "map_icons": place_map_icons(data, f, courtyards) + landmark_icons(data),
+        "map_landmarks": map_landmarks(),
         "churches": churches,
         "newyork": new_york_pieces,
         "city_theatre": theatre_front,
