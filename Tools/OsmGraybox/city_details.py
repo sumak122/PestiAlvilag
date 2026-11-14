@@ -605,7 +605,7 @@ CEMETERY_LOW = 650
 # The Rabbinical Seminary (SeminaryModel.h) on the corner of Scheiber Sándor
 # utca: its block's street edges each get a dressed run, the cut corner the door.
 SEMINARY_ID = "w256568273"
-SEMINARY_EDGES = [23, 25, 26, 28, 29, 30, 1, 2, 4]
+SEMINARY_EDGES = [23, 24, 25, 26, 27, 28, 29, 30, 0, 1, 2, 3, 4]
 SEMINARY_MAIN = 29
 
 # A later little block in Rózsák tere's garden (not there in 1932).

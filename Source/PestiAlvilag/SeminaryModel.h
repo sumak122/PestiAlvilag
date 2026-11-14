@@ -44,14 +44,14 @@ namespace SeminaryModel
 	constexpr double Skin = 14.0;
 
 	/** A round-arched window on the wall at Y, its sill at Z. */
-	inline void ArchWindow(TArray<FShape>& Out, double Y, double Z, double Width, double Height)
+	inline void ArchWindow(TArray<FShape>& Out, double Y, double Z, double Width, double Height, double Front = Skin)
 	{
 		using namespace Colors;
-		Add(Out, MarketModel::Cube, Trim, FVector(Skin + 3, Y, Z + Height * 0.5), FVector(6, Width + 26, Height + 8), 0.0, false);
-		Add(Out, MarketModel::Cube, Glass, FVector(Skin + 6, Y, Z + Height * 0.5 - 4), FVector(4, Width, Height - 8), 0.0, false);
-		Add(Out, MarketModel::Cylinder, Trim, FVector(Skin + 3, Y, Z + Height), FVector(Width + 26, Width + 26, 6), 0.0, false, 90.0);
-		Add(Out, MarketModel::Cylinder, Glass, FVector(Skin + 6, Y, Z + Height - 4), FVector(Width, Width, 4), 0.0, false, 90.0);
-		Add(Out, MarketModel::Cube, Trim, FVector(Skin + 8, Y, Z - 6), FVector(16, Width + 40, 12), 0.0, false);
+		Add(Out, MarketModel::Cube, Trim, FVector(Front + 3, Y, Z + Height * 0.5), FVector(6, Width + 26, Height + 8), 0.0, false);
+		Add(Out, MarketModel::Cube, Glass, FVector(Front + 6, Y, Z + Height * 0.5 - 4), FVector(4, Width, Height - 8), 0.0, false);
+		Add(Out, MarketModel::Cylinder, Trim, FVector(Front + 3, Y, Z + Height), FVector(Width + 26, Width + 26, 6), 0.0, false, 90.0);
+		Add(Out, MarketModel::Cylinder, Glass, FVector(Front + 6, Y, Z + Height - 4), FVector(Width, Width, 4), 0.0, false, 90.0);
+		Add(Out, MarketModel::Cube, Trim, FVector(Front + 8, Y, Z - 6), FVector(16, Width + 40, 12), 0.0, false);
 	}
 
 	/** The plain brick skin of a run from Y0 to Y1: plinth, string course, the arch band and cornice. */
@@ -79,6 +79,15 @@ namespace SeminaryModel
 	{
 		using namespace Colors;
 		Skin2(Out, 0.0, Length);
+		// A short step in the wall: plain brick between two pilasters, no window.
+		if (Length < 250.0)
+		{
+			for (const double Y : { 23.0, Length - 23.0 })
+			{
+				Add(Out, MarketModel::Cube, Brick, FVector(Skin + 10, Y, WallTop * 0.5), FVector(20, 46, WallTop - 40), 0.0, false);
+			}
+			return;
+		}
 		const int32 Bays = FMath::Max(1, FMath::FloorToInt(Length / BayWidth));
 		const double Bay = Length / Bays;
 		for (int32 k = 0; k <= Bays; ++k)
@@ -130,7 +139,7 @@ namespace SeminaryModel
 		// The triple window over the door.
 		for (const double Y : { -110.0, 0.0, 110.0 })
 		{
-			ArchWindow(Out, Mid + Y, FloorTwo + 60.0, 80.0, Y == 0.0 ? 210.0 : 180.0);
+			ArchWindow(Out, Mid + Y, FloorTwo + 60.0, 80.0, Y == 0.0 ? 210.0 : 180.0, Skin + 30.0);
 		}
 		// The attic: a stepped gable with the name on a dark plate, and pinnacles at its sides.
 		const double AtticW = FMath::Min(Length - 80.0, 560.0);
@@ -141,7 +150,7 @@ namespace SeminaryModel
 			Add(Out, MarketModel::Cube, Trim, FVector(Skin + 15, Mid, WallTop + 98 + Step * 90), FVector(Skin + 46, W + 16, 10), 0.0, false);
 		}
 		Add(Out, MarketModel::Cube, Plate, FVector(Skin + 33, Mid, WallTop + 60), FVector(4, AtticW - 60, 70), 0.0, false);
-		Signs.Add({ TEXT("ORSZÁGOS RABBIKÉPZŐ INTÉZET"), FVector(Skin + 36, Mid, WallTop + 50), 0.0, 22.0, Gilt });
+		Signs.Add({ TEXT("ORSZ\u00C1GOS RABBIK\u00C9PZ\u0150 INT\u00C9ZET"), FVector(Skin + 36, Mid, WallTop + 50), 0.0, 22.0, Gilt });
 		for (const double Y : { Mid - AtticW * 0.5, Mid + AtticW * 0.5 })
 		{
 			Add(Out, MarketModel::Cube, Trim, FVector(Skin + 20, Y, WallTop + 90), FVector(40, 40, 180), 0.0, false);
