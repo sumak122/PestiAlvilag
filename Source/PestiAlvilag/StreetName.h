@@ -30,6 +30,8 @@ namespace StreetName
 	constexpr int32 ForBeatingUp = -1;
 	// Knocking a constable down in a fist fight: the underworld hears of it.
 	constexpr int32 ForBeatingPolice = 2;
+	// Beating a tough who came up to pick a fight with the player.
+	constexpr int32 ForBeatingChallenger = 2;
 
 	struct FRank
 	{

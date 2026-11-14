@@ -361,6 +361,15 @@ void AStreetFights::TakeTurns(FFight& Fight, ARuffian* Man, APestiPerson* Player
 	}
 }
 
+void AStreetFights::SetChallenger()
+{
+	if (Fights.Num() > 0)
+	{
+		Fights.Last().bChallenger = true;
+		Fights.Last().bFightsBack = true;
+	}
+}
+
 void AStreetFights::SetLoot(int32 Filler)
 {
 	if (Fights.Num() > 0 && Filler > 0)
@@ -510,6 +519,18 @@ void AStreetFights::Tick(float DeltaSeconds)
 						Hud->Say(TEXT("Zsebtolvaj"), TEXT("Itt van, itt van, vegye vissza!"), TEXT("Here, here, take it back!"), 3.f);
 					}
 					Fight.Loot = 0;
+				}
+				else if (Fight.bChallenger)
+				{
+					// The tough asked for it: the street likes to see him put down.
+					if (APestiHUD* Hud = APestiHUD::Get(this))
+					{
+						Hud->Say(TEXT("K\u00f6teked\u0151"), TEXT("J\u00f3l van, j\u00f3l van... maga az \u00far itt."), TEXT("All right, all right... you're the boss here."), 3.f);
+					}
+					if (Game)
+					{
+						Game->AddRenown(StreetName::ForBeatingChallenger, TEXT("lerendezett egy k\u00f6teked\u0151t"), TEXT("saw off a tough who picked on him"));
+					}
 				}
 				else
 				{

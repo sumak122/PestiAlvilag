@@ -70,6 +70,15 @@ public:
 	/** Standing, one fist raised and shaking (Seconds drives the shake). */
 	void ShakeFist(const FVector& Location, double Yaw, float Seconds);
 
+	/** Standing, the right hand raised to the hat brim by Raise (0..1); a woman only stands and faces. */
+	void TipHat(const FVector& Location, double Yaw, float Raise);
+
+	/** Standing, the right arm up and waving (Seconds drives the wave). */
+	void Wave(const FVector& Location, double Yaw, float Seconds);
+
+	/** Standing squared up, fists raised before his face, bobbing a little (Seconds drives it). */
+	void FistsUp(const FVector& Location, double Yaw, float Seconds);
+
 private:
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
@@ -185,7 +194,7 @@ private:
 	 * off from a car on the pavement, knocked down (and getting up again), or
 	 * run over at speed and lying still, or stopped to show the player the way.
 	 */
-	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead, Point };
+	enum class EReact : uint8 { None, Aside, Stumble, Leap, Flee, Down, GetUp, Dead, Point, Respect, Wave, Challenge, Backing };
 
 	struct FLine
 	{
@@ -271,6 +280,10 @@ private:
 		FString CallHu;
 		FString CallEn;
 		double NextCall = 0.0;
+		/** A stander: not before this time does he wave to the player again. */
+		double NextWave = 0.0;
+		/** A tough picking on the player: there in front of him with his fists up (not still walking over). */
+		bool bSquared = false;
 	};
 
 	bool LoadLines();
@@ -349,6 +362,12 @@ private:
 	void AskTheWay(APawn* Player, double Now);
 	/** A click on foot next to someone: the player picks a fight with him (AStreetFights). */
 	void PickAFight(APawn* Player);
+	/** The player's street name rank (StreetName::Ranks), 0 without a game mode. */
+	int32 PlayerRank() const;
+	/** Now and then, while his name is still small, a tough walks up and squares up to him. */
+	void TickChallenge(double Now, bool bPlayerAbout);
+	/** The tough (and his mates) back to walking, with a parting line if he gives up. */
+	void EndChallenge(bool bJeer);
 	/** The map direction to point from From to get to To along the streets, and how far that is (cm). */
 	float WayFrom(const FVector2D& From, const FVector2D& To, double& OutDistance) const;
 
@@ -374,4 +393,11 @@ private:
 	FVector2D PlayerForward = FVector2D(1.0, 0.0);
 	bool bPlayerDriving = false;
 	double LastShout = -10.0;
+	/** The street name at work: not before these times does anyone show respect, bump into him, or pick on him. */
+	double NextRespect = 0.0;
+	double NextBump = 0.0;
+	double NextChallenge = -1.0;
+	/** Where the tough picking on the player stands, while one does. */
+	FVector2D ChallengerAt = FVector2D::ZeroVector;
+	bool bChallenge = false;
 };
