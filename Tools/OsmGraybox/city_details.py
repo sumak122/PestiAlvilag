@@ -602,6 +602,12 @@ CEMETERY_GRAVE_KINDS = [0, 0, 0, 1, 1, 2, 2, 3, 4, 4, 5]   # CemeteryModel::EGra
 # offices, chapels and tombs are lower (by name; anything else one floor).
 CEMETERY_HEIGHTS = {"Árkádsor": 750, "kápolna": 1100, "Batthyány": 1300, "Kossuth": 1500, "mauzóleum": 800}
 CEMETERY_LOW = 650
+# The Rabbinical Seminary (SeminaryModel.h) on the corner of Scheiber Sándor
+# utca: its block's street edges each get a dressed run, the cut corner the door.
+SEMINARY_ID = "w256568273"
+SEMINARY_EDGES = [23, 25, 26, 28, 29, 30, 1, 2, 4]
+SEMINARY_MAIN = 29
+
 # A later little block in Rózsák tere's garden (not there in 1932).
 ROZSAK_LATER = ["w374844687"]
 CEMETERY_LATER = ["w526250716", "w526250726"]
@@ -720,6 +726,23 @@ def new_york(data):
         assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), part
         pieces.append([part, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
     return form, pieces
+
+
+def seminary(data):
+    """The seminary's runs: [main, x, y, yaw, length], each from its start at
+    the foot, yaw out of the wall, the wall along the frame's Y."""
+    building = next(b for b in data["buildings"] if b["id"] == SEMINARY_ID)
+    ring = ring_points(building["rings"][0])
+    shape = Polygon(ring)
+    runs = []
+    for i in SEMINARY_EDGES:
+        a, z = ring[i], ring[(i + 1) % len(ring)]
+        ax, ay = unit(z[0] - a[0], z[1] - a[1])
+        ox, oy = ay, -ax
+        mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
+        assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), i
+        runs.append([1 if i == SEMINARY_MAIN else 0, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
+    return runs
 
 
 def city_theatre(data):
@@ -1090,6 +1113,7 @@ def main():
         "newyork": new_york_pieces,
         "city_theatre": theatre_front,
         "cemetery": cemetery,
+        "seminary": seminary(data),
         "areas": extra_areas,
         "window_folk": folk,
         "hydrants": hydrants,
