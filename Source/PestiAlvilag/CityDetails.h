@@ -71,6 +71,9 @@ private:
 	void BuildNewYork(const FJsonObject& Root);
 	void BuildCityTheatre(const FJsonObject& Root);
 	void BuildCemetery(const FJsonObject& Root);
+	void BuildSeminary(const FJsonObject& Root);
+	void BuildOti(const FJsonObject& Root);
+	void BuildHotels(const FJsonObject& Root);
 	void BuildStreetLife(const FJsonObject& Root);
 	void PutCoalMan(const FVector& Foot, double FacingYaw, uint32 Seed);
 	void SetHands(float Hour);
