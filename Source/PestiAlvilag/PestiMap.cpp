@@ -131,6 +131,7 @@ namespace PestiMapBake
 			const FVector2D Corners[3] = { A, B, C };
 			for (int32 Row = FirstRow; Row <= LastRow; ++Row)
 			{
+				// Where the edges cross the middle of this row of pixels.
 				const double Y = Row + 0.5;
 				double Left = TNumericLimits<double>::Max();
 				double Right = -TNumericLimits<double>::Max();
@@ -140,15 +141,41 @@ namespace PestiMapBake
 					const FVector2D& Q = Corners[(i + 1) % 3];
 					const double Low = FMath::Min(P.Y, Q.Y);
 					const double High = FMath::Max(P.Y, Q.Y);
-					if (High - Low < UE_DOUBLE_SMALL_NUMBER)
+					if (High - Low < UE_DOUBLE_SMALL_NUMBER || Y < Low || Y > High)
 					{
 						continue;
 					}
-					// Rows the triangle only grazes still get its nearest edge.
-					const double At = FMath::Clamp(Y, Low, High);
-					const double X = P.X + (At - P.Y) * (Q.X - P.X) / (Q.Y - P.Y);
+					const double X = P.X + (Y - P.Y) * (Q.X - P.X) / (Q.Y - P.Y);
 					Left = FMath::Min(Left, X);
 					Right = FMath::Max(Right, X);
+				}
+				// A row the triangle only grazes (it starts or ends inside the row): the part of each edge inside the row.
+				if (Left > Right)
+				{
+					const double RowTop = Row;
+					const double RowBottom = Row + 1.0;
+					for (int32 i = 0; i < 3; ++i)
+					{
+						const FVector2D& P = Corners[i];
+						const FVector2D& Q = Corners[(i + 1) % 3];
+						const double Low = FMath::Min(P.Y, Q.Y);
+						const double High = FMath::Max(P.Y, Q.Y);
+						if (High < RowTop || Low > RowBottom)
+						{
+							continue;
+						}
+						for (const double Edge : { FMath::Max(Low, RowTop), FMath::Min(High, RowBottom) })
+						{
+							const double X = High - Low < UE_DOUBLE_SMALL_NUMBER ? P.X : P.X + (Edge - P.Y) * (Q.X - P.X) / (Q.Y - P.Y);
+							Left = FMath::Min(Left, X);
+							Right = FMath::Max(Right, X);
+						}
+						if (High - Low < UE_DOUBLE_SMALL_NUMBER)
+						{
+							Left = FMath::Min(Left, FMath::Min(P.X, Q.X));
+							Right = FMath::Max(Right, FMath::Max(P.X, Q.X));
+						}
+					}
 				}
 				if (Left <= Right)
 				{
