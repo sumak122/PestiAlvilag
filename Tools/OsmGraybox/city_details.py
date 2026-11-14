@@ -611,7 +611,7 @@ SEMINARY_MAIN = 29
 # The OTI palace on Fiumei út (map: "Nyugdíjbiztosítási Székház"): its street walls,
 # the long Fiumei út front (edge 3) gets the wings, the gate and the tower.
 OTI_ID = "r3331750"
-OTI_EDGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 23, 24]
+OTI_EDGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 23, 24]  # not 22: a house stands against it
 OTI_MAIN = 3
 
 # The two grand hotels by Blaha: (block, hotel 0 Nemzeti / 1 Metropol, part
@@ -785,8 +785,17 @@ def hotels(data):
         ox, oy = ay, -ax
         mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
         assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), (building_id, i)
+        assert_street_side(data, a, z, ox, oy, (building_id, i))
         rows.append([hotel, part, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z)), building["height"]])
     return rows
+
+
+def assert_street_side(data, a, z, ox, oy, what):
+    """The game finds the ground for a dressed wall 120 cm in front of its
+    middle; on a roof there the wall would float, so that spot must be open."""
+    probe = Point((a[0] + z[0]) / 2 + ox * 120, (a[1] + z[1]) / 2 + oy * 120)
+    for b in data["buildings"]:
+        assert not Polygon(ring_points(b["rings"][0])).contains(probe), (what, b["id"])
 
 
 def dressed_runs(data, building_id, edges, main):
@@ -801,6 +810,7 @@ def dressed_runs(data, building_id, edges, main):
         ox, oy = ay, -ax
         mx, my = (a[0] + z[0]) / 2, (a[1] + z[1]) / 2
         assert not shape.contains(Point(mx + ox * 100, my + oy * 100)), i
+        assert_street_side(data, a, z, ox, oy, (building_id, i))
         runs.append([1 if i == main else 0, round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))])
     return runs
 
