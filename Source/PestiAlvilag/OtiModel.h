@@ -99,26 +99,33 @@ namespace OtiModel
 		Add(Out, MarketModel::Cube, Trim, FVector(Front * 0.5 + 4, Mid, WallTop + 84), FVector(Front + 16, Long + 10, 8), 0.0, false);
 	}
 
-	/** One plain run: windows in bays, a flat pilaster every third bay. */
-	inline void Run(double Length, TArray<FShape>& Out)
+	/** The windows of a plain stretch from Y0 to Y1: windows in bays, a flat pilaster every third bay. */
+	inline void Bays(TArray<FShape>& Out, double Y0, double Y1)
 	{
 		using namespace Colors;
-		Wall(Out, 0.0, Length, Skin);
-		if (Length < 250.0)
+		const double Long = Y1 - Y0;
+		if (Long < 250.0)
 		{
 			return;
 		}
-		const int32 Bays = FMath::Max(1, FMath::RoundToInt(Length / BayWidth));
-		const double Bay = Length / Bays;
-		for (int32 k = 0; k <= Bays; k += 3)
+		const int32 Count = FMath::Max(1, FMath::RoundToInt(Long / BayWidth));
+		const double Bay = Long / Count;
+		const double PilasterZ = (BaseTop + WallTop - 40.0) * 0.5;
+		for (int32 k = 0; k <= Count; k += 3)
 		{
-			const double PilasterZ = (BaseTop + WallTop - 40.0) * 0.5;
-			Add(Out, MarketModel::Cube, Plaster, FVector(Skin + 8, k * Bay, PilasterZ), FVector(16, 50, WallTop - 40.0 - BaseTop), 0.0, false);
+			Add(Out, MarketModel::Cube, Plaster, FVector(Skin + 8, Y0 + k * Bay, PilasterZ), FVector(16, 50, WallTop - 40.0 - BaseTop), 0.0, false);
 		}
-		for (int32 k = 0; k < Bays; ++k)
+		for (int32 k = 0; k < Count; ++k)
 		{
-			BayWindows(Out, (k + 0.5) * Bay, Skin, FMath::Min(120.0, Bay - 120.0));
+			BayWindows(Out, Y0 + (k + 0.5) * Bay, Skin, FMath::Min(120.0, Bay - 120.0));
 		}
+	}
+
+	/** One plain run. */
+	inline void Run(double Length, TArray<FShape>& Out)
+	{
+		Wall(Out, 0.0, Length, Skin);
+		Bays(Out, 0.0, Length);
 	}
 
 	/** A rounded gable over the wall from Y0 to Y1, its face at Front. */
@@ -143,9 +150,9 @@ namespace OtiModel
 		{
 			Add(Out, MarketModel::Cube, Trim, FVector(Front + 4, Y, (BaseTop + WallTop) * 0.5), FVector(8, 60, WallTop - BaseTop - 40), 0.0, false);
 		}
-		const int32 Bays = 3;
-		const double Bay = (Y1 - Y0 - 120.0) / Bays;
-		for (int32 k = 0; k < Bays; ++k)
+		const int32 WingBays = 3;
+		const double Bay = (Y1 - Y0 - 120.0) / WingBays;
+		for (int32 k = 0; k < WingBays; ++k)
 		{
 			BayWindows(Out, Y0 + 60.0 + (k + 0.5) * Bay, Front, 110.0);
 		}
@@ -239,11 +246,15 @@ namespace OtiModel
 	/** The long front on Fiumei út: the plain run, the two end wings and the middle with the tower. */
 	inline void MainFront(double Length, TArray<FShape>& Out, TArray<FLamp>& Lamps, TArray<FSign>& Signs)
 	{
-		Run(Length, Out);
 		if (Length < MiddleWidth + 2.0 * WingWidth + 1000.0)
 		{
+			Run(Length, Out);
 			return;
 		}
+		// The plain stretches get their windows only between the wings and the middle, so none is cut by them.
+		Wall(Out, 0.0, Length, Skin);
+		Bays(Out, WingWidth, (Length - MiddleWidth) * 0.5);
+		Bays(Out, (Length + MiddleWidth) * 0.5, Length - WingWidth);
 		Wing(Out, 0.0, WingWidth);
 		Wing(Out, Length - WingWidth, Length);
 		Middle(Length * 0.5, Out, Lamps, Signs);
