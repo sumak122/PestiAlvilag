@@ -54,7 +54,7 @@ protected:
 	TObjectPtr<UAnimalSound> Voice;
 
 private:
-	enum class EMood : uint8 { Rest, Walk, Watch, Leap, Flee, Lap };
+	enum class EMood : uint8 { Rest, Walk, Watch, Leap, Flee, Lap, Chase };
 
 	struct FPet
 	{
@@ -102,6 +102,11 @@ private:
 		double MilkUntil = 0.0;
 		int32 MilkTries = 0;
 		float AwayClock = 0.f;
+		/** A dog after a passing cart or bicycle: which, on which side of it, and when it may chase again. */
+		TWeakObjectPtr<AActor> Chased;
+		float ChaseSide = 1.f;
+		float ChaseRest = 0.f;
+		bool bSpookTried = false;
 	};
 
 	/** Spilt milk the strays come to, till that time (world seconds). */
@@ -120,6 +125,9 @@ private:
 		FVector2D Velocity = FVector2D::ZeroVector;
 		bool bVehicle = false;
 		bool bPlayer = false;
+		/** A city cart or bicycle in the traffic: something for a dog to run after. */
+		bool bCart = false;
+		bool bBike = false;
 	};
 
 	void SetUp();
@@ -133,6 +141,10 @@ private:
 	void PoseIt(FPet& Pet, float DeltaSeconds);
 	void SetMood(FPet& Pet, EMood Mood, float Seconds);
 	void RunFrom(FPet& Pet, const FVector2D& Away, bool bLeap);
+	/** A dog runs barking beside a passing cart or bicycle; true when it set off. */
+	bool StartChase(FPet& Pet, const FMover& Mover);
+	/** Keeps beside it, barks, may make the horse shy or the rider wobble. */
+	void TickChase(FPet& Pet);
 	void Speak(const FPet& Pet, uint8 Kind, float Strength, float Delay = 0.f);
 	/** Brings a stray to a milk spill from out of sight; false when no spot was found. */
 	bool SendVisitor(FMilk& Milk);

@@ -71,6 +71,11 @@ namespace TrafficCartRide
 	constexpr double SpillScatter = 70.0;
 	// A bolting horse knocks down whoever it runs into, faster than this (cm/s).
 	constexpr float RunDownFrom = 150.f;
+	// Spooked, the horse rears for this long (s), up this fast and down this slowly (s); then it may bolt.
+	constexpr float ShySeconds = 1.8f;
+	constexpr float ShyUp = 0.35f;
+	constexpr float ShyDown = 0.45f;
+	constexpr float BoltAfterShy = 0.3f;
 	// Spilt things stay at least this long (s), and go when the camera is this far off (cm);
 	// an emptied cart is loaded again when the camera is farther than this.
 	constexpr double SpillsLast = 40.0;
@@ -149,6 +154,23 @@ void ATrafficCart::Tick(float DeltaSeconds)
 
 	BumpCooldown = FMath::Max(0.f, BumpCooldown - DeltaSeconds);
 	FollowLane(DeltaSeconds);
+	if (ShyTime > 0.f)
+	{
+		// Reared up and stopped dead, then down again; now and then it bolts after.
+		ShyTime -= DeltaSeconds;
+		Speed = FMath::FInterpTo(Speed, 0.f, DeltaSeconds, 5.f);
+		const float Into = TrafficCartRide::ShySeconds - ShyTime;
+		RearUp = FMath::Clamp(FMath::Min(Into / TrafficCartRide::ShyUp, ShyTime / TrafficCartRide::ShyDown), 0.f, 1.f);
+		if (ShyTime <= 0.f)
+		{
+			ShyTime = 0.f;
+			RearUp = 0.f;
+			if (FMath::FRand() < TrafficCartRide::BoltAfterShy)
+			{
+				Bolt();
+			}
+		}
+	}
 
 	// Pushing through after a long wait, it slips past what holds it up.
 	const bool bSqueezing = SqueezeTime > 0.f;
@@ -297,6 +319,21 @@ void ATrafficCart::CheckBumps()
 		}
 	}
 	LastPlayerVelocity = PlayerVelocity;
+}
+
+void ATrafficCart::Shy()
+{
+	if (!Manager || BoltTime > 0.f || ShyTime > 0.f)
+	{
+		return;
+	}
+	ShyTime = TrafficCartRide::ShySeconds;
+	if (!Sound->IsPlaying())
+	{
+		Sound->Start();
+	}
+	Sound->Whinny();
+	CallOut(TEXT("\u201eH\u00f3, h\u00f3! Takarodj innen, te korcs!\u201d   (Whoa, whoa! Get away, you mutt!)"));
 }
 
 void ATrafficCart::Bolt()

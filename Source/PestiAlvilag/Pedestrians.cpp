@@ -25,6 +25,7 @@
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
+#include "Pigeons.h"
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "StreetFights.h"
@@ -1754,8 +1755,12 @@ void APedestrians::AddGathering(const FVector& At, float Seconds, bool bFight)
 	Ring.Until = Now + Seconds;
 	Ring.bFight = bFight;
 	Ring.NextShout = Now + Random.FRandRange(1.f, Pedestrians::CrowdShoutMin);
-	// The nearest constables come to see what is going on.
-	APolicePatrols::Investigate(this, At);
+	// The square's pigeons go up, and the nearest constables come to see what is going on
+	// (from further off when the birds give it away).
+	if (!APigeons::Trouble(this, At))
+	{
+		APolicePatrols::Investigate(this, At);
+	}
 }
 
 APedestrians::FGathering* APedestrians::FindGathering(int32 Id)

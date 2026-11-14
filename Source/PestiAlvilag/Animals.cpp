@@ -17,7 +17,9 @@
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "StableYard.h"
+#include "TrafficBike.h"
 #include "TrafficCar.h"
+#include "TrafficCart.h"
 
 namespace Animals
 {
@@ -115,6 +117,26 @@ namespace Animals
 	constexpr float AwayUnseen = 1.5f;
 	// In the camera's view: within this cosine of where it looks.
 	constexpr double InView = 0.45;
+
+	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm),
+	// with this chance each time, for this long (s), then rests from it this long.
+	constexpr double ChaseFrom = 100.0;
+	constexpr double ChaseStart = 900.0;
+	constexpr float ChaseChance = 0.5f;
+	constexpr float ChaseLow = 4.f;
+	constexpr float ChaseHigh = 6.5f;
+	constexpr float ChaseRestFor = 15.f;
+	// Beside the horse's head (or the bicycle's front wheel), this far out to the side (cm); it gives
+	// up once left this far behind.
+	constexpr double CartAhead = 250.0;
+	constexpr double CartOut = 200.0;
+	constexpr double BikeAhead = 40.0;
+	constexpr double BikeOut = 110.0;
+	constexpr double ChaseLost = 1500.0;
+	// That close to the horse's head it may make it shy (rear up), or the rider wobble, with these chances.
+	constexpr double SpookNear = 350.0;
+	constexpr float ShyChance = 0.4f;
+	constexpr float WobbleChance = 0.5f;
 }
 
 AAnimals::AAnimals()
@@ -332,6 +354,22 @@ void AAnimals::GatherMovers(float DeltaSeconds)
 			Add(*It, true, false);
 		}
 	}
+	for (TActorIterator<ATrafficCart> It(GetWorld()); It; ++It)
+	{
+		if (It->IsInTraffic() && FVector::DistSquared2D(It->GetActorLocation(), Camera) < Near * Near)
+		{
+			Add(*It, true, false);
+			Movers.Last().bCart = true;
+		}
+	}
+	for (TActorIterator<ATrafficBike> It(GetWorld()); It; ++It)
+	{
+		if (It->IsInTraffic() && FVector::DistSquared2D(It->GetActorLocation(), Camera) < Near * Near)
+		{
+			Add(*It, true, false);
+			Movers.Last().bBike = true;
+		}
+	}
 	LastSeen = MoveTemp(Seen);
 }
 
@@ -414,6 +452,15 @@ void AAnimals::React(FPet& Pet)
 			continue;
 		}
 		const double Speed = Mover.Velocity.Size();
+		// The one it is running after is no fright.
+		if (Pet.Mood == EMood::Chase && Mover.Actor == Pet.Chased)
+		{
+			continue;
+		}
+		if (Pet.bDog && !Pet.bTame && (Mover.bCart || Mover.bBike) && Pet.Mood != EMood::Chase && StartChase(Pet, Mover))
+		{
+			return;
+		}
 		if (Mover.bVehicle)
 		{
 			if (Speed < Animals::CarNoticeSpeed)
@@ -545,6 +592,12 @@ void AAnimals::Think(FPet& Pet)
 		RunFrom(Pet, Away, false);
 		break;
 	}
+	case EMood::Chase:
+		Pet.Chased = nullptr;
+		Pet.ChaseRest = Animals::ChaseRestFor;
+		SetMood(Pet, EMood::Rest, Random.FRandRange(2.f, 5.f));
+		Pet.Resting = EPose::Stand;
+		break;
 	case EMood::Flee:
 	case EMood::Watch:
 		SetMood(Pet, EMood::Rest, Random.FRandRange(2.f, 5.f));
@@ -588,7 +641,7 @@ void AAnimals::Think(FPet& Pet)
 
 void AAnimals::Move(FPet& Pet, float DeltaSeconds)
 {
-	const bool bMoving = Pet.Mood == EMood::Walk || Pet.Mood == EMood::Flee || Pet.Mood == EMood::Leap;
+	const bool bMoving = Pet.Mood == EMood::Walk || Pet.Mood == EMood::Flee || Pet.Mood == EMood::Leap || Pet.Mood == EMood::Chase;
 	if (!bMoving)
 	{
 		if (Pet.Mood == EMood::Watch)
@@ -658,6 +711,7 @@ void AAnimals::PoseIt(FPet& Pet, float DeltaSeconds)
 		break;
 	case EMood::Flee:
 	case EMood::Leap:
+	case EMood::Chase:
 		Wanted = EPose::Run;
 		Phase = Pet.Phase;
 		break;
@@ -802,6 +856,11 @@ void AAnimals::Tick(float DeltaSeconds)
 		if (Pet.Hop >= 0.f)
 		{
 			Pet.Hop += DeltaSeconds;
+		}
+		Pet.ChaseRest -= DeltaSeconds;
+		if (Pet.Mood == EMood::Chase)
+		{
+			TickChase(Pet);
 		}
 		React(Pet);
 		Pet.Busy -= DeltaSeconds;
@@ -1001,4 +1060,72 @@ void AAnimals::ThinkVisitor(FPet& Pet)
 		}
 	}
 	SetMood(Pet, EMood::Rest, 2.f);
+}
+
+bool AAnimals::StartChase(FPet& Pet, const FMover& Mover)
+{
+	AActor* Thing = Mover.Actor.Get();
+	const double Speed = Mover.Velocity.Size();
+	if (!Thing || Pet.ChaseRest > 0.f || Speed < Animals::ChaseFrom
+		|| FVector::DistSquared2D(Pet.At, Mover.At) > FMath::Square(Animals::ChaseStart))
+	{
+		return false;
+	}
+	// Seen once; it may or may not take after it.
+	Pet.ChaseRest = Animals::ChaseRestFor;
+	if (Random.FRand() >= Animals::ChaseChance)
+	{
+		return false;
+	}
+	Pet.Chased = Thing;
+	Pet.ChaseSide = FVector::DotProduct(Pet.At - Mover.At, Thing->GetActorRightVector()) >= 0.0 ? 1.f : -1.f;
+	Pet.bSpookTried = false;
+	Pet.Hop = -1.f;
+	SetMood(Pet, EMood::Chase, Random.FRandRange(Animals::ChaseLow, Animals::ChaseHigh));
+	Speak(Pet, static_cast<uint8>(AnimalSynth::EKind::Bark), 1.f);
+	Pet.Quiet = 0.5f;
+	TickChase(Pet);
+	return true;
+}
+
+void AAnimals::TickChase(FPet& Pet)
+{
+	AActor* Thing = Pet.Chased.Get();
+	if (!Thing || FVector::DistSquared2D(Pet.At, Thing->GetActorLocation()) > FMath::Square(Animals::ChaseLost))
+	{
+		Pet.Busy = 0.f;
+		return;
+	}
+	ATrafficCart* Cart = Cast<ATrafficCart>(Thing);
+	ATrafficBike* Bike = Cast<ATrafficBike>(Thing);
+	const FVector Ahead = Thing->GetActorForwardVector();
+	const FVector Side = Thing->GetActorRightVector() * Pet.ChaseSide;
+	const FVector Front = Thing->GetActorLocation() + Ahead * (Cart ? Animals::CartAhead : Animals::BikeAhead);
+	const FVector Spot = Front + Side * (Cart ? Animals::CartOut : Animals::BikeOut);
+	const FVector2D ToSpot = FVector2D(Spot - Pet.At);
+	const double Gap = ToSpot.Size();
+	Pet.Heading = Gap > 1.0 ? ToSpot / Gap : FVector2D(Ahead);
+	const double Pace = Pet.bDog ? Animals::DogRun * 1.3 : Animals::CatRun;
+	Pet.Speed = static_cast<float>(FMath::Clamp(Gap * 3.0, 60.0, Pace));
+
+	// Barking all the while.
+	if (Pet.Quiet <= 0.f)
+	{
+		Speak(Pet, static_cast<uint8>(AnimalSynth::EKind::Bark), Random.FRandRange(0.8f, 1.f));
+		Pet.Quiet = Random.FRandRange(0.45f, 0.9f);
+	}
+
+	// Close up: the horse may shy and rear, the rider wobble.
+	if (!Pet.bSpookTried && FVector::DistSquared2D(Pet.At, Front) < FMath::Square(Animals::SpookNear))
+	{
+		Pet.bSpookTried = true;
+		if (Cart && Random.FRand() < Animals::ShyChance)
+		{
+			Cart->Shy();
+		}
+		else if (Bike && Random.FRand() < Animals::WobbleChance)
+		{
+			Bike->Spook();
+		}
+	}
 }

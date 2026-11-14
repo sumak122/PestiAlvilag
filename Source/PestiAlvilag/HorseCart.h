@@ -152,6 +152,8 @@ protected:
 	float Stride = 0.f;
 	bool WasPlanted[4] = { true, true, true, true };
 	float Idle = 0.f;
+	/** How far the horse is reared up on its hind legs (0 standing, 1 right up), when something spooks it. */
+	float RearUp = 0.f;
 	double NextSnort = 0.0;
 	float WheelTurn = 0.f;
 	int32 Crates = 0;

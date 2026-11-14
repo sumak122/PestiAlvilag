@@ -198,9 +198,11 @@ public:
 	/**
 	 * A crowd has gathered at At (a fight, a crash, a spill): the nearest
 	 * pair on its beat walks over and stands looking a while. A fight the
-	 * player is still in when they get there makes him wanted.
+	 * player is still in when they get there makes him wanted. Range, when
+	 * above 0, is how far off a pair still comes (pigeons flying up are seen
+	 * from further than a crowd).
 	 */
-	static void Investigate(const UObject* WorldContextObject, const FVector& At);
+	static void Investigate(const UObject* WorldContextObject, const FVector& At, double Range = 0.0);
 
 	/** The furniture file with the boxes and the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Police")

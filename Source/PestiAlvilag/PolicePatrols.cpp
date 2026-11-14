@@ -24,6 +24,7 @@
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
+#include "Pigeons.h"
 #include "PoliceCar.h"
 #include "PersonModel.h"
 #include "PoliceModel.h"
@@ -483,6 +484,8 @@ void APoliceBox::Smash(const FVector& At, const FVector& Away, bool bLean)
 		Bits->Burst(FVector(At.X, At.Y, Middle.Z + PoliceBox::BurstUp), (Middle - At).GetSafeNormal2D(), 0.7f, true, Body->GetComponentLocation().Z);
 	}
 	// Loud: a constable near enough hears it.
+	// The square's pigeons go up at the crash of glass.
+	APigeons::Trouble(this, Middle);
 	if (APolicePatrols::Witnessed(this, Middle, PoliceBox::SmashHeard))
 	{
 		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
@@ -1473,7 +1476,7 @@ void APolicePatrols::Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En)
 	Hud->Say(TEXT("Rend\u0151r"), Hu, En, 3.f);
 }
 
-void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVector& At)
+void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVector& At, double Range)
 {
 	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
 	if (!World)
@@ -1490,7 +1493,7 @@ void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVecto
 		}
 		// The nearest pair walking its beat together.
 		FPatrol* Nearest = nullptr;
-		double NearestDistance = PolicePatrol::LookRange;
+		double NearestDistance = Range > 0.0 ? Range : PolicePatrol::LookRange;
 		for (FPatrol& Patrol : Police->Patrols)
 		{
 			if (Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat

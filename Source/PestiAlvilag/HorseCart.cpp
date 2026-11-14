@@ -417,7 +417,25 @@ void AHorseCart::Animate(float DeltaSeconds)
 	Stride -= FMath::FloorToFloat(Stride);
 	Idle += DeltaSeconds;
 
-	const FHorsePose P = Pose(Gait, Stride);
+	FHorsePose P = Pose(Gait, Stride);
+	// Reared up: the body tipped back on the hind legs, the forelegs up and folded, the head high.
+	if (RearUp > 0.f)
+	{
+		const float Reared = FMath::SmoothStep(0.f, 1.f, RearUp);
+		P.Pitch = FMath::Lerp(P.Pitch, 28.f, Reared);
+		P.Lift = FMath::Lerp(P.Lift, 36.f, Reared);
+		P.NeckPitch = FMath::Lerp(P.NeckPitch, 18.f, Reared);
+		P.TailPitch = FMath::Lerp(P.TailPitch, -10.f, Reared);
+		const float Kick = 6.f * FMath::Sin(Idle * 14.f);
+		const float UpperWanted[4] = { 75.f + Kick, 60.f - Kick, -30.f, -24.f };
+		const float LowerWanted[4] = { -95.f, -80.f, 0.f, 0.f };
+		for (int32 l = 0; l < 4; ++l)
+		{
+			P.Upper[l] = FMath::Lerp(P.Upper[l], UpperWanted[l], Reared);
+			P.Lower[l] = FMath::Lerp(P.Lower[l], LowerWanted[l], Reared);
+			P.Planted[l] = l >= 2;
+		}
+	}
 	HorseRoot->SetRelativeLocationAndRotation(FVector(HorseAt, 0.0, P.Lift), FRotator(P.Pitch, 0.f, 0.f));
 	// Standing, he lowers his head now and then and swishes his tail; moving, his head looks into the turn.
 	const bool bStanding = Gait == EGait::Stand;
