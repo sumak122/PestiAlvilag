@@ -29,6 +29,7 @@
 #include "PestiHud.h"
 #include "SeminaryModel.h"
 #include "OtiModel.h"
+#include "HotelModel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "ShapeSet.h"
@@ -279,6 +280,7 @@ void ACityDetails::BeginPlay()
 		BuildCemetery(*Root);
 		BuildSeminary(*Root);
 		BuildOti(*Root);
+		BuildHotels(*Root);
 		BuildStreetLife(*Root);
 	}
 }
@@ -782,6 +784,61 @@ void ACityDetails::BuildOti(const FJsonObject& Root)
 		else
 		{
 			OtiModel::Run(WallLength, Shapes);
+		}
+		Set->AddShapes(Shapes);
+		for (const BozsiHouseModel::FLamp& Light : Lights)
+		{
+			Set->AddLamp(Light.At, Light.Radius);
+		}
+		for (const BozsiHouseModel::FSign& Sign : Lettering)
+		{
+			Set->AddSign(Sign.Text, Sign.At, Sign.Yaw, Sign.Height, Sign.Color);
+		}
+	}
+}
+
+void ACityDetails::BuildHotels(const FJsonObject& Root)
+{
+	// [hotel, part, x, y, yaw, length, height] per street wall: hotel 0 Nemzeti / 1 Metropol, part 0 plain / 1 main front / 2 cut corner.
+	const TArray<TSharedPtr<FJsonValue>>* WallRows = nullptr;
+	if (!Root.TryGetArrayField(TEXT("hotels"), WallRows))
+	{
+		return;
+	}
+	for (const TSharedPtr<FJsonValue>& RowValue : *WallRows)
+	{
+		const TArray<TSharedPtr<FJsonValue>>& E = RowValue->AsArray();
+		if (E.Num() < 7)
+		{
+			continue;
+		}
+		const HotelModel::EHotel Which = E[0]->AsNumber() > 0.5 ? HotelModel::EHotel::Metropol : HotelModel::EHotel::Nemzeti;
+		const int32 Part = FMath::RoundToInt(E[1]->AsNumber());
+		const FVector2D Start = CityDetailsPlace::Pair(E, 2);
+		const double WallYaw = E[4]->AsNumber();
+		const double WallLength = E[5]->AsNumber();
+		const double WallHeight = E[6]->AsNumber();
+		const FVector2D Middle = Start + FVector2D(FRotator(0.0, WallYaw, 0.0).RotateVector(FVector(0.0, WallLength * 0.5, 0.0)));
+		const double Ground = GroundAt(Middle + CityDetailsPlace::Ahead(WallYaw, CityDetailsPlace::OutFromWall));
+		AShapeSet* Set = PutUp(FVector(Start, Ground), WallYaw, CityDetailsPlace::ChurchDrawDistance);
+		if (!Set)
+		{
+			continue;
+		}
+		TArray<MarketModel::FShape> Shapes;
+		TArray<BozsiHouseModel::FLamp> Lights;
+		TArray<BozsiHouseModel::FSign> Lettering;
+		if (Part == 1)
+		{
+			HotelModel::MainFront(Which, WallLength, WallHeight, Shapes, Lights, Lettering);
+		}
+		else if (Part == 2)
+		{
+			HotelModel::Corner(Which, WallLength, WallHeight, Shapes);
+		}
+		else
+		{
+			HotelModel::Run(Which, WallLength, WallHeight, Shapes);
 		}
 		Set->AddShapes(Shapes);
 		for (const BozsiHouseModel::FLamp& Light : Lights)
