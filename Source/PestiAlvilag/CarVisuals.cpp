@@ -3,6 +3,7 @@
 #include "CarVisuals.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "DayNight.h"
@@ -206,6 +207,36 @@ namespace CarVisuals
 		return Built;
 	}
 
+	/**
+	 * The collision box's half length and half width for a body: the body's
+	 * own size (wheels included), but never more than the saloon's box
+	 * (210 x 85 cm), so the big cars keep the box they always had and the
+	 * small ones (Fiat, Opel, Ford T...) stop bumping into things with air.
+	 */
+	FVector2D BoxHalfSize(const CarModel::FStyle& Style, const CarModel::FBuilder& Shape)
+	{
+		constexpr double MaxHalfLength = 210.0;
+		constexpr double MaxHalfWidth = 85.0;
+		double MinX = 0.0;
+		double MaxX = 0.0;
+		double Widest = CarModel::Layout(Style.Body).TrackY + CarModel::WheelWidth * 0.5;
+		for (const CarModel::FPart& Part : Shape.Parts)
+		{
+			for (const FVector& V : Part.Vertices)
+			{
+				MinX = FMath::Min(MinX, V.X);
+				MaxX = FMath::Max(MaxX, V.X);
+				Widest = FMath::Max(Widest, FMath::Abs(V.Y));
+			}
+		}
+		const double HalfLength = (MaxX - MinX) * 0.5;
+		if (HalfLength < 50.0)
+		{
+			return FVector2D(MaxHalfLength, MaxHalfWidth);
+		}
+		return FVector2D(FMath::Min(HalfLength, MaxHalfLength), FMath::Min(Widest, MaxHalfWidth));
+	}
+
 	const CarModel::FBuilder& WheelShape(CarModel::EWheel Wheel)
 	{
 		static TMap<int32, CarModel::FBuilder> Shapes;
@@ -268,6 +299,12 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 
 	const CarModel::FBuilder& Shape = CarVisuals::BodyShape(Style);
 	Fill(Body, Shape);
+	// Fit the car's collision box (the parent) to this body; its height stays.
+	if (UBoxComponent* CarBox = Cast<UBoxComponent>(Parent))
+	{
+		const FVector2D Fit = CarVisuals::BoxHalfSize(Style, Shape);
+		CarBox->SetBoxExtent(FVector(Fit.X, Fit.Y, CarBox->GetUnscaledBoxExtent().Z));
+	}
 	GlassLeft = Shape.Parts[CarModel::Glass].Triangles.Num();
 	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
 	// The headlamp lenses: the middle of the lamp glass on each side of the front.
