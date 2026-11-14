@@ -118,7 +118,7 @@ public:
 	void MarkPlace(const FVector& At, const FString& Letter);
 
 	/** The kinds of little pictures the maps show for places (ACityDetails sends them). */
-	enum class EMapIcon : uint8 { Cafe, Market, Tram, Phone, Yard, Theatre, Station, Store, Church };
+	enum class EMapIcon : uint8 { Cafe, Market, Tram, Phone, Yard, Theatre, Station, Store, Church, Hotel, Sight };
 	struct FMapIcon
 	{
 		FVector2D At = FVector2D::ZeroVector;

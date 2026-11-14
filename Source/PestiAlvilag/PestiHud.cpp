@@ -234,6 +234,14 @@ namespace PestiHud
 		{ TEXT("TELEKI T\u00c9R"), 101500.0, 22500.0 },
 		{ TEXT("TISZA K\u00c1LM\u00c1N T\u00c9R"), 67500.0, -1000.0 },
 		{ TEXT("KEREPESI TEMET\u0150"), 128000.0, 12000.0 },
+		{ TEXT("BLAHA LUJZA T\u00c9R"), 9000.0, -5600.0 },
+		{ TEXT("NEW YORK"), 8000.0, -23800.0 },
+		{ TEXT("METROPOL"), 9700.0, -16400.0 },
+		{ TEXT("NEMZETI"), -4500.0, 9500.0 },
+		{ TEXT("V\u00c1ROSI SZ\u00cdNH\u00c1Z"), 47000.0, -10500.0 },
+		{ TEXT("R\u00d3ZS\u00c1K TERE"), 43300.0, -56500.0 },
+		{ TEXT("RABBIK\u00c9PZ\u0150"), -1700.0, 32700.0 },
+		{ TEXT("OTI"), 94600.0, 7700.0 },
 	};
 
 	/**
@@ -2103,6 +2111,27 @@ private:
 			Paint.Line(X, Y - 8.f * U, X, Y + 8.f * U, C, 2.2f * U, On);
 			Paint.Line(X - 5.f * U, Y - 3.f * U, X + 5.f * U, Y - 3.f * U, C, 2.2f * U, On);
 			break;
+		case EIcon::Hotel:
+			// A bed: the head board, the mattress and the pillow.
+			Paint.Line(X - 7.f * U, Y - 6.f * U, X - 7.f * U, Y + 7.f * U, C, 2.f * U, On);
+			Paint.Box(X - 7.f * U, Y, 15.f * U, 4.f * U, C, On);
+			Paint.Box(X - 5.f * U, Y - 4.f * U, 5.f * U, 3.f * U, C, On);
+			Paint.Line(X + 7.f * U, Y + 4.f * U, X + 7.f * U, Y + 7.f * U, C, 2.f * U, On);
+			break;
+		case EIcon::Sight:
+		{
+			// A five pointed star.
+			TArray<FVector2f> Star;
+			for (int32 i = 0; i <= 10; ++i)
+			{
+				const float A = UE_PI * i / 5.f - UE_HALF_PI;
+				const float R = (i % 2 ? 3.5f : 8.f) * U;
+				Star.Add(FVector2f(X + FMath::Cos(A) * R, Y + 1.f * U + FMath::Sin(A) * R));
+			}
+			Paint.Lines(Star, C, 1.6f * U, On);
+			Paint.Diamond(X, Y + 1.f * U, 3.f * U, C, On);
+			break;
+		}
 		}
 	}
 
@@ -2359,6 +2388,8 @@ private:
 			{ EIcon::Theatre, TEXT("Sz\u00ednh\u00e1z"), TEXT("Theatre") },
 			{ EIcon::Station, TEXT("P\u00e1lyaudvar"), TEXT("Station") },
 			{ EIcon::Store, TEXT("\u00c1ruh\u00e1z"), TEXT("Department store") },
+			{ EIcon::Hotel, TEXT("Sz\u00e1lloda"), TEXT("Hotel") },
+			{ EIcon::Sight, TEXT("Nevezetess\u00e9g"), TEXT("Landmark") },
 		};
 		Over.Line(LX + 30.f, RowY - 22.f, LX + LW - 30.f, RowY - 22.f, PestiHud::Brass, 1.f, 1);
 		Paint.Text(bEnglish ? TEXT("HELYEK  \u00b7  PLACES") : TEXT("HELYEK"), Paint.Deco(17.f), LX + LW * 0.5f, RowY, PestiHud::Gold, 0.5f);

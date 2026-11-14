@@ -511,6 +511,7 @@ void ACityDetails::ReadMapIcons(const FJsonObject& Root)
 		{ TEXT("cafe"), EIcon::Cafe }, { TEXT("market"), EIcon::Market }, { TEXT("tram"), EIcon::Tram },
 		{ TEXT("phone"), EIcon::Phone }, { TEXT("yard"), EIcon::Yard }, { TEXT("theatre"), EIcon::Theatre },
 		{ TEXT("station"), EIcon::Station }, { TEXT("store"), EIcon::Store }, { TEXT("church"), EIcon::Church },
+		{ TEXT("hotel"), EIcon::Hotel }, { TEXT("sight"), EIcon::Sight },
 	};
 	const TArray<TSharedPtr<FJsonValue>>* Icons = nullptr;
 	if (!Root.TryGetArrayField(TEXT("map_icons"), Icons))
