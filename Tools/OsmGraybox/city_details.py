@@ -602,6 +602,8 @@ CEMETERY_GRAVE_KINDS = [0, 0, 0, 1, 1, 2, 2, 3, 4, 4, 5]   # CemeteryModel::EGra
 # offices, chapels and tombs are lower (by name; anything else one floor).
 CEMETERY_HEIGHTS = {"Árkádsor": 750, "kápolna": 1100, "Batthyány": 1300, "Kossuth": 1500, "mauzóleum": 800}
 CEMETERY_LOW = 650
+# A later little block in Rózsák tere's garden (not there in 1932).
+ROZSAK_LATER = ["w374844687"]
 CEMETERY_LATER = ["w526250716", "w526250726"]
 
 # The facade's sums (AddFacade in OsmGraybox.cpp, Facade:: constants).
@@ -1057,7 +1059,7 @@ def main():
     replaced[NEW_YORK_ID] = [new_york_block]
     theatre_block, theatre_front = city_theatre(data)
     replaced[THEATRE_ID] = [theatre_block]
-    for bid in CEMETERY_LATER:
+    for bid in CEMETERY_LATER + ROZSAK_LATER:
         replaced[bid] = [{"gone": True}]
     replaced.update(cemetery_buildings(data, f))
     cemetery, extra_areas = place_cemetery(data, f)
