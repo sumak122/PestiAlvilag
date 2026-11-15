@@ -23,7 +23,8 @@
  * The instruments (FPiece, built like PersonKit pieces): the cimbalom on its
  * legs (built from the middle of its feet, the player at -X), its hammers
  * (grip at the origin, along +Z), the double bass (from its spike, upright) and
- * a clarinet (grip at the origin, along +Z). The fiddle is DailyLifeModel's.
+ * a clarinet (grip at the origin, along +Z), the fiddle (from its chin rest,
+ * the neck along +Y) and its bow (the frog in the fist, along +Z).
  */
 namespace MusicBarModel
 {
@@ -98,6 +99,25 @@ namespace MusicBarModel
 
 	// ---------------------------------------------------------------------
 	// The instruments.
+
+	/** The fiddle, held under the chin: built from the chin rest, the body and the neck along +Y (see FiddleAt, FiddleTurn). */
+	inline void Fiddle(FPiece& P)
+	{
+		const FLinearColor Varnish(0.42f, 0.16f, 0.05f);
+		PersonKit::Blob(P, BlackWood(), FVector(0.0, 0.0, 1.0), FVector(3.0, 2.5, 1.2), 6, 3);
+		PersonKit::Blob(P, Varnish, FVector(0.0, 6.0, 0.0), FVector(8.5, 9.5, 2.6), 10, 4);
+		PersonKit::Blob(P, Varnish, FVector(0.0, 20.0, 0.0), FVector(7.0, 8.0, 2.6), 10, 4);
+		PersonKit::Rod(P, BlackWood(), FVector(0.0, 26.0, 2.5), FVector(0.0, 52.0, 2.0), 1.3, 6);
+		PersonKit::Blob(P, Walnut(), FVector(0.0, 54.0, 2.0), FVector(1.8, 3.0, 2.0), 6, 3);
+	}
+
+	/** The fiddle bow: the frog in the right fist, the stick along +Z. */
+	inline void FiddleBow(FPiece& P)
+	{
+		PersonKit::Rod(P, BlackWood(), FVector(0.0, 0.0, -3.0), FVector(0.0, 0.0, 66.0), 0.6, 4);
+		PersonKit::Block(P, BlackWood(), FVector(0.0, 0.0, 0.0), FVector(1.0, 1.0, 3.0));
+		PersonKit::Rod(P, Cloth(), FVector(1.5, 0.0, 1.0), FVector(1.5, 0.0, 64.0), 0.35, 3);
+	}
 
 	/** How high the cimbalom's strings are, and how far in front of the player's feet its middle stands. */
 	constexpr double CimbalomTop = 90.0;
@@ -298,7 +318,19 @@ namespace MusicBarModel
 	}
 
 	// ---------------------------------------------------------------------
-	// Playing poses (a held pose like DailyLifeModel::FLimbs: arm turns, elbows, legs, knees).
+	// Playing poses: each arm's turn at the shoulder (left, right), each elbow's bend, each thigh's swing and knee's bend, and the whole body tipped forward by Pitch.
+
+	/** Where the fist closes, in the forearm's own frame (as PersonKit builds the arm). Side: -1 left, 1 right. */
+	inline FVector HandAt(double Side, double Height)
+	{
+		return FVector(1.4, 2.3 * Side, -27.5 * Height / 178.0);
+	}
+
+	/** The turn that keeps a held thing (built along +Z) upright, leaning forward by Lean, in a hand whose arm and elbow together are raised Raised degrees. */
+	inline FRotator HoldUpright(float Raised, float Lean = 0.f)
+	{
+		return FRotator(-Raised - Lean, 0.f, 0.f);
+	}
 
 	struct FPlay
 	{
@@ -337,14 +369,14 @@ namespace MusicBarModel
 	}
 
 	/**
-	 * Playing the fiddle (DailyLifeModel::Fiddle, built from the chin rest
+	 * Playing the fiddle (Fiddle, built from the chin rest
 	 * with the neck along +Y) under the chin: it sits on the left shoulder at
 	 * FiddleAt, turned by FiddleTurn so the scroll points forward and to the
 	 * left; the left hand is on the neck, the right draws the bow across.
 	 */
 	inline FVector FiddleAt(double Height) { return FVector(8.0, -12.0, 141.0 * Height / 178.0); }
 	inline FRotator FiddleTurn() { return FRotator(0.0, -142.0, -12.0); }
-	/** The bow's turn in the right fist (DailyLifeModel::FiddleBow), lying across the strings, for an arm raised Raised degrees. */
+	/** The bow's turn in the right fist (FiddleBow), lying across the strings, for an arm raised Raised degrees. */
 	inline FRotator BowTurn(float Raised) { return FRotator(-Raised, 0.f, -90.f); }
 	inline void Fiddling(FPlay& L, float Phase)
 	{
@@ -474,8 +506,18 @@ namespace MusicBarModel
 			// Front wall with the door in the middle and a window either side.
 			B.Add(Cube, Lime(), FVector(-10.0, -W * 0.5 - 50.0, H * 0.5), FVector(20.0, W - 100.0 + 40.0, H), 0.0, 0.0, 0.0, true);
 			B.Add(Cube, Lime(), FVector(-10.0, W * 0.5 + 50.0, H * 0.5), FVector(20.0, W - 100.0 + 40.0, H), 0.0, 0.0, 0.0, true);
-			B.Add(Cube, Lime(), FVector(-10.0, 0.0, 285.0), FVector(20.0, 120.0, 110.0), 0.0, 0.0, 0.0, true);
+			B.Add(Cube, Lime(), FVector(-10.0, 0.0, 285.0), FVector(20.0, 160.0, 110.0), 0.0, 0.0, 0.0, true);
 			B.Add(Cube, Lime(), FVector(D * 0.5, 0.0, H + 5.0), FVector(D + 40.0, 2.0 * W + 40.0, 10.0));
+			// The street door, shut (E by it goes out), and the two windows with lace curtains, lit from the street.
+			B.Add(Cube, Walnut(), FVector(-4.0, 0.0, 115.0), FVector(8.0, 150.0, 230.0), 0.0, 0.0, 0.0, true);
+			B.Add(Cube, Brass(), FVector(2.0, 50.0, 105.0), FVector(4.0, 4.0, 14.0));
+			for (int32 Side = -1; Side <= 1; Side += 2)
+			{
+				B.Add(Cube, Walnut(), FVector(1.0, Side * 300.0, 175.0), FVector(3.0, 176.0, 166.0));
+				B.Add(Cube, FLinearColor(0.85f, 0.80f, 0.66f), FVector(2.5, Side * 300.0, 175.0), FVector(2.0, 160.0, 150.0));
+				B.Add(Cube, Cloth(), FVector(4.0, Side * 300.0 - 55.0, 175.0), FVector(2.0, 50.0, 150.0));
+				B.Add(Cube, Cloth(), FVector(4.0, Side * 300.0 + 55.0, 175.0), FVector(2.0, 50.0, 150.0));
+			}
 		}
 		// Ceiling beams.
 		for (int32 i = 0; i < 4; ++i)
@@ -579,8 +621,23 @@ namespace MusicBarModel
 		{
 			B.Add(Cube, Plaster, FVector(-10.0, -W * 0.5 - 60.0, H * 0.5), FVector(20.0, W - 120.0 + 40.0, H), 0.0, 0.0, 0.0, true);
 			B.Add(Cube, Plaster, FVector(-10.0, W * 0.5 + 60.0, H * 0.5), FVector(20.0, W - 120.0 + 40.0, H), 0.0, 0.0, 0.0, true);
-			B.Add(Cube, Plaster, FVector(-10.0, 0.0, 370.0), FVector(20.0, 140.0, 220.0), 0.0, 0.0, 0.0, true);
+			B.Add(Cube, Plaster, FVector(-10.0, 0.0, 370.0), FVector(20.0, 200.0, 220.0), 0.0, 0.0, 0.0, true);
 			B.Add(Cube, Plaster, FVector(D * 0.5, 0.0, H + 5.0), FVector(D + 40.0, 2.0 * W + 40.0, 10.0));
+			// The glazed double door, shut (E by it goes out), and tall windows lit from the boulevard.
+			for (int32 Side = -1; Side <= 1; Side += 2)
+			{
+				B.Add(Cube, Walnut(), FVector(-4.0, Side * 50.0, 130.0), FVector(8.0, 98.0, 260.0), 0.0, 0.0, 0.0, true);
+				B.Add(Cube, FLinearColor(0.85f, 0.80f, 0.66f), FVector(1.0, Side * 50.0, 160.0), FVector(2.0, 70.0, 150.0));
+				B.Add(Cube, Brass(), FVector(2.0, Side * 8.0, 120.0), FVector(4.0, 3.0, 40.0));
+				for (int32 i = 0; i < 2; ++i)
+				{
+					const double Y = Side * (300.0 + i * 260.0);
+					B.Add(Cube, Gilt(), FVector(1.0, Y, 230.0), FVector(3.0, 170.0, 300.0));
+					B.Add(Cube, FLinearColor(0.85f, 0.80f, 0.66f), FVector(2.5, Y, 230.0), FVector(2.0, 154.0, 284.0));
+					B.Add(Cube, Plush(), FVector(4.0, Y - 62.0, 230.0), FVector(3.0, 30.0, 290.0));
+					B.Add(Cube, Plush(), FVector(4.0, Y + 62.0, 230.0), FVector(3.0, 30.0, 290.0));
+				}
+			}
 		}
 		// A gilt cornice round the top.
 		B.Add(Cube, Gilt(), FVector(D - 4.0, 0.0, H - 20.0), FVector(10.0, 2.0 * W, 18.0));

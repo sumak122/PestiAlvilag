@@ -86,6 +86,8 @@ FString ARuffian::GetSpeakerName() const
 		return TEXT("J\u00e1r\u00f3kel\u0151");
 	case ERuffian::Constable:
 		return TEXT("Rend\u0151r");
+	case ERuffian::Hired:
+		return TEXT("Ver\u0151leg\u00e9ny");
 	default:
 		return TEXT("Bika");
 	}
@@ -135,6 +137,9 @@ float ARuffian::GetMaxHealth() const
 	// A constable: used to a scuffle, but no boxer.
 	case ERuffian::Constable:
 		return 55.f;
+	// Hired toughs: like mission 4's.
+	case ERuffian::Hired:
+		return 45.f;
 	default:
 		return 60.f;
 	}
@@ -194,6 +199,8 @@ float ARuffian::GetVoicePitch() const
 		return StreetDress.bWoman ? 205.f : 112.f;
 	case ERuffian::Constable:
 		return 98.f;
+	case ERuffian::Hired:
+		return 104.f;
 	default:
 		return 142.f;
 	}
@@ -245,6 +252,7 @@ PersonKit::FOutfit ARuffian::GetDress() const
 		return BoxingYardModel::Rival(4);
 	case ERuffian::Passerby:
 	case ERuffian::Constable:
+	case ERuffian::Hired:
 		return StreetDress;
 	default:
 		break;

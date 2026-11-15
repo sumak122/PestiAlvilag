@@ -44,6 +44,9 @@ public:
 	ETestWeather GetTestWeather() const { return Forced; }
 	void SetTestWeather(ETestWeather To);
 
+	/** The player is indoors (a music bar): no rain drawn round him, the rain heard only faintly. */
+	void SetIndoors(bool bIn) { bIndoors = bIn; }
+
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
@@ -87,6 +90,7 @@ private:
 	TArray<FVector> Vertices;
 	TArray<FVector> Normals;
 	bool bDropsShown = false;
+	bool bIndoors = false;
 	FVector LastEye = FVector::ZeroVector;
 	FRandomStream Random;
 };
