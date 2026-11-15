@@ -74,6 +74,7 @@
 #include "FoodMenus.h"
 #include "TrafficManager.h"
 #include "Garage.h"
+#include "GarageModel.h"
 #include "MissionHirdetes.h"
 #include "MissionKulcs.h"
 #include "Tattersall.h"
