@@ -73,6 +73,10 @@
 #include "TramRides.h"
 #include "FoodMenus.h"
 #include "TrafficManager.h"
+#include "Garage.h"
+#include "MissionHirdetes.h"
+#include "MissionKulcs.h"
+#include "Tattersall.h"
 
 namespace PestiStart
 {
@@ -116,7 +120,14 @@ namespace PestiStart
 
 	// Act 1 in order, for the menu's mission list (JumpToMission).
 	const FName* const ActOne[] = { &Prologue, &Uzenet, &Zsebtolvaj, &Zsibvasar, &Felmondas, &Kifutofiu, &ElsoAuto, &Bunda };
-	// The mission the next level start jumps to (1 to 8), or 0 for none.
+	constexpr int32 ActOneCount = static_cast<int32>(UE_ARRAY_COUNT(ActOne));
+	// The car show missions (the black Mercedes SSK), Laci's after act 1 once
+	// all his night races are won; in the menu's list after act 1.
+	const FName Hirdetes(TEXT("Hirdetes"));
+	const FName Kulcs(TEXT("Kulcs"));
+	const FName* const ShowChain[] = { &Hirdetes, &Kulcs };
+	constexpr int32 ShowChainCount = static_cast<int32>(UE_ARRAY_COUNT(ShowChain));
+	// The mission the next level start jumps to (1 to 8 act 1, then the car show's), or 0 for none.
 	int32 PendingJump = 0;
 	// After a jump: how long to wait for the mission's ring (s), and how far
 	// out from the ring the player stands (cm), so it counts when he walks in.
@@ -397,10 +408,39 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionBunda>();
 	}
-	else if (AStoryPerson* BozsiAtStall = AFleaMarket::FindKeeper(GetWorld(), PestiStart::BozsiName))
+	else
 	{
-		// Act 1 is over: Bözsi néni was taken away in the raid.
-		BozsiAtStall->SetInWorld(false);
+		if (AStoryPerson* BozsiAtStall = AFleaMarket::FindKeeper(GetWorld(), PestiStart::BozsiName))
+		{
+			// Act 1 is over: Bözsi néni was taken away in the raid.
+			BozsiAtStall->SetInWorld(false);
+		}
+		SpawnShowMission();
+	}
+}
+
+void APestiAlvilagGameModeBase::SpawnShowMission()
+{
+	// Laci's car show missions, once all his night races are won, one at a time.
+	if (!ANightRaces::AllWon(this))
+	{
+		return;
+	}
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		// One of them already waiting or under way (a passed one stays a little while).
+		if ((It->IsA<AMissionHirdetes>() || It->IsA<AMissionKulcs>()) && !IsMissionDone(It->MissionId))
+		{
+			return;
+		}
+	}
+	if (!IsMissionDone(PestiStart::Hirdetes))
+	{
+		GetWorld()->SpawnActor<AMissionHirdetes>();
+	}
+	else if (!IsMissionDone(PestiStart::Kulcs))
+	{
+		GetWorld()->SpawnActor<AMissionKulcs>();
 	}
 }
 
@@ -544,6 +584,20 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(FVector2D(ABoxingYard::ToCity(BoxingYardModel::RingAt, 0.0)));
 		GetWorld()->SpawnActor<ABoxingYard>(ABoxingYard::StaticClass(), FVector(BoxingYardModel::CityAt, Z), FRotator(0.0, BoxingYardModel::CityYaw, 0.0));
+	}
+
+	// The Tattersall on Kerepesi út with its motor show (the car show missions).
+	if (!TActorIterator<ATattersall>(GetWorld()))
+	{
+		const FTransform Frame = ATattersall::Frame(GetWorld());
+		GetWorld()->SpawnActor<ATattersall>(ATattersall::StaticClass(), Frame.GetLocation(), Frame.Rotator());
+	}
+
+	// The player's lock-up garage on Bérkocsis utca, by his attic.
+	if (!TActorIterator<AGarage>(GetWorld()))
+	{
+		const double Z = GroundZ(GarageModel::CityAt);
+		GetWorld()->SpawnActor<AGarage>(AGarage::StaticClass(), FVector(GarageModel::CityAt, Z), FRotator(0.0, GarageModel::CityYaw, 0.0));
 	}
 
 	// And Bözsi néni's house, Népszínház utca 29, built in place of the plain
@@ -1048,17 +1102,33 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		BestRoundTenths = Save->BestRoundTenths;
 		BestMedal = Save->BestMedal;
 		RacesWon = Save->RacesWon;
+		GarageCar.Body = Save->GarageBody;
+		GarageCar.Wheel = Save->GarageWheel;
+		GarageCar.Paint = Save->GaragePaint;
+		GarageCar.Guard = Save->GarageGuard;
+		GarageCar.Spoke = Save->GarageSpoke;
+		GarageCar.Accent = Save->GarageAccent;
+		GarageCar.bTaxi = Save->bGarageTaxi;
+		GarageCar.bPolice = Save->bGaragePolice;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
 	const int32 Jump = PestiStart::PendingJump;
 	PestiStart::PendingJump = 0;
-	if (Jump >= 1 && Jump <= static_cast<int32>(UE_ARRAY_COUNT(PestiStart::ActOne)))
+	if (Jump >= 1 && Jump <= PestiStart::ActOneCount + PestiStart::ShowChainCount)
 	{
 		CompletedMissions.Reset();
 		for (int32 i = 0; i < Jump - 1; ++i)
 		{
-			CompletedMissions.Add(*PestiStart::ActOne[i]);
+			CompletedMissions.Add(i < PestiStart::ActOneCount ? *PestiStart::ActOne[i] : *PestiStart::ShowChain[i - PestiStart::ActOneCount]);
+		}
+		// The car show missions come after all of Laci's night races are won.
+		if (Jump > PestiStart::ActOneCount)
+		{
+			for (int32 i = 0; i < ANightRaces::RaceCount(); ++i)
+			{
+				MarkRaceWon(i);
+			}
 		}
 		// Schwimmer's baton comes with mission 5.
 		bHasBaton = Jump > 5;
@@ -1209,6 +1279,14 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->BestRoundTenths = BestRoundTenths;
 	Save->BestMedal = BestMedal;
 	Save->RacesWon = RacesWon;
+	Save->GarageBody = GarageCar.Body;
+	Save->GarageWheel = GarageCar.Wheel;
+	Save->GaragePaint = GarageCar.Paint;
+	Save->GarageGuard = GarageCar.Guard;
+	Save->GarageSpoke = GarageCar.Spoke;
+	Save->GarageAccent = GarageCar.Accent;
+	Save->bGarageTaxi = GarageCar.bTaxi;
+	Save->bGaragePolice = GarageCar.bPolice;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

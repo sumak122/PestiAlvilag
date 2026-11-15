@@ -8,6 +8,22 @@
 #include "PestiAlvilagGameModeBase.generated.h"
 
 /**
+ * The car kept in the player's garage on Bérkocsis utca (AGarage): its look
+ * (CarModel::FStyle, as plain numbers), Body below 0 when it is empty.
+ */
+struct FGarageCar
+{
+	int32 Body = -1;
+	int32 Wheel = 0;
+	FLinearColor Paint = FLinearColor::Black;
+	FLinearColor Guard = FLinearColor::Black;
+	FLinearColor Spoke = FLinearColor::Black;
+	FLinearColor Accent = FLinearColor::Black;
+	bool bTaxi = false;
+	bool bPolice = false;
+};
+
+/**
  * Puts up the Népszínház on Blaha Lujza tér, starts the player on foot in
  * front of it with their car parked nearby, starts the traffic, and keeps the player's wanted level (on foot
  * or driving): ramming traffic makes the police come after you; staying out
@@ -124,6 +140,10 @@ public:
 	}
 	int32 GetRacesWon() const { return RacesWon; }
 
+	/** The car kept in the garage (Body below 0: none); saved with the game at home. */
+	const FGarageCar& GetGarageCar() const { return GarageCar; }
+	void SetGarageCar(const FGarageCar& Car) { GarageCar = Car; }
+
 	/** Dishes eaten at least once; true the first time. */
 	bool TryDish(FName DishId)
 	{
@@ -239,6 +259,8 @@ private:
 	void Busted();
 	void UpdateBusted();
 	void SpawnNextMission();
+	/** After act 1: Laci's next car show mission, once all his night races are won. */
+	void SpawnShowMission();
 	/** Where he stands on the pavement outside the home door. */
 	FVector2D HomeStartAt() const;
 	/** The home door: Bözsi néni's, or after the raid (mission 8) the attic room's on Bérkocsis utca; and the way it faces. */
@@ -288,6 +310,7 @@ private:
 	int32 BestRoundTenths = 0;
 	int32 BestMedal = 0;
 	int32 RacesWon = 0;
+	FGarageCar GarageCar;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;

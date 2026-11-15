@@ -80,6 +80,9 @@ public:
 	/** True when a fight is going on (not beaten, not run off) within Radius of At. */
 	static bool IsFightNear(const UObject* WorldContextObject, const FVector& At, double Radius);
 
+	/** True when someone the player has beaten lies within Radius of At (until he is cleared away). */
+	static bool IsBeatenNear(const UObject* WorldContextObject, const FVector& At, double Radius);
+
 	/**
 	 * A constable steps into a fight with the player, standing on the ground
 	 * at Ground facing FaceYaw: hidden while a fighter in his uniform stands
