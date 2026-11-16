@@ -18,8 +18,9 @@ class UPointLightComponent;
  * doors (open by day, shut at night), the black Mercedes SSK on its
  * turntable and four more cars on stands (looks only, behind blocking
  * boxes), lamps that light the hall while the player is near, and by day
- * (CarShowModel::OpenFrom to OpenUntil) Mr. Weisz the salesman by the SSK
- * and visitors round the cars. The car show missions (AMissionHirdetes,
+ * (CarShowModel::OpenFrom to OpenUntil) Mr. Weisz the salesman by the SSK,
+ * visitors round the cars and a doorman at the door, who lets the player in
+ * only in a proper suit (game mode HasSuit, ATailor). The car show missions (AMissionHirdetes,
  * AMissionKulcs) come here.
  *
  * The actor stands at the middle of the hall's front on the ground, turned
@@ -78,10 +79,22 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AStoryPerson> Salesman;
 
+	/** The doorman by the glass doors while the show is open. */
+	UPROPERTY(Transient)
+	TObjectPtr<AStoryPerson> Doorman;
+
+	/** Across the open doorway while the player has no suit: the doorman lets nobody in in street clothes. */
+	UPROPERTY(VisibleAnywhere, Category = "Show")
+	TObjectPtr<UBoxComponent> DoorBar;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AStoryPerson>> Visitors;
 
 	/** 1 open, 0 shut, -1 not yet known. */
 	int32 OpenState = -1;
 	float UpdateIn = 0.f;
+	/** The doorway is barred (open, and the player has no suit). */
+	bool bBarred = false;
+	/** When the doorman last turned the player away (s). */
+	double LastTurnedAway = -100.0;
 };

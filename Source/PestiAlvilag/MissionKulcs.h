@@ -14,13 +14,14 @@ class AStoryPerson;
 /**
  * The car show chain, mission 2, "A kulcs" (The key): Kálmán, the car
  * importer's chauffeur, sits at a table before the Bauer tavern on Baross
- * tér with a beer, his uniform coat over the back of his chair and the
- * SSK's spare key in its pocket (CarShowModel::BuildTable). The player
- * stands behind the chair and holds E to lift the key while Kálmán looks
- * at the street; now and then he turns his head, and if he turns while
- * the player's hand is in the pocket he jumps up and fights
- * (AStreetFights). Beating him gets the key too; him running off, or an
- * arrest, fails the mission. The key goes to Laci.
+ * tér, his uniform coat over the back of his chair and the SSK's spare key
+ * in its pocket (CarShowModel::BuildTable). The player stands across the
+ * table from him and buys him rounds with E (beer, wine, two pálinkas;
+ * the glasses pile up on the table and he sways more each time); after
+ * the fourth he falls asleep over the table, and E behind his chair takes
+ * the key. Reaching into the coat while he is awake makes him jump up and
+ * fight (AStreetFights); beating him gets the key too, him running off or
+ * an arrest fails the mission. The key goes to Laci.
  */
 UCLASS()
 class PESTIALVILAG_API AMissionKulcs : public AMission
@@ -53,8 +54,10 @@ private:
 	void Hint(const FString& Text) const;
 	/** The table, Kálmán at it and his master's limousine at the kerb. */
 	void SetTheTable();
-	/** Kálmán's glances over his shoulder, the player's hand in the coat, and what comes of it. */
-	void TickLift(float DeltaSeconds);
+	/** The table and its glasses, after so many rounds. */
+	void LayTable();
+	/** Rounds bought across the table, his swaying and sleep, the hand in his coat. */
+	void TickDrinks(float DeltaSeconds);
 	/** He has seen the hand in his coat: up he gets, and fights. */
 	void Caught();
 
@@ -74,17 +77,22 @@ private:
 	/** The table's frame: its middle on the ground, +X out to the street. */
 	FVector TableAt = FVector::ZeroVector;
 	double TableYaw = 0.0;
-	/** How far the key is out of the pocket, 0 to 1. */
-	float Lifted = 0.f;
-	/** Seconds to his next glance, and how far into a glance he is (s, below 0 when not glancing). */
-	float GlanceIn = 6.f;
-	float Glancing = -1.f;
-	/** Which way he looks round: -1 left, 1 right. */
-	double GlanceSide = 1.0;
+	/** Rounds he has drunk on the player, and when the next can be ordered (s). */
+	int32 Rounds = 0;
+	double NextRoundAt = 0.0;
+	/** When he nods off (s, below 0 while awake), and how far asleep he is (0 to 1). */
+	double SleepsAt = -1.0;
+	float Asleep = 0.f;
+	/** Swaying clock (s). */
+	float SwayClock = 0.f;
+	/** The player was across the table last frame (Kálmán greets him once). */
+	bool bAcross = false;
+	/** When the "buy a round" note was last shown (s). */
+	double LastNote = -100.0;
 	/** Caught: the fight with him, and where it began. */
 	bool bFighting = false;
 	FVector FightAt = FVector::ZeroVector;
-	/** The arrests counted when the lift began (one more fails the mission). */
+	/** The arrests counted when the drinking began (one more fails the mission). */
 	int32 ArrestsAtStart = 0;
 	FRandomStream Random;
 };

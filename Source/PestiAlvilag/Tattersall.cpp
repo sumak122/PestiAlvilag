@@ -14,6 +14,8 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
+#include "PestiHud.h"
 #include "ShapeSet.h"
 #include "StoryPerson.h"
 
@@ -53,6 +55,14 @@ namespace TattersallPlace
 
 	// How often doors, people and lamps follow the clock (s).
 	constexpr float UpdateEvery = 0.5f;
+
+	// The bar across the doorway: how far out from the front and half how high (cm).
+	constexpr double BarOut = 30.0;
+	constexpr double BarHigh = 220.0;
+	// The doorman speaks to a player without a suit this near the door, this often (cm, s).
+	constexpr double TurnAwayNear = 500.0;
+	constexpr double TurnAwayEvery = 9.0;
+	constexpr float SaySeconds = 6.f;
 }
 
 ATattersall::ATattersall()
@@ -70,6 +80,14 @@ ATattersall::ATattersall()
 		CarBoxes.Add(Box);
 		CarLooks.Add(CreateDefaultSubobject<UCarVisuals>(*FString::Printf(TEXT("CarLooks%d"), i)));
 	}
+
+	// Across the open doorway, just outside it: on only while the doorman turns people away.
+	DoorBar = CreateDefaultSubobject<UBoxComponent>(TEXT("DoorBar"));
+	DoorBar->SetupAttachment(RootComponent);
+	DoorBar->SetBoxExtent(FVector(20.0, CarShowModel::DoorHalf, TattersallPlace::BarHigh));
+	DoorBar->SetRelativeLocation(FVector(TattersallPlace::BarOut, 0.0, TattersallPlace::BarHigh));
+	DoorBar->SetCollisionProfileName(TEXT("BlockAll"));
+	DoorBar->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 FTransform ATattersall::Frame(const UWorld* World)
@@ -237,6 +255,7 @@ void ATattersall::PlacePeople()
 		return Person;
 	};
 	Salesman = Place(CarShowModel::SalesmanSpot, CarShowModel::SalesmanYaw, CarShowModel::Salesman());
+	Doorman = Place(CarShowModel::DoormanSpot, CarShowModel::DoormanYaw, CarShowModel::Doorman());
 	for (int32 i = 0; i < CarShowModel::NumVisitors; ++i)
 	{
 		const CarShowModel::FVisitorSpot& Spot = CarShowModel::VisitorSpots[i];
@@ -276,6 +295,10 @@ void ATattersall::Update()
 		{
 			Salesman->SetInWorld(Open == 1);
 		}
+		if (Doorman)
+		{
+			Doorman->SetInWorld(Open == 1);
+		}
 		for (AStoryPerson* Visitor : Visitors)
 		{
 			if (Visitor)
@@ -285,8 +308,35 @@ void ATattersall::Update()
 		}
 	}
 
-	// The hall's own light, only while the player is about.
+	// The doorman lets nobody in in street clothes.
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	const bool bBar = Open == 1 && Game && !Game->HasSuit();
+	if (bBar != bBarred && DoorBar)
+	{
+		bBarred = bBar;
+		DoorBar->SetCollisionEnabled(bBar ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	}
+	const FVector DoorFront = GetActorTransform().TransformPosition(FVector(TattersallPlace::BarOut + 100.0, 0.0, 0.0));
+	if (bBar && Player && FVector::Dist2D(Player->GetActorLocation(), DoorFront) < TattersallPlace::TurnAwayNear)
+	{
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (Now - LastTurnedAway > TattersallPlace::TurnAwayEvery)
+		{
+			LastTurnedAway = Now;
+			if (Doorman)
+			{
+				Doorman->FaceTowards(Player->GetActorLocation());
+			}
+			if (APestiHUD* Hud = APestiHUD::Get(this))
+			{
+				Hud->Say(TEXT("Port\u00e1s"), TEXT("Eln\u00e9z\u00e9st, uram, a ki\u00e1ll\u00edt\u00e1sra csak ill\u0151 \u00f6lt\u00f6z\u00e9kben l\u00e9phet be."),
+					TEXT("Excuse me, sir, the show admits only those properly dressed."), TattersallPlace::SaySeconds);
+			}
+		}
+	}
+
+	// The hall's own light, only while the player is about.
 	const bool bNear = Player && FVector::Dist2D(Player->GetActorLocation(), GetActorLocation()) < TattersallPlace::LightsNear;
 	const ADayNight* Clock = ADayNight::Get(GetWorld());
 	float Candela = 0.f;

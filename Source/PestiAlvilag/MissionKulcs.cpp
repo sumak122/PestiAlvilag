@@ -24,7 +24,7 @@ namespace KulcsPlan
 {
 	constexpr int32 TalkStep = 0;
 	constexpr int32 TavernStep = 1;
-	constexpr int32 LiftStep = 2;
+	constexpr int32 DrinkStep = 2;
 	constexpr int32 BackStep = 3;
 
 	// Bauer Károly's tavern on Baross tér: the middle of its front on the
@@ -43,26 +43,32 @@ namespace KulcsPlan
 
 	constexpr float TalkRadius = 250.f;
 	constexpr float TavernRadius = 1500.f;
-	constexpr float LiftRadius = 130.f;
+	// Across the table from Kálmán, where the player stands to buy rounds (table frame).
+	const FVector Across(125.0, 0.0, 0.0);
+	constexpr double AcrossNear = 130.0;
+	constexpr double BehindNear = 110.0;
 
-	// Holding E this long gets the key out (s).
-	constexpr float LiftSeconds = 3.f;
-	// Seconds between his glances, the glance's length, how long his head
-	// takes to turn, how far it turns (degrees) and how far turned he sees
-	// the hand in his coat (0 to 1).
-	constexpr float GlanceMin = 4.f;
-	constexpr float GlanceMax = 8.f;
-	constexpr float GlanceSeconds = 2.4f;
-	constexpr float TurnSeconds = 0.9f;
-	constexpr double TurnAngle = 70.0;
-	constexpr float SeesAt = 0.7f;
+	// Four rounds put him to sleep: beer, wine, then two pálinkas (fillér, before the hírnév cut).
+	constexpr int32 RoundCount = 4;
+	constexpr int32 RoundPrices[RoundCount] = { 30, 60, 40, 40 };
+	// Seconds before the next round can be ordered, and from the last round to his sleep.
+	constexpr double RoundGap = 4.0;
+	constexpr double NodOffAfter = 7.0;
+	// How long he takes to slump over the table (s), how far he leans (degrees, - is forward) and rises meanwhile (cm).
+	constexpr float SlumpSeconds = 1.6f;
+	constexpr double SlumpPitch = -38.0;
+	constexpr double SlumpLift = 8.0;
+	// His sway per round drunk (degrees) and how fast it goes (radians a second).
+	constexpr double SwayPerRound = 2.5;
+	constexpr float SwaySpeed = 1.4f;
 	// The fight with him counts this far from where it began (cm).
 	constexpr double FightRange = 5000.0;
 
 	constexpr int32 HintKey = 39;
-	constexpr int32 BarKey = 82;
+	constexpr int32 NoteKey = 82;
 	constexpr float HintSeconds = 6.f;
-	constexpr int32 BarLength = 20;
+	constexpr float NoteSeconds = 4.f;
+	constexpr double NoteEvery = 3.5;
 
 	const TCHAR* const LaciName = TEXT("Laci");
 	const TCHAR* const KalmanName = TEXT("K\u00e1lm\u00e1n");
@@ -119,16 +125,16 @@ void AMissionKulcs::SetUpMission()
 	Tavern.Place = TEXT("Baross t\u00e9r");
 	Steps.Add(Tavern);
 
-	FMissionStep Lift;
-	Lift.GoalHu = TEXT("\u00c1llj K\u00e1lm\u00e1n sz\u00e9ke m\u00f6g\u00e9, \u00e9s tartsd lenyomva az E-t, hogy kivedd a kulcsot");
-	Lift.GoalEn = TEXT("Stand behind K\u00e1lm\u00e1n's chair and hold E to lift the key");
-	Lift.Target = Frame.TransformPosition(CarShowModel::Table::Behind);
-	Lift.Radius = KulcsPlan::LiftRadius;
-	Lift.bPressE = true;
-	Lift.bManual = true;
-	Lift.bGuide = false;
-	Lift.Place = TEXT("Baross t\u00e9r");
-	Steps.Add(Lift);
+	FMissionStep Drink;
+	Drink.GoalHu = TEXT("\u00c1llj K\u00e1lm\u00e1nnal szemben, \u00e9s fizess neki egy k\u00f6rt (E)");
+	Drink.GoalEn = TEXT("Stand across the table from K\u00e1lm\u00e1n and stand him a round (E)");
+	Drink.Target = Frame.TransformPosition(KulcsPlan::Across);
+	Drink.Radius = KulcsPlan::AcrossNear;
+	Drink.bPressE = true;
+	Drink.bManual = true;
+	Drink.bGuide = false;
+	Drink.Place = TEXT("Baross t\u00e9r");
+	Steps.Add(Drink);
 
 	FMissionStep Back;
 	Back.GoalHu = TEXT("Vidd a kulcsot Lacinak");
@@ -151,13 +157,7 @@ void AMissionKulcs::SetTheTable()
 	const FTransform Frame(FRotator(0.0, TableYaw, 0.0), TableAt);
 
 	// The table, chairs, beer and the coat with the key.
-	TableSet = SpawnForMission<AShapeSet>(FVector::ZeroVector, 0.0);
-	if (TableSet)
-	{
-		TArray<MarketModel::FShape> Shapes;
-		CarShowModel::BuildTable(Shapes, TableAt, TableYaw);
-		TableSet->AddShapes(Shapes);
-	}
+	LayTable();
 
 	// Kálmán in his chair, looking out at the street over his beer.
 	const FVector Chair = Frame.TransformPosition(CarShowModel::Table::Chair);
@@ -188,6 +188,23 @@ void AMissionKulcs::SetTheTable()
 	}
 }
 
+void AMissionKulcs::LayTable()
+{
+	// A shape set cannot be cleared, so a new one is laid for each round's glasses.
+	if (TableSet)
+	{
+		TableSet->Destroy();
+		TableSet = nullptr;
+	}
+	TableSet = SpawnForMission<AShapeSet>(FVector::ZeroVector, 0.0);
+	if (TableSet)
+	{
+		TArray<MarketModel::FShape> Shapes;
+		CarShowModel::BuildTable(Shapes, TableAt, TableYaw, Rounds);
+		TableSet->AddShapes(Shapes);
+	}
+}
+
 void AMissionKulcs::SayLater(float Seconds, const FString& Who, const FString& LineHu, const FString& LineEn)
 {
 	// Seconds after the line before it (or after now, if none is waiting).
@@ -208,14 +225,16 @@ void AMissionKulcs::OnStepStarted(int32 Step)
 		SetTheTable();
 		return;
 	}
-	if (Step == KulcsPlan::LiftStep)
+	if (Step == KulcsPlan::DrinkStep)
 	{
 		const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
 		ArrestsAtStart = Game ? Game->GetArrests() : 0;
-		Lifted = 0.f;
-		Glancing = -1.f;
-		GlanceIn = Random.FRandRange(KulcsPlan::GlanceMin, KulcsPlan::GlanceMax);
-		Hint(TEXT("Tipp: ha K\u00e1lm\u00e1n h\u00e1trafordul, engedd el az E-t  (Tip: when K\u00e1lm\u00e1n looks round, let go of E)"));
+		Rounds = 0;
+		NextRoundAt = 0.0;
+		SleepsAt = -1.0;
+		Asleep = 0.f;
+		bAcross = false;
+		Hint(TEXT("Tipp: ha el\u0151bb ny\u00falsz a kab\u00e1tj\u00e1ba, mint hogy elalszik, vereked\u00e9s lesz  (Tip: reach into his coat before he sleeps and there'll be a fight)"));
 	}
 }
 
@@ -229,22 +248,21 @@ void AMissionKulcs::OnStepDone(int32 Step)
 			Laci->FaceTowards(Player->GetActorLocation());
 		}
 		Say(KulcsPlan::LaciName,
-			TEXT("A sof\u0151r, K\u00e1lm\u00e1n. Ilyenkor a Bauer-kocsma el\u0151tt iszik, a kab\u00e1tja a sz\u00e9ke t\u00e1ml\u00e1j\u00e1n l\u00f3g."),
-			TEXT("The chauffeur, K\u00e1lm\u00e1n. This time of day he drinks before Bauer's tavern, his coat hanging on the back of his chair."), 6.f);
+			TEXT("K\u00e1lm\u00e1n, a sof\u0151r. Hallottad, hol iszik: a Bauer-kocsma el\u0151tt, a Baross t\u00e9ren."),
+			TEXT("K\u00e1lm\u00e1n, the chauffeur. You heard where he drinks: before Bauer's tavern on Baross t\u00e9r."), 6.f);
 		SayLater(6.f, KulcsPlan::LaciName,
-			TEXT("A kulcs a kab\u00e1tzsebben van. \u00c1llj m\u00f6g\u00e9, \u00e9s ny\u00falj bele, de csak ha az utc\u00e1t b\u00e1mulja."),
-			TEXT("The key is in the coat pocket. Stand behind him and reach in, but only while he's staring at the street."));
+			TEXT("\u00c1llj vele szemben, \u00e9s fizesd a k\u00f6r\u00f6ket. S\u00f6r, bor, p\u00e1linka, am\u00edg el nem alszik. Vigy\u00e9l p\u00e1r peng\u0151t."),
+			TEXT("Stand across from him and pay for the rounds. Beer, wine, p\u00e1linka, till he falls asleep. Bring a few peng\u0151."));
 		SayLater(6.f, KulcsPlan::LaciName,
-			TEXT("Ha \u00e9szrevesz, nagy h\u0171h\u00f3 lesz. Az a fick\u00f3 nem keny\u00e9rre keni a pofonokat."),
-			TEXT("If he spots you, there'll be a fuss. That fellow doesn't hand out slaps on bread."));
+			TEXT("Akkor a kulcs mag\u00e1t\u00f3l kics\u00faszik a zseb\u00e9b\u0151l. De ha el\u0151bb ny\u00falsz bele, abb\u00f3l buny\u00f3 lesz."),
+			TEXT("Then the key slips out of his pocket by itself. But reach in any sooner and it'll come to blows."));
 		return;
 	}
-	if (Step == KulcsPlan::LiftStep)
+	if (Step == KulcsPlan::DrinkStep)
 	{
-		APestiHUD::Show(this, KulcsPlan::BarKey, 0.1f, FColor(255, 210, 60), FString());
 		if (!bFighting)
 		{
-			Hint(TEXT("Megvan a kulcs. K\u00e1lm\u00e1n semmit sem vett \u00e9szre  (You have the key. K\u00e1lm\u00e1n noticed nothing)"));
+			Hint(TEXT("Megvan a kulcs. K\u00e1lm\u00e1n csak horkol tov\u00e1bb  (You have the key. K\u00e1lm\u00e1n just snores on)"));
 		}
 		return;
 	}
@@ -278,15 +296,16 @@ void AMissionKulcs::TickStep(int32 Step, float DeltaSeconds)
 		Say(Lines[0].Who, Lines[0].Hu, Lines[0].En, 7.f);
 		Lines.RemoveAt(0);
 	}
-	if (Step == KulcsPlan::LiftStep)
+	if (Step == KulcsPlan::DrinkStep)
 	{
-		TickLift(DeltaSeconds);
+		TickDrinks(DeltaSeconds);
 	}
 }
 
-void AMissionKulcs::TickLift(float DeltaSeconds)
+void AMissionKulcs::TickDrinks(float DeltaSeconds)
 {
-	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	const double Now = GetWorld()->GetTimeSeconds();
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
 	if (Game && Game->GetArrests() > ArrestsAtStart)
 	{
 		Fail(TEXT("Elkaptak a rend\u0151r\u00f6k"), TEXT("The police caught you"));
@@ -307,61 +326,118 @@ void AMissionKulcs::TickLift(float DeltaSeconds)
 		}
 		return;
 	}
-	if (!Kalman)
+	if (!Kalman || !Game)
 	{
 		return;
 	}
 
-	// His glances over his shoulder: turn, look a moment, turn back.
-	const double BaseYaw = TableYaw + CarShowModel::Table::ChairYaw;
-	float Turned = 0.f;
-	if (Glancing < 0.f)
+	// He sways more with every round, and after the last one slumps over the table.
+	const FTransform Frame(FRotator(0.0, TableYaw, 0.0), TableAt);
+	if (SleepsAt >= 0.0 && Now >= SleepsAt && Asleep <= 0.f)
 	{
-		GlanceIn -= DeltaSeconds;
-		if (GlanceIn <= 0.f)
-		{
-			Glancing = 0.f;
-			GlanceSide = Random.FRand() < 0.5f ? -1.0 : 1.0;
-		}
+		Say(KulcsPlan::KalmanName, TEXT("(horkol)"), TEXT("(snores)"), 5.f);
+		Steps[KulcsPlan::DrinkStep].GoalHu = TEXT("K\u00e1lm\u00e1n alszik. \u00c1llj a sz\u00e9ke m\u00f6g\u00e9, \u00e9s vedd ki a kulcsot (E)");
+		Steps[KulcsPlan::DrinkStep].GoalEn = TEXT("K\u00e1lm\u00e1n is asleep. Stand behind his chair and take the key (E)");
+		SetStepTarget(Frame.TransformPosition(CarShowModel::Table::Behind));
+		Asleep = KINDA_SMALL_NUMBER;
 	}
-	else
+	if (Asleep > 0.f)
 	{
-		Glancing += DeltaSeconds;
-		const float Back = KulcsPlan::GlanceSeconds - Glancing;
-		Turned = FMath::Clamp(FMath::Min(Glancing, Back) / KulcsPlan::TurnSeconds, 0.f, 1.f);
-		if (Glancing >= KulcsPlan::GlanceSeconds)
-		{
-			Glancing = -1.f;
-			Turned = 0.f;
-			GlanceIn = Random.FRandRange(KulcsPlan::GlanceMin, KulcsPlan::GlanceMax);
-		}
+		Asleep = FMath::Min(1.f, Asleep + DeltaSeconds / KulcsPlan::SlumpSeconds);
 	}
-	const double Smooth = FMath::SmoothStep(0.f, 1.f, Turned);
-	Kalman->SetActorRotation(FRotator(0.0, BaseYaw + GlanceSide * KulcsPlan::TurnAngle * Smooth, 0.0));
+	SwayClock += DeltaSeconds * KulcsPlan::SwaySpeed;
+	const double Slump = FMath::SmoothStep(0.f, 1.f, Asleep);
+	const double Sway = (1.0 - Slump) * KulcsPlan::SwayPerRound * Rounds * FMath::Sin(SwayClock);
+	const double Nod = (1.0 - Slump) * 0.5 * KulcsPlan::SwayPerRound * Rounds * FMath::Sin(SwayClock * 0.7f);
+	const FVector Seat = Frame.TransformPosition(CarShowModel::Table::Chair) + FVector(0.0, 0.0, KulcsPlan::SeatedMiddle + Slump * KulcsPlan::SlumpLift);
+	Kalman->SetActorLocationAndRotation(Seat, FRotator(Slump * KulcsPlan::SlumpPitch - FMath::Abs(Nod), TableYaw + CarShowModel::Table::ChairYaw, Sway));
 
-	// The player's hand in the pocket: on foot behind the chair, holding E.
 	APestiPerson* Person = Cast<APestiPerson>(GetPlayer());
 	const APlayerController* PC = Person ? Cast<APlayerController>(Person->GetController()) : nullptr;
-	const bool bBehind = Person && FVector::Dist2D(Person->GetActorLocation(), Steps[KulcsPlan::LiftStep].Target) < KulcsPlan::LiftRadius;
-	const bool bReaching = bBehind && PC && PC->IsInputKeyDown(EKeys::E);
-	if (bReaching && Turned >= KulcsPlan::SeesAt)
+	if (!Person || !PC)
 	{
-		Caught();
 		return;
 	}
-	if (bReaching)
+	const bool bPressed = PC->WasInputKeyJustPressed(EKeys::E);
+
+	// The hand in his coat: fine once he sleeps, a fight while he is awake.
+	const FVector Behind = Frame.TransformPosition(CarShowModel::Table::Behind);
+	if (FVector::Dist2D(Person->GetActorLocation(), Behind) < KulcsPlan::BehindNear && bPressed)
 	{
-		Lifted = FMath::Min(1.f, Lifted + DeltaSeconds / KulcsPlan::LiftSeconds);
+		if (Asleep >= 1.f)
+		{
+			FinishStep();
+		}
+		else
+		{
+			Caught();
+		}
+		return;
 	}
-	if (bBehind && Lifted > 0.f)
+
+	// Across the table: a greeting, then rounds while there are rounds to buy.
+	const FVector AcrossAt = Frame.TransformPosition(KulcsPlan::Across);
+	const bool bThere = FVector::Dist2D(Person->GetActorLocation(), AcrossAt) < KulcsPlan::AcrossNear;
+	if (!bThere)
 	{
-		const int32 Done = FMath::RoundToInt(Lifted * KulcsPlan::BarLength);
-		const FString Bar = FString(TEXT("Kulcs  [")) + FString::ChrN(Done, TEXT('#')) + FString::ChrN(KulcsPlan::BarLength - Done, TEXT('-')) + TEXT("]  (Key)");
-		APestiHUD::Show(this, KulcsPlan::BarKey, 0.5f, FColor(255, 210, 60), Bar);
+		bAcross = false;
+		return;
 	}
-	if (Lifted >= 1.f)
+	if (!bAcross)
 	{
-		FinishStep();
+		bAcross = true;
+		if (Rounds == 0)
+		{
+			Say(KulcsPlan::KalmanName, TEXT("Mit b\u00e1mul? Ez az \u00e9n asztalom. Hacsak nem fizet valamit."),
+				TEXT("What are you staring at? This is my table. Unless you're buying."), 5.f);
+		}
+	}
+	if (Rounds >= KulcsPlan::RoundCount)
+	{
+		return;
+	}
+	const int32 Price = APestiAlvilagGameModeBase::PriceFor(this, KulcsPlan::RoundPrices[Rounds]);
+	if (bPressed && Now >= NextRoundAt)
+	{
+		if (Game->GetMoney() < Price)
+		{
+			Hint(TEXT("Nincs el\u00e9g p\u00e9nzed a k\u00f6rre  (You haven't the money for the round)"));
+			return;
+		}
+		Game->AddMoney(-Price);
+		++Rounds;
+		NextRoundAt = Now + KulcsPlan::RoundGap;
+		LayTable();
+		switch (Rounds)
+		{
+		case 1:
+			Say(KulcsPlan::KalmanName, TEXT("Egy s\u00f6r? H\u00e1t, ha maga fizet, ki vagyok \u00e9n, hogy nemet mondjak? Eg\u00e9szs\u00e9g\u00e9re!"),
+				TEXT("A beer? Well, if you're paying, who am I to say no? Your health!"), 5.f);
+			break;
+		case 2:
+			Say(KulcsPlan::KalmanName, TEXT("Tudja, a gazd\u00e1m, Vogel \u00far, egy poh\u00e1r vizet se adna. Maga m\u00e1s. Maga \u00fariember."),
+				TEXT("You know, my master, Mr. Vogel, wouldn't give me a glass of water. You're different. You're a gentleman."), 5.f);
+			break;
+		case 3:
+			Say(KulcsPlan::KalmanName, TEXT("Barackp\u00e1linka... ez azt\u00e1n! Mondtam m\u00e1r, hogy maga rendes ember? Mert az."),
+				TEXT("Apricot brandy... now that's something! Did I say you're a decent fellow? Because you are."), 5.f);
+			break;
+		default:
+			Say(KulcsPlan::KalmanName, TEXT("M\u00e9g egy... utols\u00f3... a kulcsot... j\u00f3zanul kell... visszavinnem..."),
+				TEXT("One more... last one... the key... got to take it back... sober..."), 5.f);
+			SleepsAt = Now + KulcsPlan::NodOffAfter;
+			break;
+		}
+		return;
+	}
+	if (Now >= NextRoundAt && Now - LastNote > KulcsPlan::NoteEvery)
+	{
+		LastNote = Now;
+		static const TCHAR* const DrinkHu[KulcsPlan::RoundCount] = { TEXT("egy kors\u00f3 s\u00f6r"), TEXT("egy poh\u00e1r bor"), TEXT("egy p\u00e1linka"), TEXT("m\u00e9g egy p\u00e1linka") };
+		static const TCHAR* const DrinkEn[KulcsPlan::RoundCount] = { TEXT("a mug of beer"), TEXT("a glass of wine"), TEXT("a p\u00e1linka"), TEXT("another p\u00e1linka") };
+		const FString Money = APestiAlvilagGameModeBase::FormatMoney(Price);
+		APestiHUD::Show(this, KulcsPlan::NoteKey, KulcsPlan::NoteSeconds, FColor(255, 210, 60),
+			FString(TEXT("E: ")) + DrinkHu[Rounds] + TEXT(", ") + Money + TEXT("  (E: ") + DrinkEn[Rounds] + TEXT(", ") + Money + TEXT(")"));
 	}
 }
 
@@ -389,7 +465,6 @@ void AMissionKulcs::Caught()
 	Fights->SetFightsBack();
 	bFighting = true;
 	FightAt = Chair;
-	APestiHUD::Show(this, KulcsPlan::BarKey, 0.1f, FColor(255, 210, 60), FString());
 	Say(KulcsPlan::KalmanName, TEXT("H\u00e9! Mit keresel a zsebemben, te tolvaj?!"), TEXT("Hey! What are you doing in my pocket, you thief?!"), 4.f);
 	Hint(TEXT("Verd meg K\u00e1lm\u00e1nt, \u00e9s ti\u00e9d a kulcs  (Beat K\u00e1lm\u00e1n and the key is yours)"));
 	Kalman->Destroy();
@@ -408,5 +483,4 @@ bool AMissionKulcs::GetRetrySpot(FVector& OutAt, double& OutYaw) const
 void AMissionKulcs::OnFailed()
 {
 	Lines.Reset();
-	APestiHUD::Show(this, KulcsPlan::BarKey, 0.1f, FColor(255, 210, 60), FString());
 }

@@ -208,6 +208,31 @@ namespace CarShowModel
 		return O;
 	}
 
+	/** The doorman by the glass doors while the show is open: he turns away anyone not in a proper suit. */
+	const FVector DoormanSpot(170.0, 360.0, 0.0);
+	constexpr double DoormanYaw = -60.0;
+
+	/** The doorman: a commissionaire's long green coat with gold buttons and sash, a peaked cap and a handlebar moustache. */
+	inline PersonKit::FOutfit Doorman()
+	{
+		PersonKit::FOutfit O;
+		O.Height = 188.f;
+		O.Hat = PersonKit::EHat::FlatCap;
+		O.HatColor = FLinearColor(0.05f, 0.13f, 0.09f);
+		O.HatBand = FLinearColor(0.70f, 0.55f, 0.20f);
+		O.Top = PersonKit::ETop::Overcoat;
+		O.Coat = FLinearColor(0.05f, 0.13f, 0.09f);
+		O.Trousers = FLinearColor(0.04f, 0.05f, 0.05f);
+		O.bSash = true;
+		O.Sash = FLinearColor(0.70f, 0.55f, 0.20f);
+		O.bTie = false;
+		O.bBoots = true;
+		O.bMoustache = true;
+		O.MoustacheKind = PersonKit::EMoustache::Handlebar;
+		O.Hair = FLinearColor(0.30f, 0.26f, 0.22f);
+		return O;
+	}
+
 	/** A visitor to the show in his (or her) best: Index picks one of eight. */
 	inline PersonKit::FOutfit Visitor(int32 Index)
 	{
@@ -310,7 +335,7 @@ namespace CarShowModel
 		const FVector Behind(-150.0, 25.0, 0.0);
 	}
 
-	inline void BuildTable(TArray<FShape>& Out, const FVector& Origin, double Yaw)
+	inline void BuildTable(TArray<FShape>& Out, const FVector& Origin, double Yaw, int32 Rounds = 0)
 	{
 		using namespace Colors;
 		MarketModel::FBuilder B{ Out, Origin, Yaw };
@@ -349,6 +374,36 @@ namespace CarShowModel
 		B.Add(MarketModel::Cube, CoatGrey, FVector(-88, 0, 70), FVector(4, 48, 3));
 		B.Add(MarketModel::Cube, Brass, FVector(-93.5, 14, 56), FVector(1, 4, 6));
 		B.Add(MarketModel::Cylinder, Brass, FVector(-93.5, 14, 61), FVector(2, 2, 2), 90, 0, 0);
+
+		// The rounds the player has stood him: empty beer glasses, the wine
+		// bottle and its glass, then the pálinka bottle and its little glasses.
+		const FLinearColor GlassEmpty(0.62f, 0.66f, 0.62f);
+		const FLinearColor Bottle(0.10f, 0.20f, 0.12f);
+		const FLinearColor Wine(0.30f, 0.04f, 0.06f);
+		if (Rounds >= 1)
+		{
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(26, 24, 83), FVector(8, 8, 16));
+			B.Add(MarketModel::Cylinder, Beer, FVector(34, -30, 79), FVector(8, 8, 8));
+		}
+		if (Rounds >= 2)
+		{
+			B.Add(MarketModel::Cylinder, Bottle, FVector(-4, -30, 90), FVector(8, 8, 30));
+			B.Add(MarketModel::Cylinder, Bottle, FVector(-4, -30, 108), FVector(3, 3, 7));
+			B.Add(MarketModel::Cylinder, Wine, FVector(-20, -20, 79), FVector(7, 7, 7));
+		}
+		if (Rounds >= 3)
+		{
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(6, 36, 88), FVector(9, 9, 26));
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(6, 36, 103), FVector(3, 3, 6));
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(-24, -4, 78), FVector(5, 5, 6));
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(30, 2, 78), FVector(5, 5, 6));
+		}
+		if (Rounds >= 4)
+		{
+			// The bottle on its side, rolled against the siphon.
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(20, -4, 80), FVector(9, 9, 26), 90, 30, 0);
+			B.Add(MarketModel::Cylinder, GlassEmpty, FVector(-30, 30, 78), FVector(5, 5, 6));
+		}
 	}
 
 	/** A potted palm at At (the pot's foot). */
