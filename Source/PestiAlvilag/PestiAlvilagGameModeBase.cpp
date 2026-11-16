@@ -604,7 +604,9 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	// The player's lock-up garage on Bérkocsis utca, by his attic.
 	if (!TActorIterator<AGarage>(GetWorld()))
 	{
-		const double Z = GroundZ(GarageModel::CityAt);
+		// The ground out on the pavement: straight down at the door the drop
+		// from the sky lands on the house over the garage.
+		const double Z = GroundZ(PestiStart::OutFrom(GarageModel::CityAt, GarageModel::CityYaw));
 		GetWorld()->SpawnActor<AGarage>(AGarage::StaticClass(), FVector(GarageModel::CityAt, Z), FRotator(0.0, GarageModel::CityYaw, 0.0));
 	}
 
