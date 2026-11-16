@@ -106,6 +106,12 @@ public:
 	/** A bang from the tail pipe: a big dark puff. */
 	void Backfire();
 
+	/** For a car someone drives: how rough the ground under it is (1 the setts, less on smooth paving): how much the body shakes. */
+	void SetRoughness(float InRoughness) { Roughness = InRoughness; }
+
+	/** A jolt through the springs, Strength 0..1 (going over a kerb): the body drops, nods and rocks, and settles. */
+	void Jolt(float Strength);
+
 	/**
 	 * A knock at WorldPoint, pushing the way of WorldInto (into the car), at
 	 * Speed (cm/s, the speed straight into it): dents the body (CarDamage),
@@ -220,6 +226,12 @@ private:
 	float SwayRollRate = 0.f;
 	float SwayPitch = 0.f;
 	float SwayPitchRate = 0.f;
+	/** How much this kind of car leans (CarHandling RollShare), and how rough the ground is (SetRoughness). */
+	float RollShare = 1.f;
+	float Roughness = 1.f;
+	/** A jolt's drop of the body (cm, - is down) and how fast it springs back. */
+	float JoltZ = 0.f;
+	float JoltZRate = 0.f;
 	/** How far the body hangs down where a wheel has come off (degrees, as the sway). */
 	float SagPitch = 0.f;
 	float SagRoll = 0.f;

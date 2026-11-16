@@ -29,7 +29,10 @@ class AWeather;
  * Each kind of car drives differently (CarHandling: weight, power, top speed,
  * steering, grip). The car's weight shifts: braking into a bend tucks the
  * nose in and lets the back step out, pulling hard makes it run wide. Wet
- * streets grip and brake less. Crashes trade speed between the cars by their
+ * streets grip and brake less. The tyres can only pull so hard: in a fast
+ * bend the back steps out and the car slides, leaving tyre marks (ASkidMarks);
+ * the front tyres can only turn it so tight at speed. Grass grips less, the
+ * setts shake the car more than the slabs, and a kerb gives it a jolt. Crashes trade speed between the cars by their
  * weight, and a hit off the middle spins them (CarHandling::Collide).
  */
 UCLASS()
@@ -195,6 +198,10 @@ private:
 	void UpdateSkidAndView(bool bHandbrake, float DeltaSeconds);
 	void MoveWithSlide(const FVector& Delta);
 	void SnapToGround();
+	/** What the ground under the front wheels is (setts, slabs, grass...): how rough and how grippy, and a jolt over a kerb. */
+	void UpdateGround(float DeltaSeconds);
+	/** The back tyres leave black marks on the street, Strength 0..1 (ASkidMarks). */
+	void LeaveTyreMarks(float Strength);
 	void ToggleCamera();
 	void UpdateFreeLook(const APlayerController* PC, float DeltaSeconds);
 	void LetDriverOut(APlayerController* PC);
@@ -262,4 +269,19 @@ private:
 	/** The tyre squeal now, 0..1, and the chase camera's view angle. */
 	float SkidAmount = 0.f;
 	float ChaseView = 90.f;
+	/** The ground under the front wheels: how rough (1 is plain), how much it grips (1 is the setts), how well it shows tyre marks, and its kind (SurfaceModel::EKind, -1 unknown). */
+	float SurfaceRough = 1.f;
+	float SurfaceGrip = 1.f;
+	float SurfaceMarks = 1.f;
+	int32 LastGroundKind = -1;
+	/** The road's height under the car (cm), for the tyre marks. */
+	float GroundZ = 0.f;
+	/** The back wheels go over the kerb this much later, this hard (0 none). */
+	double RearJoltAt = -1.0;
+	float RearJolt = 0.f;
+	/** The chase camera turns this far towards a slide (degrees), and shakes this hard after a jolt (0..1). */
+	float CameraSlip = 0.f;
+	float CameraShake = 0.f;
+	/** Time to the next puff of tyre smoke (s). */
+	float TyreSmokeTimer = 0.f;
 };
