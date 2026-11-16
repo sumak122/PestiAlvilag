@@ -408,6 +408,27 @@ bool AStreetFights::IsFightNear(const UObject* WorldContextObject, const FVector
 	return false;
 }
 
+bool AStreetFights::IsBeatenNear(const UObject* WorldContextObject, const FVector& At, double Radius)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	for (TActorIterator<AStreetFights> It(World); It; ++It)
+	{
+		for (const FFight& Fight : It->Fights)
+		{
+			const ARuffian* Man = Fight.Man.Get();
+			if (Man && Man->IsBeaten() && FVector::Dist2D(Man->GetActorLocation(), At) < Radius)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void AStreetFights::Say(const TCHAR* Hu, const TCHAR* En, const TCHAR* Speaker)
 {
 	const double Now = GetWorld()->GetTimeSeconds();

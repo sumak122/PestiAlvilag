@@ -164,6 +164,193 @@ namespace CarShowModel
 		return O;
 	}
 
+	/** The show is open (doors open, visitors, the salesman) from and until these hours of the day. */
+	constexpr float OpenFrom = 9.f;
+	constexpr float OpenUntil = 19.f;
+
+	/** Where a visitor stands by day (hall frame) and which way he faces. */
+	struct FVisitorSpot
+	{
+		FVector At;
+		double Yaw;
+	};
+
+	/** Visitors looking at the cars: four round the SSK's ropes, one by each of the other stands. */
+	const FVisitorSpot VisitorSpots[] = {
+		{ FVector(-1260.0, -230.0, 0.0), 205.0 },
+		{ FVector(-1460.0, -470.0, 0.0), 240.0 },
+		{ FVector(-1840.0, 520.0, 0.0), 280.0 },
+		{ FVector(-2150.0, 420.0, 0.0), 315.0 },
+		{ FVector(-560.0, -560.0, 0.0), 220.0 },
+		{ FVector(-600.0, 600.0, 0.0), 125.0 },
+		{ FVector(-2020.0, -600.0, 0.0), 215.0 },
+		{ FVector(-2030.0, 610.0, 0.0), 140.0 } };
+	constexpr int32 NumVisitors = static_cast<int32>(UE_ARRAY_COUNT(VisitorSpots));
+
+	/** The salesman by the SSK's board, facing the doors, by day. */
+	const FVector SalesmanSpot(-1130.0, 300.0, 0.0);
+	constexpr double SalesmanYaw = 20.0;
+
+	/** Mr. Weisz the salesman: a black suit, a wing collar and a pencil moustache, his hair oiled flat. */
+	inline PersonKit::FOutfit Salesman()
+	{
+		PersonKit::FOutfit O;
+		O.Height = 175.f;
+		O.Hat = PersonKit::EHat::None;
+		O.Top = PersonKit::ETop::Jacket;
+		O.Coat = FLinearColor(0.03f, 0.03f, 0.035f);
+		O.Trousers = FLinearColor(0.05f, 0.05f, 0.06f);
+		O.Tie = FLinearColor(0.42f, 0.36f, 0.30f);
+		O.bMoustache = true;
+		O.MoustacheKind = PersonKit::EMoustache::Pencil;
+		O.Hair = FLinearColor(0.04f, 0.03f, 0.02f);
+		O.FaceShape = 1;
+		return O;
+	}
+
+	/** A visitor to the show in his (or her) best: Index picks one of eight. */
+	inline PersonKit::FOutfit Visitor(int32 Index)
+	{
+		PersonKit::FOutfit O;
+		switch (Index % 8)
+		{
+		case 0:
+			O.Hat = PersonKit::EHat::Fedora;
+			O.HatColor = FLinearColor(0.30f, 0.27f, 0.22f);
+			O.Coat = FLinearColor(0.32f, 0.28f, 0.22f);
+			break;
+		case 1:
+			O.bWoman = true;
+			O.Height = 164.f;
+			O.Hat = PersonKit::EHat::Cloche;
+			O.HatColor = FLinearColor(0.30f, 0.05f, 0.06f);
+			O.Top = PersonKit::ETop::Dress;
+			O.Coat = FLinearColor(0.12f, 0.10f, 0.18f);
+			O.Hair = FLinearColor(0.35f, 0.22f, 0.10f);
+			O.Held = PersonKit::EHeld::Umbrella;
+			break;
+		case 2:
+			O.Hat = PersonKit::EHat::Bowler;
+			O.Top = PersonKit::ETop::Overcoat;
+			O.Coat = FLinearColor(0.08f, 0.08f, 0.09f);
+			O.bMoustache = true;
+			O.bAged = true;
+			O.Hair = FLinearColor(0.50f, 0.49f, 0.47f);
+			O.Build = 1.2f;
+			break;
+		case 3:
+			O.Hat = PersonKit::EHat::Boater;
+			O.HatColor = FLinearColor(0.80f, 0.72f, 0.50f);
+			O.Top = PersonKit::ETop::Jacket;
+			O.Coat = FLinearColor(0.42f, 0.40f, 0.36f);
+			O.Trousers = FLinearColor(0.40f, 0.38f, 0.34f);
+			O.Height = 182.f;
+			break;
+		case 4:
+			O.bWoman = true;
+			O.Height = 167.f;
+			O.Hat = PersonKit::EHat::Cloche;
+			O.HatColor = FLinearColor(0.10f, 0.10f, 0.10f);
+			O.Top = PersonKit::ETop::Dress;
+			O.Coat = FLinearColor(0.45f, 0.38f, 0.26f);
+			O.bScarf = true;
+			O.Scarf = FLinearColor(0.75f, 0.70f, 0.62f);
+			break;
+		case 5:
+			O.Hat = PersonKit::EHat::FlatCap;
+			O.HatColor = FLinearColor(0.22f, 0.20f, 0.17f);
+			O.Top = PersonKit::ETop::Jacket;
+			O.Coat = FLinearColor(0.20f, 0.17f, 0.13f);
+			O.bTie = false;
+			O.Height = 170.f;
+			break;
+		case 6:
+			O.Hat = PersonKit::EHat::Fedora;
+			O.HatColor = FLinearColor(0.06f, 0.07f, 0.09f);
+			O.Coat = FLinearColor(0.10f, 0.12f, 0.17f);
+			O.Held = PersonKit::EHeld::Newspaper;
+			O.Beard = PersonKit::EBeard::Goatee;
+			break;
+		default:
+			O.Hat = PersonKit::EHat::Bowler;
+			O.HatColor = FLinearColor(0.20f, 0.13f, 0.07f);
+			O.Top = PersonKit::ETop::Waistcoat;
+			O.Waistcoat = FLinearColor(0.30f, 0.24f, 0.14f);
+			O.bMoustache = true;
+			O.Build = 1.15f;
+			break;
+		}
+		return O;
+	}
+
+	/** The chauffeur at the tavern table, his uniform coat over the chair behind him (the key is in its pocket). */
+	inline PersonKit::FOutfit ChauffeurAtTable()
+	{
+		PersonKit::FOutfit O = Chauffeur();
+		O.Top = PersonKit::ETop::Waistcoat;
+		O.Waistcoat = FLinearColor(0.20f, 0.21f, 0.22f);
+		O.bSeated = true;
+		return O;
+	}
+
+	/**
+	 * The chauffeur's table on the pavement before the tavern, in a frame on
+	 * the ground at Origin turned by Yaw (+X out to the street; the table at
+	 * the origin): a round iron table, his chair on the house side and one
+	 * across from it, a beer, a soda siphon, his driving gloves, and his grey
+	 * uniform coat hung over the back of his chair with the key's tag
+	 * showing at the pocket.
+	 */
+	namespace Table
+	{
+		/** His chair (its seat's middle on the floor) and which way he sits, in the table's frame. */
+		const FVector Chair(-62.0, 0.0, 0.0);
+		constexpr double ChairYaw = 0.0;
+		/** Where the player stands to lift the key: behind the chair, by the coat. */
+		const FVector Behind(-150.0, 25.0, 0.0);
+	}
+
+	inline void BuildTable(TArray<FShape>& Out, const FVector& Origin, double Yaw)
+	{
+		using namespace Colors;
+		MarketModel::FBuilder B{ Out, Origin, Yaw };
+		const FLinearColor Marble(0.78f, 0.76f, 0.70f);
+		const FLinearColor Bentwood(0.20f, 0.11f, 0.05f);
+		const FLinearColor Beer(0.62f, 0.40f, 0.08f);
+		const FLinearColor Froth(0.92f, 0.90f, 0.84f);
+		const FLinearColor Siphon(0.16f, 0.30f, 0.34f);
+		const FLinearColor Leather(0.12f, 0.07f, 0.04f);
+		const FLinearColor CoatGrey(0.24f, 0.25f, 0.26f);
+		// The table: a marble top on an iron foot.
+		B.Add(MarketModel::Cylinder, Marble, FVector(0, 0, 73), FVector(70, 70, 3));
+		B.Add(MarketModel::Cylinder, Iron, FVector(0, 0, 37), FVector(6, 6, 70), 0, 0, 0, true);
+		B.Add(MarketModel::Cylinder, Iron, FVector(0, 0, 2), FVector(46, 46, 4));
+		// Two bentwood chairs facing each other across it.
+		for (const double Side : { -1.0, 1.0 })
+		{
+			const double X = Side * 62.0;
+			B.Add(MarketModel::Cylinder, Bentwood, FVector(X, 0, 46), FVector(42, 42, 4));
+			for (const FVector2D Leg : { FVector2D(-14.0, -14.0), FVector2D(14.0, -14.0), FVector2D(-14.0, 14.0), FVector2D(14.0, 14.0) })
+			{
+				B.Add(MarketModel::Cylinder, Bentwood, FVector(X + Leg.X, Leg.Y, 22), FVector(3, 3, 44));
+			}
+			B.Add(MarketModel::Cube, Bentwood, FVector(X + Side * 20.0, 0, 70), FVector(3, 36, 44));
+		}
+		// On the table: his beer, the siphon, his gloves.
+		B.Add(MarketModel::Cylinder, Beer, FVector(-18, 10, 83), FVector(8, 8, 16));
+		B.Add(MarketModel::Cylinder, Froth, FVector(-18, 10, 92), FVector(8.4, 8.4, 2));
+		B.Add(MarketModel::Cylinder, Siphon, FVector(14, -14, 90), FVector(9, 9, 30));
+		B.Add(MarketModel::Cylinder, Iron, FVector(14, -14, 108), FVector(4, 4, 7));
+		B.Add(MarketModel::Cube, Leather, FVector(10, 20, 75.5), FVector(16, 9, 2), 0, 30, 0);
+		B.Add(MarketModel::Cube, Leather, FVector(12, 28, 75.5), FVector(16, 9, 2), 0, -10, 0);
+		// His uniform coat over the back of his chair, hanging down behind it, the key's brass tag at the pocket.
+		B.Add(MarketModel::Cube, CoatGrey, FVector(-86, 0, 84), FVector(8, 44, 14));
+		B.Add(MarketModel::Cube, CoatGrey, FVector(-90, 0, 52), FVector(5, 46, 64), 0, 0, 0);
+		B.Add(MarketModel::Cube, CoatGrey, FVector(-88, 0, 70), FVector(4, 48, 3));
+		B.Add(MarketModel::Cube, Brass, FVector(-93.5, 14, 56), FVector(1, 4, 6));
+		B.Add(MarketModel::Cylinder, Brass, FVector(-93.5, 14, 61), FVector(2, 2, 2), 90, 0, 0);
+	}
+
 	/** A potted palm at At (the pot's foot). */
 	inline void PottedPalm(TArray<FShape>& Out, const FVector& At)
 	{

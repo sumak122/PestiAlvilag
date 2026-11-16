@@ -120,8 +120,8 @@ public:
 	/** The question being asked, in both languages. */
 	void Question(FString& Hu, FString& En) const;
 
-	/** The act 1 missions in the mission list. */
-	static constexpr int32 MissionCount = 8;
+	/** The missions in the mission list: act 1's eight, then the car show's. */
+	static constexpr int32 MissionCount = 10;
 	/** A mission in the list (0 for the first): its name (in capitals), and who gives it where. */
 	static void MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FString& WhereHu, FString& WhereEn);
 
