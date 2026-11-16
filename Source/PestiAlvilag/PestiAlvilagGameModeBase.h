@@ -53,6 +53,8 @@ public:
 	/** How many times the police have caught him (missions tell a getaway from an arrest). */
 	int32 GetArrests() const { return Arrests; }
 	void ReportCrime(int32 CrimeLevel);
+	/** For testing (the spawn menu, TestSpawn): wanted with exactly Stars (0 clears it). */
+	void SetWantedForTest(int32 Stars);
 	/** Seconds still to stay out of police sight to lose them. */
 	float GetEscapeSecondsLeft() const { return FMath::Max(0.f, EscapeTimeNow() - TimeUnseen); }
 	/** Seconds out of sight that lose them at the stars he has now. */

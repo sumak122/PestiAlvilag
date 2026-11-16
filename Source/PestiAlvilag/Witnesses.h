@@ -33,8 +33,12 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Something bad the police did not see happened at Where, worth Stars once telephoned in. */
-	static void Report(const UObject* WorldContextObject, const FVector& Where, int32 Stars);
+	/**
+	 * Something bad the police did not see happened at Where, worth Stars
+	 * once telephoned in. bForce (the spawn menu, TestSpawn) sends one
+	 * every time, not now and then.
+	 */
+	static void Report(const UObject* WorldContextObject, const FVector& Where, int32 Stars, bool bForce = false);
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Witnesses")

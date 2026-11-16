@@ -47,6 +47,9 @@ struct FTramRoute
 	FVector LocationAt(float Distance) const;
 };
 
+/** What the test spawn menu (TestSpawn) can put into the traffic. */
+enum class ETestTraffic : uint8 { Car, Taxi, Police, MilkCart, CoalCart, BeerCart, Bike };
+
 /**
  * Reads the traffic lanes from the graybox JSON, spawns AI cars on them and
  * answers their questions: which lane to take next, and how far ahead the
@@ -178,6 +181,16 @@ public:
 	bool IsJunction(int32 Node) const;
 	void ReleaseNode(int32 Node, const ATrafficCar* Car);
 	FVector GetNodeLocation(int32 Node) const;
+
+	/** The lane point nearest At within Within (cm, flat), and the way its lane runs there; false if none. */
+	bool NearestLanePoint(const FVector& At, double Within, FVector& OutPoint, FVector& OutAlong) const;
+
+	/**
+	 * For testing (the spawn menu, TestSpawn): puts one car, taxi, police
+	 * car, carrier's cart or bicycle rider on a lane some 20 to 50 m from
+	 * Near, coming that way where it can. False when no lane is near.
+	 */
+	bool SpawnForTest(ETestTraffic What, const FVector& Near);
 
 protected:
 	virtual void BeginPlay() override;

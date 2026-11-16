@@ -1617,24 +1617,30 @@ void APedestrians::TickChallenge(double Now, bool bPlayerAbout)
 		return;
 	}
 
-	if (NextChallenge < 0.0)
+	// Sent for from the spawn menu (SendChallenger): one comes now, whatever his name.
+	const bool bSentFor = bChallengeNow && bOnFootFree;
+	if (!bSentFor)
 	{
-		NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeFirstLow, Pedestrians::ChallengeFirstHigh);
-		return;
+		if (NextChallenge < 0.0)
+		{
+			NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeFirstLow, Pedestrians::ChallengeFirstHigh);
+			return;
+		}
+		if (Now < NextChallenge || !bOnFootFree)
+		{
+			return;
+		}
+		NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeEveryLow, Pedestrians::ChallengeEveryHigh);
+		// Less likely the better his name; never at the top.
+		const int32 Rank = PlayerRank();
+		const float Share = 1.f - static_cast<float>(Rank) / static_cast<float>(FMath::Max(1, StreetName::NumRanks - 1));
+		// Toughs are bolder after dark.
+		if (Random.FRand() >= Pedestrians::ChallengeChance * Share * (1.f + Pedestrians::ChallengeLate * Lateness))
+		{
+			return;
+		}
 	}
-	if (Now < NextChallenge || !bOnFootFree)
-	{
-		return;
-	}
-	NextChallenge = Now + Random.FRandRange(Pedestrians::ChallengeEveryLow, Pedestrians::ChallengeEveryHigh);
-	// Less likely the better his name; never at the top.
-	const int32 Rank = PlayerRank();
-	const float Share = 1.f - static_cast<float>(Rank) / static_cast<float>(FMath::Max(1, StreetName::NumRanks - 1));
-	// Toughs are bolder after dark.
-	if (Random.FRand() >= Pedestrians::ChallengeChance * Share * (1.f + Pedestrians::ChallengeLate * Lateness))
-	{
-		return;
-	}
+	bChallengeNow = false;
 
 	// A man walking near him (not keeping to a spot, not busy with anything).
 	auto IsFreeMan = [](const FWalker& Walker)
@@ -1644,7 +1650,8 @@ void APedestrians::TickChallenge(double Now, bool bPlayerAbout)
 			&& !Walker.Person->GetOutfit().bWoman;
 	};
 	int32 Picked = INDEX_NONE;
-	double Nearest = FMath::Square(Pedestrians::ChallengeFromFar);
+	// One sent for may come from further off.
+	double Nearest = FMath::Square(bSentFor ? Pedestrians::ChallengeFromFar * 3.0 : Pedestrians::ChallengeFromFar);
 	for (int32 i = 0; i < Walkers.Num(); ++i)
 	{
 		const FWalker& Walker = Walkers[i];
@@ -2322,6 +2329,20 @@ void APedestrians::LeaveShelter(FWalker& Walker)
 		Street->LeaveShelter(Walker.Shelter);
 	}
 	Walker.Shelter = INDEX_NONE;
+}
+
+void APedestrians::SendChallenger(const UObject* WorldContextObject)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	TActorIterator<APedestrians> It(World);
+	if (It)
+	{
+		It->bChallengeNow = true;
+	}
 }
 
 void APedestrians::Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight)

@@ -39,6 +39,13 @@ public:
 	 */
 	static void CallToMilk(const UObject* WorldContextObject, const FVector& At, float Seconds);
 
+	/**
+	 * For testing (the spawn menu, TestSpawn): a stray of Kind on the ground
+	 * near Near, keeping round there. A dog put out this way always runs
+	 * after carts and bicycles going by. False when there is no ground.
+	 */
+	static bool AddStray(const UObject* WorldContextObject, AnimalModel::EKind Kind, const FVector& Near);
+
 	/** Animals further than this from the camera are hidden and left still (cm). */
 	UPROPERTY(EditAnywhere, Category = "Animals")
 	float ShowWithin = 7000.f;
@@ -64,6 +71,8 @@ private:
 		bool bTame = false;
 		/** Bütyök: lies about nearly all day. */
 		bool bLazy = false;
+		/** Put out by the spawn menu: always chases carts and bikes. */
+		bool bKeen = false;
 		USceneComponent* Root = nullptr;
 		USceneComponent* Hips = nullptr;
 		UProceduralMeshComponent* Parts[AnimalModel::NumParts] = {};

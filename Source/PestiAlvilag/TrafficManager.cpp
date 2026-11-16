@@ -1079,6 +1079,154 @@ FVector ATrafficManager::GetNodeLocation(int32 Node) const
 	return NodeLocations.IsValidIndex(Node) ? NodeLocations[Node] : FVector::ZeroVector;
 }
 
+bool ATrafficManager::NearestLanePoint(const FVector& At, double Within, FVector& OutPoint, FVector& OutAlong) const
+{
+	double Best = FMath::Square(Within);
+	bool bFound = false;
+	for (const FTrafficLane& Lane : Lanes)
+	{
+		for (int32 i = 0; i + 1 < Lane.Points.Num(); ++i)
+		{
+			const double Gap = FVector::DistSquared2D(Lane.Points[i], At);
+			if (Gap < Best)
+			{
+				Best = Gap;
+				OutPoint = Lane.Points[i];
+				OutAlong = (Lane.Points[i + 1] - Lane.Points[i]).GetSafeNormal2D();
+				bFound = true;
+			}
+		}
+	}
+	return bFound;
+}
+
+bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
+{
+	// Some way off, so it drives up to him; on a lane coming his way where there is one.
+	static constexpr double TestNear = 2000.0;
+	static constexpr double TestFar = 5000.0;
+	static constexpr double TestRoom = 700.0;
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+	int32 BestLane = INDEX_NONE;
+	int32 BestPoint = INDEX_NONE;
+	double BestScore = TNumericLimits<double>::Max();
+	for (int32 l = 0; l < Lanes.Num(); ++l)
+	{
+		const FTrafficLane& Lane = Lanes[l];
+		for (int32 i = 0; i + 1 < Lane.Points.Num(); ++i)
+		{
+			const FVector& Spot = Lane.Points[i];
+			const double Gap = FVector::Dist2D(Spot, Near);
+			if (Gap < TestNear || Gap > TestFar)
+			{
+				continue;
+			}
+			bool bRoom = true;
+			for (const ATrafficCar* Other : Cars)
+			{
+				if (Other && FVector::Dist2D(Other->GetActorLocation(), Spot) < TestRoom)
+				{
+					bRoom = false;
+					break;
+				}
+			}
+			for (const ATrafficCart* Other : Carts)
+			{
+				if (bRoom && Other && FVector::Dist2D(Other->GetActorLocation(), Spot) < TestRoom)
+				{
+					bRoom = false;
+				}
+			}
+			if (!bRoom)
+			{
+				continue;
+			}
+			// Nearer is better, and much better when the lane runs towards him.
+			const FVector Along = (Lane.Points[i + 1] - Spot).GetSafeNormal2D();
+			const bool bComing = FVector::DotProduct(Along, (Near - Spot).GetSafeNormal2D()) > 0.5;
+			const double Score = Gap + (bComing ? 0.0 : 10000.0);
+			if (Score < BestScore)
+			{
+				BestScore = Score;
+				BestLane = l;
+				BestPoint = i;
+			}
+		}
+	}
+	if (BestLane == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FTrafficLane& Lane = Lanes[BestLane];
+	const FVector Spot = Lane.Points[BestPoint];
+	FVector Location = Spot;
+	FHitResult Hit;
+	if (World->LineTraceSingleByChannel(Hit, Spot + FVector(0.0, 0.0, 200.0), Spot - FVector(0.0, 0.0, 1000.0), ECC_Visibility))
+	{
+		Location.Z = Hit.ImpactPoint.Z;
+	}
+	const FRotator Facing = (Lane.Points[BestPoint + 1] - Spot).GetSafeNormal2D().Rotation();
+	FRandomStream Random(FMath::Rand());
+
+	if (What == ETestTraffic::MilkCart || What == ETestTraffic::CoalCart || What == ETestTraffic::BeerCart)
+	{
+		static constexpr double TestCartLift = 20.0;
+		Location.Z += HorseCartModel::RigHalf().Z + TestCartLift;
+		const FTransform Place(Facing, Location);
+		ATrafficCart* Cart = World->SpawnActorDeferred<ATrafficCart>(ATrafficCart::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Cart)
+		{
+			return false;
+		}
+		const HorseCartModel::ELoad CartKind = What == ETestTraffic::MilkCart ? HorseCartModel::ELoad::Milk
+			: What == ETestTraffic::CoalCart ? HorseCartModel::ELoad::Coal : HorseCartModel::ELoad::Beer;
+		Cart->PickLoad(Random, CartKind);
+		Cart->FinishSpawning(Place);
+		Cart->StartOnLane(this, BestLane, BestPoint + 1);
+		Carts.Add(Cart);
+		return true;
+	}
+	if (What == ETestTraffic::Bike)
+	{
+		Location.Z += BicycleModel::BoxBottom + BicycleModel::BoxHalf().Z + 5.0;
+		const FTransform Place(Facing, Location);
+		ATrafficBike* Bike = World->SpawnActorDeferred<ATrafficBike>(ATrafficBike::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Bike)
+		{
+			return false;
+		}
+		Bike->PickRider(Random);
+		Bike->FinishSpawning(Place);
+		Bike->StartOnLane(this, BestLane, BestPoint + 1);
+		Bikes.Add(Bike);
+		return true;
+	}
+
+	Location.Z += Traffic::RideHeight;
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	UClass* CarClass = What == ETestTraffic::Police ? APoliceCar::StaticClass()
+		: What == ETestTraffic::Taxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
+	ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
+	if (!Car)
+	{
+		return false;
+	}
+	const FLinearColor& Paint = What == ETestTraffic::Police ? Traffic::PolicePaint
+		: What == ETestTraffic::Taxi ? Traffic::TaxiPaint
+		: Traffic::Paints[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)];
+	Car->StartOnLane(this, BestLane, BestPoint + 1, Paint);
+	Cars.Add(Car);
+	return true;
+}
+
 bool ATrafficManager::HasRoomOnLane(int32 LaneIndex, float Room, const AActor* Asker) const
 {
 	if (!Lanes.IsValidIndex(LaneIndex))
