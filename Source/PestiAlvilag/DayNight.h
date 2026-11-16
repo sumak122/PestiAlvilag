@@ -113,7 +113,19 @@ public:
 	void AddNightGlow(UMeshComponent* Mesh, int32 Slot, const FLinearColor& Color, float Strength);
 
 	/** A street lamp's lantern: at night the nearest ones light the ground, the rest show a glow under them. Returns its number, for SetLampOut. */
-	int32 AddLamp(const FVector& At) { LampOut.Add(false); return Lamps.Add(At); }
+	int32 AddLamp(const FVector& At) { LampOut.Add(false); LampUnlit.Add(false); LampGlass.Add(FTransform(FQuat::Identity, At, FVector::ZeroVector)); return Lamps.Add(At); }
+
+	/** A street lamp post's lantern glass (a cube of 100 cm turned and sized by Glass), for the lamplighter (ADailyLife). */
+	void SetLampGlass(int32 Lamp, const FTransform& Glass) { if (LampGlass.IsValidIndex(Lamp)) { LampGlass[Lamp] = Glass; } }
+
+	/** How many lamps there are, where each lantern is, its glass (zero sized but on a street lamp post), and whether it is knocked down. */
+	int32 NumLamps() const { return Lamps.Num(); }
+	FVector GetLampAt(int32 Lamp) const { return Lamps.IsValidIndex(Lamp) ? Lamps[Lamp] : FVector::ZeroVector; }
+	FTransform GetLampGlass(int32 Lamp) const { return LampGlass.IsValidIndex(Lamp) ? LampGlass[Lamp] : FTransform::Identity; }
+	bool IsLampOut(int32 Lamp) const { return LampOut.IsValidIndex(Lamp) && LampOut[Lamp]; }
+
+	/** A lamp the lamplighter has not got to yet at dusk (ADailyLife): it stays dark, its light and ground glow too, until he lights it. */
+	void SetLampUnlit(int32 Lamp, bool bUnlit);
 
 	/** A lamp knocked down (bOut) goes dark, its glow on the ground too; put up again, it lights again. */
 	void SetLampOut(int32 Lamp, bool bOut);
@@ -204,6 +216,9 @@ private:
 	TArray<FVector> Lamps;
 	/** Which lamps are knocked down, one for each in Lamps. */
 	TArray<bool> LampOut;
+	/** Which lamps wait for the lamplighter (SetLampUnlit), and each street lamp's lantern glass. */
+	TArray<bool> LampUnlit;
+	TArray<FTransform> LampGlass;
 	/** The ground height under each lamp, found when the glows are first laid. */
 	TArray<double> PoolGround;
 
