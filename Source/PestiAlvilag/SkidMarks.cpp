@@ -23,12 +23,12 @@ namespace SkidMarks
 	constexpr double StripBreak = 250.0;
 	constexpr double MarkBreak = 0.2;
 	// The marks are this wide (cm) faint and strong, and lie this far above the ground (cm).
-	constexpr double ThinWidth = 7.0;
-	constexpr double FullWidth = 15.0;
-	constexpr double Lift = 2.5;
+	constexpr double ThinWidth = 10.0;
+	constexpr double FullWidth = 18.0;
+	constexpr double Lift = 3.0;
 	// Rubber black, this see-through when new; each older batch is fainter.
 	const FLinearColor MarkColor(0.012f, 0.011f, 0.010f, 0.f);
-	constexpr float NewAlpha = 0.6f;
+	constexpr float NewAlpha = 0.75f;
 	// Lines no tyre has added to for this long (s) are forgotten.
 	constexpr double ForgetTrail = 3.0;
 }
@@ -181,6 +181,12 @@ void ASkidMarks::Mark(int32 Tyre, const FVector& At, float Strength)
 	}
 	++Batch.Strips;
 	Batch.bDirty = true;
+	if (!bLoggedFirst)
+	{
+		// Once, so a test can tell from the log that marks are being laid.
+		bLoggedFirst = true;
+		UE_LOG(LogTemp, Log, TEXT("SkidMarks: first tyre mark at %s, strength %.2f"), *At.ToString(), Strength);
+	}
 	Trail.Last = At;
 }
 

@@ -284,4 +284,6 @@ private:
 	float CameraShake = 0.f;
 	/** Time to the next puff of tyre smoke (s). */
 	float TyreSmokeTimer = 0.f;
+	/** How hard the brake pedal is down this frame (0..1). */
+	float PedalBrake = 0.f;
 };

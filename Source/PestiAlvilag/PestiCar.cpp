@@ -133,16 +133,22 @@ namespace PestiCar
 	constexpr float SlipFromSpeed = 200.f;
 	// Black tyre marks: sliding sideways from MarkFrom cm/s, at full at MarkFull;
 	// fainter on wet setts (this share less).
-	constexpr float MarkFrom = 300.f;
-	constexpr float MarkFull = 900.f;
+	constexpr float MarkFrom = 150.f;
+	constexpr float MarkFull = 600.f;
 	constexpr float WetMarkLoss = 0.6f;
 	constexpr float MarkLeast = 0.08f;
+	// Stamping on the brake pedal faster than BrakeLockSpeed cm/s locks the
+	// wheels (no clever brakes in 1932): marks, full at BrakeLockFull, this strong.
+	constexpr float BrakeLockPedal = 0.8f;
+	constexpr float BrakeLockSpeed = 900.f;
+	constexpr float BrakeLockFull = 2100.f;
+	constexpr float BrakeLockMarks = 0.6f;
 	// A hard slide on dry stone smokes the back tyres: from this much marking
 	// (0..1), a puff from each tyre every this many seconds, this big (cm),
 	// left behind at this share of the car's speed and rising this fast (cm/s).
-	constexpr float SmokeFrom = 0.45f;
+	constexpr float SmokeFrom = 0.3f;
 	constexpr float TyreSmokeEvery = 0.06f;
-	constexpr float TyreSmokeSize = 22.f;
+	constexpr float TyreSmokeSize = 30.f;
 	constexpr float TyreSmokeCarry = 0.15f;
 	constexpr float TyreSmokeRise = 30.f;
 	// The ground is looked at this far ahead of the middle (cm), by the front wheels.
@@ -449,6 +455,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	// wet setts and grass hold less.
 	const float SoakedLoss = PestiCar::WetGripLoss * RoadWet;
 	const float BrakeUse = bPedalBrakes ? FMath::Abs(Throttle) : 0.f;
+	PedalBrake = BrakeUse;
 	const float FrontHold = PestiCar::SideGrip * PestiCar::FrontGripShare * GripShare * SurfaceGrip
 		* (1.f - 0.5f * SoakedLoss) * (1.f - PestiCar::BrakeFrontLoss * BrakeUse);
 	const float RearHold = PestiCar::SideGrip * GripShare * SurfaceGrip * (1.f - SoakedLoss)
@@ -1015,8 +1022,11 @@ void APestiCar::UpdateSkidAndView(bool bHandbrake, float DeltaSeconds)
 	}
 
 	// Sliding hard or on locked wheels, the back tyres leave black marks (faint on wet setts and on grass).
-	const float Marking = FMath::Max(
-		FMath::Clamp((FMath::Abs(SideSpeed) - PestiCar::MarkFrom) / (PestiCar::MarkFull - PestiCar::MarkFrom), 0.f, 1.f), Locked)
+	const float BrakeLock = PedalBrake > PestiCar::BrakeLockPedal
+		? FMath::Clamp((FMath::Abs(ForwardSpeed) - PestiCar::BrakeLockSpeed) / (PestiCar::BrakeLockFull - PestiCar::BrakeLockSpeed), 0.f, 1.f) * PestiCar::BrakeLockMarks
+		: 0.f;
+	const float Marking = FMath::Max3(
+		FMath::Clamp((FMath::Abs(SideSpeed) - PestiCar::MarkFrom) / (PestiCar::MarkFull - PestiCar::MarkFrom), 0.f, 1.f), Locked, BrakeLock)
 		* (1.f - PestiCar::WetMarkLoss * RoadWet) * SurfaceMarks;
 	if (Marking > PestiCar::MarkLeast)
 	{
@@ -1036,9 +1046,9 @@ void APestiCar::UpdateSkidAndView(bool bHandbrake, float DeltaSeconds)
 			for (int32 i = 0; i < 2; ++i)
 			{
 				const FVector Tyre = Placed.TransformPosition(FVector(Layout.RearAxle, i == 0 ? -Layout.TrackY : Layout.TrackY, 0.0));
-				Smoke->Puff(FVector(Tyre.X, Tyre.Y, GroundZ + 15.f),
+				Smoke->PuffTyre(FVector(Tyre.X, Tyre.Y, GroundZ + 15.f),
 					Going * PestiCar::TyreSmokeCarry + FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), PestiCar::TyreSmokeRise),
-					PestiCar::TyreSmokeSize * FMath::Lerp(0.6f, 1.2f, FMath::Clamp(Smoking, 0.f, 1.f)), false);
+					PestiCar::TyreSmokeSize * FMath::Lerp(0.6f, 1.2f, FMath::Clamp(Smoking, 0.f, 1.f)));
 			}
 		}
 	}

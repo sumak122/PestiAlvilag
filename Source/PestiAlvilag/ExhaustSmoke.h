@@ -29,6 +29,8 @@ public:
 
 	/** A puff at At (world), moving off at Velocity (cm/s), Size across (cm) when it leaves the pipe. */
 	void Puff(const FVector& At, const FVector& Velocity, float Size, bool bDark);
+	/** A puff of white tyre smoke from a sliding car: thicker and longer lasting. */
+	void PuffTyre(const FVector& At, const FVector& Velocity, float Size);
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -64,7 +66,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
 
-	FPool Pools[2];
+	FPool Pools[3];
+	void AddPuff(int32 PoolIndex, const FVector& At, const FVector& Velocity, float Size, float LifeScale);
 	TArray<FVector> Vertices;
 	TArray<FVector> Normals;
 };

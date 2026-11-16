@@ -81,4 +81,6 @@ private:
 	/** The batch taking new marks, and when it started. */
 	int32 Newest = 0;
 	double NewestSince = 0.0;
+	/** The first mark has been written to the log. */
+	bool bLoggedFirst = false;
 };
