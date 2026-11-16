@@ -3,6 +3,7 @@
 #include "CarVisuals.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "CarHandling.h"
 #include "Components/SceneComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "DayNight.h"
@@ -55,7 +56,7 @@ namespace CarVisuals
 	// The body sits on springs. It leans out of a turn (at most MaxRoll
 	// degrees), squats pulling away and dips its nose braking (MaxPitch),
 	// half way there at this much push (cm/s each second)...
-	constexpr float MaxRoll = 6.f;
+	constexpr float MaxRoll = 7.f;
 	constexpr float RollPush = 1500.f;
 	constexpr float MaxPitch = 4.f;
 	constexpr float PitchPush = 1500.f;
@@ -74,6 +75,14 @@ namespace CarVisuals
 	// An idling engine shakes the body a little (cm, degrees, shakes a second),
 	// below this speed (cm/s).
 	constexpr float IdleBob = 0.18f;
+	// A jolt (a kerb) drops the body this far (cm) and nods and rocks it
+	// (degrees a second) at full strength; it springs back this stiffly and
+	// settles this quickly (a quick bounce or two).
+	constexpr float JoltDrop = 90.f;
+	constexpr float JoltNod = 25.f;
+	constexpr float JoltRock = 20.f;
+	constexpr float JoltStiffness = 220.f;
+	constexpr float JoltDamping = 11.f;
 	constexpr float IdleRock = 0.12f;
 	constexpr float IdleShakes = 9.f;
 	constexpr float IdleSpeed = 60.f;
@@ -245,6 +254,8 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 	SwayRoll = SwayRollRate = SwayPitch = SwayPitchRate = 0.f;
 	SagPitch = SagRoll = 0.f;
 	PushSide = PushAhead = 0.f;
+	JoltZ = JoltZRate = 0.f;
+	RollShare = CarHandling::For(Style.Body).RollShare;
 	bVelocityKnown = false;
 
 	auto MakeMesh = [Owner, Parent]()
@@ -525,7 +536,7 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 	PushSide = FMath::FInterpTo(PushSide, Side, DeltaTime, CarVisuals::PushSmoothing);
 	PushAhead = FMath::FInterpTo(PushAhead, Ahead, DeltaTime, CarVisuals::PushSmoothing);
 	// Roll + puts the right side down: a right turn pushes right, so the left side goes down.
-	const float WantedRoll = -CarVisuals::MaxRoll * CarVisuals::Soft(PushSide / CarVisuals::RollPush);
+	const float WantedRoll = -CarVisuals::MaxRoll * RollShare * CarVisuals::Soft(PushSide / CarVisuals::RollPush);
 	const float WantedPitch = CarVisuals::MaxPitch * CarVisuals::Soft(PushAhead / CarVisuals::PitchPush);
 
 	// On springs: it swings towards the lean, a little past it, and back.
@@ -534,6 +545,9 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 	SwayPitchRate += (CarVisuals::SwayStiffness * (WantedPitch - SwayPitch) - CarVisuals::SwayDamping * SwayPitchRate) * SpringTime;
 	SwayRoll = FMath::Clamp(SwayRoll + SwayRollRate * SpringTime, -1.5f * CarVisuals::MaxRoll, 1.5f * CarVisuals::MaxRoll);
 	SwayPitch = FMath::Clamp(SwayPitch + SwayPitchRate * SpringTime, -1.5f * CarVisuals::MaxPitch, 1.5f * CarVisuals::MaxPitch);
+	// A jolt bounces the body up and down on its springs till it settles.
+	JoltZRate += (-CarVisuals::JoltStiffness * JoltZ - CarVisuals::JoltDamping * JoltZRate) * SpringTime;
+	JoltZ = FMath::Clamp(JoltZ + JoltZRate * SpringTime, -6.f, 4.f);
 
 	if (!bNear)
 	{
@@ -542,7 +556,7 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 
 	// The setts: the faster, the rougher. The bumps come with the distance
 	// driven, so a car standing still stands still.
-	const float Rough = FMath::Clamp(FMath::Abs(Speed) / CarVisuals::RoughSpeed, 0.f, 1.f);
+	const float Rough = FMath::Clamp(FMath::Abs(Speed) / CarVisuals::RoughSpeed, 0.f, 1.f) * Roughness;
 	const float Along = static_cast<float>(Odometer);
 	float Bob = Rough * CarVisuals::BodyBob * (FMath::PerlinNoise1D(Along / 380.f) + 0.4f * FMath::PerlinNoise1D(Along / 110.f + 17.f));
 	float Rock = Rough * CarVisuals::BodyRock * FMath::PerlinNoise1D(Along / 430.f + 53.f);
@@ -557,6 +571,8 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 		Rock += Idle * CarVisuals::IdleRock * FMath::Sin(IdlePhase * 0.5f + 1.f);
 	}
 
+	Bob += JoltZ;
+
 	// Tip the body about the axles' height, so its bottom stays down by the wheels.
 	const FQuat Lean = FRotator(SwayPitch + Nod + SagPitch, 0.f, SwayRoll + Rock + SagRoll).Quaternion();
 	const FVector Pivot(0.0, 0.0, CarModel::HubZ);
@@ -569,6 +585,14 @@ void UCarVisuals::UpdateSway(float DeltaTime, float Speed, const FVector& Push, 
 		Wheels[i]->SetRelativeLocationAndRotation(CarModel::WheelHub(Style.Body, i) + FVector(0.0, 0.0, Hop),
 			FRotator(-Spin, i < 2 ? SteerAngle : 0.f, 0.f));
 	}
+}
+
+void UCarVisuals::Jolt(float Strength)
+{
+	const float Amount = FMath::Clamp(Strength, 0.f, 1.f);
+	JoltZRate -= CarVisuals::JoltDrop * Amount;
+	SwayPitchRate += CarVisuals::JoltNod * Amount;
+	SwayRollRate += CarVisuals::JoltRock * Amount * (FMath::RandBool() ? 1.f : -1.f);
 }
 
 void UCarVisuals::UpdateStreetEngine(double Distance, float Speed, float Pickup)

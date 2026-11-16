@@ -14,7 +14,11 @@
 namespace ExhaustSmoke
 {
 	// How many puffs can be in the air at once, light and dark.
-	constexpr int32 PoolSizes[2] = { 220, 30 };
+	// How many puffs can be in the air at once: light, dark, and tyre smoke.
+	constexpr int32 NumPools = 3;
+	constexpr int32 PoolSizes[NumPools] = { 220, 30, 200 };
+	// Tyre smoke lasts this many times as long as a light puff.
+	constexpr float TyreLife = 1.8f;
 	// Seconds a puff lasts.
 	constexpr float MinLife = 0.9f;
 	constexpr float MaxLife = 1.6f;
@@ -24,9 +28,10 @@ namespace ExhaustSmoke
 	constexpr float Lift = 40.f;
 	constexpr float Drag = 1.8f;
 	// See-through grey: colour and how much it hides (alpha).
-	const FLinearColor Colors[2] = {
+	const FLinearColor Colors[NumPools] = {
 		FLinearColor(0.62f, 0.62f, 0.60f, 0.12f),
-		FLinearColor(0.10f, 0.10f, 0.10f, 0.28f) };
+		FLinearColor(0.10f, 0.10f, 0.10f, 0.28f),
+		FLinearColor(0.85f, 0.85f, 0.83f, 0.32f) };
 
 	/** A rough ball of 12 corners, 1 across. */
 	const TArray<FVector>& Ball()
@@ -106,7 +111,7 @@ void AExhaustSmoke::BeginPlay()
 	// The mesh is in world space; the actor stays at the origin.
 	SetActorLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
 	const TArray<FVector>& Ball = ExhaustSmoke::Ball();
-	for (int32 Section = 0; Section < 2; ++Section)
+	for (int32 Section = 0; Section < ExhaustSmoke::NumPools; ++Section)
 	{
 		FPool& Pool = Pools[Section];
 		Pool.Puffs.SetNum(ExhaustSmoke::PoolSizes[Section]);
@@ -153,7 +158,17 @@ void AExhaustSmoke::BeginPlay()
 
 void AExhaustSmoke::Puff(const FVector& At, const FVector& Velocity, float Size, bool bDark)
 {
-	FPool& Pool = Pools[bDark ? 1 : 0];
+	AddPuff(bDark ? 1 : 0, At, Velocity, Size, bDark ? 1.5f : 1.f);
+}
+
+void AExhaustSmoke::PuffTyre(const FVector& At, const FVector& Velocity, float Size)
+{
+	AddPuff(2, At, Velocity, Size, ExhaustSmoke::TyreLife);
+}
+
+void AExhaustSmoke::AddPuff(int32 PoolIndex, const FVector& At, const FVector& Velocity, float Size, float LifeScale)
+{
+	FPool& Pool = Pools[PoolIndex];
 	if (Pool.Puffs.Num() == 0)
 	{
 		return;
@@ -165,7 +180,7 @@ void AExhaustSmoke::Puff(const FVector& At, const FVector& Velocity, float Size,
 	New.Velocity = Velocity;
 	New.Size = Size;
 	New.Age = 0.f;
-	New.Life = FMath::FRandRange(ExhaustSmoke::MinLife, ExhaustSmoke::MaxLife) * (bDark ? 1.5f : 1.f);
+	New.Life = FMath::FRandRange(ExhaustSmoke::MinLife, ExhaustSmoke::MaxLife) * LifeScale;
 	Pool.bAny = true;
 }
 
@@ -173,7 +188,7 @@ void AExhaustSmoke::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	for (int32 Section = 0; Section < 2; ++Section)
+	for (int32 Section = 0; Section < ExhaustSmoke::NumPools; ++Section)
 	{
 		UpdatePool(Section, Pools[Section], DeltaSeconds);
 	}
