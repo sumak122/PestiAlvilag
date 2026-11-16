@@ -142,6 +142,25 @@ public:
 	/** The lane point nearest Location that heads roughly along Forward. */
 	bool FindLanePointNear(const FVector& Location, const FVector& Forward, int32& OutLane, int32& OutPoint) const;
 
+	/** The lane leaving the end of this one that brings it nearest Goal (a hearse on its way to the cemetery). */
+	int32 PickLaneToward(int32 LaneIndex, const FVector& Goal) const;
+
+	/**
+	 * People walking in the road (a wedding or a funeral) or a fire engine
+	 * racing by: cars stop short of these points, whichever way they go. Each
+	 * caller keeps its own Slot; an empty list clears it.
+	 */
+	void SetRoadBlock(int32 Slot, const TArray<FVector>& Points);
+
+	/** A hearse put on lane LaneIdx at its point PointIdx (ADailyLife's funeral), or null. */
+	ATrafficCart* SpawnHearse(int32 LaneIdx, int32 PointIdx);
+
+	/** Takes a cart out of the traffic and away (the funeral is over). */
+	void RemoveCart(ATrafficCart* Cart);
+
+	/** The trams and buses about the city. */
+	const TArray<TObjectPtr<ATram>>& GetTrams() const { return Trams; }
+
 	/** Roughly one tram per this much route length (cm); at least one per route. */
 	UPROPERTY(EditAnywhere, Category = "Traffic")
 	float TramSpacing = 80000.f;
@@ -224,6 +243,9 @@ private:
 		float Length = 0.f;
 	};
 	TArray<TArray<FStreetLink>> StreetLinks;
+
+	/** SetRoadBlock's points, by slot. */
+	TMap<int32, TArray<FVector>> RoadBlocks;
 	int32 NearestNode(const FVector& Location) const;
 
 	UPROPERTY(Transient)

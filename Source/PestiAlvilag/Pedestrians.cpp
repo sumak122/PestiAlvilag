@@ -612,6 +612,60 @@ void APedestrian::CarryBroom(bool bSweeping, float Seconds)
 	bArmsFolded = true;
 }
 
+void APedestrian::Strike(const FVector& Location, double Yaw, const DailyLifeModel::FLimbs& Limbs)
+{
+	// A forward lean is a pitch down.
+	Hold(Location, FRotator(-Limbs.Pitch, Yaw, 0.0), 0.f, 0.f, 0.f);
+	PersonModel::PoseLegs(Pieces, Limbs.Legs[0], Limbs.Legs[1], Limbs.Knees[0], Limbs.Knees[1]);
+	ArmsAs(Limbs);
+}
+
+void APedestrian::ArmsAs(const DailyLifeModel::FLimbs& Limbs)
+{
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (USceneComponent* Part = Limb(PersonKit::ArmLeft + i))
+		{
+			Part->SetRelativeRotation(Limbs.Arms[i]);
+		}
+	}
+	PersonModel::PoseElbows(Pieces, Limbs.Elbows[0], Limbs.Elbows[1]);
+	// Unfold puts the elbows straight again once he only walks.
+	bArmsFolded = true;
+}
+
+UProceduralMeshComponent* APedestrian::AddProp(const PersonKit::FPiece& Shape, int32 OnPiece, const FVector& At, const FRotator& Turn)
+{
+	USceneComponent* Parent = Capsule;
+	if (Pieces.IsValidIndex(OnPiece) && Pieces[OnPiece])
+	{
+		Parent = Pieces[OnPiece];
+	}
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+	Mesh->SetupAttachment(Parent);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCanEverAffectNavigation(false);
+	// It moves with him: kept out of the ray-traced lighting and the distance fields.
+	Mesh->bVisibleInRayTracing = false;
+	Mesh->bAffectDistanceFieldLighting = false;
+	for (int32 s = 0; s < Shape.Sections.Num(); ++s)
+	{
+		const PersonKit::FSection& Section = Shape.Sections[s];
+		Mesh->CreateMeshSection_LinearColor(s, Section.Vertices, Section.Triangles, Section.Normals,
+			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+		if (BaseMaterial)
+		{
+			UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+			Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+			Mesh->SetMaterial(s, Paint);
+		}
+	}
+	Mesh->SetRelativeLocationAndRotation(At, Turn);
+	Mesh->RegisterComponent();
+	AddInstanceComponent(Mesh);
+	return Mesh;
+}
+
 void APedestrian::CarryInArms()
 {
 	ShowBroom(false);

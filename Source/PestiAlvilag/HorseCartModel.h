@@ -562,12 +562,12 @@ namespace HorseCartModel
 	 * churns from the dairy, sacks of coal, or beer barrels from the Kőbánya
 	 * breweries. None is Pista bácsi's market cart, with its crates.
 	 */
-	enum class ELoad : uint8 { None, Milk, Coal, Beer, Count };
+	enum class ELoad : uint8 { None, Milk, Coal, Beer, Hearse, Count };
 	constexpr int32 MaxLoadItems = 14;
 
 	inline int32 NumLoadItems(ELoad Load)
 	{
-		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : 0;
+		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : Load == ELoad::Hearse ? 1 : 0;
 	}
 
 	// A churn, a sack and a barrel (cm).
@@ -601,6 +601,11 @@ namespace HorseCartModel
 			}
 			const double Rise = FMath::Sqrt(4.0 * BarrelRadius * BarrelRadius - 28.0 * 28.0);
 			return FVector(-94.0 + ((Index - 8) / 2) * 56.0, Side * 33.0, BedTop + Rise);
+		}
+		if (Load == ELoad::Hearse)
+		{
+			// The glass case over the middle of the bed.
+			return FVector((BedFront + BedBack) * 0.5 - 6.0, 0.0, BedTop);
 		}
 		return FVector(0.0, 0.0, BedTop);
 	}
@@ -636,6 +641,11 @@ namespace HorseCartModel
 			// The brewery's: deep red boards, yellow wheels.
 			OutBoards = FLinearColor(0.30f, 0.05f, 0.03f);
 			OutWheels = FLinearColor(0.55f, 0.38f, 0.06f);
+			break;
+		case ELoad::Hearse:
+			// The undertaker's: black all over.
+			OutBoards = FLinearColor(0.02f, 0.02f, 0.022f);
+			OutWheels = FLinearColor(0.025f, 0.025f, 0.028f);
 			break;
 		default:
 			OutBoards = BoardPaint();
@@ -711,6 +721,75 @@ namespace HorseCartModel
 			for (const double Side : { -1.0, 1.0 })
 			{
 				Hoop(P, FLinearColor(0.45f, 0.05f, 0.03f), FVector(0.0, (L + 0.4) * Side, R), FVector(0.0, 0.0, 10.0), FVector(10.0, 0.0, 0.0), 1.4, 14);
+			}
+			return;
+		}
+		if (Load == ELoad::Hearse)
+		{
+			// The undertaker's case on the bed: black posts and a black roof with silver urns
+			// and black plumes at the corners, black drapes with a silver fringe looped
+			// between the posts, and inside the dark coffin under its wreaths.
+			const FLinearColor Black(0.02f, 0.02f, 0.022f);
+			const FLinearColor Silver(0.55f, 0.56f, 0.58f);
+			const FLinearColor Coffin(0.16f, 0.07f, 0.03f);
+			const double HalfX = 118.0;
+			const double HalfY = 62.0;
+			const double Top = 125.0;
+			Block(P, Black, FVector(0.0, 0.0, 3.0), FVector(HalfX, HalfY, 3.0));
+			for (const double SX : { -1.0, 1.0 })
+			{
+				for (const double SY : { -1.0, 1.0 })
+				{
+					const FVector Post(SX * (HalfX - 4.0), SY * (HalfY - 4.0), 0.0);
+					Rod(P, Black, Post, Post + FVector(0.0, 0.0, Top), 3.0, 8);
+					Blob(P, Silver, Post + FVector(0.0, 0.0, Top + 14.0), FVector(5.0, 5.0, 7.0), 8, 4);
+					Loft(P, Black, { Flat(Post.X, Top + 20.0, 1.0, 1.0, Post.Y), Flat(Post.X, Top + 30.0, 7.0, 7.0, Post.Y), Flat(Post.X, Top + 46.0, 4.0, 4.0, Post.Y), Flat(Post.X, Top + 52.0, 0.5, 0.5, Post.Y) }, 8, false, true);
+				}
+			}
+			// The roof, a little cornice of silver under its edge, a cross in the middle.
+			Block(P, Black, FVector(0.0, 0.0, Top + 4.0), FVector(HalfX + 6.0, HalfY + 6.0, 4.0));
+			Block(P, Silver, FVector(0.0, 0.0, Top - 1.0), FVector(HalfX + 3.0, HalfY + 3.0, 1.0));
+			Block(P, Black, FVector(0.0, 0.0, Top + 10.0), FVector(HalfX - 10.0, HalfY - 10.0, 2.0));
+			Rod(P, Silver, FVector(0.0, 0.0, Top + 12.0), FVector(0.0, 0.0, Top + 40.0), 1.6, 6);
+			Rod(P, Silver, FVector(0.0, -8.0, Top + 32.0), FVector(0.0, 8.0, Top + 32.0), 1.6, 6);
+			// Drapes along the top of each side, a deep fringe of silver under them.
+			for (const double SY : { -1.0, 1.0 })
+			{
+				Block(P, Black, FVector(0.0, SY * (HalfY - 1.0), Top - 14.0), FVector(HalfX - 6.0, 1.2, 12.0));
+				Block(P, Silver, FVector(0.0, SY * (HalfY - 0.8), Top - 27.0), FVector(HalfX - 6.0, 1.0, 2.0));
+				for (double X = -HalfX + 22.0; X <= HalfX - 20.0; X += 46.0)
+				{
+					Loft(P, Black, { Flat(X, Top - 26.0, 9.0, 1.0, SY * (HalfY - 1.0)), Flat(X, Top - 40.0, 3.0, 1.0, SY * (HalfY - 1.0)) }, 8, false, true);
+				}
+			}
+			for (const double SX : { -1.0, 1.0 })
+			{
+				Block(P, Black, FVector(SX * (HalfX - 1.0), 0.0, Top - 14.0), FVector(1.2, HalfY - 6.0, 12.0));
+			}
+			// The coffin: tapering at the foot, a raised lid, silver handles.
+			Loft(P, Coffin, {
+				{ FVector(-92.0, 0.0, 6.0), FVector(0.0, 0.0, 0.1), FVector(0.0, 0.1, 0.0) },
+				{ FVector(-92.0, 0.0, 6.0), FVector(0.0, 0.0, 22.0), FVector(0.0, 22.0, 0.0) },
+				{ FVector(40.0, 0.0, 6.0), FVector(0.0, 0.0, 22.0), FVector(0.0, 30.0, 0.0) },
+				{ FVector(92.0, 0.0, 6.0), FVector(0.0, 0.0, 22.0), FVector(0.0, 26.0, 0.0) },
+				{ FVector(92.0, 0.0, 6.0), FVector(0.0, 0.0, 0.1), FVector(0.0, 0.1, 0.0) },
+			}, 4, false, false, PI * 0.25);
+			for (const double X : { -50.0, 0.0, 50.0 })
+			{
+				for (const double SY : { -1.0, 1.0 })
+				{
+					Rod(P, Silver, FVector(X - 8.0, SY * 30.0, 20.0), FVector(X + 8.0, SY * 30.0, 20.0), 1.2, 5);
+				}
+			}
+			// Two wreaths lying on the lid, white flowers in dark leaves.
+			for (const double X : { -36.0, 34.0 })
+			{
+				Hoop(P, FLinearColor(0.06f, 0.16f, 0.06f), FVector(X, 0.0, 40.0), FVector(16.0, 0.0, 0.0), FVector(0.0, 16.0, 0.0), 4.0, 14);
+				for (int32 k = 0; k < 6; ++k)
+				{
+					const double A = 2.0 * PI * k / 6.0;
+					Blob(P, FLinearColor(0.92f, 0.91f, 0.86f), FVector(X + 16.0 * FMath::Cos(A), 16.0 * FMath::Sin(A), 44.0), FVector(3.0, 3.0, 2.5), 6, 3);
+				}
 			}
 		}
 	}
@@ -797,6 +876,18 @@ namespace HorseCartModel
 			O.Apron = FLinearColor(0.24f, 0.12f, 0.05f);
 			O.Build = 1.22f;
 			O.bMoustache = true;
+			break;
+		case ELoad::Hearse:
+			// The undertaker's coachman: all in black under a black bowler.
+			O.Hat = EHat::Bowler;
+			O.HatColor = FLinearColor(0.015f, 0.015f, 0.015f);
+			O.Top = ETop::Overcoat;
+			O.Coat = FLinearColor(0.02f, 0.02f, 0.025f);
+			O.Shirt = FLinearColor(0.85f, 0.85f, 0.83f);
+			O.Trousers = FLinearColor(0.02f, 0.02f, 0.025f);
+			O.bTie = true;
+			O.Tie = FLinearColor(0.01f, 0.01f, 0.01f);
+			O.bApron = false;
 			break;
 		default:
 			break;

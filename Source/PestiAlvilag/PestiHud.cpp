@@ -1643,7 +1643,7 @@ private:
 		Paint.Tab(TEXT("\u00c1LL\u00c1S"), RX + 80.f, SideY);
 		const int32 Money = Game->GetMoney();
 		const FString Rows[][3] = {
-			{ TEXT("K\u00fcldet\u00e9sek"), TEXT("missions"), FString::Printf(TEXT("%d / %d"), Game->GetMissionsDone(), PestiHud::MenuActOneMissions) },
+			{ TEXT("K\u00fcldet\u00e9sek"), TEXT("missions"), FString::Printf(TEXT("%d / %d"), FMath::Min(Game->GetMissionsDone(), PestiHud::MenuActOneMissions), PestiHud::MenuActOneMissions) },
 			{ TEXT("P\u00e9nz"), TEXT("money"), FString::Printf(TEXT("%d,%02d P"), Money / 100, FMath::Abs(Money % 100)) },
 			{ TEXT("\u00d6ngy\u00fajt\u00f3k"), TEXT("lighters"), FString::Printf(TEXT("%d / %d"), Game->GetLightersFound(), LighterModel::All().Num()) },
 			{ TEXT("Taxifuvarok"), TEXT("taxi fares"), FString::FromInt(Game->GetTaxiJobs()) },
@@ -1669,7 +1669,8 @@ private:
 	{
 		const bool bEnglish = PestiSettings::English();
 		const TArray<FPestiMenuRow> List = Shown.Rows();
-		constexpr float RowStep = 70.f;
+		// Rows close up a little when the list grows past act 1's eight.
+		const float RowStep = FPestiMenu::MissionCount > 8 ? 58.f : 70.f;
 		const float W = 1000.f;
 		const float H = 130.f + RowStep * FPestiMenu::MissionCount + 70.f;
 		const float X = CentreX - W * 0.5f;
@@ -1689,9 +1690,11 @@ private:
 			FPestiMenu::MissionInfo(i, NameHu, NameEn, WhereHu, WhereEn);
 			if (bOn)
 			{
-				Paint.Box(X + 30.f, RowY - 40.f, W - 60.f, 64.f, PestiHud::MenuGlow);
-				Paint.Line(X + 30.f, RowY - 40.f, X + W - 30.f, RowY - 40.f, PestiHud::Gold, 1.5f);
-				Paint.Line(X + 30.f, RowY + 24.f, X + W - 30.f, RowY + 24.f, PestiHud::Gold, 1.5f);
+				const float Top = RowY - RowStep * 0.57f;
+				const float Bottom = RowY + RowStep * 0.34f;
+				Paint.Box(X + 30.f, Top, W - 60.f, Bottom - Top, PestiHud::MenuGlow);
+				Paint.Line(X + 30.f, Top, X + W - 30.f, Top, PestiHud::Gold, 1.5f);
+				Paint.Line(X + 30.f, Bottom, X + W - 30.f, Bottom, PestiHud::Gold, 1.5f);
 			}
 			// The mission's number in a small diamond.
 			Paint.Diamond(X + 80.f, RowY - 9.f, 40.f, bOn ? PestiHud::Gold : PestiHud::MenuGlow, 1);

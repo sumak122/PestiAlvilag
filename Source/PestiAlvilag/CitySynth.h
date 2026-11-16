@@ -37,6 +37,14 @@ namespace CitySynth
 		Carpet,
 		Dog,
 		Smith,
+		/** The organ grinder's barrel organ (ADailyLife). */
+		Organ,
+		/** The knife grinder's stone and his hand bell. */
+		Grinder,
+		/** The fiddler leading a wedding party. */
+		Fiddle,
+		/** The fire engine's bell, rung hard as it races by. */
+		FireBell,
 		Count,
 	};
 
@@ -56,6 +64,9 @@ namespace CitySynth
 		Cricket,
 		Coo,
 		Record,
+		Organ,
+		Fiddle,
+		Whir,
 	};
 
 	constexpr int32 MaxCalls = 16;
@@ -78,6 +89,8 @@ namespace CitySynth
 	// The gramophone's scale (semitones above the key note) and its waltz chords (scale steps of the bass).
 	constexpr int32 TuneSteps[8] = { 0, 2, 4, 5, 7, 9, 11, 12 };
 	constexpr int32 WaltzBass[4] = { 0, 3, 4, 0 };
+	// The fiddler's minor scale, with its raised seventh.
+	constexpr int32 MinorSteps[8] = { 0, 2, 3, 5, 7, 8, 11, 12 };
 
 	/** One sound playing. */
 	struct FCall
@@ -308,6 +321,28 @@ namespace CitySynth
 				C.Left = 4 + static_cast<int32>(Unit() * 8.f);
 				C.Hz = 0.38f + 0.15f * Unit();
 			}
+			else if (Spot == ESpot::Organ || Spot == ESpot::Fiddle)
+			{
+				// Already playing when you come by.
+				StartTune(Spot == ESpot::Organ ? ECall::Organ : ECall::Fiddle, 30.f + 20.f * Unit());
+			}
+		}
+
+		void StartTune(ECall Kind, float Lasts)
+		{
+			FCall& C = Start(Kind, Lasts, Kind == ECall::Organ ? 0.05f : 0.035f);
+			C.Tone = 0.9f + 0.2f * Unit();
+			C.Target = 2.f;
+		}
+
+		/** A few strokes of a bell, Gap seconds apart. */
+		void RingBell(ECall Kind, int32 Strokes, float Gap, float Tone, float Gain)
+		{
+			for (int32 k = 0; k < Strokes; ++k)
+			{
+				FCall& C = Start(Kind, 1.2f, Gain, k * Gap);
+				C.Tone = Tone * (k % 2 == 0 ? 1.f : 0.97f);
+			}
 		}
 
 		/** Start a sound; returns it so the caller can set it up further. */
@@ -476,6 +511,37 @@ namespace CitySynth
 					FCall& C = Start(ECall::Anvil, 5.f, 0.9f + 0.45f * Unit());
 					C.Left = 4 + static_cast<int32>(Unit() * 8.f);
 					C.Hz = 0.38f + 0.15f * Unit();
+				}
+				break;
+			case ESpot::Organ:
+				// One tune after another, with a pause to change the barrel.
+				if (!Playing(ECall::Organ) && Roll(5.f))
+				{
+					StartTune(ECall::Organ, 35.f + 20.f * Unit());
+				}
+				break;
+			case ESpot::Fiddle:
+				if (!Playing(ECall::Fiddle) && Roll(12.f))
+				{
+					StartTune(ECall::Fiddle, 30.f + 20.f * Unit());
+				}
+				break;
+			case ESpot::Grinder:
+				// The stone whirring as a blade goes to it, and now and then his bell.
+				if (!Playing(ECall::Whir) && Roll(6.f))
+				{
+					Start(ECall::Whir, 3.f + 4.f * Unit(), 0.10f);
+				}
+				if (Roll(1.2f))
+				{
+					RingBell(ECall::TramBell, 3 + static_cast<int32>(Unit() * 3.f), 0.32f, 0.82f, 0.25f);
+				}
+				break;
+			case ESpot::FireBell:
+				// Rung without a break as the engine races by.
+				if (!Playing(ECall::TramBell))
+				{
+					RingBell(ECall::TramBell, 6, 0.22f, 0.58f, 0.8f);
 				}
 				break;
 			default:
@@ -741,6 +807,66 @@ namespace CitySynth
 				const float Crackle = (Unit() < 0.0006f ? Noise() * 1.5f : 0.f) + Noise() * 0.02f;
 				const float Envelope = FMath::Min(1.f, A / 0.5f) * FMath::Clamp((C.Lasts - A) / 1.f, 0.f, 1.f);
 				return (Music + Crackle) * Envelope;
+			}
+			case ECall::Organ:
+			case ECall::Fiddle:
+			{
+				// A barrel organ's pipes playing a waltz, or a gypsy fiddle's quick minor tune.
+				const bool bOrgan = C.Kind == ECall::Organ;
+				C.Next -= Dt;
+				if (C.Next <= 0.f)
+				{
+					C.Next = bOrgan ? 0.40f : 0.24f;
+					C.Left = (C.Left + 1) % (bOrgan ? 3 : 4);
+					if (C.Left == 0)
+					{
+						C.Hz = static_cast<float>((static_cast<int32>(C.Hz) + 1) % 4);
+					}
+					if (Unit() < (bOrgan ? 0.7f : 0.85f))
+					{
+						C.Target = FMath::Clamp(C.Target + static_cast<float>(FMath::FloorToInt(Unit() * 5.f) - 2), 0.f, 7.f);
+					}
+					C.Sub = 0.f;
+				}
+				C.Sub += Dt;
+				const float Key = (bOrgan ? 523.f : 440.f) * C.Tone;
+				const int32 Step = (bOrgan ? TuneSteps : MinorSteps)[FMath::Clamp(static_cast<int32>(C.Target), 0, 7)];
+				const float Tune = Key * FMath::Pow(2.f, Step / 12.f);
+				C.Phase[3] += (Tune - C.Phase[3]) * (1.f - FMath::Exp(-Dt / (bOrgan ? 0.008f : 0.04f)));
+				const float Envelope = FMath::Min(1.f, A / 0.4f) * FMath::Clamp((C.Lasts - A) / 1.f, 0.f, 1.f);
+				if (bOrgan)
+				{
+					// Two flute pipes a little out of tune with each other, beating, a tremolo, and the bass.
+					C.Phase[0] += C.Phase[3] * Dt;
+					C.Phase[0] -= FMath::FloorToFloat(C.Phase[0]);
+					C.Phase[1] += C.Phase[3] * 1.006f * Dt;
+					C.Phase[1] -= FMath::FloorToFloat(C.Phase[1]);
+					const float Tremolo = 0.8f + 0.2f * FMath::Sin(2.f * PI * 6.f * A);
+					const float Pipes = (FMath::Sin(2.f * PI * C.Phase[0]) + 0.35f * FMath::Sin(4.f * PI * C.Phase[0]) + FMath::Sin(2.f * PI * C.Phase[1])) * Tremolo;
+					const int32 Bass = TuneSteps[WaltzBass[FMath::Clamp(static_cast<int32>(C.Hz), 0, 3)]];
+					const float BassHz = Key * 0.25f * FMath::Pow(2.f, Bass / 12.f) * (C.Left == 0 ? 1.f : 2.f);
+					C.Phase[2] += BassHz * Dt;
+					C.Phase[2] -= FMath::FloorToFloat(C.Phase[2]);
+					const float Puff = FMath::Exp(-C.Sub / 0.18f);
+					const float Reed = (C.Phase[2] * 2.f - 1.f) * 0.5f * Puff;
+					const float Wind = Noise() * 0.03f;
+					return C.R1.Run(Pipes * 0.5f + Reed + Wind, 1200.f, 1800.f, SampleRate) * 1.6f * Envelope;
+				}
+				// The fiddle: a bowed saw tooth with vibrato, through the body's two resonances.
+				const float Vibrato = 1.f + 0.012f * FMath::Sin(2.f * PI * 6.2f * A) * FMath::Min(1.f, C.Sub / 0.1f);
+				C.Phase[0] += C.Phase[3] * Vibrato * Dt;
+				C.Phase[0] -= FMath::FloorToFloat(C.Phase[0]);
+				const float Bow = 0.7f + 0.3f * FMath::Sin(PI * FMath::Min(1.f, C.Sub / 0.24f));
+				const float Saw = (C.Phase[0] * 2.f - 1.f) * Bow + Noise() * 0.04f;
+				return (C.R1.Run(Saw, 480.f, 500.f, SampleRate) * 1.2f + C.R2.Run(Saw, 2800.f, 2000.f, SampleRate) * 0.8f) * Envelope;
+			}
+			case ECall::Whir:
+			{
+				// Steel on the turning stone: a hiss that swells and fades as the blade is drawn across.
+				const float Draw = 0.5f + 0.5f * FMath::Sin(2.f * PI * 0.7f * A);
+				const float Envelope = FMath::Min(1.f, A / 0.3f) * FMath::Clamp((C.Lasts - A) / 0.4f, 0.f, 1.f);
+				const float Grit = Noise() * (0.6f + 0.4f * Draw);
+				return (C.R1.Run(Grit, 3200.f * C.Tone, 1800.f, SampleRate) * 1.2f + C.R2.Run(Grit, 900.f, 600.f, SampleRate) * 0.6f) * Envelope;
 			}
 			default:
 				return 0.f;

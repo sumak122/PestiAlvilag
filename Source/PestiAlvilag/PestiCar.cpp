@@ -6,20 +6,25 @@
 #include "CarHandling.h"
 #include "CarVisuals.h"
 #include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "CrashBits.h"
 #include "CrashSound.h"
 #include "CrashSynth.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineSound.h"
+#include "ExhaustSmoke.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GroundSurfaces.h"
 #include "Pedestrians.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PersonModel.h"
 #include "PoliceCar.h"
 #include "PolicePatrols.h"
+#include "SkidMarks.h"
+#include "SurfaceModel.h"
 #include "TrafficCar.h"
 #include "Tram.h"
 #include "Weather.h"
@@ -109,6 +114,60 @@ namespace PestiCar
 	constexpr float HandbrakeGrip = 1.8f;
 	// Sliding sideways also scrubs off speed (cm/s each second, at most).
 	constexpr float SlideDrag = 900.f;
+	// But the tyres can only pull the car sideways this hard (cm/s each
+	// second, on dry setts): past that it slides on. The front tyres hold
+	// this many times as much, so at speed the car turns no tighter than they
+	// can hold it and the back steps out a little. Hard braking leaves the
+	// front this share less to steer with; the locked back wheels of the
+	// handbrake hold only this share.
+	constexpr float SideGrip = 1400.f;
+	constexpr float FrontGripShare = 1.5f;
+	constexpr float BrakeFrontLoss = 0.3f;
+	constexpr float HandbrakeSideShare = 0.3f;
+	// Sliding further sideways than this (degrees off the way it is going), it
+	// turns no further into the slide, easing off over the last SlipEase
+	// degrees: it drifts, but does not spin round by itself. Only above this speed (cm/s).
+	constexpr float MaxSlip = 30.f;
+	constexpr float HandbrakeMaxSlip = 75.f;
+	constexpr float SlipEase = 12.f;
+	constexpr float SlipFromSpeed = 200.f;
+	// Black tyre marks: sliding sideways from MarkFrom cm/s, at full at MarkFull;
+	// fainter on wet setts (this share less).
+	constexpr float MarkFrom = 150.f;
+	constexpr float MarkFull = 600.f;
+	constexpr float WetMarkLoss = 0.6f;
+	constexpr float MarkLeast = 0.08f;
+	// Stamping on the brake pedal faster than BrakeLockSpeed cm/s locks the
+	// wheels (no clever brakes in 1932): marks, full at BrakeLockFull, this strong.
+	constexpr float BrakeLockPedal = 0.8f;
+	constexpr float BrakeLockSpeed = 900.f;
+	constexpr float BrakeLockFull = 2100.f;
+	constexpr float BrakeLockMarks = 0.6f;
+	// A hard slide on dry stone smokes the back tyres: from this much marking
+	// (0..1), a puff from each tyre every this many seconds, this big (cm),
+	// left behind at this share of the car's speed and rising this fast (cm/s).
+	constexpr float SmokeFrom = 0.3f;
+	constexpr float TyreSmokeEvery = 0.06f;
+	constexpr float TyreSmokeSize = 30.f;
+	constexpr float TyreSmokeCarry = 0.15f;
+	constexpr float TyreSmokeRise = 30.f;
+	// The ground is looked at this far ahead of the middle (cm), by the front wheels.
+	constexpr double GroundLookAhead = 130.0;
+	// Over a kerb faster than KerbFrom cm/s the car jolts, fully at KerbFull;
+	// the back wheels follow the front ones this far behind (cm).
+	constexpr float KerbFrom = 250.f;
+	constexpr float KerbFull = 1500.f;
+	constexpr float KerbWheelGap = 260.f;
+	// The chase camera turns this share of the slide towards where the car is
+	// really going (at most MaxCameraSlip degrees), this quickly.
+	constexpr float CameraSlipShare = 0.35f;
+	constexpr float MaxCameraSlip = 20.f;
+	constexpr float CameraSlipRate = 3.f;
+	// The camera trembles on the setts at speed (degrees, at roughness 1.5 and
+	// top speed) and shakes after a jolt (degrees at full), dying away this quickly.
+	constexpr float CobbleShake = 0.18f;
+	constexpr float JoltShake = 1.2f;
+	constexpr float ShakeFade = 5.f;
 
 	// Crashes (CarHandling::Collide): how much of the speed they met at springs
 	// back off another car and off a wall, and the rub along what was hit.
@@ -351,6 +410,7 @@ void APestiCar::Tick(float DeltaSeconds)
 		WeatherFound = AWeather::Get(GetWorld());
 	}
 	RoadWet = WeatherFound.IsValid() ? FMath::Clamp(WeatherFound->GetWet(), 0.f, 1.f) : 0.f;
+	UpdateGround(DeltaSeconds);
 
 	// The weight shifts forward under braking and back when pulling away.
 	const bool bPedalBrakes = (Throttle < -0.05f && ForwardSpeed > 20.f) || (Throttle > 0.05f && ForwardSpeed < -20.f);
@@ -386,8 +446,37 @@ void APestiCar::Tick(float DeltaSeconds)
 	const float HandbrakeBoost = bHandbrake ? 1.6f : 1.f;
 	// Weight on the nose tucks it into the bend; pulling hard, it runs wide.
 	const float WeightTurn = WeightShift > 0.f ? 1.f + PestiCar::BrakeTurnIn * WeightShift : 1.f + PestiCar::PullRunWide * WeightShift;
-	const float WantedTurnRate = Steer * MaxTurnRate * SpeedFactor * HighSpeedDamping * HandbrakeBoost * WeightTurn
+	float WantedTurnRate = Steer * MaxTurnRate * SpeedFactor * HighSpeedDamping * HandbrakeBoost * WeightTurn
 		* FMath::Sign(ForwardSpeed);
+	// The tyres can only pull so hard. The front ones steer: at speed the car
+	// turns no tighter than they can hold. The back ones hold a little less,
+	// so in a fast bend the back steps out and the car slides. Hard braking
+	// leaves the front less to steer with, the handbrake locks the back, and
+	// wet setts and grass hold less.
+	const float SoakedLoss = PestiCar::WetGripLoss * RoadWet;
+	const float BrakeUse = bPedalBrakes ? FMath::Abs(Throttle) : 0.f;
+	PedalBrake = BrakeUse;
+	const float FrontHold = PestiCar::SideGrip * PestiCar::FrontGripShare * GripShare * SurfaceGrip
+		* (1.f - 0.5f * SoakedLoss) * (1.f - PestiCar::BrakeFrontLoss * BrakeUse);
+	const float RearHold = PestiCar::SideGrip * GripShare * SurfaceGrip * (1.f - SoakedLoss)
+		* (bHandbrake ? PestiCar::HandbrakeSideShare * HandbrakeGripShare
+			: 1.f - PestiCar::BrakeLooseRear * FMath::Max(WeightShift, 0.f) * FMath::Abs(Steer));
+	if (!bHandbrake && AbsSpeed > 1.f)
+	{
+		const float MostTurn = FMath::RadiansToDegrees(FrontHold / AbsSpeed);
+		WantedTurnRate = FMath::Clamp(WantedTurnRate, -MostTurn, MostTurn);
+	}
+	// Already sliding far sideways, it turns no further into the slide; turning
+	// the other way (catching it) always works.
+	if (ForwardSpeed > PestiCar::SlipFromSpeed)
+	{
+		const float Slip = FMath::RadiansToDegrees(FMath::Atan2(SideSpeed, ForwardSpeed));
+		const float MostSlip = bHandbrake ? PestiCar::HandbrakeMaxSlip : PestiCar::MaxSlip;
+		if (WantedTurnRate * Slip < 0.f && FMath::Abs(Slip) > MostSlip - PestiCar::SlipEase)
+		{
+			WantedTurnRate *= FMath::Clamp((MostSlip - FMath::Abs(Slip)) / PestiCar::SlipEase, 0.f, 1.f);
+		}
+	}
 	TurnRate = FMath::FInterpTo(TurnRate, WantedTurnRate, DeltaSeconds, TurnWeight);
 	// A crash's spin: the tyres slowly stop it (less so on locked wheels).
 	const float SpinFadeNow = bHandbrake ? PestiCar::HandbrakeSpinFade : PestiCar::SpinFade * (1.f - PestiCar::WetGripLoss * RoadWet);
@@ -406,7 +495,16 @@ void APestiCar::Tick(float DeltaSeconds)
 		: FMath::Lerp(PestiCar::RoadGrip, PestiCar::CorneringGrip, SpeedShare * FMath::Abs(Steer)) * GripShare
 			* (1.f - PestiCar::BrakeLooseRear * FMath::Max(WeightShift, 0.f) * FMath::Abs(Steer)))
 		* (1.f - PestiCar::WetGripLoss * RoadWet);
-	SideSpeed *= FMath::Exp(-Grip * DeltaSeconds);
+	// They kill a small slide quickly, but pull no harder than they can hold:
+	// a big slide carries on and dies away slowly.
+	const float SlideBefore = SideSpeed;
+	float SlideAfter = SideSpeed * FMath::Exp(-Grip * DeltaSeconds);
+	const float MostPull = RearHold * DeltaSeconds;
+	if (FMath::Abs(SlideBefore - SlideAfter) > MostPull)
+	{
+		SlideAfter = SlideBefore - FMath::Sign(SlideBefore) * MostPull;
+	}
+	SideSpeed = SlideAfter;
 	// Sliding scrubs off some of the speed too.
 	const float Scrub = FMath::Min(FMath::Abs(SideSpeed) / 1000.f, 1.f) * PestiCar::SlideDrag * DeltaSeconds;
 	ForwardSpeed = FMath::FInterpConstantTo(ForwardSpeed, 0.f, 1.f, Scrub);
@@ -923,6 +1021,45 @@ void APestiCar::UpdateSkidAndView(bool bHandbrake, float DeltaSeconds)
 		CrashNoise->SetSkid(SkidAmount > 0.02f ? SkidAmount : 0.f, RoadWet);
 	}
 
+	// Sliding hard or on locked wheels, the back tyres leave black marks (faint on wet setts and on grass).
+	const float BrakeLock = PedalBrake > PestiCar::BrakeLockPedal
+		? FMath::Clamp((FMath::Abs(ForwardSpeed) - PestiCar::BrakeLockSpeed) / (PestiCar::BrakeLockFull - PestiCar::BrakeLockSpeed), 0.f, 1.f) * PestiCar::BrakeLockMarks
+		: 0.f;
+	const float Marking = FMath::Max3(
+		FMath::Clamp((FMath::Abs(SideSpeed) - PestiCar::MarkFrom) / (PestiCar::MarkFull - PestiCar::MarkFrom), 0.f, 1.f), Locked, BrakeLock)
+		* (1.f - PestiCar::WetMarkLoss * RoadWet) * SurfaceMarks;
+	if (Marking > PestiCar::MarkLeast)
+	{
+		LeaveTyreMarks(Marking);
+	}
+	// A hard slide on dry stone smokes the tyres; wet setts only hiss.
+	TyreSmokeTimer -= DeltaSeconds;
+	const float Smoking = (Marking - PestiCar::SmokeFrom) / (1.f - PestiCar::SmokeFrom) * (1.f - RoadWet) * (SurfaceMarks >= 1.f ? 1.f : 0.f);
+	if (Smoking > 0.f && TyreSmokeTimer <= 0.f)
+	{
+		TyreSmokeTimer = PestiCar::TyreSmokeEvery;
+		if (AExhaustSmoke* Smoke = AExhaustSmoke::Get(GetWorld()))
+		{
+			const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
+			const FTransform Placed = GetActorTransform();
+			const FVector Going = GetVelocity();
+			for (int32 i = 0; i < 2; ++i)
+			{
+				const FVector Tyre = Placed.TransformPosition(FVector(Layout.RearAxle, i == 0 ? -Layout.TrackY : Layout.TrackY, 0.0));
+				Smoke->PuffTyre(FVector(Tyre.X, Tyre.Y, GroundZ + 15.f),
+					Going * PestiCar::TyreSmokeCarry + FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), PestiCar::TyreSmokeRise),
+					PestiCar::TyreSmokeSize * FMath::Lerp(0.6f, 1.2f, FMath::Clamp(Smoking, 0.f, 1.f)));
+			}
+		}
+	}
+
+	// The chase camera turns a little towards where a sliding car is really going.
+	const float SlideAngle = ForwardSpeed > PestiCar::SlipFromSpeed
+		? FMath::RadiansToDegrees(FMath::Atan2(SideSpeed, ForwardSpeed)) * PestiCar::CameraSlipShare : 0.f;
+	CameraSlip = FMath::FInterpTo(CameraSlip, FMath::Clamp(SlideAngle, -PestiCar::MaxCameraSlip, PestiCar::MaxCameraSlip),
+		DeltaSeconds, PestiCar::CameraSlipRate);
+	CameraShake = FMath::Max(0.f, CameraShake - PestiCar::ShakeFade * CameraShake * DeltaSeconds);
+
 	// The chase camera widens a little with speed.
 	if (!bOverheadCamera && ChaseCamera)
 	{
@@ -941,8 +1078,99 @@ void APestiCar::SnapToGround()
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 	{
 		FVector Location = Start;
+		GroundZ = static_cast<float>(Hit.ImpactPoint.Z);
 		Location.Z = Hit.ImpactPoint.Z + HoverHeight + CollisionBox->GetScaledBoxExtent().Z;
 		SetActorLocation(Location, false);
+	}
+}
+
+void APestiCar::UpdateGround(float DeltaSeconds)
+{
+	// The ground under the front wheels: the picture painted on it says what it is.
+	const FVector Front = GetActorLocation() + GetActorForwardVector() * PestiCar::GroundLookAhead;
+	FHitResult GroundHit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PestiCarSurface), true, this);
+	Params.bReturnFaceIndex = true;
+	int32 Kind = -1;
+	if (GetWorld()->LineTraceSingleByChannel(GroundHit, Front, Front - FVector(0.0, 0.0, 400.0), ECC_Visibility, Params)
+		&& GroundHit.GetComponent())
+	{
+		int32 SectionIndex = 0;
+		SurfaceModel::EKind Painted = SurfaceModel::EKind::Slabs;
+		if (GroundSurfaces::KindOf(GroundHit.GetComponent()->GetMaterialFromCollisionFaceIndex(GroundHit.FaceIndex, SectionIndex), Painted))
+		{
+			Kind = static_cast<int32>(Painted);
+		}
+	}
+
+	// The setts shake the car most, the pavement's slabs hardly; grass, gravel
+	// and the market's earth grip less and hardly take tyre marks.
+	float Rough = 1.f;
+	float Hold = 1.f;
+	float Marks = 1.f;
+	switch (Kind)
+	{
+	case static_cast<int32>(SurfaceModel::EKind::Setts): Rough = 1.5f; break;
+	case static_cast<int32>(SurfaceModel::EKind::BigSetts): Rough = 1.2f; break;
+	case static_cast<int32>(SurfaceModel::EKind::Slabs): Rough = 0.5f; break;
+	case static_cast<int32>(SurfaceModel::EKind::Gravel): Rough = 1.2f; Hold = 0.8f; Marks = 0.4f; break;
+	case static_cast<int32>(SurfaceModel::EKind::Grass): Rough = 1.3f; Hold = 0.75f; Marks = 0.4f; break;
+	case static_cast<int32>(SurfaceModel::EKind::MarketEarth): Rough = 1.4f; Hold = 0.8f; Marks = 0.4f; break;
+	default: break;
+	}
+	SurfaceRough = FMath::FInterpTo(SurfaceRough, Rough, DeltaSeconds, 4.f);
+	SurfaceGrip = FMath::FInterpTo(SurfaceGrip, Hold, DeltaSeconds, 4.f);
+	SurfaceMarks = Marks;
+	Visuals->SetRoughness(SurfaceRough);
+
+	// Off the road's setts onto the pavement's slabs, or back: over the kerb,
+	// a jolt for the front wheels and a smaller one for the back ones after.
+	const double Now = GetWorld()->GetTimeSeconds();
+	const float AbsSpeed = FMath::Abs(ForwardSpeed);
+	auto IsRoad = [](int32 K)
+	{
+		return K == static_cast<int32>(SurfaceModel::EKind::Setts) || K == static_cast<int32>(SurfaceModel::EKind::BigSetts);
+	};
+	const int32 PavementKind = static_cast<int32>(SurfaceModel::EKind::Slabs);
+	if (Kind >= 0 && LastGroundKind >= 0 && Kind != LastGroundKind
+		&& ((IsRoad(Kind) && LastGroundKind == PavementKind) || (Kind == PavementKind && IsRoad(LastGroundKind)))
+		&& AbsSpeed > PestiCar::KerbFrom)
+	{
+		const float Strength = FMath::Clamp((AbsSpeed - PestiCar::KerbFrom) / (PestiCar::KerbFull - PestiCar::KerbFrom), 0.15f, 1.f);
+		Visuals->Jolt(Strength);
+		CameraShake = FMath::Max(CameraShake, Strength);
+		RearJolt = Strength * 0.7f;
+		RearJoltAt = Now + PestiCar::KerbWheelGap / AbsSpeed;
+		if (Strength > 0.4f)
+		{
+			PlayCrashSound(static_cast<uint8>(CrashSynth::EKind::Bump), 0.2f * Strength, 0.f);
+		}
+	}
+	if (Kind >= 0)
+	{
+		LastGroundKind = Kind;
+	}
+	if (RearJoltAt > 0.0 && Now >= RearJoltAt)
+	{
+		RearJoltAt = -1.0;
+		Visuals->Jolt(RearJolt);
+		CameraShake = FMath::Max(CameraShake, RearJolt);
+	}
+}
+
+void APestiCar::LeaveTyreMarks(float Strength)
+{
+	ASkidMarks* Marks = ASkidMarks::Get(GetWorld());
+	if (!Marks)
+	{
+		return;
+	}
+	const CarModel::FLayout Layout = CarModel::Layout(Style.Body);
+	const FTransform Placed = GetActorTransform();
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FVector Wheel = Placed.TransformPosition(FVector(Layout.RearAxle, i == 0 ? -Layout.TrackY : Layout.TrackY, 0.0));
+		Marks->Mark(static_cast<int32>(GetUniqueID() * 2u + static_cast<uint32>(i)), FVector(Wheel.X, Wheel.Y, GroundZ), Strength);
 	}
 }
 
@@ -988,5 +1216,16 @@ void APestiCar::UpdateFreeLook(const APlayerController* PC, float DeltaSeconds)
 	}
 
 	const float BasePitch = bOverheadCamera ? PestiCar::OverheadPitch : PestiCar::ChasePitch;
-	CameraArm->SetRelativeRotation(FRotator(BasePitch + LookPitch, LookYaw, 0.f));
+	// Behind the car it turns towards a slide and trembles on the setts and over kerbs.
+	float SlideYaw = 0.f;
+	float Tremble = 0.f;
+	if (!bOverheadCamera)
+	{
+		SlideYaw = CameraSlip;
+		const float Fast = FMath::Clamp(FMath::Abs(ForwardSpeed) / MaxSpeed, 0.f, 1.f);
+		const float Cobbles = FMath::Clamp(SurfaceRough - 0.5f, 0.f, 1.f) * Fast * PestiCar::CobbleShake;
+		const float Seconds = static_cast<float>(FMath::Fmod(GetWorld()->GetTimeSeconds(), 1000.0));
+		Tremble = (Cobbles + CameraShake * PestiCar::JoltShake) * FMath::PerlinNoise1D(Seconds * 23.f);
+	}
+	CameraArm->SetRelativeRotation(FRotator(BasePitch + LookPitch + Tremble, LookYaw + SlideYaw, 0.f));
 }

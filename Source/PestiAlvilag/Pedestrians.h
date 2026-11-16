@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "DailyLifeModel.h"
 #include "StoryPerson.h"
 #include "Pedestrians.generated.h"
 
@@ -92,6 +93,19 @@ public:
 	void ShowBroom(bool bShow);
 	/** After WalkTo: the broom put away and both arms held out in front, carrying something. */
 	void CarryInArms();
+
+	/** Holds him still in one of the daily life's poses (DailyLifeModel::FLimbs) at Location (his middle), facing Yaw. */
+	void Strike(const FVector& Location, double Yaw, const DailyLifeModel::FLimbs& Limbs);
+
+	/** After WalkTo: his arms and elbows as in Limbs instead of swinging (the legs keep walking). */
+	void ArmsAs(const DailyLifeModel::FLimbs& Limbs);
+
+	/**
+	 * Something he holds or wears (a DailyLifeModel shape), made now and hung
+	 * on his piece OnPiece (PersonKit::EPiece; anything else: his middle) at
+	 * At, turned by Turn. Call after SetOutfit; it goes when he does.
+	 */
+	UProceduralMeshComponent* AddProp(const PersonKit::FPiece& Shape, int32 OnPiece, const FVector& At, const FRotator& Turn);
 
 private:
 	/** Arms back down from Huddle, if they were folded. */
