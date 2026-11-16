@@ -156,6 +156,11 @@ void AGarage::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	// The garage on the maps, once it is his.
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->MarkPlace(GetActorLocation(), TEXT("Á"));
+	}
 
 	const FVector Front = GetActorTransform().TransformPosition(FVector(GaragePlace::DoorwayOut * 0.5, 0.0, 0.0));
 	const double Distance = FVector::Dist2D(Player->GetActorLocation(), Front);
