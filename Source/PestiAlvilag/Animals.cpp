@@ -118,13 +118,14 @@ namespace Animals
 	// In the camera's view: within this cosine of where it looks.
 	constexpr double InView = 0.45;
 
-	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm),
+	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm,
+	// far enough that one lying in the middle of a square runs out to the road),
 	// with this chance each time, for this long (s), then rests from it this long.
 	constexpr double ChaseFrom = 100.0;
-	constexpr double ChaseStart = 900.0;
+	constexpr double ChaseStart = 2200.0;
 	constexpr float ChaseChance = 0.5f;
-	constexpr float ChaseLow = 4.f;
-	constexpr float ChaseHigh = 6.5f;
+	constexpr float ChaseLow = 6.f;
+	constexpr float ChaseHigh = 9.f;
 	constexpr float ChaseRestFor = 15.f;
 	// Beside the horse's head (or the bicycle's front wheel), this far out to the side (cm); it gives
 	// up once left this far behind.
@@ -132,7 +133,7 @@ namespace Animals
 	constexpr double CartOut = 200.0;
 	constexpr double BikeAhead = 40.0;
 	constexpr double BikeOut = 110.0;
-	constexpr double ChaseLost = 1500.0;
+	constexpr double ChaseLost = 2800.0;
 	// That close to the horse's head it may make it shy (rear up), or the rider wobble, with these chances.
 	constexpr double SpookNear = 350.0;
 	constexpr float ShyChance = 0.4f;
