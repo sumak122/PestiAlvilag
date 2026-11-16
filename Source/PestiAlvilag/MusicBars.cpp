@@ -299,6 +299,21 @@ void AMusicBars::BuildRoom(int32 Bar)
 void AMusicBars::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// The two bars on the maps, once there is a HUD to tell.
+	if (!bIconsSent)
+	{
+		if (APestiHUD* Hud = APestiHUD::Get(this))
+		{
+			for (int32 Bar = 0; Bar < 2; ++Bar)
+			{
+				APestiHUD::FMapIcon Icon;
+				Icon.At = FVector2D(StreetDoor[Bar].X, StreetDoor[Bar].Y);
+				Icon.Kind = APestiHUD::EMapIcon::Music;
+				Hud->AddMapIcon(Icon);
+			}
+			bIconsSent = true;
+		}
+	}
 	TickDoors();
 	TickBands();
 	ChainCheckIn -= DeltaSeconds;

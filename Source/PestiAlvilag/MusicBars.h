@@ -117,5 +117,6 @@ private:
 	bool bBandOn = false;
 	bool bDzsokiOut = false;
 	bool bRozsiOut = false;
+	bool bIconsSent = false;
 	float ChainCheckIn = 0.f;
 };
