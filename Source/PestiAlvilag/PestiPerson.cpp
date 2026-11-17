@@ -20,6 +20,7 @@
 #include "Bicycle.h"
 #include "HorseCart.h"
 #include "PersonModel.h"
+#include "TailorModel.h"
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiCar.h"
 #include "ProceduralMeshComponent.h"
@@ -843,6 +844,11 @@ PersonKit::FOutfit APestiPerson::GetDress() const
 	{
 		Outfit.Held = PersonKit::EHeld::Baton;
 		Outfit.HeldColor = PersonKit::Bamboo();
+	}
+	// The suit from Kertész the tailor, once bought.
+	if (Game && Game->HasSuit())
+	{
+		Outfit = TailorModel::Suit(Outfit);
 	}
 	return Outfit;
 }

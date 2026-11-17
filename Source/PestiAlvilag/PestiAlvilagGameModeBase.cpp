@@ -78,6 +78,8 @@
 #include "GarageModel.h"
 #include "MissionHirdetes.h"
 #include "MissionKulcs.h"
+#include "Tailor.h"
+#include "TailorModel.h"
 #include "Tattersall.h"
 
 namespace PestiStart
@@ -604,8 +606,17 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	// The player's lock-up garage on Bérkocsis utca, by his attic.
 	if (!TActorIterator<AGarage>(GetWorld()))
 	{
-		const double Z = GroundZ(GarageModel::CityAt);
+		// The ground out on the pavement: straight down at the door the drop
+		// from the sky lands on the house over the garage.
+		const double Z = GroundZ(PestiStart::OutFrom(GarageModel::CityAt, GarageModel::CityYaw));
 		GetWorld()->SpawnActor<AGarage>(AGarage::StaticClass(), FVector(GarageModel::CityAt, Z), FRotator(0.0, GarageModel::CityYaw, 0.0));
+	}
+
+	// Kertész the tailor across the street from it, where the suit for the car show is bought.
+	if (!TActorIterator<ATailor>(GetWorld()))
+	{
+		const double Z = GroundZ(PestiStart::OutFrom(TailorModel::CityAt, TailorModel::CityYaw));
+		GetWorld()->SpawnActor<ATailor>(ATailor::StaticClass(), FVector(TailorModel::CityAt, Z), FRotator(0.0, TailorModel::CityYaw, 0.0));
 	}
 
 	// And Bözsi néni's house, Népszínház utca 29, built in place of the plain
@@ -1118,6 +1129,7 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		GarageCar.Accent = Save->GarageAccent;
 		GarageCar.bTaxi = Save->bGarageTaxi;
 		GarageCar.bPolice = Save->bGaragePolice;
+		bHasSuit = Save->bHasSuit;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
@@ -1138,8 +1150,9 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 				MarkRaceWon(i);
 			}
 		}
-		// Schwimmer's baton comes with mission 5.
+		// Schwimmer's baton comes with mission 5, the tailor's suit with the car show's first.
 		bHasBaton = Jump > 5;
+		bHasSuit = Jump > PestiStart::ActOneCount + 1;
 		// Mission 1 starts at Keleti like a new game; the others at their ring.
 		bPlaceAtRing = Jump > 1;
 		PlaceAtRingUntil = -1.0;
@@ -1295,6 +1308,7 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->GarageAccent = GarageCar.Accent;
 	Save->bGarageTaxi = GarageCar.bTaxi;
 	Save->bGaragePolice = GarageCar.bPolice;
+	Save->bHasSuit = bHasSuit;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 

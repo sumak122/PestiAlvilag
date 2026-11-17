@@ -144,6 +144,10 @@ public:
 	const FGarageCar& GetGarageCar() const { return GarageCar; }
 	void SetGarageCar(const FGarageCar& Car) { GarageCar = Car; }
 
+	/** The suit from Kertész the tailor (TailorModel::Suit): worn from then on, saved; the Tattersall's doorman lets him in. */
+	bool HasSuit() const { return bHasSuit; }
+	void SetHasSuit(bool bInHasSuit) { bHasSuit = bInHasSuit; }
+
 	/** Dishes eaten at least once; true the first time. */
 	bool TryDish(FName DishId)
 	{
@@ -311,6 +315,7 @@ private:
 	int32 BestMedal = 0;
 	int32 RacesWon = 0;
 	FGarageCar GarageCar;
+	bool bHasSuit = false;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;

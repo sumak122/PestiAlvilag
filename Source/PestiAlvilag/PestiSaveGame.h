@@ -106,4 +106,8 @@ public:
 
 	UPROPERTY()
 	bool bGaragePolice = false;
+
+	/** The suit from Kertész the tailor is his. */
+	UPROPERTY()
+	bool bHasSuit = false;
 };
