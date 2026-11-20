@@ -9,11 +9,19 @@ Turns an OpenStreetMap export into the JSON that the `AOsmGraybox` actor
   `https://www.openstreetmap.org/api/0.6/map?bbox=19.066,47.490,19.090,47.503`.
 - `Data/OsmGraybox/blaha_test_area.json` is the output the actor reads.
 
+- `source/east_strip.osm` is the strip east of it out to the railway at
+  19.102 E (Kerepesi út, the trotting track, the Keleti engine yard, the old
+  gallop course), cut by `east_strip.py` from raw downloads of 2026-11-20
+  so that only what stood there in 1932 is left (see that script).
+  `osm_to_graybox.py` reads both and adds the strip's 1932 houses, the
+  track's infield and the gallop course (`east_1932`); the game builds the
+  track itself (TrotTrackModel.h).
+
 To regenerate:
 
 ```
 pip install -r requirements.txt
-python osm_to_graybox.py source/blaha_test_area.osm ../../Data/OsmGraybox/blaha_test_area.json
+python osm_to_graybox.py source/blaha_test_area.osm source/east_strip.osm ../../Data/OsmGraybox/blaha_test_area.json
 ```
 
 Then press **Rebuild** on the OsmGraybox actor in the editor.
