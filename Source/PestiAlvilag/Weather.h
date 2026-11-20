@@ -44,6 +44,12 @@ public:
 	ETestWeather GetTestWeather() const { return Forced; }
 	void SetTestWeather(ETestWeather To);
 
+	/**
+	 * A roof nothing can bump into (so looking down for it finds nothing),
+	 * like the market hall's or Keleti's: no rain is drawn under it.
+	 */
+	void AddShelter(UProceduralMeshComponent* Roof);
+
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
@@ -55,6 +61,27 @@ private:
 	void NextSpell();
 	void Aim(ESpell Spell);
 	void UpdateDrops(float DeltaSeconds, const FVector& Eye);
+
+	/** A sheltering roof, drawn down onto a grid of squares: the roof's top over each (far below where there is none). */
+	struct FShelter
+	{
+		TWeakObjectPtr<UProceduralMeshComponent> Roof;
+		bool bDrawn = false;
+		FVector2D Corner = FVector2D::ZeroVector;
+		int32 Across = 0;
+		int32 Down = 0;
+		TArray<float> Tops;
+	};
+	void DrawShelter(FShelter& Shelter) const;
+	/** Looks down for roofs over a few more of the squares round the camera. */
+	void LookForCover(const FVector& Eye);
+	/** The top of whatever is over this spot (roof, or the ground itself): rain only shows above it. */
+	float CoverOver(const FVector& At) const;
+
+	TArray<FShelter> Shelters;
+	/** What was found over each square of the map looked at so far, and which square is looked at next. */
+	TMap<FIntPoint, float> CoverSquares;
+	int32 CoverTurn = 0;
 
 	UPROPERTY(VisibleAnywhere, Category = "Weather")
 	TObjectPtr<UProceduralMeshComponent> Mesh;

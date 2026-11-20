@@ -8,6 +8,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Weather.h"
 
 namespace Keleti
 {
@@ -1307,6 +1308,17 @@ void AKeletiStation::SteamSpots(TArray<FVector>& OutChimneys, TArray<FVector>& O
 		{
 			OutCylinders.Add(FVector(Engine.FrontX + Engine.Dir * 200.0, Engine.Y + Side * 150.0, 110.0));
 		}
+	}
+}
+
+void AKeletiStation::BeginPlay()
+{
+	Super::BeginPlay();
+	// No rain under the hall's roofs (they have no collision for the weather to find).
+	if (AWeather* Sky = AWeather::Get(GetWorld()))
+	{
+		Sky->AddShelter(Overhead);
+		Sky->AddShelter(Glazing);
 	}
 }
 

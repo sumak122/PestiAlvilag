@@ -39,6 +39,7 @@ public:
 	AKeletiStation();
 
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
 
 	/** Where the game puts the station: the middle of its main front (cm, X east, Y south). */
 	static FVector2D FrontAt();
