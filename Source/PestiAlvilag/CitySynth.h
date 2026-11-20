@@ -45,6 +45,8 @@ namespace CitySynth
 		Fiddle,
 		/** The fire engine's bell, rung hard as it races by. */
 		FireBell,
+		/** A motorcycle's rubber bulb horn, honked twice. */
+		MotorHorn,
 		Count,
 	};
 
@@ -320,6 +322,12 @@ namespace CitySynth
 				FCall& C = Start(ECall::Anvil, 5.f, 0.9f + 0.45f * Unit(), 3.f + 3.f * Unit());
 				C.Left = 4 + static_cast<int32>(Unit() * 8.f);
 				C.Hz = 0.38f + 0.15f * Unit();
+			}
+			else if (Spot == ESpot::MotorHorn)
+			{
+				// Honk-honk, the moment it is pressed (each press is a new generation).
+				FCall& C = Start(ECall::Horn, 1.f, 0.5f);
+				C.Left = 2;
 			}
 			else if (Spot == ESpot::Organ || Spot == ESpot::Fiddle)
 			{

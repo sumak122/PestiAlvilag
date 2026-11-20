@@ -17,6 +17,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Bicycle.h"
 #include "FireTruck.h"
+#include "Motorbike.h"
 #include "HorseCart.h"
 #include "InputCoreTypes.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -559,6 +560,18 @@ APawn* ATestGrounds::SpawnVehicle(UWorld* World, const TestGroundsModel::FVehicl
 			Truck->FinishSpawning(Place);
 		}
 		return Truck;
+	}
+
+	if (Spot.Kind == EVehicle::Motorbike)
+	{
+		AMotorbike* Bike = World->SpawnActorDeferred<AMotorbike>(AMotorbike::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+		if (Bike)
+		{
+			Bike->SetLook(true, FMath::RandRange(0, 3));
+			Bike->FinishSpawning(Place);
+		}
+		return Bike;
 	}
 
 	CarModel::FStyle Look;

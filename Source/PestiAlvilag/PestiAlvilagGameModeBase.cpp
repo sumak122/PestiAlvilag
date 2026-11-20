@@ -28,6 +28,7 @@
 #include "LaciYardModel.h"
 #include "DailyLife.h"
 #include "FiakerStand.h"
+#include "MotorbikeParking.h"
 #include "FireStation.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
@@ -388,6 +389,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AFiakerStand>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AFiakerStand>();
+	}
+
+	// A few motorcycles with sidecars parked by the kerb round the player.
+	if (!TActorIterator<AMotorbikeParking>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AMotorbikeParking>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first
