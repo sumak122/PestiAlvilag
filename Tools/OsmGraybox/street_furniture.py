@@ -2187,6 +2187,21 @@ MUSIC_BARS = [
     ((21478, 34089), "tavern", "FEHÉR GALAMB VENDÉGLŐ", "ESTÉNKÉNT ZENE", "VENDÉGLŐ"),   # Vásár utca: Dzsoki's band
     ((5026, 9194), "cafe", "RÓZSA KÁVÉHÁZ", "ESTÉNKÉNT ZENE", "KÁVÉHÁZ"),              # József körút: Gyuszi's band
 ]
+# The places to eat of AEateries: each gets a shop front with its name, and E at
+# its door takes the player in. (target, street the front is on, trade, fascia,
+# glass, hanging sign). The nearest shop front of that street to the target is
+# renamed; a street without shops gets just this one front, cut where the
+# street's shops would go. The Nemzeti's restaurant uses the hotel door.
+EATERIES = [
+    ((6223, -10608), "Rákóczi út", "cafe", "HAUER CUKRÁSZDA", "CUKRÁSZDA · 1890 ÓTA", "CUKRÁSZ"),
+    ((23441, 12109), "Népszínház utca", "tavern", "KIFŐZDE", "NAPI MENÜ · ÉTKEZDE", "KIFŐZDE"),
+    ((20000, 61700), "József utca", "dairy", "KÖZPONTI TEJCSARNOK", "TEJ · KIFLI · KAKAÓ", "TEJ"),
+    ((53500, 29700), "Nagy Fuvaros utca", "tavern", "FUVAROS VENDÉGLŐ", "FŐZTJE · SÖR · BOR", "VENDÉGLŐ"),
+    ((95000, 40000), "Teleki László tér", "tavern", "BOROZÓ", "PINCE · FRÖCCS · POGÁCSA", "BOR"),
+    ((-9000, -9000), "Akácfa utca", "tavern", "KISPIPA VENDÉGLŐ", "ESTÉNKÉNT ZONGORA", "VENDÉGLŐ"),
+    ((77823, -31762), "Baross tér", "cafe", "ÁLLÓBÜFÉ", "SZENDVICS · SÖR · KÁVÉ", "BÜFÉ"),
+    ((3000, 33000), "Scheiber Sándor utca", "baker", "KÓSER ÉTKEZDE", "SÓLET · FLÓDNI", "ÉTKEZDE"),
+]
 SHOP_SKIP_BUILDINGS = {"w261801166", "w256539415", "w191191238", "w259011268", "w308551954", "r3476312"}  # the Corvin, the two churches, the New York palace, the Nemzeti and Metropol hotels (city_details.py)
 SHOP_OWNERS = [
     "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
@@ -2398,6 +2413,17 @@ def main():
         bar = min(shops, key=lambda v: math.dist(v["at"][:2], (bx, by)))
         if math.dist(bar["at"][:2], (bx, by)) < 100:
             bar.update(trade=trade, fascia=fascia, glass=glass, blade=blade, closed=False, outside=False, keeper=False)
+    for (ex, ey), street_name, trade, fascia, glass, blade in EATERIES:
+        on_street = [v for v in shops if math.dist(v["at"][:2], (ex, ey)) < 3000]
+        if not on_street:
+            # A street without shops: cut its fronts (without taking its walls) and keep the nearest, wide enough for a door.
+            fronts, _ = place_shops(data, spots, street_name, None, [], None, SHOP_KEEP_CLEAR)
+            fronts = [v for v in fronts if v["width"] >= 450] or fronts
+            front = min(fronts, key=lambda v: math.dist(v["at"][:2], (ex, ey)))
+            shops.append(front)
+        else:
+            front = min(on_street, key=lambda v: math.dist(v["at"][:2], (ex, ey)))
+        front.update(trade=trade, fascia=fascia, glass=glass, blade=blade, closed=False, outside=False, keeper=False, eatery=fascia)
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
     kerepesi = layout_kerepesi(data)

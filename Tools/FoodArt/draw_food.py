@@ -474,6 +474,315 @@ def sult_tok(p):
                   inside=lambda x, y, dy=dy: 500 + dy - (x - 230) * 0.18 < y < 600 + dy - (x - 260) * 0.24)
 
 
+def oilcloth(p):
+    """The cook-shop's green-checked oilcloth."""
+    p.d.rectangle((0, 0, S, S), fill=(198, 214, 196))
+    for i in range(0, S, 96):
+        p.d.rectangle((i, 0, i + 48, S), fill=(176, 198, 178))
+        p.d.rectangle((0, i, S, i + 48), fill=(176, 198, 178))
+    l = p.layer()
+    ImageDraw.Draw(l).rectangle((0, 0, S, S), fill=(255, 255, 255, 30))
+    p.paste(l, 2)
+
+
+def checks(p):
+    """The inn's red and white checked cloth."""
+    p.d.rectangle((0, 0, S, S), fill=(240, 234, 224))
+    l = p.layer()
+    g = ImageDraw.Draw(l)
+    for i in range(0, S, 110):
+        g.rectangle((i, 0, i + 55, S), fill=(190, 40, 36, 150))
+        g.rectangle((0, i, S, i + 55), fill=(190, 40, 36, 150))
+    p.paste(l, 2)
+
+
+def oak(p):
+    """The top of a wine cask: worn oak staves."""
+    p.d.rectangle((0, 0, S, S), fill=(120, 80, 46))
+    for x in range(0, S, 120):
+        p.d.rectangle((x, 0, x + 116, S), fill=shade((120, 80, 46), 0.85 + 0.3 * p.rng.random()))
+        p.d.line((x, 0, x, S), fill=(70, 44, 24), width=6)
+    p.speckle((0, 0, S, S), [(96, 62, 34), (140, 96, 56)], 600, (2, 6))
+
+
+# -- the new places' dishes ------------------------------------------------------
+
+def _cake_slice(p, cx, cy, layers, top, side=(250, 236, 200), w=260, h=180, depth=150):
+    """A wedge of cake seen from the front: layers bottom up, then its top."""
+    p.plate(cx, cy + 120, 360, 220)
+    y = cy + depth
+    for i, c in enumerate(layers):
+        hh = depth / len(layers)
+        p.d.polygon([(cx - w, y), (cx + w * 0.6, y + 40), (cx + w * 0.6, y + 40 - hh), (cx - w, y - hh)], fill=c)
+        y -= hh
+    p.d.polygon([(cx - w, y), (cx + w * 0.6, y + 40), (cx + w, y - 50), (cx - w * 0.2, y - h * 0.6)], fill=top)
+    p.d.polygon([(cx + w * 0.6, cy + depth + 40), (cx + w, cy + depth - 50), (cx + w, y - 50), (cx + w * 0.6, y + 40)], fill=shade(top, 0.75))
+
+
+def rigo_jancsi(p):
+    _cake_slice(p, 470, 420, [(80, 44, 24), (120, 66, 36), (80, 44, 24)], (46, 24, 14), depth=200)
+    p.d.polygon([(260, 470), (590, 510), (590, 430), (260, 400)], fill=(150, 96, 60))
+    p.highlight((300, 300, 520, 360), 60, 8)
+
+
+def eszterhazy(p):
+    _cake_slice(p, 470, 440, [(236, 214, 170), (200, 160, 110), (236, 214, 170), (200, 160, 110), (236, 214, 170)], (250, 246, 236), depth=180)
+    for k in range(5):
+        x = 290 + k * 70
+        p.d.line((x, 330 + k * 4, x + 120, 350 + k * 4), fill=(80, 46, 26), width=8)
+
+
+def kremes(p):
+    p.plate(500, 580, 380, 230)
+    p.gradient_polygon([(260, 420), (720, 420), (760, 470), (300, 470)], (236, 190, 120), (200, 150, 80))
+    p.d.polygon([(300, 470), (760, 470), (760, 640), (300, 640)], fill=(252, 236, 170))
+    p.d.polygon([(300, 470), (260, 420), (260, 590), (300, 640)], fill=(236, 216, 150))
+    p.d.polygon([(300, 640), (760, 640), (760, 680), (300, 680)], fill=(220, 168, 96))
+    p.speckle((260, 400, 760, 440), [(252, 252, 250)], 300, (3, 6))
+
+
+def gesztenyepure(p):
+    p.plate(500, 600, 340, 210)
+    l = p.layer()
+    g = ImageDraw.Draw(l)
+    for _ in range(120):
+        x, y = p.rng.uniform(330, 670), p.rng.uniform(420, 640)
+        g.line((x, y, x + p.rng.uniform(-50, 50), y + p.rng.uniform(-20, 20)), fill=(110, 66, 40, 255), width=16)
+    p.paste(l)
+    p.gradient_ellipse((390, 330, 610, 470), (254, 252, 246), (230, 224, 210))
+    p.gradient_ellipse((450, 290, 550, 360), (254, 252, 248), (230, 226, 214))
+
+
+def forro_csoki(p):
+    p.cup(470, 430, 170, 66, 200, (90, 44, 22))
+    p.gradient_ellipse((330, 360, 610, 470), (254, 252, 246), (226, 220, 206))
+    p.speckle((350, 370, 590, 450), [(90, 44, 22)], 40, (3, 6))
+
+
+def babfozelek(p):
+    p.bowl(470, 470, 300, 130, 170, (176, 120, 70))
+    p.speckle((230, 380, 710, 560), [(232, 216, 190), (210, 190, 160)], 160, (8, 14),
+              inside=lambda x, y: ((x - 470) / 250) ** 2 + ((y - 470) / 105) ** 2 < 1)
+    # Sausage slices on top.
+    for x, y in ((390, 450), (500, 430), (560, 490)):
+        p.gradient_ellipse((x - 46, y - 28, x + 46, y + 28), (200, 90, 70), (150, 56, 44))
+
+
+def krumplifozelek(p):
+    p.bowl(470, 470, 300, 130, 170, (236, 214, 150))
+    p.speckle((230, 380, 710, 560), [(250, 236, 180), (220, 190, 120)], 80, (10, 18),
+              inside=lambda x, y: ((x - 470) / 250) ** 2 + ((y - 470) / 105) ** 2 < 1)
+    p.speckle((230, 380, 710, 560), [(70, 120, 40)], 30, (3, 6))
+    p.speckle((230, 380, 710, 560), [(200, 60, 30)], 20, (3, 5))
+
+
+def paradicsomleves(p):
+    p.bowl(470, 470, 300, 130, 170, (214, 70, 40))
+    for x in range(300, 650, 46):
+        p.d.ellipse((x, 440 + (x % 3) * 12, x + 30, 452 + (x % 3) * 12), fill=(250, 240, 200))
+
+
+def rakott_krumpli(p):
+    p.plate(500, 580, 380, 230)
+    for i, c in enumerate([(240, 220, 160), (210, 120, 90), (240, 220, 160), (250, 240, 220), (240, 220, 160)]):
+        y = 650 - i * 40
+        p.d.polygon([(290, y), (690, y + 20), (690, y - 20), (290, y - 40)], fill=c)
+    p.gradient_polygon([(290, 450), (690, 470), (740, 420), (340, 400)], (236, 180, 100), (200, 130, 60))
+    p.speckle((300, 400, 730, 470), [(170, 100, 40)], 60, (4, 8))
+
+
+def lekvaros_teszta(p):
+    p.plate(500, 580, 380, 230)
+    l = p.layer()
+    g = ImageDraw.Draw(l)
+    for _ in range(80):
+        x, y = p.rng.uniform(290, 710), p.rng.uniform(450, 690)
+        if ((x - 500) / 210) ** 2 + ((y - 570) / 120) ** 2 > 1:
+            continue
+        g.rectangle((x - 22, y - 22, x + 22, y + 22), fill=(244, 226, 170, 255))
+    p.paste(l)
+    p.gradient_ellipse((380, 480, 620, 620), (150, 40, 50), (100, 20, 30))
+    p.speckle((300, 450, 700, 690), [(250, 250, 248)], 160, (2, 4))
+
+
+def tej(p):
+    p.glass(380, 260, 620, 760, 330, (250, 250, 246, 255))
+    p.highlight((400, 300, 450, 700), 60, 6)
+    # A crescent beside it.
+    vajas_kifli_small(p, 760, 720)
+
+
+def vajas_kifli_small(p, cx, cy):
+    for i in range(9):
+        a = math.pi * (0.15 + 0.7 * i / 8)
+        x, y = cx + 150 * math.cos(a) - 150, cy - 90 * math.sin(a)
+        r = 34 + 20 * math.sin(a)
+        p.gradient_ellipse((x - r, y - r * 0.8, x + r, y + r * 0.8), (232, 170, 80), (180, 110, 40))
+
+
+def kakao(p):
+    p.cup(470, 420, 170, 66, 220, (150, 92, 54), saucer=False)
+    p.d.ellipse((360, 390, 580, 440), fill=(170, 110, 70))
+    p.gradient_ellipse((380, 395, 560, 435), (190, 130, 86), (150, 96, 60))
+
+
+def tejbegriz(p):
+    p.bowl(470, 480, 280, 120, 150, (248, 240, 220))
+    p.speckle((260, 400, 680, 560), [(150, 90, 50), (120, 70, 36)], 120, (3, 7),
+              inside=lambda x, y: ((x - 470) / 200) ** 2 + ((y - 470) / 70) ** 2 < 1)
+    p.gradient_ellipse((420, 440, 520, 500), (190, 40, 50), (140, 20, 30))
+
+
+def porkolt(p):
+    p.plate(500, 560, 400, 250)
+    for _ in range(9):
+        x, y = p.rng.uniform(280, 520), p.rng.uniform(460, 640)
+        p.gradient_ellipse((x - 60, y - 44, x + 60, y + 44), (176, 70, 40), (110, 36, 20))
+    p.speckle((240, 430, 560, 670), [(210, 80, 30)], 60, (3, 6))
+    for _ in range(60):
+        x, y = p.rng.uniform(580, 790), p.rng.uniform(440, 640)
+        if ((x - 680) / 110) ** 2 + ((y - 540) / 100) ** 2 > 1:
+            continue
+        p.gradient_ellipse((x - 22, y - 12, x + 22, y + 12), (252, 240, 196), (220, 200, 140))
+    p.gradient_polygon([(560, 640), (640, 600), (660, 640), (590, 680)], (90, 160, 60), (50, 110, 30))
+
+
+def toltott_kaposzta(p):
+    p.bowl(470, 470, 300, 130, 170, (196, 90, 50))
+    for x, y in ((380, 450), (530, 460)):
+        p.gradient_ellipse((x - 90, y - 60, x + 90, y + 50), (210, 220, 150), (150, 160, 90))
+        for k in range(3):
+            p.d.arc((x - 80 + k * 20, y - 50, x + 60 + k * 20, y + 40), 200, 320, fill=(130, 140, 80), width=6)
+    p.gradient_ellipse((420, 380, 520, 420), (254, 252, 244), (230, 226, 210))
+
+
+def froccs(p):
+    p.glass(350, 250, 560, 760, 300, (230, 214, 140, 210))
+    p.speckle((370, 320, 540, 740), [(255, 250, 220)], 90, (2, 4))
+    # The soda siphon behind.
+    p.gradient_polygon([(640, 220), (760, 220), (770, 780), (630, 780)], (110, 160, 190), (60, 100, 130))
+    p.d.rectangle((650, 140, 750, 230), fill=(170, 170, 176))
+    p.d.polygon([(700, 160), (840, 170), (840, 190), (700, 190)], fill=(150, 150, 156))
+
+
+def bor(p):
+    p.glass(380, 280, 620, 760, 360, (150, 30, 40, 220))
+    p.highlight((400, 320, 450, 700), 60, 6)
+    p.gradient_polygon([(660, 300), (760, 300), (780, 780), (640, 780)], (40, 80, 50), (20, 50, 30))
+    p.d.rectangle((680, 180, 740, 300), fill=(40, 80, 50))
+
+
+def zsiros_kenyer(p):
+    p.d.polygon([(220, 420), (760, 340), (820, 700), (260, 780)], fill=(150, 96, 50))
+    p.gradient_polygon([(250, 440), (740, 365), (790, 690), (285, 755)], (250, 244, 230), (232, 222, 200))
+    p.speckle((280, 400, 780, 740), [(200, 70, 40), (220, 100, 50)], 260, (3, 6))
+    for x, y in ((420, 520), (560, 560), (500, 650), (640, 470)):
+        p.d.ellipse((x - 40, y - 26, x + 40, y + 26), outline=(170, 110, 170), width=10)
+
+
+def sonkas_zsemle(p):
+    p.shadow((260, 560, 780, 760))
+    p.gradient_ellipse((270, 520, 770, 720), (220, 160, 80), (170, 110, 40))
+    p.gradient_polygon([(260, 540), (780, 540), (790, 580), (250, 590)], (240, 150, 140), (200, 110, 100))
+    p.gradient_polygon([(270, 520), (770, 520), (760, 548), (280, 552)], (120, 170, 70), (80, 130, 40))
+    p.gradient_ellipse((290, 360, 750, 560), (230, 170, 90), (180, 116, 50))
+    p.d.arc((360, 380, 680, 520), 200, 340, fill=(250, 240, 220), width=6)
+
+
+def korozott(p):
+    p.d.polygon([(220, 420), (760, 340), (820, 700), (260, 780)], fill=(100, 66, 40))
+    p.gradient_polygon([(250, 440), (740, 365), (790, 690), (285, 755)], (240, 150, 100), (210, 110, 70))
+    p.speckle((280, 400, 780, 740), [(200, 70, 40), (250, 200, 170)], 300, (3, 6))
+    for x, y in ((420, 520), (600, 480)):
+        p.gradient_polygon([(x, y), (x + 120, y - 20), (x + 130, y + 20), (x + 10, y + 36)], (110, 170, 60), (70, 130, 30))
+
+
+def kocsonya(p):
+    p.plate(500, 600, 360, 220)
+    l = p.layer()
+    ImageDraw.Draw(l).ellipse((290, 420, 710, 680), fill=(200, 150, 90, 170))
+    p.paste(l, 4)
+    for x, y in ((420, 540), (560, 560)):
+        p.gradient_ellipse((x - 60, y - 40, x + 60, y + 40), (230, 200, 180), (180, 140, 120))
+    p.speckle((300, 430, 700, 670), [(220, 90, 40)], 30, (3, 5))
+    for x, y in ((470, 470), (520, 620)):
+        p.d.ellipse((x - 30, y - 12, x + 30, y + 12), fill=(250, 140, 60))
+
+
+def husleves(p):
+    p.bowl(470, 470, 300, 130, 170, (226, 180, 90))
+    l = p.layer()
+    g = ImageDraw.Draw(l)
+    for _ in range(60):
+        x, y = p.rng.uniform(260, 680), p.rng.uniform(400, 540)
+        if ((x - 470) / 230) ** 2 + ((y - 470) / 95) ** 2 > 1:
+            continue
+        g.line((x, y, x + p.rng.uniform(-40, 40), y + p.rng.uniform(-10, 10)), fill=(250, 230, 160, 255), width=5)
+    p.paste(l)
+    for x, y in ((380, 450), (560, 490)):
+        p.d.ellipse((x - 28, y - 14, x + 28, y + 14), fill=(240, 130, 40))
+    p.speckle((260, 400, 680, 540), [(80, 140, 50)], 30, (3, 5))
+
+
+def solet(p):
+    p.plate(500, 560, 400, 250)
+    p.speckle((240, 430, 640, 690), [(170, 110, 60), (140, 86, 46), (190, 130, 80)], 420, (10, 16),
+              inside=lambda x, y: ((x - 440) / 190) ** 2 + ((y - 560) / 120) ** 2 < 1)
+    p.gradient_ellipse((560, 420, 760, 560), (226, 210, 190), (190, 170, 150))
+    p.gradient_ellipse((600, 560, 760, 660), (150, 70, 50), (110, 46, 30))
+
+
+def flodni(p):
+    _cake_slice(p, 470, 420, [(232, 200, 140), (220, 190, 110), (232, 200, 140), (60, 40, 40), (232, 200, 140),
+                              (180, 120, 40), (232, 200, 140)], (236, 190, 120), depth=230)
+
+
+def barchesz(p):
+    p.shadow((220, 520, 820, 760))
+    for k in range(4):
+        x = 280 + k * 120
+        p.gradient_ellipse((x - 80, 430 - (k % 2) * 30, x + 110, 680 - (k % 2) * 30), (210, 130, 50), (150, 84, 30))
+    p.speckle((220, 400, 800, 680), [(250, 240, 220)], 120, (3, 5))
+
+
+def eroleves(p):
+    p.cup(470, 430, 200, 76, 160, (200, 140, 60), handle=False)
+    p.d.ellipse((330, 420, 360, 436), fill=(250, 220, 120))
+    p.d.ellipse((560, 410, 590, 426), fill=(250, 220, 120))
+    p.d.ellipse((420, 410, 520, 440), fill=(252, 200, 60))
+
+
+def fogas(p):
+    p.plate(500, 560, 420, 250, band=(190, 150, 60))
+    p.gradient_polygon([(240, 500), (420, 440), (640, 450), (760, 520), (640, 590), (420, 600)], (250, 240, 220), (220, 200, 170))
+    p.d.polygon([(760, 520), (840, 460), (830, 580)], fill=(220, 200, 170))
+    p.speckle((260, 460, 740, 590), [(236, 190, 120)], 40, (6, 10))
+    p.d.pieslice((300, 600, 420, 700), 180, 360, fill=(250, 226, 80))
+    p.speckle((420, 580, 700, 680), [(60, 130, 40)], 30, (4, 7))
+
+
+def belszin(p):
+    p.plate(500, 560, 420, 250, band=(190, 150, 60))
+    p.gradient_ellipse((280, 430, 560, 640), (120, 50, 30), (80, 30, 18))
+    p.d.ellipse((330, 470, 510, 600), outline=(160, 80, 50), width=10)
+    p.gradient_ellipse((300, 520, 540, 600), (150, 70, 40), (110, 40, 26))
+    for x, y in ((640, 460), (720, 540), (640, 620)):
+        p.gradient_ellipse((x - 54, y - 34, x + 54, y + 34), (248, 216, 120), (210, 170, 70))
+    p.gradient_polygon([(570, 520), (660, 500), (680, 530), (590, 560)], (70, 140, 50), (40, 100, 30))
+
+
+def pezsgo(p):
+    for cx in (390, 610):
+        l = p.layer()
+        g = ImageDraw.Draw(l)
+        g.polygon([(cx - 60, 260), (cx + 60, 260), (cx + 30, 580), (cx - 30, 580)], fill=(220, 230, 235, 70))
+        g.polygon([(cx - 52, 330), (cx + 52, 330), (cx + 28, 570), (cx - 28, 570)], fill=(240, 220, 140, 200))
+        g.rectangle((cx - 6, 580, cx + 6, 760), fill=(220, 230, 235, 120))
+        g.ellipse((cx - 70, 750, cx + 70, 790), fill=(220, 230, 235, 120))
+        p.paste(l)
+        p.speckle((cx - 40, 340, cx + 40, 560), [(255, 250, 220)], 40, (2, 4))
+
+
 DISHES = {
     "feketekave": (marble, feketekave),
     "tejeskave": (marble, tejeskave),
@@ -493,6 +802,36 @@ DISHES = {
     "perec": (newspaper, perec),
     "gesztenye": (newspaper, gesztenye),
     "sult_tok": (newspaper, sult_tok),
+    # The places to eat (AEateries).
+    "rigo_jancsi": (marble, rigo_jancsi),
+    "eszterhazy": (marble, eszterhazy),
+    "kremes": (marble, kremes),
+    "gesztenyepure": (marble, gesztenyepure),
+    "forro_csoki": (marble, forro_csoki),
+    "babfozelek": (oilcloth, babfozelek),
+    "krumplifozelek": (oilcloth, krumplifozelek),
+    "paradicsomleves": (oilcloth, paradicsomleves),
+    "rakott_krumpli": (oilcloth, rakott_krumpli),
+    "lekvaros_teszta": (oilcloth, lekvaros_teszta),
+    "tej": (marble, tej),
+    "kakao": (marble, kakao),
+    "tejbegriz": (marble, tejbegriz),
+    "porkolt": (checks, porkolt),
+    "toltott_kaposzta": (checks, toltott_kaposzta),
+    "froccs": (oak, froccs),
+    "bor": (oak, bor),
+    "zsiros_kenyer": (oak, zsiros_kenyer),
+    "sonkas_zsemle": (marble, sonkas_zsemle),
+    "korozott": (marble, korozott),
+    "kocsonya": (marble, kocsonya),
+    "husleves": (tablecloth, husleves),
+    "solet": (tablecloth, solet),
+    "flodni": (tablecloth, flodni),
+    "barchesz": (tablecloth, barchesz),
+    "eroleves": (tablecloth, eroleves),
+    "fogas": (tablecloth, fogas),
+    "belszin": (tablecloth, belszin),
+    "pezsgo": (tablecloth, pezsgo),
 }
 
 

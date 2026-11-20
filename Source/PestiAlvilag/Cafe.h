@@ -98,6 +98,10 @@ public:
 	/** Stops his rounds to take Customer's order; null sends him back to them. */
 	void Attend(const AActor* InCustomer) { Customer = InCustomer; }
 
+	/** Whose menu he brings (an EFoodMenu; the café's by default). */
+	void SetMenu(uint8 InMenu) { Menu = InMenu; }
+	uint8 GetMenu() const { return Menu; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Waiter")
 	TObjectPtr<UStaticMeshComponent> Tray;
@@ -112,4 +116,5 @@ private:
 	float Wait = 0.f;
 	float Phase = 0.f;
 	TWeakObjectPtr<const AActor> Customer;
+	uint8 Menu = 0;
 };

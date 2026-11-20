@@ -19,6 +19,16 @@ enum class EFoodMenu : uint8
 	Chestnuts,
 	Sausages,
 	Pretzels,
+	// The places to eat of AEateries, in EateryModel::EEatery order.
+	Hauer,
+	Kifozde,
+	Tejcsarnok,
+	Fuvaros,
+	Borozo,
+	Kispipa,
+	Bufe,
+	Koser,
+	Nemzeti,
 	Count
 };
 
