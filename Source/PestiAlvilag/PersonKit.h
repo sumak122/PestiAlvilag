@@ -26,9 +26,17 @@
  */
 namespace PersonKit
 {
-	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood };
+	/**
+	 * Kerchief: a headscarf tied under the chin (old women, market women).
+	 * WideBrim: a lady's hat with a wide brim dipping at the front.
+	 * PeakedCap: a stiff cap with a peak (a soldier on leave, a schoolboy).
+	 * Veil: a nun's white wimple and black veil.
+	 * ClericHat: a priest's round black hat with a wide flat brim.
+	 */
+	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood, Kerchief, WideBrim, PeakedCap, Veil, ClericHat };
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
-	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket, Baton };
+	/** Cane: a walking stick down to the ground. NetBag: a string bag with bread and a cabbage. Book: a couple of school books. */
+	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket, Baton, Cane, NetBag, Book };
 
 	enum class EMoustache : uint8 { Auto, Brush, Handlebar, Walrus, Pencil };
 	enum class EBeard : uint8 { None, Stubble, Goatee, Full };
@@ -70,6 +78,18 @@ namespace PersonKit
 		bool bBandaged = false;
 		/** A constable in a fight: the rest of the uniform (shako, brass, sabre) and the truncheon in his right hand, put on by PersonModel::Dress (PoliceModel). */
 		bool bUniform = false;
+		/** The overcoat or dress comes down to the ankles (a priest's cassock, a nun's habit, an old woman's skirts). */
+		bool bLong = false;
+		/** A fur collar on the coat (Fur colour). */
+		bool bFurCollar = false;
+		/** A knitted shawl over the shoulders, its point down the back (Shawl colour). */
+		bool bShawl = false;
+		/** A priest's white collar band round the neck. */
+		bool bClerical = false;
+		/** A leather belt with a buckle round the waist over the coat (Belt colour). */
+		bool bBelt = false;
+		/** A stand-up collar on the jacket, closed at the throat (a soldier's tunic). */
+		bool bStandCollar = false;
 		EHeld Held = EHeld::None;
 		/**
 		 * Sitting on a chair: thighs forward, shins down, a lap instead of
@@ -92,6 +112,11 @@ namespace PersonKit
 		FLinearColor Apron = FLinearColor(0.90f, 0.90f, 0.88f);
 		FLinearColor Sash = FLinearColor(0.45f, 0.06f, 0.05f);
 		FLinearColor HeldColor = FLinearColor(0.25f, 0.13f, 0.06f);
+		FLinearColor Fur = FLinearColor(0.12f, 0.08f, 0.05f);
+		FLinearColor Shawl = FLinearColor(0.06f, 0.06f, 0.06f);
+		FLinearColor Belt = FLinearColor(0.16f, 0.09f, 0.04f);
+		/** The coat buttons (brass on a soldier). */
+		FLinearColor Buttons = FLinearColor(0.02f, 0.02f, 0.02f);
 	};
 
 	/** How far a seated person's feet are above the standing person's ground (cm). */
@@ -594,7 +619,7 @@ namespace PersonKit
 		DressFace(O, B, HeadAt, Hr);
 		// Hair: a cap over the top and back, longer at the back for a woman, with a bun.
 		Blob(B, O.Hair, HeadAt + FVector(-1.0, 0.0, 1.0), FVector(10.4, 9.2, 11.2) * Hr, 12, 6, W ? -0.55 : -0.2);
-		if (W)
+		if (W && O.Hat != EHat::Kerchief && O.Hat != EHat::Veil)
 		{
 			Blob(B, O.Hair, HeadAt + FVector(-9.0, 0.0, -2.0), FVector(4.0, 5.0, 4.0), 8, 4);
 		}
@@ -634,11 +659,11 @@ namespace PersonKit
 		// Coat buttons down the front.
 		if (bCoat || O.Top == ETop::Waistcoat)
 		{
-			const int32 Buttons = O.Top == ETop::Overcoat ? 4 : 3;
-			for (int32 i = 0; i < Buttons; ++i)
+			const int32 NumButtons = O.Top == ETop::Overcoat ? 4 : 3;
+			for (int32 i = 0; i < NumButtons; ++i)
 			{
 				const double Bz = Z(120.0 - 9.0 * i);
-				Blob(B, FLinearColor(0.02f, 0.02f, 0.02f), FVector(12.0 * G * Thick + 0.4, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
+				Blob(B, O.Buttons, FVector(12.0 * G * Thick + 0.4, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
 			}
 		}
 
@@ -657,7 +682,7 @@ namespace PersonKit
 					const double Bz = Cz + Rz * (0.45 - 0.42 * i);
 					const double Lift = (Bz - Cz) / Rz;
 					const double Bx = Cx + Rx * FMath::Sqrt(FMath::Max(0.0, 1.0 - Lift * Lift)) + 0.2;
-					Blob(B, FLinearColor(0.02f, 0.02f, 0.02f), FVector(Bx, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
+					Blob(B, O.Buttons, FVector(Bx, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
 				}
 			}
 		}
@@ -729,6 +754,58 @@ namespace PersonKit
 			}, 4, true, true, PI * 0.25);
 		}
 
+		if (O.bFurCollar && !O.bSeated)
+		{
+			// A thick roll of fur round the shoulders and up the neck.
+			Loft(B, O.Fur, {
+				Flat(0.0, Z(137.0), 12.6 * G * Thick, 20.0 * G * Thick),
+				Flat(0.5, Z(142.0), 13.0 * G * Thick, 18.5 * G * Thick),
+				Flat(0.8, Z(148.0), 9.8, 10.8),
+				Flat(0.8, Z(151.0), 7.2, 7.6),
+			}, 14, false, true);
+		}
+		if (O.bShawl)
+		{
+			// Over the shoulders and round to the front, and a point down the back.
+			Loft(B, O.Shawl, {
+				Flat(-0.5, Z(126.0), 13.4 * G * Thick + 0.6, 20.0 * G * Thick + 0.8),
+				Flat(-0.5, Z(136.0), 12.6 * G * Thick + 0.6, 20.4 * G * Thick + 0.8),
+				Flat(-0.5, Z(144.0), 9.8 * Thick, 14.8 * Thick),
+				Flat(0.0, Z(149.0), 7.0, 8.0),
+			}, 14, false, true);
+			const double Back = -12.0 * G * Thick - 1.4;
+			Loft(B, O.Shawl, {
+				{ FVector(Back + 0.2, 0.0, Z(128.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 16.0 * G, 0.0) },
+				{ FVector(Back - 0.8, 0.0, Z(110.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 7.0 * G, 0.0) },
+				{ FVector(Back - 1.2, 0.0, Z(98.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 0.6, 0.0) },
+			}, 4, true, true, PI * 0.25);
+			// The two ends crossed over the chest.
+			const double Front = 12.6 * G * Thick + 1.0;
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Loft(B, O.Shawl, {
+					{ FVector(Front - 3.0, 9.0 * Side, Z(140.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 4.5, 0.0) },
+					{ FVector(Front, -4.0 * Side, Z(118.0)), FVector(0.6, 0.0, 0.0), FVector(0.0, 4.0, 0.0) },
+				}, 4, true, true, PI * 0.25);
+			}
+		}
+		if (O.bClerical)
+		{
+			Loft(B, FLinearColor(0.92f, 0.92f, 0.90f), { Flat(0.6, Z(145.5), 6.3, 6.4), Flat(0.9, Z(149.0), 5.9, 6.0) }, 10, false, false);
+		}
+		if (O.bStandCollar)
+		{
+			Loft(B, O.Coat, { Flat(0.5, Z(144.0), 7.6 * Thick, 8.4 * Thick), Flat(0.8, Z(150.0), 6.4, 6.6) }, 10, false, true);
+		}
+		if (O.bBelt && !O.bSeated)
+		{
+			Loft(B, O.Belt, {
+				Flat(0.5, Z(100.0), 12.4 * G * G * Thick + 0.9, 16.0 * G * G * Thick + 0.9),
+				Flat(0.5, Z(105.0), 11.9 * G * G * Thick + 0.9, 15.8 * G * G * Thick + 0.9),
+			}, 14, true, true);
+			Block(B, O.Buttons, FVector(12.4 * G * G * Thick + 1.3, 0.0, Z(102.5)), FVector(0.5, 2.6, 2.4));
+		}
+
 		// Hats.
 		const FVector Crown = HeadAt + FVector(-0.5, 0.0, 7.5 * Hr);
 		switch (O.Hat)
@@ -797,6 +874,94 @@ namespace PersonKit
 			}, 14, false, false);
 			break;
 		}
+		case EHat::Kerchief:
+		{
+			// A headscarf framing the face, tied in a knot under the chin, a point down the nape.
+			auto Wrap = [&HeadAt, Hr](double X, double Up, double RadiusY, double RadiusZ)
+			{
+				return FRing{ HeadAt + FVector(X, 0.0, Up) * Hr, FVector(0.0, RadiusY * Hr, 0.0), FVector(0.0, 0.0, RadiusZ * Hr) };
+			};
+			Loft(B, O.HatColor, {
+				Wrap(6.0, 0.5, 9.6, 12.4),
+				Wrap(1.0, 1.2, 10.4, 13.0),
+				Wrap(-5.5, 1.0, 10.2, 12.4),
+				Wrap(-10.0, -0.5, 7.6, 9.4),
+				Wrap(-11.6, -1.5, 3.2, 4.2),
+			}, 14, false, true);
+			Blob(B, O.HatColor, HeadAt + FVector(5.0, 0.0, -12.4) * Hr, FVector(2.6, 3.2, 2.2), 8, 4);
+			Loft(B, O.HatColor, {
+				{ HeadAt + FVector(-9.5, 0.0, -6.0) * Hr, FVector(0.5, 0.0, 0.0), FVector(0.0, 7.0, 0.0) },
+				{ HeadAt + FVector(-10.0, 0.0, -17.0) * Hr, FVector(0.5, 0.0, 0.0), FVector(0.0, 0.6, 0.0) },
+			}, 4, true, true, PI * 0.25);
+			break;
+		}
+		case EHat::WideBrim:
+		{
+			// A low soft crown, a band with a bow, and a wide brim that dips at the front.
+			Blob(B, O.HatColor, Crown + FVector(0.0, 0.0, -1.5), FVector(10.6, 9.6, 7.0), 14, 5, 0.0);
+			Loft(B, O.HatBand, { Flat(Crown.X, Crown.Z - 1.2, 10.8, 9.8), Flat(Crown.X, Crown.Z + 1.4, 10.4, 9.4) }, 14, true, true);
+			Blob(B, O.HatBand, Crown + FVector(-1.0, 9.6, 0.4), FVector(3.0, 1.6, 2.4), 8, 4);
+			const double Dip = FMath::DegreesToRadians(9.0);
+			const FVector BrimU(23.0 * FMath::Cos(Dip), 0.0, -23.0 * FMath::Sin(Dip));
+			const FVector BrimAt = Crown + FVector(1.0, 0.0, -1.6);
+			Loft(B, O.HatColor, {
+				{ BrimAt - FVector(0.0, 0.0, 0.5), BrimU, FVector(0.0, 21.5, 0.0) },
+				{ BrimAt + FVector(0.0, 0.0, 0.4), BrimU, FVector(0.0, 21.5, 0.0) },
+			}, 18, true, true);
+			break;
+		}
+		case EHat::PeakedCap:
+			// A stiff round cap, a band, and a short shiny peak.
+			Loft(B, O.HatColor, {
+				Flat(Crown.X, Crown.Z - 1.5, 10.5, 9.5),
+				Flat(Crown.X - 0.3, Crown.Z + 3.0, 11.0, 10.0),
+				Flat(Crown.X - 0.5, Crown.Z + 5.0, 11.8, 10.6),
+			}, 14, false, true);
+			Loft(B, O.HatBand, { Flat(Crown.X, Crown.Z - 1.6, 10.7, 9.7), Flat(Crown.X, Crown.Z + 1.0, 10.8, 9.8) }, 14, true, true);
+			Loft(B, FLinearColor(0.02f, 0.02f, 0.02f), {
+				{ Crown + FVector(8.5, 0.0, -1.2), FVector(0.0, 0.0, 0.35), FVector(0.0, 8.0, 0.0) },
+				{ Crown + FVector(14.0, 0.0, -2.8), FVector(0.0, 0.0, 0.35), FVector(0.0, 6.0, 0.0) },
+			}, 8, true, true);
+			Blob(B, O.Buttons, Crown + FVector(10.2, 0.0, 1.8), FVector(0.6, 1.3, 1.3), 6, 3);
+			break;
+		case EHat::Veil:
+		{
+			// A nun: a white wimple round the face and under the chin, a white
+			// band over the brow, a white bib on the chest, the black veil over
+			// it all and down the back.
+			const FLinearColor White(0.90f, 0.90f, 0.88f);
+			auto Wrap = [&HeadAt, Hr](double X, double Up, double RadiusY, double RadiusZ)
+			{
+				return FRing{ HeadAt + FVector(X, 0.0, Up) * Hr, FVector(0.0, RadiusY * Hr, 0.0), FVector(0.0, 0.0, RadiusZ * Hr) };
+			};
+			Loft(B, White, {
+				Wrap(6.2, 0.0, 9.4, 12.6),
+				Wrap(1.0, 0.5, 10.3, 13.4),
+				Wrap(-5.5, 0.5, 10.1, 12.8),
+				Wrap(-10.5, -1.0, 6.5, 8.0),
+			}, 14, false, true);
+			Loft(B, White, {
+				{ FVector(4.0, 0.0, Z(150.0)), FVector(4.0, 0.0, 0.0), FVector(0.0, 9.5, 0.0) },
+				{ FVector(11.5 * G, 0.0, Z(133.0)), FVector(1.5, 0.0, 0.0), FVector(0.0, 11.5 * G, 0.0) },
+			}, 12, false, true);
+			Loft(B, O.HatColor, {
+				Wrap(3.5, 2.0, 11.4, 14.6),
+				Wrap(-2.0, 2.0, 12.0, 15.0),
+				Wrap(-8.0, 1.0, 11.4, 14.0),
+				Wrap(-12.0, -1.5, 7.0, 9.0),
+			}, 14, false, true);
+			Loft(B, O.HatColor, {
+				{ HeadAt + FVector(-7.0, 0.0, -4.0) * Hr, FVector(5.0, 0.0, 0.0), FVector(0.0, 11.5, 0.0) },
+				{ FVector(-6.5, 0.0, Z(132.0)), FVector(6.5, 0.0, 0.0), FVector(0.0, 19.0 * G, 0.0) },
+				{ FVector(-8.5, 0.0, Z(122.0)), FVector(4.5, 0.0, 0.0), FVector(0.0, 17.0 * G, 0.0) },
+			}, 12, false, true);
+			break;
+		}
+		case EHat::ClericHat:
+			// A low round crown and a wide flat brim, all black.
+			Blob(B, O.HatColor, Crown + FVector(0.0, 0.0, -1.0), FVector(10.4, 9.4, 6.0), 14, 5, 0.0);
+			Loft(B, O.HatColor, { Flat(Crown.X + 0.5, Crown.Z - 1.4, 18.5, 17.0), Flat(Crown.X + 0.5, Crown.Z - 0.4, 18.5, 17.0) }, 18, true, true);
+			break;
 		default:
 			break;
 		}
@@ -820,11 +985,20 @@ namespace PersonKit
 			if (O.Top == ETop::Overcoat)
 			{
 				Skirt = { FStop{ Z(81.0), 15.4 * G, 18.4 * G, -0.3 }, FStop{ Z(74.0), 15.8 * G, 18.6 * G, -0.5 }, FStop{ Z(50.0), 18.4 * G, 21.2 * G, -1.5 } };
+				if (O.bLong)
+				{
+					// Down to the ankles, a little wider at the hem.
+					Skirt.Add(FStop{ Z(14.0), 20.0 * G, 23.0 * G, -2.0 });
+				}
 				Hinge = Z(77.0);
 			}
 			else if (O.Top == ETop::Dress || W)
 			{
 				Skirt = { FStop{ Z(79.0), 15.0 * G, 17.8 * G, -0.3 }, FStop{ Z(72.0), 15.3 * G, 18.0 * G, -0.5 }, FStop{ Z(38.0), 19.0 * G, 21.6 * G, -1.0 } };
+				if (O.bLong)
+				{
+					Skirt.Add(FStop{ Z(12.0), 20.5 * G, 23.0 * G, -1.5 });
+				}
 				Hinge = Z(75.0);
 				SkirtColor = O.Top == ETop::Dress ? O.Coat : O.Trousers;
 			}
@@ -977,6 +1151,30 @@ namespace PersonKit
 					}
 					break;
 				}
+				case EHeld::Cane:
+				{
+					// A walking stick with a crook, its tip on the ground a little ahead.
+					const FLinearColor Wood = O.HeldColor * 0.6f;
+					Rod(F, Wood, Hand + FVector(0.5, 0.0, 3.0), FVector(Hand.X + 7.0, Hand.Y, 1.0), 1.1, 6);
+					Rod(F, Wood, Hand + FVector(0.5, 0.0, 3.0), Hand + FVector(-5.0, 0.0, 4.0), 1.1, 6);
+					Rod(F, Wood, Hand + FVector(-5.0, 0.0, 4.0), Hand + FVector(-6.0, 0.0, 0.5), 1.1, 6);
+					break;
+				}
+				case EHeld::NetBag:
+				{
+					// A string bag: a loaf and a cabbage showing over its rim.
+					const FLinearColor String(0.55f, 0.50f, 0.40f);
+					Rod(F, String, Hand + FVector(-1.0, -1.0, 0.0), Hand + FVector(-5.0, 0.0, -10.0), 0.4, 4);
+					Rod(F, String, Hand + FVector(1.0, 1.0, 0.0), Hand + FVector(5.0, 0.0, -10.0), 0.4, 4);
+					Blob(F, String, Hand + FVector(0.0, 0.0, -21.0), FVector(9.0, 6.5, 10.5), 10, 5);
+					Blob(F, FLinearColor(0.55f, 0.36f, 0.14f), Hand + FVector(-2.5, 0.0, -11.0), FVector(8.5, 4.0, 3.6), 8, 4);
+					Blob(F, FLinearColor(0.25f, 0.42f, 0.16f), Hand + FVector(3.0, 0.5, -13.0), FVector(5.0, 5.0, 4.5), 8, 4);
+					break;
+				}
+				case EHeld::Book:
+					Block(F, O.HeldColor, Hand + FVector(2.0, 3.2, -7.0), FVector(8.0, 2.2, 10.5));
+					Block(F, FLinearColor(0.82f, 0.79f, 0.70f), Hand + FVector(2.6, 3.2, -7.0), FVector(7.6, 1.6, 10.2));
+					break;
 				case EHeld::Basket:
 					Blob(F, O.HeldColor, Hand + FVector(0.0, 0.0, -24.0), FVector(16.0, 11.0, 10.0), 12, 4, -0.3);
 					Rod(F, O.HeldColor, Hand + FVector(-10.0, 0.0, -18.0), Hand + FVector(0.0, 0.0, -1.0), 1.0);

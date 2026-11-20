@@ -2075,7 +2075,7 @@ void APedestrians::Tick(float DeltaSeconds)
 		{
 			break;
 		}
-		Walker.Person->SetOutfit(PersonModel::RandomOutfit(Random));
+		Walker.Person->SetOutfit(PersonModel::RandomOutfit(Random, true));
 		const PersonKit::FOutfit& Dressed = Walker.Person->GetOutfit();
 		Walker.bHasUmbrella = Dressed.Held == PersonKit::EHeld::Umbrella || Random.FRand() < Pedestrians::UmbrellaShare;
 		Walker.UmbrellaColor = UmbrellaModel::ClothColor(Random.FRand(), Dressed.bWoman);
