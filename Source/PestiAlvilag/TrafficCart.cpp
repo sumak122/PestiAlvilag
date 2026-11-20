@@ -3,6 +3,7 @@
 #include "TrafficCart.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "CarModel.h"
 #include "CarjackedDriver.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -32,6 +33,9 @@ namespace TrafficCartRide
 	constexpr float BeerHigh = 290.f;
 	constexpr float MilkLow = 300.f;
 	constexpr float MilkHigh = 345.f;
+	// A fiaker's brisk trot (cm/s).
+	constexpr float FiakerLow = 390.f;
+	constexpr float FiakerHigh = 460.f;
 	// The hearse goes at a slow walk, so the mourners keep up behind it.
 	constexpr float HearseLow = 105.f;
 	constexpr float HearseHigh = 125.f;
@@ -126,6 +130,30 @@ void ATrafficCart::PickLoad(FRandomStream& Random, HorseCartModel::ELoad Wanted)
 		: Random.FRandRange(TrafficCartRide::MilkLow, TrafficCartRide::MilkHigh);
 }
 
+void ATrafficCart::MakeFiaker(FRandomStream& Dice, bool bWithFares)
+{
+	using HorseCartModel::ELoad;
+	CartLoad = ELoad::Fiaker;
+	HorseCoat = static_cast<HorseCartModel::ECoat>(Dice.RandRange(0, static_cast<int32>(HorseCartModel::ECoat::Count) - 1));
+	bBlaze = Dice.FRand() < 0.5f;
+	DriverLook = HorseCartModel::CarterLook(ELoad::Fiaker, Dice.RandRange(0, 11));
+	bOwnDriverLook = true;
+	bFares = bWithFares;
+	Cruise = Dice.FRandRange(TrafficCartRide::FiakerLow, TrafficCartRide::FiakerHigh);
+}
+
+bool ATrafficCart::IsForHire() const
+{
+	return IsFiaker() && !bFares && Manager != nullptr && BoltTime <= 0.f && ShyTime <= 0.f;
+}
+
+void ATrafficCart::WaitForHire(ATrafficManager* InManager)
+{
+	Manager = InManager;
+	bWaiting = true;
+	Speed = 0.f;
+}
+
 void ATrafficCart::MakeHearse(FRandomStream& Dice)
 {
 	using HorseCartModel::ELoad;
@@ -149,6 +177,20 @@ void ATrafficCart::BeginPlay()
 	// The carter on the bench, reins in hand.
 	DriverMesh->SetVisibility(true);
 	UpdateReins();
+	// A fiaker's fares, side by side on the back seat.
+	if (bFares)
+	{
+		FRandomStream Dice(FMath::Rand());
+		for (const double Side : { -1.0, 1.0 })
+		{
+			TArray<PersonKit::FSection> Seated;
+			CarModel::BuildSeatedPerson(PersonModel::RandomOutfit(Dice), HorseCartModel::FiakerFareHip(Side),
+				CarModel::PassengerArmPitch, CarModel::PassengerLegPitch, Seated);
+			UProceduralMeshComponent* Fare = MakeMesh(Rig.Get(), PersonKit::FPiece(), FVector::ZeroVector);
+			Fill(Fare, Seated);
+			FareMeshes.Add(Fare);
+		}
+	}
 }
 
 void ATrafficCart::StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex)
@@ -173,6 +215,17 @@ void ATrafficCart::Tick(float DeltaSeconds)
 	APawn::Tick(DeltaSeconds);
 
 	BumpCooldown = FMath::Max(0.f, BumpCooldown - DeltaSeconds);
+	HoldTime = FMath::Max(0.f, HoldTime - DeltaSeconds);
+	if (bWaiting)
+	{
+		// At the cab stand: standing, the horse idling.
+		Pace = 0;
+		Speed = 0.f;
+		Move(DeltaSeconds);
+		CheckBumps();
+		UpdateNearness(DeltaSeconds);
+		return;
+	}
 	FollowLane(DeltaSeconds);
 	if (ShyTime > 0.f)
 	{
@@ -261,6 +314,11 @@ void ATrafficCart::FollowLane(float DeltaSeconds)
 			SqueezeTime = TrafficCartRide::Squeeze;
 		}
 	}
+	if (HoldTime > 0.f && !bBolting)
+	{
+		// Pulled up for someone hailing it.
+		Wanted = 0.f;
+	}
 	const float Rate = Wanted >= Speed ? TrafficCartRide::SpeedUp : bBolting ? TrafficCartRide::BoltSlowDown : TrafficCartRide::SlowDown;
 	Speed = FMath::FInterpConstantTo(Speed, Wanted, DeltaSeconds, bBolting && Wanted >= Speed ? Rate * 2.f : Rate);
 	Pace = Speed < 12.f ? 0 : Speed < 240.f ? 1 : Speed < 450.f ? 2 : Speed < 700.f ? 3 : 4;
@@ -344,7 +402,7 @@ void ATrafficCart::CheckBumps()
 void ATrafficCart::Shy()
 {
 	// The undertaker's old horse has heard it all before.
-	if (!Manager || BoltTime > 0.f || ShyTime > 0.f || IsHearse())
+	if (!Manager || BoltTime > 0.f || ShyTime > 0.f || IsHearse() || bWaiting)
 	{
 		return;
 	}
@@ -359,9 +417,9 @@ void ATrafficCart::Shy()
 
 void ATrafficCart::Bolt()
 {
-	if (IsHearse())
+	if (IsHearse() || bWaiting)
 	{
-		// The hearse's horse never bolts, and nothing falls off it.
+		// The hearse's horse never bolts, and nothing falls off it; a cabman on his stand holds his horse.
 		return;
 	}
 	if (BoltTime <= 0.f)
@@ -403,7 +461,7 @@ void ATrafficCart::WhileBolting(float DeltaSeconds)
 void ATrafficCart::SpillOne()
 {
 	using namespace HorseCartModel;
-	if (IsHearse())
+	if (IsHearse() || IsFiaker())
 	{
 		return;
 	}
@@ -577,6 +635,18 @@ void ATrafficCart::TakeDriver(APawn* InDriver)
 			// Nobody from the police saw it: now and then a passer-by runs to tell them.
 			AWitnesses::Report(this, Bench, 1);
 		}
+
+		// A fiaker's fares climb down and are gone.
+		for (UProceduralMeshComponent* Fare : FareMeshes)
+		{
+			if (Fare)
+			{
+				Fare->SetVisibility(false);
+			}
+		}
+		bFares = false;
+		bWaiting = false;
+		HoldTime = 0.f;
 
 		// Out of the traffic: an ordinary cart for the player, still loaded.
 		Manager = nullptr;

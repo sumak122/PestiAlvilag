@@ -867,7 +867,16 @@ void ATrafficManager::SpawnCarts()
 		{
 			continue;
 		}
-		Cart->PickLoad(Random);
+		// Now and then a fiaker instead, half of them with fares in the back.
+		static constexpr float FiakerShare = 0.2f;
+		if (Random.FRand() < FiakerShare)
+		{
+			Cart->MakeFiaker(Random, Random.FRand() < 0.5f);
+		}
+		else
+		{
+			Cart->PickLoad(Random);
+		}
 		Cart->FinishSpawning(Place);
 		Cart->StartOnLane(this, LaneIdx, PointIdx + 1);
 		Carts.Add(Cart);
@@ -1261,7 +1270,7 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 	const FRotator Facing = (Lane.Points[BestPoint + 1] - Spot).GetSafeNormal2D().Rotation();
 	FRandomStream Random(FMath::Rand());
 
-	if (What == ETestTraffic::MilkCart || What == ETestTraffic::CoalCart || What == ETestTraffic::BeerCart)
+	if (What == ETestTraffic::MilkCart || What == ETestTraffic::CoalCart || What == ETestTraffic::BeerCart || What == ETestTraffic::Fiaker)
 	{
 		static constexpr double TestCartLift = 20.0;
 		Location.Z += HorseCartModel::RigHalf().Z + TestCartLift;
@@ -1274,7 +1283,14 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 		}
 		const HorseCartModel::ELoad CartKind = What == ETestTraffic::MilkCart ? HorseCartModel::ELoad::Milk
 			: What == ETestTraffic::CoalCart ? HorseCartModel::ELoad::Coal : HorseCartModel::ELoad::Beer;
-		Cart->PickLoad(Random, CartKind);
+		if (What == ETestTraffic::Fiaker)
+		{
+			Cart->MakeFiaker(Random, false);
+		}
+		else
+		{
+			Cart->PickLoad(Random, CartKind);
+		}
 		Cart->FinishSpawning(Place);
 		Cart->StartOnLane(this, BestLane, BestPoint + 1);
 		Carts.Add(Cart);

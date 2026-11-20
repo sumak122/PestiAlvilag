@@ -42,6 +42,29 @@ public:
 	void MakeHearse(FRandomStream& Dice);
 	bool IsHearse() const { return CartLoad == HorseCartModel::ELoad::Hearse; }
 
+	/**
+	 * Makes it a cab, a fiaker (a one-horse "konflis"): a lacquered body, the
+	 * cabman in his bowler, at a brisk trot; with bWithFares two people ride
+	 * in the back. Before spawning.
+	 */
+	void MakeFiaker(FRandomStream& Dice, bool bWithFares);
+	bool IsFiaker() const { return CartLoad == HorseCartModel::ELoad::Fiaker; }
+	/** Has fares on board (a fiaker in the traffic): not for hire. */
+	bool HasFares() const { return bFares; }
+	/** A fiaker the player can hire (ATaxiRides): empty, in the traffic or on its stand, calm. */
+	bool IsForHire() const;
+
+	/**
+	 * A fiaker waiting for fares at a cab stand (AFiakerStand) instead of
+	 * driving: it stands still, the cabman on his box, until it is hired
+	 * (ATaxiRides) or stolen. Call right after spawning.
+	 */
+	void WaitForHire(ATrafficManager* InManager);
+	bool IsWaitingForHire() const { return bWaiting; }
+
+	/** Stops where it is for this long (s): someone is hailing it. */
+	void HoldStill(float Seconds) { HoldTime = FMath::Max(HoldTime, Seconds); }
+
 	/** From now on it turns at each junction towards Goal (the cemetery gate). */
 	void HeadFor(const FVector& InGoal) { Goal = InGoal; bHasGoal = true; }
 
@@ -97,6 +120,13 @@ private:
 
 	/** This carter's easy pace (cm/s). */
 	float Cruise = 250.f;
+
+	/** A fiaker: two fares seated in the back, their meshes; waiting at a stand; held still for a hail (s). */
+	bool bFares = false;
+	bool bWaiting = false;
+	float HoldTime = 0.f;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> FareMeshes;
 
 	/** Seconds left of the horse's bolt, till the next thing goes over, and how many went this time. */
 	float BoltTime = 0.f;
