@@ -2205,6 +2205,14 @@ private:
 			Paint.Diamond(X, Y + 1.f * U, 3.f * U, C, On);
 			break;
 		}
+		case EIcon::Music:
+			// Two notes joined by a beam: a music bar with a band.
+			Paint.Diamond(X - 5.f * U, Y + 5.f * U, 3.5f * U, C, On);
+			Paint.Diamond(X + 4.f * U, Y + 3.f * U, 3.5f * U, C, On);
+			Paint.Line(X - 2.5f * U, Y + 5.f * U, X - 2.5f * U, Y - 6.f * U, C, 1.6f * U, On);
+			Paint.Line(X + 6.5f * U, Y + 3.f * U, X + 6.5f * U, Y - 8.f * U, C, 1.6f * U, On);
+			Paint.Line(X - 2.5f * U, Y - 6.f * U, X + 6.5f * U, Y - 8.f * U, C, 2.6f * U, On);
+			break;
 		}
 	}
 
@@ -2463,6 +2471,7 @@ private:
 			{ EIcon::Store, TEXT("\u00c1ruh\u00e1z"), TEXT("Department store") },
 			{ EIcon::Hotel, TEXT("Sz\u00e1lloda"), TEXT("Hotel") },
 			{ EIcon::Sight, TEXT("Nevezetess\u00e9g"), TEXT("Landmark") },
+			{ EIcon::Music, TEXT("Zen\u00e9s hely"), TEXT("Live music") },
 		};
 		Over.Line(LX + 30.f, RowY - 22.f, LX + LW - 30.f, RowY - 22.f, PestiHud::Brass, 1.f, 1);
 		Paint.Text(bEnglish ? TEXT("HELYEK  \u00b7  PLACES") : TEXT("HELYEK"), Paint.Deco(17.f), LX + LW * 0.5f, RowY, PestiHud::Gold, 0.5f);

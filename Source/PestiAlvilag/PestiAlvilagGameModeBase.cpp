@@ -63,6 +63,7 @@
 #include "PestiMenu.h"
 #include "PestiPerson.h"
 #include "StreetFights.h"
+#include "MusicBars.h"
 #include "CarjackedDriver.h"
 #include "LighterModel.h"
 #include "StreetName.h"
@@ -587,6 +588,12 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	if (!TActorIterator<ANightRaces>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ANightRaces>(ANightRaces::StaticClass(), FVector(LaciYardModel::CityAt, 0.0), FRotator::ZeroRotator);
+	}
+	// Dzsoki's tavern and Gyuszi's coffee house, rooms to walk into with a
+	// band in the evening, and Dzsoki's missions (after mission 7).
+	if (!TActorIterator<AMusicBars>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AMusicBars>(AMusicBars::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
 	}
 
 	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).

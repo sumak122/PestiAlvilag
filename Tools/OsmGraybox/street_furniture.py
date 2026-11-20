@@ -2181,6 +2181,12 @@ SHOP_KEEP_CLEAR = [
     ((101266, -37678), 900),   # the station address on the delivery round
     ((18173, 30456), 900),     # the attic's door on Berkocsis utca
 ]
+# The two music bars of Dzsoki's side quests (AMusicBars): these shop fronts get the bars' names,
+# and E at their doors takes the player in. Matched to the nearest shop within 100 cm.
+MUSIC_BARS = [
+    ((21478, 34089), "tavern", "FEHÉR GALAMB VENDÉGLŐ", "ESTÉNKÉNT ZENE", "VENDÉGLŐ"),   # Vásár utca: Dzsoki's band
+    ((5026, 9194), "cafe", "RÓZSA KÁVÉHÁZ", "ESTÉNKÉNT ZENE", "KÁVÉHÁZ"),              # József körút: Gyuszi's band
+]
 SHOP_SKIP_BUILDINGS = {"w261801166", "w256539415", "w191191238", "w259011268", "w308551954", "r3476312"}  # the Corvin, the two churches, the New York palace, the Nemzeti and Metropol hotels (city_details.py)
 SHOP_OWNERS = [
     "WEISZ MÓR", "KOHN ÁRMIN", "GROSZ JAKAB", "KLEIN SÁNDOR", "SCHWARCZ LIPÓT", "BERGER IGNÁC", "KOVÁCS JÁNOS",
@@ -2388,6 +2394,10 @@ def main():
         more_shops, more_gates = place_shops(data, spots, street_name, None, chemists, taken, SHOP_KEEP_CLEAR, share)
         shops += more_shops
         gates += more_gates
+    for (bx, by), trade, fascia, glass, blade in MUSIC_BARS:
+        bar = min(shops, key=lambda v: math.dist(v["at"][:2], (bx, by)))
+        if math.dist(bar["at"][:2], (bx, by)) < 100:
+            bar.update(trade=trade, fascia=fascia, glass=glass, blade=blade, closed=False, outside=False, keeper=False)
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
     kerepesi = layout_kerepesi(data)

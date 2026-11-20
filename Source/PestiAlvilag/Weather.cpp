@@ -41,6 +41,8 @@ namespace Weather
 	// Pale see-through grey: colour and how much it hides.
 	const FLinearColor DropTint(0.72f, 0.75f, 0.80f, 0.35f);
 	constexpr float RainVolume = 0.8f;
+	/** Indoors the rain is heard this much. */
+	constexpr float IndoorShare = 0.2f;
 
 	// No rain under roofs: the map round the camera in squares this wide (cm),
 	// out to this many squares each way; a few of them each frame are looked
@@ -273,6 +275,7 @@ void AWeather::Tick(float DeltaSeconds)
 	if (RainNoise)
 	{
 		RainNoise->SetRain(Rain);
+		RainNoise->SetVolumeMultiplier(bIndoors ? Weather::RainVolume * Weather::IndoorShare : Weather::RainVolume);
 	}
 
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -285,7 +288,7 @@ void AWeather::Tick(float DeltaSeconds)
 void AWeather::UpdateDrops(float DeltaSeconds, const FVector& Eye)
 {
 	using namespace Weather;
-	const int32 Showing = FMath::RoundToInt(Rain * Drops.Num());
+	const int32 Showing = bIndoors ? 0 : FMath::RoundToInt(Rain * Drops.Num());
 	if (Showing <= 0)
 	{
 		if (bDropsShown)

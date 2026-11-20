@@ -93,6 +93,12 @@ public:
 	 */
 	bool GetStartSpot(FVector& OutAt, FVector& OutAway) const;
 
+	/**
+	 * A side story (Dzsoki's missions): passing or retrying it does not start
+	 * the next story mission; whoever spawned it starts the next one.
+	 */
+	bool bSideStory = false;
+
 	/** True from the first step until passed, and while failed (E then means try again). */
 	bool IsUnderway() const { return bFailed || CurrentStep != INDEX_NONE; }
 

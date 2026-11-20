@@ -42,6 +42,8 @@ namespace PersonKit
 		float Height = 178.f;
 		/** 1 is an average build; up to 1.25 for a stout one. */
 		float Build = 1.f;
+		/** A paunch pushed out over the belt (cm forward, 0 for none, about 10 for a fat man; men only, the apron and sash don't follow it). */
+		float Belly = 0.f;
 
 		EHat Hat = EHat::Fedora;
 		ETop Top = ETop::Overcoat;
@@ -637,6 +639,26 @@ namespace PersonKit
 			{
 				const double Bz = Z(120.0 - 9.0 * i);
 				Blob(B, FLinearColor(0.02f, 0.02f, 0.02f), FVector(12.0 * G * Thick + 0.4, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
+			}
+		}
+
+		// A paunch: a round bulge on the front of the waist in the top's colour, with its buttons.
+		if (O.Belly > 0.f && !W && O.Top != ETop::Dress)
+		{
+			const double Rx = 6.0 + O.Belly;
+			const double Cx = 0.5 + 11.5 * G * G * Thick - 8.0;
+			const double Cz = Z(103.0);
+			const double Rz = Z(21.0);
+			Blob(B, TorsoColor, FVector(Cx, 0.0, Cz), FVector(Rx, 13.5 * G * G * Thick, Rz), 16, 8);
+			if (bCoat || O.Top == ETop::Waistcoat)
+			{
+				for (int32 i = 0; i < 3; ++i)
+				{
+					const double Bz = Cz + Rz * (0.45 - 0.42 * i);
+					const double Lift = (Bz - Cz) / Rz;
+					const double Bx = Cx + Rx * FMath::Sqrt(FMath::Max(0.0, 1.0 - Lift * Lift)) + 0.2;
+					Blob(B, FLinearColor(0.02f, 0.02f, 0.02f), FVector(Bx, 0.0, Bz), FVector(0.6, 1.0, 1.0), 6, 3);
+				}
 			}
 		}
 
