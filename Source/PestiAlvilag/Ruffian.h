@@ -45,7 +45,9 @@ enum class ERuffian : uint8
 	// Anyone off the street the player picks a fight with (AStreetFights): dressed as he walked.
 	Passerby,
 	// A constable who fights the player (AStreetFights::BeginConstable): his uniform in StreetDress, the truncheon in his fist.
-	Constable
+	Constable,
+	// A hired tough (Dzsoki's missions): dressed as given in StreetDress.
+	Hired
 };
 
 UCLASS()

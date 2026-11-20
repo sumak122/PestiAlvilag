@@ -63,6 +63,7 @@
 #include "PestiMenu.h"
 #include "PestiPerson.h"
 #include "StreetFights.h"
+#include "MusicBars.h"
 #include "CarjackedDriver.h"
 #include "LighterModel.h"
 #include "StreetName.h"
@@ -588,6 +589,12 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		GetWorld()->SpawnActor<ANightRaces>(ANightRaces::StaticClass(), FVector(LaciYardModel::CityAt, 0.0), FRotator::ZeroRotator);
 	}
+	// Dzsoki's tavern and Gyuszi's coffee house, rooms to walk into with a
+	// band in the evening, and Dzsoki's missions (after mission 7).
+	if (!TActorIterator<AMusicBars>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AMusicBars>(AMusicBars::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
 
 	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).
 	if (!TActorIterator<ABoxingYard>(GetWorld()))
@@ -869,6 +876,21 @@ void APestiAlvilagGameModeBase::ReportCrime(int32 CrimeLevel)
 		APestiHUD::Show(this, 3, 4.f, FColor::Red, TEXT("The police are after you!"));
 	}
 	WantedLevel = FMath::Clamp(FMath::Max(WantedLevel, CrimeLevel), 0, PestiStart::MaxWantedLevel);
+	NotifySeenByPolice();
+}
+
+void APestiAlvilagGameModeBase::SetWantedForTest(int32 Stars)
+{
+	if (Stars <= 0)
+	{
+		ClearWanted(TEXT("Nem keres a rend\u0151rs\u00e9g.  (Not wanted.)"));
+		return;
+	}
+	if (WantedLevel == 0)
+	{
+		APestiHUD::Show(this, 3, 4.f, FColor::Red, TEXT("The police are after you!"));
+	}
+	WantedLevel = FMath::Clamp(Stars, 1, PestiStart::MaxWantedLevel);
 	NotifySeenByPolice();
 }
 

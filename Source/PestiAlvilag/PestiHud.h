@@ -118,14 +118,24 @@ public:
 	void MarkPlace(const FVector& At, const FString& Letter);
 
 	/** The kinds of little pictures the maps show for places (ACityDetails sends them). */
-	enum class EMapIcon : uint8 { Cafe, Market, Tram, Phone, Yard, Theatre, Station, Store, Church, Hotel, Sight };
+	enum class EMapIcon : uint8 { Cafe, Market, Tram, Phone, Yard, Theatre, Station, Store, Church, Hotel, Sight, Music };
 	struct FMapIcon
 	{
 		FVector2D At = FVector2D::ZeroVector;
 		EMapIcon Kind = EMapIcon::Cafe;
 	};
 	/** The places shown with a little picture on the minimap and the big map, for good. */
-	void SetMapIcons(const TArray<FMapIcon>& InIcons) { MapIcons = InIcons; }
+	void SetMapIcons(const TArray<FMapIcon>& InIcons)
+	{
+		MapIcons = InIcons;
+		MapIcons.Append(AddedIcons);
+	}
+	/** One more place's picture, for good, kept when ACityDetails sends its list (the music bars, AMusicBars). */
+	void AddMapIcon(const FMapIcon& Icon)
+	{
+		AddedIcons.Add(Icon);
+		MapIcons.Add(Icon);
+	}
 	/**
 	 * A scene (ACutscene): how far the black bars are in, 0 to 1. While they
 	 * show, the rest of the HUD goes, and what people say shows as subtitles
@@ -238,6 +248,7 @@ private:
 	TArray<FPlaceMark> PlaceMarks;
 	/** The little pictures of places on the maps. */
 	TArray<FMapIcon> MapIcons;
+	TArray<FMapIcon> AddedIcons;
 
 	// A scene: the bars and the title.
 	float SceneBars = 0.f;

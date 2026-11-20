@@ -387,7 +387,7 @@ void AMission::Retry(bool bPutBack)
 			}
 		}
 	}
-	if (Game)
+	if (Game && !bSideStory)
 	{
 		Game->StartNextMission(bPutBack ? Mission::RetryStart : -1.f);
 	}
@@ -466,7 +466,10 @@ void AMission::Pass()
 		Game->MarkMissionDone(MissionId);
 		Announce(TEXT("K\u00dcLDET\u00c9S TELJES\u00cdTVE"),
 			FString::Printf(TEXT("Mission passed  \u00b7  %s (%s)  \u00b7  +%s"), *TitleHu, *TitleEn, *APestiAlvilagGameModeBase::FormatMoney(Reward)), 6.f);
-		Game->StartNextMission();
+		if (!bSideStory)
+		{
+			Game->StartNextMission();
+		}
 	}
 
 	// Leave the people where they are for a while, then tidy up.

@@ -85,7 +85,7 @@ AWitnesses::AWitnesses()
 	Random.Initialize(4711);
 }
 
-void AWitnesses::Report(const UObject* WorldContextObject, const FVector& Where, int32 Stars)
+void AWitnesses::Report(const UObject* WorldContextObject, const FVector& Where, int32 Stars, bool bForce)
 {
 	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
 	if (!World)
@@ -110,7 +110,7 @@ void AWitnesses::Report(const UObject* WorldContextObject, const FVector& Where,
 	}
 	// One at a time, and seldom: less often the better the player's street name.
 	const double Now = World->GetTimeSeconds();
-	if (Found->Stage != EStage::None || Found->bPending || Now - Found->LastRun < Witness::RunEvery)
+	if (Found->Stage != EStage::None || Found->bPending || (!bForce && Now - Found->LastRun < Witness::RunEvery))
 	{
 		return;
 	}
@@ -120,7 +120,7 @@ void AWitnesses::Report(const UObject* WorldContextObject, const FVector& Where,
 		NameShare = static_cast<float>(Game->GetRenownRank()) / static_cast<float>(FMath::Max(1, StreetName::NumRanks - 1));
 	}
 	const float Chance = Witness::RunChance * FMath::Lerp(1.f, Witness::BestNameShare, FMath::Clamp(NameShare, 0.f, 1.f));
-	if (Found->Random.FRand() >= Chance)
+	if (!bForce && Found->Random.FRand() >= Chance)
 	{
 		return;
 	}

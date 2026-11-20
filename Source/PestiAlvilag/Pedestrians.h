@@ -177,6 +177,9 @@ public:
 	 */
 	static void Gather(const UObject* WorldContextObject, const FVector& At, float Seconds, bool bFight);
 
+	/** For testing (the spawn menu, TestSpawn): a tough near the player squares up to him soon, whatever his name. */
+	static void SendChallenger(const UObject* WorldContextObject);
+
 	/**
 	 * A passer-by walking within Reach of At, at least NotNear from the
 	 * player, is taken off the street to be someone else's (AWitnesses):
@@ -438,6 +441,8 @@ private:
 	/** Where the tough picking on the player stands, while one does. */
 	FVector2D ChallengerAt = FVector2D::ZeroVector;
 	bool bChallenge = false;
+	/** The spawn menu has sent for a tough (SendChallenger). */
+	bool bChallengeNow = false;
 	/** 0 by day, up to 1 late at night (ADayNight): walkers go in, drunks come out. */
 	float Lateness = 0.f;
 	/** ADayNight's darkness this frame (0 day, 1 night). */

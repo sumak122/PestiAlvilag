@@ -1467,6 +1467,11 @@ private:
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("ind\u00edt\u00e1s"), TEXT("start") },
 				{ TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
 			break;
+		case EPestiMenuPage::Spawn:
+			PaintSpawn(Paint, Shown, CentreX, Y0);
+			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("A / D"), TEXT("m\u00e1sikat"), TEXT("another") },
+				{ TEXT("ENTER"), TEXT("idehozza"), TEXT("bring it") }, { TEXT("ESC / TAB"), TEXT("vissza"), TEXT("back") } });
+			break;
 		case EPestiMenuPage::Confirm:
 			PaintConfirm(Paint, Shown, CentreX, Y0);
 			PaintMenuKeys(Paint, CentreX, KeysY, { { TEXT("W / S"), TEXT("v\u00e1laszt\u00e1s"), TEXT("choose") }, { TEXT("ENTER"), TEXT("rendben"), TEXT("OK") },
@@ -1661,6 +1666,71 @@ private:
 			Paint.Text(Row[2], Paint.Deco(24.f, 1.f), RX + SideW - 32.f, RowY, PestiHud::Gold, 1.f);
 			Paint.Line(RX + 32.f, RowY + 16.f, RX + SideW - 32.f, RowY + 16.f, PestiHud::Dim, 1.f);
 			RowY += 54.f;
+		}
+	}
+
+	/** The spawn page (TestSpawn): each group with its pick between arrows and what Enter does, and Back under them. */
+	void PaintSpawn(const FPainter& Paint, const FPestiMenu& Shown, float CentreX, float Y0) const
+	{
+		const bool bEnglish = PestiSettings::English();
+		const TArray<FPestiMenuRow> List = Shown.Rows();
+		constexpr float RowStep = 76.f;
+		const float W = 1100.f;
+		const float H = 130.f + RowStep * TestSpawn::NumGroups + 70.f;
+		const float X = CentreX - W * 0.5f;
+		const float Y = Y0 + 100.f;
+		const float PickX = X + W - 320.f;
+		Paint.Panel(X, Y, W, H);
+		Paint.Rays(CentreX, Y + 4.f, 60.f, 11, PestiHud::Dim);
+		Paint.Tab(TEXT("IDEHOZ\u00c1S"), CentreX, Y);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Spawn things"), Paint.Plain(17.f, 3.f), CentreX, Y + 52.f, PestiHud::Grey, 0.5f);
+		}
+		float RowY = Y + 125.f;
+		for (int32 i = 0; i < TestSpawn::NumGroups; ++i)
+		{
+			const TestSpawn::EGroup Group = static_cast<TestSpawn::EGroup>(i);
+			const bool bOn = i == Shown.GetChoice();
+			const bool bCan = List.IsValidIndex(i) && List[i].bEnabled;
+			FString NameHu, NameEn, NoteHu, NoteEn, PickHu, PickEn;
+			TestSpawn::GroupName(Group, NameHu, NameEn, NoteHu, NoteEn);
+			TestSpawn::PickName(Group, Shown.GetSpawnPick(i), PickHu, PickEn);
+			if (bOn)
+			{
+				Paint.Box(X + 30.f, RowY - 42.f, W - 60.f, 68.f, PestiHud::MenuGlow);
+				Paint.Line(X + 30.f, RowY - 42.f, X + W - 30.f, RowY - 42.f, PestiHud::Gold, 1.5f);
+				Paint.Line(X + 30.f, RowY + 26.f, X + W - 30.f, RowY + 26.f, PestiHud::Gold, 1.5f);
+			}
+			// The group's name, and under it what Enter does with it.
+			Paint.Text(NameHu, Paint.Deco(30.f, 3.f), X + 70.f, RowY - 6.f, !bCan ? PestiHud::Dim : bOn ? PestiHud::Gold : PestiHud::Cream);
+			const FString Note = bEnglish ? FString::Printf(TEXT("%s  \u00b7  %s"), *NoteHu, *NoteEn) : NoteHu;
+			Paint.Text(Note, Paint.Plain(16.f, 1.f), X + 70.f, RowY + 17.f, !bCan ? PestiHud::Dim : PestiHud::Brass);
+			// The pick, between arrows on the chosen row.
+			Paint.Text(PickHu, Paint.Bold(24.f), PickX, RowY - 6.f, !bCan ? PestiHud::Dim : bOn ? PestiHud::Cream : PestiHud::Grey, 0.5f);
+			if (bEnglish)
+			{
+				Paint.Text(PickEn, Paint.Plain(15.f, 1.f), PickX, RowY + 16.f, !bCan ? PestiHud::Dim : PestiHud::Grey, 0.5f);
+			}
+			if (bOn)
+			{
+				Paint.Diamond(PickX - 230.f, RowY - 13.f, 28.f, PestiHud::Gold, 2);
+				Paint.Diamond(PickX + 230.f, RowY - 13.f, 28.f, PestiHud::Gold, 2);
+				Paint.Text(TEXT("A"), Paint.Bold(13.f), PickX - 230.f, RowY - 8.f, PestiHud::Solid, 0.5f);
+				Paint.Text(TEXT("D"), Paint.Bold(13.f), PickX + 230.f, RowY - 8.f, PestiHud::Solid, 0.5f);
+			}
+			RowY += RowStep;
+		}
+		if (List.IsValidIndex(TestSpawn::NumGroups))
+		{
+			PaintMenuRow(Paint, CentreX, RowY + 10.f, List[TestSpawn::NumGroups], Shown.GetChoice() == TestSpawn::NumGroups, FString());
+		}
+		Paint.Text(TEXT("Enterre a men\u00fc bez\u00e1rul, \u00e9s ott lesz. Az F6 b\u00e1rmikor ide hoz vissza."),
+			Paint.Bold(19.f), CentreX, Y + H + 46.f, PestiHud::Cream, 0.5f);
+		if (bEnglish)
+		{
+			Paint.Text(TEXT("Enter closes the menu and it is there. F6 brings you back here any time."),
+				Paint.Plain(16.f, 1.f), CentreX, Y + H + 72.f, PestiHud::Grey, 0.5f);
 		}
 	}
 
@@ -2135,6 +2205,14 @@ private:
 			Paint.Diamond(X, Y + 1.f * U, 3.f * U, C, On);
 			break;
 		}
+		case EIcon::Music:
+			// Two notes joined by a beam: a music bar with a band.
+			Paint.Diamond(X - 5.f * U, Y + 5.f * U, 3.5f * U, C, On);
+			Paint.Diamond(X + 4.f * U, Y + 3.f * U, 3.5f * U, C, On);
+			Paint.Line(X - 2.5f * U, Y + 5.f * U, X - 2.5f * U, Y - 6.f * U, C, 1.6f * U, On);
+			Paint.Line(X + 6.5f * U, Y + 3.f * U, X + 6.5f * U, Y - 8.f * U, C, 1.6f * U, On);
+			Paint.Line(X - 2.5f * U, Y - 6.f * U, X + 6.5f * U, Y - 8.f * U, C, 2.6f * U, On);
+			break;
 		}
 	}
 
@@ -2393,6 +2471,7 @@ private:
 			{ EIcon::Store, TEXT("\u00c1ruh\u00e1z"), TEXT("Department store") },
 			{ EIcon::Hotel, TEXT("Sz\u00e1lloda"), TEXT("Hotel") },
 			{ EIcon::Sight, TEXT("Nevezetess\u00e9g"), TEXT("Landmark") },
+			{ EIcon::Music, TEXT("Zen\u00e9s hely"), TEXT("Live music") },
 		};
 		Over.Line(LX + 30.f, RowY - 22.f, LX + LW - 30.f, RowY - 22.f, PestiHud::Brass, 1.f, 1);
 		Paint.Text(bEnglish ? TEXT("HELYEK  \u00b7  PLACES") : TEXT("HELYEK"), Paint.Deco(17.f), LX + LW * 0.5f, RowY, PestiHud::Gold, 0.5f);

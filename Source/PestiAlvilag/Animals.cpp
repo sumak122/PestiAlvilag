@@ -118,13 +118,14 @@ namespace Animals
 	// In the camera's view: within this cosine of where it looks.
 	constexpr double InView = 0.45;
 
-	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm),
+	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm,
+	// far enough that one lying in the middle of a square runs out to the road),
 	// with this chance each time, for this long (s), then rests from it this long.
 	constexpr double ChaseFrom = 100.0;
-	constexpr double ChaseStart = 900.0;
+	constexpr double ChaseStart = 2200.0;
 	constexpr float ChaseChance = 0.5f;
-	constexpr float ChaseLow = 4.f;
-	constexpr float ChaseHigh = 6.5f;
+	constexpr float ChaseLow = 6.f;
+	constexpr float ChaseHigh = 9.f;
 	constexpr float ChaseRestFor = 15.f;
 	// Beside the horse's head (or the bicycle's front wheel), this far out to the side (cm); it gives
 	// up once left this far behind.
@@ -132,7 +133,7 @@ namespace Animals
 	constexpr double CartOut = 200.0;
 	constexpr double BikeAhead = 40.0;
 	constexpr double BikeOut = 110.0;
-	constexpr double ChaseLost = 1500.0;
+	constexpr double ChaseLost = 2800.0;
 	// That close to the horse's head it may make it shy (rear up), or the rider wobble, with these chances.
 	constexpr double SpookNear = 350.0;
 	constexpr float ShyChance = 0.4f;
@@ -253,6 +254,33 @@ void AAnimals::SetUp()
 			AddPet(Place.Kind, Ground, Place.Roam, Place.bTame, Place.bLazy);
 		}
 	}
+}
+
+bool AAnimals::AddStray(const UObject* WorldContextObject, AnimalModel::EKind Kind, const FVector& Near)
+{
+	static constexpr double StrayRoam = 600.0;
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	TActorIterator<AAnimals> It(World);
+	if (!It)
+	{
+		return false;
+	}
+	AAnimals* Strays = *It;
+	FVector Ground;
+	if (!Strays->GroundAt(Near + FVector(0.0, 0.0, 150.0), 400.0, Ground))
+	{
+		return false;
+	}
+	Strays->AddPet(Kind, Ground, StrayRoam, false, false);
+	FPet& Added = Strays->Pets.Last();
+	Added.bKeen = Added.bDog;
+	// Up and about at once, not lying down.
+	Added.Busy = 0.f;
+	return true;
 }
 
 void AAnimals::AddPet(AnimalModel::EKind Kind, const FVector& Near, double Roam, bool bTame, bool bLazy)
@@ -1073,7 +1101,7 @@ bool AAnimals::StartChase(FPet& Pet, const FMover& Mover)
 	}
 	// Seen once; it may or may not take after it.
 	Pet.ChaseRest = Animals::ChaseRestFor;
-	if (Random.FRand() >= Animals::ChaseChance)
+	if (!Pet.bKeen && Random.FRand() >= Animals::ChaseChance)
 	{
 		return false;
 	}

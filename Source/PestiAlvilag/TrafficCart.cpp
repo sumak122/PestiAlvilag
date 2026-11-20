@@ -111,12 +111,12 @@ ATrafficCart::ATrafficCart()
 	DrawDistance = TrafficCartRide::DrawDistance;
 }
 
-void ATrafficCart::PickLoad(FRandomStream& Random)
+void ATrafficCart::PickLoad(FRandomStream& Random, HorseCartModel::ELoad Wanted)
 {
 	using HorseCartModel::ECoat;
 	using HorseCartModel::ELoad;
 	const int32 Which = Random.RandRange(0, 2);
-	CartLoad = Which == 0 ? ELoad::Milk : Which == 1 ? ELoad::Coal : ELoad::Beer;
+	CartLoad = Wanted != ELoad::None ? Wanted : Which == 0 ? ELoad::Milk : Which == 1 ? ELoad::Coal : ELoad::Beer;
 	HorseCoat = static_cast<ECoat>(Random.RandRange(0, static_cast<int32>(ECoat::Count) - 1));
 	bBlaze = Random.FRand() < 0.5f;
 	DriverLook = HorseCartModel::CarterLook(CartLoad, Random.RandRange(0, 11));

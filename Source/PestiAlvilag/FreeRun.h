@@ -183,6 +183,34 @@ namespace FreeRun
 		return P;
 	}
 
+	/**
+	 * Turning an old car's starting crank, Turn turns into it (one whole
+	 * turn is 1): he kneels on his right knee at the radiator, bent over,
+	 * the left hand by his knee, and the right hand swings the handle round
+	 * through a circle in front of him.
+	 */
+	inline FPose Crank(float Turn)
+	{
+		const float A = 2.f * UE_PI * Turn;
+		const float S = FMath::Sin(A);
+		const float C = FMath::Cos(A);
+		FPose P;
+		P.Lift = -35.f + 1.5f * S;
+		P.Pitch = -30.f - 2.f * S;
+		P.Roll = 1.f * C;
+		P.LegL = 85.f;
+		P.KneeL = -100.f;
+		P.LegR = 45.f;
+		P.KneeR = -95.f;
+		P.ArmL = 40.f;
+		P.ArmOutL = 8.f;
+		P.ElbowL = 20.f;
+		P.ArmR = 30.f + 8.f * S;
+		P.ArmOutR = 2.f + 3.f * C;
+		P.ElbowR = 10.f + 8.f * S;
+		return P;
+	}
+
 	/** How high his middle rides at T on the way over a vault: up to the peak over the obstacle, down to land. */
 	inline double ArcZ(double FromZ, double ToZ, double PeakZ, float Over, float T)
 	{
