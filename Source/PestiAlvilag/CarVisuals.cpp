@@ -347,8 +347,30 @@ void UCarVisuals::Show(USceneComponent* Parent, const CarModel::FStyle& InStyle)
 	bMoved = false;
 }
 
+void UCarVisuals::DrawNothing()
+{
+	bDrawsNothing = true;
+	if (Body)
+	{
+		Body->SetVisibility(false);
+	}
+	for (UProceduralMeshComponent* Wheel : Wheels)
+	{
+		if (Wheel)
+		{
+			Wheel->SetVisibility(false);
+		}
+	}
+	HidePerson(Driver);
+	HidePerson(Passenger);
+}
+
 void UCarVisuals::ShowDriver(const PersonKit::FOutfit& Outfit)
 {
+	if (bDrawsNothing)
+	{
+		return;
+	}
 	TArray<PersonKit::FSection> Sections;
 	CarModel::BuildSeatedDriver(Outfit, CarModel::Layout(Style.Body), Sections);
 	FillPerson(Driver, Sections);
@@ -356,6 +378,10 @@ void UCarVisuals::ShowDriver(const PersonKit::FOutfit& Outfit)
 
 void UCarVisuals::ShowStreetDriver(int32 Look)
 {
+	if (bDrawsNothing)
+	{
+		return;
+	}
 	FillPerson(Driver, CarVisuals::StreetDriverShape(Style, FMath::Clamp(Look, 0, NumDriverLooks - 1)));
 }
 
@@ -366,6 +392,10 @@ void UCarVisuals::HideDriver()
 
 void UCarVisuals::ShowPassenger(const PersonKit::FOutfit& Outfit)
 {
+	if (bDrawsNothing)
+	{
+		return;
+	}
 	TArray<PersonKit::FSection> Sections;
 	CarModel::BuildBackSeatPassenger(Outfit, CarModel::Layout(Style.Body), Sections);
 	FillPerson(Passenger, Sections);
@@ -865,7 +895,7 @@ void UCarVisuals::PuffFrom(const FVector& Local, const FVector& Drift, float Siz
 
 int32 UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, float Speed)
 {
-	if (!bShown || !Body || !Body->GetAttachParent())
+	if (bDrawsNothing || !bShown || !Body || !Body->GetAttachParent())
 	{
 		return 0;
 	}
@@ -954,7 +984,7 @@ int32 UCarVisuals::Knock(const FVector& WorldPoint, const FVector& WorldInto, fl
 
 void UCarVisuals::Repaint(const FLinearColor& Paint)
 {
-	if (!bShown || !Body || !Body->GetAttachParent())
+	if (bDrawsNothing || !bShown || !Body || !Body->GetAttachParent())
 	{
 		return;
 	}

@@ -19,6 +19,8 @@
 #include "GroundSurfaces.h"
 #include "Bicycle.h"
 #include "HorseCart.h"
+#include "FireEngine.h"
+#include "FireTruck.h"
 #include "PersonModel.h"
 #include "TailorModel.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -586,6 +588,18 @@ void APestiPerson::TryEnterCar(APlayerController* PC)
 		NearestBike->TakeRider(this);
 		PC->Possess(NearestBike);
 		return;
+	}
+	// The brigade's engine standing at a fire, its crew off it: up onto the driver's bench.
+	for (TActorIterator<AFireEngine> It(GetWorld()); It; ++It)
+	{
+		if (It->CanBeTaken() && FVector::Dist2D(It->GetActorLocation(), GetActorLocation()) < EnterCarRange)
+		{
+			if (AFireTruck* Truck = AFireTruck::TakeFrom(*It))
+			{
+				GetIntoCar(PC, Truck);
+			}
+			return;
+		}
 	}
 	APestiCar* Nearest = nullptr;
 	double NearestDist = EnterCarRange;

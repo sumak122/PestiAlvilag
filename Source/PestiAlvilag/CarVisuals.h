@@ -50,6 +50,13 @@ public:
 
 	const CarModel::FStyle& GetStyle() const { return Style; }
 
+	/**
+	 * The vehicle draws itself (the stolen fire engine, AFireTruck): the car's
+	 * body, wheels and people are hidden for good, it takes no dents and drops
+	 * no parts, and it is never repainted. Call after Show.
+	 */
+	void DrawNothing();
+
 	/** Sits this person at the wheel (the player, say). */
 	void ShowDriver(const PersonKit::FOutfit& Outfit);
 
@@ -211,6 +218,8 @@ private:
 
 	CarModel::FStyle Style;
 	bool bShown = false;
+	/** DrawNothing was called. */
+	bool bDrawsNothing = false;
 
 	FVector LastLocation = FVector::ZeroVector;
 	float LastYaw = 0.f;

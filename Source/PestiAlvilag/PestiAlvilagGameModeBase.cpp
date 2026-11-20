@@ -25,6 +25,7 @@
 #include "LaciYard.h"
 #include "LaciYardModel.h"
 #include "DailyLife.h"
+#include "FireStation.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "Bicycle.h"
@@ -372,6 +373,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<ADailyLife>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ADailyLife>();
+	}
+
+	// The VIII. district fire station on Dologház utca, its engine waiting out front.
+	if (!TActorIterator<AFireStation>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AFireStation>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first
