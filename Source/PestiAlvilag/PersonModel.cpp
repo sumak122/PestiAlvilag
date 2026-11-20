@@ -2,6 +2,7 @@
 
 #include "PersonModel.h"
 
+#include "PassersbyModel.h"
 #include "PoliceModel.h"
 
 #include "Components/SceneComponent.h"
@@ -205,9 +206,13 @@ namespace PersonModel
 		}
 	}
 
-	FOutfit RandomOutfit(FRandomStream& Random)
+	FOutfit RandomOutfit(FRandomStream& Random, bool bOnFoot)
 	{
 		FOutfit O;
+		if (PassersbyModel::SpecialLook(Random, bOnFoot, O))
+		{
+			return O;
+		}
 		O.bWoman = Random.FRand() < 0.35f;
 		O.Skin = Pick(Random, Skins);
 		O.Hair = Pick(Random, Hairs);
@@ -224,28 +229,38 @@ namespace PersonModel
 
 		if (O.bWoman)
 		{
-			O.Height = Random.FRandRange(155.f, 170.f);
-			O.Build = Random.FRandRange(0.95f, 1.12f);
+			O.Height = Random.FRandRange(150.f, 174.f);
+			// Slim, middling or stout.
+			const float Shape = Random.FRand();
+			O.Build = Shape < 0.25f ? Random.FRandRange(0.88f, 0.95f) : Shape < 0.8f ? Random.FRandRange(0.95f, 1.1f) : Random.FRandRange(1.1f, 1.24f);
 			O.Hat = Random.FRand() < 0.75f ? EHat::Cloche : EHat::None;
 			O.HatColor = Random.FRand() < 0.5f ? Pick(Random, Hats) : Pick(Random, Dresses);
 			O.bTie = false;
 			if (Random.FRand() < 0.5f)
 			{
 				O.Top = ETop::Overcoat;
-				O.Coat = Pick(Random, Coats);
-				O.Trousers = Pick(Random, Dresses);
+				O.Coat = Random.FRand() < 0.35f ? PassersbyModel::BrightCloth(Random) : Pick(Random, Coats);
+				O.Trousers = Random.FRand() < 0.4f ? PassersbyModel::BrightCloth(Random) : Pick(Random, Dresses);
 			}
 			else
 			{
 				O.Top = ETop::Dress;
-				O.Coat = Pick(Random, Dresses);
+				O.Coat = Random.FRand() < 0.45f ? PassersbyModel::BrightCloth(Random) : Pick(Random, Dresses);
 			}
+			O.bScarf = Random.FRand() < 0.3f;
+			O.Scarf = Random.FRand() < 0.5f ? PassersbyModel::BrightCloth(Random) : Pick(Random, Scarves);
 			O.Held = Held < 0.25f ? EHeld::Basket : Held < 0.35f ? EHeld::Umbrella : EHeld::None;
 			return O;
 		}
 
-		O.Height = Random.FRandRange(165.f, 186.f);
-		O.Build = Random.FRandRange(0.95f, 1.22f);
+		O.Height = Random.FRandRange(160.f, 190.f);
+		// Thin, middling or stout, and now and then a paunch.
+		const float Shape = Random.FRand();
+		O.Build = Shape < 0.2f ? Random.FRandRange(0.86f, 0.95f) : Shape < 0.8f ? Random.FRandRange(0.95f, 1.12f) : Random.FRandRange(1.12f, 1.25f);
+		if (O.Build > 1.08f && Random.FRand() < 0.45f)
+		{
+			O.Belly = Random.FRandRange(3.f, 7.f);
+		}
 		O.bMoustache = Random.FRand() < 0.4f;
 		// Now and then a beard: a full one, a goatee, or a few days' stubble.
 		const float BeardRoll = Random.FRand();
@@ -267,6 +282,11 @@ namespace PersonModel
 		}
 		O.Hat = Kind < 0.55f ? EHat::Fedora : Kind < 0.8f ? EHat::Bowler : Kind < 0.84f ? EHat::Boater : Kind < 0.9f ? EHat::FlatCap : EHat::None;
 		O.Top = Random.FRand() < 0.6f ? ETop::Overcoat : ETop::Jacket;
+		if (O.Top == ETop::Overcoat)
+		{
+			// The paunch only shows under a jacket; an overcoat hangs over it.
+			O.Belly = 0.f;
+		}
 		O.Coat = Pick(Random, Coats);
 		O.bTie = Random.FRand() < 0.85f;
 		O.Held = Held < 0.12f ? EHeld::Briefcase : Held < 0.2f ? EHeld::Umbrella : Held < 0.28f ? EHeld::Newspaper : EHeld::None;

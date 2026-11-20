@@ -434,6 +434,37 @@ void APigeons::Tick(float DeltaSeconds)
 	}
 }
 
+bool APigeons::FlockNear(const UObject* WorldContextObject, const FVector2D& At, double Within, FVector& OutMiddle)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	for (TActorIterator<APigeons> It(World); It; ++It)
+	{
+		const APigeons* Squares = *It;
+		for (const FFlock& Flock : Squares->Flocks)
+		{
+			if (!Flock.bShown || FVector2D::Distance(FVector2D(Flock.Middle), At) > Within)
+			{
+				continue;
+			}
+			int32 Down = 0;
+			for (const int32 Index : Flock.Birds)
+			{
+				Down += Squares->Birds[Index].State == EState::Ground ? 1 : 0;
+			}
+			if (Down * 2 >= Flock.Birds.Num() && Down > 0)
+			{
+				OutMiddle = Flock.Middle;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool APigeons::Trouble(const UObject* WorldContextObject, const FVector& At)
 {
 	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;

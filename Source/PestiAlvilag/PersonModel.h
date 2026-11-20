@@ -55,8 +55,12 @@ namespace PersonModel
 	/** Bends the elbows of a dressed person (degrees, positive brings the forearm forward and up). */
 	void PoseElbows(const TArray<TObjectPtr<UProceduralMeshComponent>>& Pieces, float Left, float Right);
 
-	/** Someone out on the streets of Pest in the autumn of 1932. */
-	PersonKit::FOutfit RandomOutfit(FRandomStream& Random);
+	/**
+	 * Someone out on the streets of Pest in the autumn of 1932. On foot
+	 * (bOnFoot) also the rarer kinds: nuns, priests, old folk with a stick or
+	 * a string bag (PassersbyModel).
+	 */
+	PersonKit::FOutfit RandomOutfit(FRandomStream& Random, bool bOnFoot = false);
 
 	/** The player: a dark overcoat, a grey fedora and a red scarf. */
 	PersonKit::FOutfit PlayerOutfit();
