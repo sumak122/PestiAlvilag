@@ -123,6 +123,73 @@ RAKOCZI_GARDEN = [(6900, 39850), (14700, 37950), (17050, 44800), (6900, 45200)]
 RAKOCZI_SQUARE = [(6300, 39450), (15850, 37050), (16780, 37420), (19330, 44520), (19100, 45100), (6300, 45750)]
 RAKOCZI_DROP_WAYS = {"240802393", "240802394"}
 
+# The east strip (source/east_strip.osm, cut by east_strip.py) runs on from
+# the prototype area out to the trotting track. Where the two meet stand
+# today's Aréna Mall (2007), its car park roads and the cycle ways along
+# Kerepesi út; in 1932 that was the trotting track's ground, so they go.
+EAST_DROP_WAYS = {
+    "25268421",                                  # Aréna Mall
+    "207513293", "262231241", "230426322", "485679302",  # its roads
+    "230426895", "553651590", "1194300917", "1194300940",  # its lawns, tree rows
+    "1347179809", "669376351", "351378585",      # footway and cycle ways
+}
+# Streets named differently in 1932: today's name -> the 1932 one; an empty
+# name leaves the street unnamed (its 1932 name is not known).
+RENAMED_1932 = {"Dózsa György út": "Aréna út", "Asztalos Sándor út": ""}
+
+# The 1932 things in the east strip that today's map has lost, in map metres
+# (x east, y north). The Kerepesi út trotting track: a stadium-shaped oval
+# between Kerepesi út and the cemetery's north wall, its middle, half the
+# length of its straights, its outer radius and the width of its sand. The
+# game's ATrotTrack builds the rails, stands and stables round it; keep
+# TrotTrackModel.h (Middle, Straight, Outer, Sand) in step with these.
+TROT_MIDDLE = (1700.0, 195.0)
+TROT_STRAIGHT = 205.0
+TROT_OUTER = 95.0
+TROT_SAND = 18.0
+# The old gallop course north of Aréna út (races moved out in 1925): open
+# grass from the road out to the map's north edge.
+GALLOP_FIELD = [(1505, 717), (1550, 652), (1605, 608), (1815, 565), (2015, 526), (2115, 507),
+                (2300, 469), (2381, 454), (2381, 717)]
+# Low houses on the south side of Salgótarjáni utca (along this line, the
+# street's middle, east of the old Józsefváros station), the inn on the
+# corner of Kerepesi út by the stables, and the jockeys' houses behind them.
+SALGO_LINE = [(1585, -560), (1752, -586), (1968, -624)]
+EAST_HOUSES = [
+    ("inn", [(2104, 296), (2136, 296), (2136, 318), (2104, 318)], 2),
+    ("jockeys-1", [(2018, 100), (2034, 100), (2034, 111), (2018, 111)], 1),
+    ("jockeys-2", [(2044, 100), (2060, 100), (2060, 111), (2044, 111)], 1),
+    ("jockeys-3", [(2070, 100), (2086, 100), (2086, 111), (2070, 111)], 1),
+]
+
+
+def east_1932():
+    """Parks and houses of the 1932 east strip: (parks, buildings) as (polygon, tags)."""
+    parks, houses = [], []
+    (mx, my), inner = TROT_MIDDLE, TROT_OUTER - TROT_SAND
+    infield = LineString([(mx - TROT_STRAIGHT, my), (mx + TROT_STRAIGHT, my)]).buffer(inner, quad_segs=16)
+    parks.append((infield, {"leisure": "park", "name": "trotting track infield"}))
+    parks.append((Polygon(GALLOP_FIELD), {"leisure": "park", "name": "old gallop course"}))
+    for name, ring, levels in EAST_HOUSES:
+        houses.append((Polygon(ring), {"building": "house", "building:levels": str(levels), "id": "east-" + name}))
+    # Salgótarjáni utca: a house every 16 m, 13 m wide and 11 m deep, set
+    # back 7 m from the street's middle on its south (right hand) side.
+    count = 0
+    for (x1, y1), (x2, y2) in zip(SALGO_LINE, SALGO_LINE[1:]):
+        length = math.hypot(x2 - x1, y2 - y1)
+        ux, uy = (x2 - x1) / length, (y2 - y1) / length
+        nx, ny = uy, -ux  # right of the way along the line: south
+        along = 2.0
+        while along + 13.0 <= length:
+            ax, ay = x1 + ux * along, y1 + uy * along
+            ring = [(ax + nx * 7, ay + ny * 7), (ax + ux * 13 + nx * 7, ay + uy * 13 + ny * 7),
+                    (ax + ux * 13 + nx * 18, ay + uy * 13 + ny * 18), (ax + nx * 18, ay + ny * 18)]
+            count += 1
+            houses.append((Polygon(ring), {"building": "house", "building:levels": str(1 + count % 2),
+                                           "id": f"east-salgo-{count}"}))
+            along += 16.0
+    return parks, houses
+
 # Footprints smaller than this are modern street clutter (tram shelters,
 # kiosks, toilets). With no height in OSM they would come out as four-storey
 # pillars, and 1932 had none of them, so they are left out.
@@ -757,8 +824,25 @@ def build_lanes(ways, nodes, proj, clip, walls=None):
     return lanes
 
 
-def convert(osm_path, origin):
-    nodes, ways, relations, (minlat, minlon, maxlat, maxlon) = parse_osm(osm_path)
+def convert(osm_paths, origin):
+    nodes, ways, relations, (minlat, minlon, maxlat, maxlon) = parse_osm(osm_paths[0])
+    for extra in osm_paths[1:]:
+        more_nodes, more_ways, more_relations, more_bounds = parse_osm(extra)
+        nodes.update(more_nodes)
+        for wid, way in more_ways.items():
+            ways.setdefault(wid, way)
+        relations += more_relations
+        minlat, minlon = min(minlat, more_bounds[0]), min(minlon, more_bounds[1])
+        maxlat, maxlon = max(maxlat, more_bounds[2]), max(maxlon, more_bounds[3])
+    for wid in EAST_DROP_WAYS:
+        ways.pop(wid, None)
+    for way in ways.values():
+        old = way["tags"].get("name")
+        if old in RENAMED_1932:
+            if RENAMED_1932[old]:
+                way["tags"]["name"] = RENAMED_1932[old]
+            else:
+                del way["tags"]["name"]
     proj = LocalProjection(*origin)
     baross = baross_ter_1932(nodes, ways, proj)
     for wid in RAKOCZI_DROP_WAYS:
@@ -829,6 +913,11 @@ def convert(osm_path, origin):
         add_area(plazas, poly, {})
     for poly in baross["parks"]:
         add_area(parks, poly, {})
+    east_parks, east_houses = east_1932()
+    for poly, tags in east_parks:
+        add_area(parks, poly, tags)
+    for poly, tags in east_houses:
+        add_area(buildings, poly, tags)
 
     for rel in relations:
         tags = rel["tags"]
@@ -949,7 +1038,7 @@ def convert(osm_path, origin):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("osm")
+    ap.add_argument("osm", nargs="+", help="the main area first, then extra strips")
     ap.add_argument("out")
     ap.add_argument("--origin", nargs=2, type=float, default=DEFAULT_ORIGIN, metavar=("LAT", "LON"))
     args = ap.parse_args()
