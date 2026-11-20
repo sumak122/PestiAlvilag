@@ -510,90 +510,103 @@ void ATestGrounds::SpawnVehicles()
 			continue;
 		}
 		const FTransform Place(FRotator(0.0, Spot.Yaw, 0.0), At);
-		if (bCart)
-		{
-			AHorseCart* Cart = GetWorld()->SpawnActorDeferred<AHorseCart>(AHorseCart::StaticClass(), Place, nullptr, nullptr,
-				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-			if (Cart)
-			{
-				Cart->FinishSpawning(Place);
-				Vehicles.Add(Cart);
-			}
-			continue;
-		}
-		if (Spot.Kind == EVehicle::Bicycle || Spot.Kind == EVehicle::ShopBicycle)
-		{
-			ABicycle* Bike = GetWorld()->SpawnActorDeferred<ABicycle>(ABicycle::StaticClass(), Place, nullptr, nullptr,
-				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-			if (Bike)
-			{
-				Bike->bShopBike = Spot.Kind == EVehicle::ShopBicycle;
-				Bike->FinishSpawning(Place);
-				Vehicles.Add(Bike);
-			}
-			continue;
-		}
-
-		CarModel::FStyle Look;
-		UClass* Kind = APestiCar::StaticClass();
-		if (Spot.Kind == EVehicle::Taxi || Spot.Kind == EVehicle::DeluxeTaxi)
-		{
-			// The special taxi as an ordinary company taxi in its looks, so the kiosk's own stays in town.
-			Kind = APestiTaxi::StaticClass();
-			Look = Spot.Kind == EVehicle::Taxi ? CarModel::TaxiStyle() : CarModel::DeluxeTaxiStyle();
-		}
-		else if (Spot.Body == CarModel::EBody::Steyr)
-		{
-			// Dr. Halász's Steyr (mission 7) in its own colours.
-			Look = CarModel::SteyrStyle();
-		}
-		else if (Spot.Body == CarModel::EBody::Ssk)
-		{
-			// The car show's black Mercedes SSK in its own colours.
-			Look = CarModel::SskStyle();
-		}
-		else
-		{
-			Look.Body = Spot.Body;
-			Look.Wheel = Spot.Wheel;
-			Look.PaintColor = Spot.Paint;
-			if (Spot.Body == CarModel::EBody::TownCar || Spot.Body == CarModel::EBody::FordT)
-			{
-				Look.AccentColor = CarModel::OldBrass();
-			}
-			if (Spot.Body == CarModel::EBody::FordT)
-			{
-				Look.SpokeColor = CarModel::OldWood();
-			}
-			if (Spot.Kind == EVehicle::Police)
-			{
-				// As the force's own: dark blue on steel discs, the blue lamp by the windscreen.
-				Look.SpokeColor = Spot.Paint;
-				Look.bPolice = true;
-				Look.AccentColor = FLinearColor(0.05f, 0.25f, 1.0f);
-			}
-		}
-		APestiCar* Car = GetWorld()->SpawnActorDeferred<APestiCar>(Kind, Place, nullptr, nullptr,
-			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-		if (!Car)
-		{
-			continue;
-		}
-		Car->BodyColor = Look.PaintColor;
-		Car->SetStyle(Look);
 		// The saloon and the coupe at the head of the row are locked, to try breaking in.
-		if (Spot.Kind == EVehicle::Car && !Spot.bTarget && (Spot.Body == CarModel::EBody::Saloon || Spot.Body == CarModel::EBody::Coupe))
+		const bool bLocked = Spot.Kind == TestGroundsModel::EVehicle::Car && !Spot.bTarget
+			&& (Spot.Body == CarModel::EBody::Saloon || Spot.Body == CarModel::EBody::Coupe);
+		if (APawn* Made = SpawnVehicle(GetWorld(), Spot, Place, bLocked))
 		{
-			Car->SetLocked(true);
+			Vehicles.Add(Made);
 		}
-		if (Spot.Kind == EVehicle::DeluxeTaxi)
-		{
-			Car->MaxSpeed = 3300.f;
-			Car->Acceleration = 1150.f;
-		}
-		Car->FinishSpawning(Place);
-		Vehicles.Add(Car);
 	}
+}
+
+APawn* ATestGrounds::SpawnVehicle(UWorld* World, const TestGroundsModel::FVehicleSpot& Spot, const FTransform& Place, bool bLocked)
+{
+	using TestGroundsModel::EVehicle;
+	if (!World)
+	{
+		return nullptr;
+	}
+	if (Spot.Kind == EVehicle::HorseCart)
+	{
+		AHorseCart* Cart = World->SpawnActorDeferred<AHorseCart>(AHorseCart::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+		if (Cart)
+		{
+			Cart->FinishSpawning(Place);
+		}
+		return Cart;
+	}
+	if (Spot.Kind == EVehicle::Bicycle || Spot.Kind == EVehicle::ShopBicycle)
+	{
+		ABicycle* Bike = World->SpawnActorDeferred<ABicycle>(ABicycle::StaticClass(), Place, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+		if (Bike)
+		{
+			Bike->bShopBike = Spot.Kind == EVehicle::ShopBicycle;
+			Bike->FinishSpawning(Place);
+		}
+		return Bike;
+	}
+
+	CarModel::FStyle Look;
+	UClass* Kind = APestiCar::StaticClass();
+	if (Spot.Kind == EVehicle::Taxi || Spot.Kind == EVehicle::DeluxeTaxi)
+	{
+		// The special taxi as an ordinary company taxi in its looks, so the kiosk's own stays in town.
+		Kind = APestiTaxi::StaticClass();
+		Look = Spot.Kind == EVehicle::Taxi ? CarModel::TaxiStyle() : CarModel::DeluxeTaxiStyle();
+	}
+	else if (Spot.Body == CarModel::EBody::Steyr)
+	{
+		// Dr. Halász's Steyr (mission 7) in its own colours.
+		Look = CarModel::SteyrStyle();
+	}
+	else if (Spot.Body == CarModel::EBody::Ssk)
+	{
+		// The car show's black Mercedes SSK in its own colours.
+		Look = CarModel::SskStyle();
+	}
+	else
+	{
+		Look.Body = Spot.Body;
+		Look.Wheel = Spot.Wheel;
+		Look.PaintColor = Spot.Paint;
+		if (Spot.Body == CarModel::EBody::TownCar || Spot.Body == CarModel::EBody::FordT)
+		{
+			Look.AccentColor = CarModel::OldBrass();
+		}
+		if (Spot.Body == CarModel::EBody::FordT)
+		{
+			Look.SpokeColor = CarModel::OldWood();
+		}
+		if (Spot.Kind == EVehicle::Police)
+		{
+			// As the force's own: dark blue on steel discs, the blue lamp by the windscreen.
+			Look.SpokeColor = Spot.Paint;
+			Look.bPolice = true;
+			Look.AccentColor = FLinearColor(0.05f, 0.25f, 1.0f);
+		}
+	}
+	APestiCar* Car = World->SpawnActorDeferred<APestiCar>(Kind, Place, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Car)
+	{
+		return nullptr;
+	}
+	Car->BodyColor = Look.PaintColor;
+	Car->SetStyle(Look);
+	if (bLocked)
+	{
+		Car->SetLocked(true);
+	}
+	if (Spot.Kind == EVehicle::DeluxeTaxi)
+	{
+		Car->MaxSpeed = 3300.f;
+		Car->Acceleration = 1150.f;
+	}
+	Car->FinishSpawning(Place);
+	return Car;
 }
 
 void ATestGrounds::UpdateLamps()

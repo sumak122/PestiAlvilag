@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "TestSpawn.h"
 
 class APestiHUD;
 class APlayerController;
@@ -63,6 +64,9 @@ enum class EPestiMenuAction : uint8
 	// The mission list on the test page, and starting the chosen mission.
 	Missions,
 	PlayMission,
+	// The spawn page (TestSpawn) on the test page, and doing a row's pick.
+	SpawnPage,
+	SpawnPick,
 	Back,
 };
 
@@ -79,6 +83,8 @@ enum class EPestiMenuPage : uint8
 	Tests,
 	/** The act 1 missions, to start any of them for testing. */
 	Missions,
+	/** The spawn menu (TestSpawn): vehicles, traffic, animals, people, the clock, the stars, jumps. */
+	Spawn,
 };
 
 struct FPestiMenuRow
@@ -125,6 +131,9 @@ public:
 	/** A mission in the list (0 for the first): its name (in capitals), and who gives it where. */
 	static void MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FString& WhereHu, FString& WhereEn);
 
+	/** The pick shown in a row of the spawn page. */
+	int32 GetSpawnPick(int32 Row) const { return SpawnPicks[FMath::Clamp(Row, 0, TestSpawn::NumGroups - 1)]; }
+
 	/** The settings rows. */
 	static constexpr int32 SettingCount = 8;
 	/** A settings row: its name, and either Bars (0 to 10) or a value to pick. */
@@ -148,6 +157,11 @@ private:
 	/** On foot when the menu opened, and out on the test grounds then. */
 	bool bOnFoot = false;
 	bool bOnTestGrounds = false;
+	/** The spawn page: each row's pick and the row last used (kept while the game runs). */
+	int32 SpawnPicks[TestSpawn::NumGroups] = {};
+	int32 SpawnRow = 0;
+	void OpenSpawn();
+	void StepSpawnPick(int32 By);
 	/** The weather the test page has set (an ETestWeather: 0 by itself, 1 clear, 2 rain, 3 fog). */
 	int32 WeatherPick = 0;
 	/** The title screen stops the game a moment after the level starts, once everything has had a frame to set itself up. */

@@ -35,8 +35,8 @@ public:
 	virtual void TakeDriver(APawn* InDriver) override;
 	virtual bool IsCityCart() const override { return true; }
 
-	/** Picks the load, the horse and the carter; call before it is spawned (deferred). */
-	void PickLoad(FRandomStream& Random);
+	/** Picks the load (Wanted, or any when None), the horse and the carter; call before it is spawned (deferred). */
+	void PickLoad(FRandomStream& Random, HorseCartModel::ELoad Wanted = HorseCartModel::ELoad::None);
 
 	/** Makes it the undertaker's hearse instead (ADailyLife's funeral): a black horse, the coachman in black, a slow walk. Before spawning. */
 	void MakeHearse(FRandomStream& Dice);

@@ -236,7 +236,18 @@ void FPestiMenu::MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FStr
 TArray<FPestiMenuRow> FPestiMenu::Rows() const
 {
 	TArray<FPestiMenuRow> Out;
-	if (Page == EPestiMenuPage::Missions)
+	if (Page == EPestiMenuPage::Spawn)
+	{
+		for (int32 i = 0; i < TestSpawn::NumGroups; ++i)
+		{
+			const TestSpawn::EGroup Group = static_cast<TestSpawn::EGroup>(i);
+			FString Hu, En, NoteHu, NoteEn;
+			TestSpawn::GroupName(Group, Hu, En, NoteHu, NoteEn);
+			Out.Add({ Hu, En, EPestiMenuAction::SpawnPick, bOnFoot || !TestSpawn::NeedsFoot(Group) });
+		}
+		Out.Add({ TEXT("VISSZA"), TEXT("Back"), EPestiMenuAction::Back });
+	}
+	else if (Page == EPestiMenuPage::Missions)
 	{
 		for (int32 i = 0; i < MissionCount; ++i)
 		{
@@ -249,6 +260,7 @@ TArray<FPestiMenuRow> FPestiMenu::Rows() const
 	else if (Page == EPestiMenuPage::Tests)
 	{
 		Out.Add({ TEXT("K\u00dcLDET\u00c9SEK"), TEXT("Missions"), EPestiMenuAction::Missions });
+		Out.Add({ TEXT("IDEHOZ\u00c1S  (F6)"), TEXT("Spawn things (F6)"), EPestiMenuAction::SpawnPage });
 		Out.Add({ TEXT("VEREKED\u0150 UDVAR"), TEXT("Fight yard"), EPestiMenuAction::TestFight, bOnFoot });
 		Out.Add({ TEXT("J\u00c1RM\u0170TELEP"), TEXT("Vehicle yard"), EPestiMenuAction::TestVehicles, bOnFoot });
 		Out.Add({ TEXT("VISSZA A V\u00c1ROSBA"), TEXT("Back to the city"), EPestiMenuAction::TestBackToCity, bOnFoot && bOnTestGrounds });
@@ -440,6 +452,27 @@ void FPestiMenu::Ask(EPestiMenuAction What)
 	Choice = 1;
 }
 
+void FPestiMenu::OpenSpawn()
+{
+	Page = EPestiMenuPage::Spawn;
+	Choice = FMath::Clamp(SpawnRow, 0, TestSpawn::NumGroups - 1);
+	const TArray<FPestiMenuRow> List = Rows();
+	if (!List.IsValidIndex(Choice) || !List[Choice].bEnabled)
+	{
+		Choice = 0;
+	}
+}
+
+void FPestiMenu::StepSpawnPick(int32 By)
+{
+	if (Choice < 0 || Choice >= TestSpawn::NumGroups)
+	{
+		return;
+	}
+	const int32 Picks = FMath::Max(1, TestSpawn::NumPicks(static_cast<TestSpawn::EGroup>(Choice)));
+	SpawnPicks[Choice] = ((SpawnPicks[Choice] + By) % Picks + Picks) % Picks;
+}
+
 void FPestiMenu::Move(int32 By)
 {
 	if (Page == EPestiMenuPage::Settings)
@@ -518,6 +551,18 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 		Page = EPestiMenuPage::Missions;
 		Choice = 0;
 		break;
+	case EPestiMenuAction::SpawnPage:
+		OpenSpawn();
+		break;
+	case EPestiMenuAction::SpawnPick:
+	{
+		// The rows are the groups in order: the chosen row is the group. The game goes on first, then it is done.
+		const int32 Row = FMath::Clamp(Choice, 0, TestSpawn::NumGroups - 1);
+		SpawnRow = Row;
+		Close(World);
+		TestSpawn::DoPick(World, static_cast<TestSpawn::EGroup>(Row), SpawnPicks[Row]);
+		break;
+	}
 	case EPestiMenuAction::PlayMission:
 	{
 		// The rows are the missions in order: the chosen row is the mission.
@@ -544,11 +589,11 @@ void FPestiMenu::Do(UWorld* World, APlayerController* PC, EPestiMenuAction Actio
 		ATestGrounds::GoBack(World);
 		break;
 	case EPestiMenuAction::Back:
-		if (Page == EPestiMenuPage::Missions)
+		if (Page == EPestiMenuPage::Missions || Page == EPestiMenuPage::Spawn)
 		{
-			// Back to the test page, on its mission row.
+			// Back to the test page, on the row it came from (the missions first, the spawn page second).
+			Choice = Page == EPestiMenuPage::Spawn ? 1 : 0;
 			Page = EPestiMenuPage::Tests;
-			Choice = 0;
 			break;
 		}
 		Page = Base;
@@ -606,6 +651,20 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 		{
 			Open(World, EPestiMenuPage::Pause);
 		}
+		else if (PC->WasInputKeyJustPressed(EKeys::F6))
+		{
+			// Straight to the spawn page; back from it goes to the test page, then the pause menu on its test row.
+			Open(World, EPestiMenuPage::Pause);
+			const TArray<FPestiMenuRow> PauseRows = Rows();
+			for (int32 i = 0; i < PauseRows.Num(); ++i)
+			{
+				if (PauseRows[i].Action == EPestiMenuAction::TestAreas)
+				{
+					BaseChoice = i;
+				}
+			}
+			OpenSpawn();
+		}
 		return;
 	}
 
@@ -624,6 +683,7 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 	case EPestiMenuPage::Confirm:
 	case EPestiMenuPage::Tests:
 	case EPestiMenuPage::Missions:
+	case EPestiMenuPage::Spawn:
 	{
 		if (bUp || (Page == EPestiMenuPage::Confirm && bLeft))
 		{
@@ -632,6 +692,10 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 		else if (bDown || (Page == EPestiMenuPage::Confirm && bRight))
 		{
 			Move(1);
+		}
+		else if (Page == EPestiMenuPage::Spawn && (bLeft || bRight))
+		{
+			StepSpawnPick(bLeft ? -1 : 1);
 		}
 		else if (bOk)
 		{
@@ -647,7 +711,7 @@ void FPestiMenu::Tick(UWorld* World, APlayerController* PC)
 			{
 				Do(World, PC, EPestiMenuAction::No);
 			}
-			else if (Page == EPestiMenuPage::Tests || Page == EPestiMenuPage::Missions)
+			else if (Page == EPestiMenuPage::Tests || Page == EPestiMenuPage::Missions || Page == EPestiMenuPage::Spawn)
 			{
 				Do(World, PC, EPestiMenuAction::Back);
 			}

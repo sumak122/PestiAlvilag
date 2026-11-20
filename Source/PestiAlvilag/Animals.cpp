@@ -256,6 +256,33 @@ void AAnimals::SetUp()
 	}
 }
 
+bool AAnimals::AddStray(const UObject* WorldContextObject, AnimalModel::EKind Kind, const FVector& Near)
+{
+	static constexpr double StrayRoam = 600.0;
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	TActorIterator<AAnimals> It(World);
+	if (!It)
+	{
+		return false;
+	}
+	AAnimals* Strays = *It;
+	FVector Ground;
+	if (!Strays->GroundAt(Near + FVector(0.0, 0.0, 150.0), 400.0, Ground))
+	{
+		return false;
+	}
+	Strays->AddPet(Kind, Ground, StrayRoam, false, false);
+	FPet& Added = Strays->Pets.Last();
+	Added.bKeen = Added.bDog;
+	// Up and about at once, not lying down.
+	Added.Busy = 0.f;
+	return true;
+}
+
 void AAnimals::AddPet(AnimalModel::EKind Kind, const FVector& Near, double Roam, bool bTame, bool bLazy)
 {
 	using namespace AnimalModel;
@@ -1074,7 +1101,7 @@ bool AAnimals::StartChase(FPet& Pet, const FMover& Mover)
 	}
 	// Seen once; it may or may not take after it.
 	Pet.ChaseRest = Animals::ChaseRestFor;
-	if (Random.FRand() >= Animals::ChaseChance)
+	if (!Pet.bKeen && Random.FRand() >= Animals::ChaseChance)
 	{
 		return false;
 	}

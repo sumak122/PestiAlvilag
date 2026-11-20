@@ -16,6 +16,11 @@ class UMaterialInterface;
 class UPointLightComponent;
 class UStaticMesh;
 
+namespace TestGroundsModel
+{
+	struct FVehicleSpot;
+}
+
 /** Which of the two test grounds. */
 enum class ETestGround : uint8
 {
@@ -47,6 +52,12 @@ public:
 	static void GoBack(UWorld* World);
 	/** True while the player is out on the grounds. */
 	static bool IsPlayerHere(const UWorld* World);
+	/**
+	 * One vehicle of the vehicle yard's kinds (its Kind, Body, Wheel and
+	 * Paint) at Place, as the yard puts them out; also used by the spawn
+	 * menu (TestSpawn). bLocked locks a car, to try breaking in.
+	 */
+	static APawn* SpawnVehicle(UWorld* World, const TestGroundsModel::FVehicleSpot& Spot, const FTransform& Place, bool bLocked);
 
 	virtual void Tick(float DeltaSeconds) override;
 

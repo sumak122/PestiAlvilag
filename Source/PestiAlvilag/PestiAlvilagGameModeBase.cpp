@@ -872,6 +872,21 @@ void APestiAlvilagGameModeBase::ReportCrime(int32 CrimeLevel)
 	NotifySeenByPolice();
 }
 
+void APestiAlvilagGameModeBase::SetWantedForTest(int32 Stars)
+{
+	if (Stars <= 0)
+	{
+		ClearWanted(TEXT("Nem keres a rend\u0151rs\u00e9g.  (Not wanted.)"));
+		return;
+	}
+	if (WantedLevel == 0)
+	{
+		APestiHUD::Show(this, 3, 4.f, FColor::Red, TEXT("The police are after you!"));
+	}
+	WantedLevel = FMath::Clamp(Stars, 1, PestiStart::MaxWantedLevel);
+	NotifySeenByPolice();
+}
+
 void APestiAlvilagGameModeBase::NotifySeenByPolice()
 {
 	TimeUnseen = 0.f;
