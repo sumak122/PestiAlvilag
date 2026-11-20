@@ -100,6 +100,7 @@ namespace TestSpawnPlace
 		case EVehicle::Bicycle: Hu = TEXT("Ker\u00e9kp\u00e1r"); En = TEXT("Bicycle"); return;
 		case EVehicle::ShopBicycle: Hu = TEXT("Boltos ker\u00e9kp\u00e1r"); En = TEXT("Shop bicycle"); return;
 		case EVehicle::FireTruck: Hu = TEXT("T\u0171zolt\u00f3 fecskend\u0151"); En = TEXT("Fire engine"); return;
+		case EVehicle::Motorbike: Hu = TEXT("Oldalkocsis motor"); En = TEXT("Motorbike with sidecar"); return;
 		default: break;
 		}
 		switch (Spot.Body)

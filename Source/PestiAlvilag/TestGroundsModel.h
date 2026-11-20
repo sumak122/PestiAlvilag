@@ -68,7 +68,7 @@ namespace TestGroundsModel
 	};
 
 	/** One vehicle standing in the yard, ready to drive. */
-	enum class EVehicle : uint8 { Car, Taxi, DeluxeTaxi, Police, HorseCart, Bicycle, ShopBicycle, FireTruck };
+	enum class EVehicle : uint8 { Car, Taxi, DeluxeTaxi, Police, HorseCart, Bicycle, ShopBicycle, FireTruck, Motorbike };
 	struct FVehicleSpot
 	{
 		EVehicle Kind;
@@ -310,6 +310,7 @@ namespace TestGroundsModel
 			{ EVehicle::Car, EBody::TownCar, EWheel::Artillery, FLinearColor(0.12f, 0.02f, 0.03f), FVector(-3400 + 10 * Gap + 2350, RowY, 0), Face, false },
 			{ EVehicle::Car, EBody::Ssk, EWheel::Wire, FLinearColor(0.010f, 0.010f, 0.012f), FVector(-3400 + 10 * Gap + 2750, RowY, 0), Face, false },
 			{ EVehicle::FireTruck, EBody::Van, EWheel::Artillery, FLinearColor::Black, FVector(-3400 + 10 * Gap + 3300, RowY, 0), Face, false },
+			{ EVehicle::Motorbike, EBody::Balilla, EWheel::Wire, FLinearColor::Black, FVector(-3400 + 10 * Gap + 3850, RowY, 0), Face, false },
 			{ EVehicle::Car, EBody::Saloon, EWheel::Artillery, FLinearColor(0.25f, 0.22f, 0.18f), FVector(1800, 7000, 0), 0.0, true },
 			{ EVehicle::Car, EBody::Van, EWheel::Artillery, FLinearColor(0.18f, 0.20f, 0.15f), FVector(2500, 7000, 0), 0.0, true },
 			{ EVehicle::Car, EBody::Tourer, EWheel::Artillery, FLinearColor(0.22f, 0.12f, 0.08f), FVector(3200, 7000, 0), 0.0, true },
