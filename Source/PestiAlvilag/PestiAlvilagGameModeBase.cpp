@@ -27,6 +27,7 @@
 #include "LaciYard.h"
 #include "LaciYardModel.h"
 #include "DailyLife.h"
+#include "FiakerStand.h"
 #include "FireStation.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
@@ -381,6 +382,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AFireStation>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AFireStation>();
+	}
+
+	// The fiakers waiting for fares in front of Keleti.
+	if (!TActorIterator<AFiakerStand>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AFiakerStand>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first

@@ -16,6 +16,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TrafficCar.h"
+#include "TrafficCart.h"
 #include "PestiHud.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTaxiRides, Log, All);
@@ -121,6 +122,14 @@ AActor* ATaxiRides::TaxiNearby(const APawn* Player) const
 	for (TActorIterator<ATrafficTaxi> It(GetWorld()); It; ++It)
 	{
 		Consider(*It);
+	}
+	// A fiaker for hire, passing or waiting at its stand.
+	for (TActorIterator<ATrafficCart> It(GetWorld()); It; ++It)
+	{
+		if (It->IsForHire())
+		{
+			Consider(*It);
+		}
 	}
 	return Best;
 }
@@ -243,7 +252,8 @@ void ATaxiRides::Tick(float DeltaSeconds)
 		}
 		if (GEngine)
 		{
-			APestiHUD::Show(this, TaxiRides::HeadLine, 0.f, FColor(255, 210, 60), TEXT("T: ride in the taxi"));
+			APestiHUD::Show(this, TaxiRides::HeadLine, 0.f, FColor(255, 210, 60),
+				Taxi->IsA<ATrafficCart>() ? TEXT("T: ride in the fi\u00e1ker") : TEXT("T: ride in the taxi"));
 		}
 		if (PC->WasInputKeyJustPressed(EKeys::T))
 		{
@@ -266,6 +276,10 @@ void ATaxiRides::Tick(float DeltaSeconds)
 	if (ATrafficTaxi* Passing = Cast<ATrafficTaxi>(Taxi))
 	{
 		Passing->HoldStill(TaxiRides::HoldFor);
+	}
+	else if (ATrafficCart* Cab = Cast<ATrafficCart>(Taxi))
+	{
+		Cab->HoldStill(TaxiRides::HoldFor);
 	}
 	const FVector From = Player->GetActorLocation();
 	ShowChoices(From);

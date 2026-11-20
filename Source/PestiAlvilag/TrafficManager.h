@@ -48,7 +48,7 @@ struct FTramRoute
 };
 
 /** What the test spawn menu (TestSpawn) can put into the traffic. */
-enum class ETestTraffic : uint8 { Car, Taxi, Police, MilkCart, CoalCart, BeerCart, Bike };
+enum class ETestTraffic : uint8 { Car, Taxi, Police, MilkCart, CoalCart, BeerCart, Bike, Fiaker };
 
 /**
  * Reads the traffic lanes from the graybox JSON, spawns AI cars on them and

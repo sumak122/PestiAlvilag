@@ -562,12 +562,12 @@ namespace HorseCartModel
 	 * churns from the dairy, sacks of coal, or beer barrels from the Kőbánya
 	 * breweries. None is Pista bácsi's market cart, with its crates.
 	 */
-	enum class ELoad : uint8 { None, Milk, Coal, Beer, Hearse, Count };
+	enum class ELoad : uint8 { None, Milk, Coal, Beer, Hearse, Fiaker, Count };
 	constexpr int32 MaxLoadItems = 14;
 
 	inline int32 NumLoadItems(ELoad Load)
 	{
-		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : Load == ELoad::Hearse ? 1 : 0;
+		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : (Load == ELoad::Hearse || Load == ELoad::Fiaker) ? 1 : 0;
 	}
 
 	// A churn, a sack and a barrel (cm).
@@ -602,6 +602,11 @@ namespace HorseCartModel
 			const double Rise = FMath::Sqrt(4.0 * BarrelRadius * BarrelRadius - 28.0 * 28.0);
 			return FVector(-94.0 + ((Index - 8) / 2) * 56.0, Side * 33.0, BedTop + Rise);
 		}
+		if (Load == ELoad::Fiaker)
+		{
+			// The cab's body over the whole bed.
+			return FVector((BedFront + BedBack) * 0.5, 0.0, BedTop);
+		}
 		if (Load == ELoad::Hearse)
 		{
 			// The glass case over the middle of the bed.
@@ -621,6 +626,10 @@ namespace HorseCartModel
 	inline FLinearColor Jute() { return FLinearColor(0.085f, 0.075f, 0.06f); }
 	inline FLinearColor Coal() { return FLinearColor(0.025f, 0.025f, 0.03f); }
 	inline FLinearColor Oak() { return FLinearColor(0.36f, 0.22f, 0.11f); }
+	inline FLinearColor FiakerLacquer() { return FLinearColor(0.012f, 0.014f, 0.016f); }
+
+	/** A fiaker's passenger seat: the middle of a seated fare's hips, in the cart's frame (two side by side: Side -1 and 1). */
+	inline FVector FiakerFareHip(double Side) { return FVector(BedBack + 50.0, Side * 30.0, BedTop + 56.0); }
 
 	/** The carrier's own colours on the side boards and the wheels. */
 	inline void LoadPaints(ELoad Load, FLinearColor& OutBoards, FLinearColor& OutWheels)
@@ -646,6 +655,11 @@ namespace HorseCartModel
 			// The undertaker's: black all over.
 			OutBoards = FLinearColor(0.02f, 0.02f, 0.022f);
 			OutWheels = FLinearColor(0.025f, 0.025f, 0.028f);
+			break;
+		case ELoad::Fiaker:
+			// The cab's black lacquer, and yellow wheels.
+			OutBoards = FiakerLacquer();
+			OutWheels = FLinearColor(0.60f, 0.42f, 0.07f);
 			break;
 		default:
 			OutBoards = BoardPaint();
@@ -721,6 +735,74 @@ namespace HorseCartModel
 			for (const double Side : { -1.0, 1.0 })
 			{
 				Hoop(P, FLinearColor(0.45f, 0.05f, 0.03f), FVector(0.0, (L + 0.4) * Side, R), FVector(0.0, 0.0, 10.0), FVector(10.0, 0.0, 0.0), 1.4, 14);
+			}
+			return;
+		}
+		if (Load == ELoad::Fiaker)
+		{
+			// The town's cab (a one-horse "konflis"): a body of black lacquer over
+			// the whole bed with a fine yellow line, a deep buttoned seat in wine
+			// leather for two at the back, its folded hood rolled up behind it,
+			// a curved dashboard before the fares' feet, brass carriage lamps by
+			// the coachman's box and a step on each side. From the bed's middle.
+			const FLinearColor Lacquer = FiakerLacquer();
+			const FLinearColor Line(0.62f, 0.46f, 0.10f);
+			const FLinearColor Wine(0.26f, 0.04f, 0.05f);
+			const FLinearColor Hood(0.03f, 0.03f, 0.032f);
+			const FLinearColor Glass(0.92f, 0.86f, 0.62f);
+			const double Back = BedBack - (BedFront + BedBack) * 0.5;
+			const double SeatX = Back + 34.0;
+			// The floor over the planks, and the body's sides, back and dashboard.
+			Block(P, Lacquer, FVector(-20.0, 0.0, 2.0), FVector(108.0, 66.0, 2.0));
+			for (const double SY : { -1.0, 1.0 })
+			{
+				// Stepped sides hiding the bed: low by the box, higher by the fares' feet, highest round the seat.
+				Block(P, Lacquer, FVector(38.0, SY * 73.0, 8.0), FVector(18.0, 2.5, 24.0));
+				Block(P, Lacquer, FVector(94.0, SY * 73.0, 12.0), FVector(42.0, 2.5, 26.0));
+				Block(P, Lacquer, FVector(-22.0, SY * 73.0, 14.0), FVector(42.0, 2.5, 30.0));
+				Block(P, Lacquer, FVector(Back + 36.0, SY * 73.0, 28.0), FVector(36.0, 2.5, 44.0));
+				Loft(P, Lacquer, { Flat(Back + 72.0, 72.0, 0.1, 2.5, SY * 73.0), Flat(Back + 80.0, 56.0, 8.0, 2.5, SY * 73.0), Flat(Back + 76.0, 44.0, 4.0, 2.5, SY * 73.0) }, 4, false, false, PI * 0.25);
+				Block(P, Line, FVector(-22.0, SY * 75.6, 30.0), FVector(40.0, 0.4, 1.0));
+				Block(P, Line, FVector(Back + 36.0, SY * 75.6, 56.0), FVector(32.0, 0.4, 1.0));
+				Block(P, Line, FVector(Back + 36.0, SY * 75.6, -8.0), FVector(32.0, 0.4, 1.0));
+				// An arm rest along the top of each side round the seat.
+				Block(P, Wine, FVector(Back + 36.0, SY * 71.0, 73.0), FVector(34.0, 4.5, 2.0));
+				// The step, on an iron bracket.
+				Rod(P, Iron(), FVector(-6.0, SY * 70.0, 0.0), FVector(-6.0, SY * 80.0, -38.0), 1.2);
+				Block(P, Iron(), FVector(-6.0, SY * 82.0, -38.0), FVector(10.0, 6.0, 1.0));
+				// A carriage lamp on a stalk either side of the box: black case, brass top, warm glass.
+				const FVector Lamp(60.0, SY * 74.0, 56.0);
+				Rod(P, Iron(), FVector(60.0, SY * 70.0, 30.0), Lamp, 1.2);
+				Block(P, Lacquer, Lamp + FVector(0.0, 0.0, 8.0), FVector(6.0, 6.0, 9.0));
+				Block(P, Glass, Lamp + FVector(6.2, 0.0, 9.0), FVector(0.3, 4.5, 6.0));
+				Loft(P, Brass(), { Flat(Lamp.X, Lamp.Z + 17.0, 7.5, 7.5, Lamp.Y), Flat(Lamp.X, Lamp.Z + 25.0, 2.0, 2.0, Lamp.Y) }, 8, true, true);
+			}
+			Block(P, Lacquer, FVector(Back + 2.5, 0.0, 28.0), FVector(2.5, 73.0, 44.0));
+			Block(P, Lacquer, FVector(134.0, 0.0, 12.0), FVector(2.5, 73.0, 26.0));
+			Loft(P, Lacquer, { Flat(56.0, 4.0, 3.0, 66.0), Flat(60.0, 34.0, 3.0, 66.0), Flat(56.0, 56.0, 2.0, 64.0) }, 4, false, false, PI * 0.25);
+			// The seat: a cushion and a high buttoned back.
+			Block(P, Wine, FVector(SeatX, 0.0, 40.0), FVector(26.0, 64.0, 8.0));
+			Block(P, Lacquer, FVector(SeatX, 0.0, 22.0), FVector(26.0, 64.0, 10.0));
+			Block(P, Wine, FVector(Back + 9.0, 0.0, 68.0), FVector(4.0, 64.0, 22.0));
+			for (double Y = -48.0; Y <= 48.0; Y += 24.0)
+			{
+				for (const double Z : { 60.0, 76.0 })
+				{
+					Blob(P, Wine * 0.6f, FVector(Back + 13.2, Y, Z), FVector(1.0, 1.5, 1.5), 6, 3);
+				}
+			}
+			// The hood, folded down: a fat roll of black leather behind the back, its irons.
+			TArray<FRing> Roll;
+			for (const double Y : { -64.0, -58.0, 58.0, 64.0 })
+			{
+				const double Shrink = FMath::Abs(Y) > 60.0 ? 0.8 : 1.0;
+				Roll.Add({ FVector(Back - 6.0, Y, 92.0), FVector(22.0 * Shrink, 0.0, 0.0), FVector(0.0, 0.0, 16.0 * Shrink) });
+			}
+			Loft(P, Hood, Roll, 12, true, true);
+			for (const double SY : { -1.0, 1.0 })
+			{
+				Rod(P, Iron(), FVector(Back - 6.0, SY * 66.0, 92.0), FVector(Back + 30.0, SY * 74.0, 66.0), 1.0);
+				Blob(P, Brass(), FVector(Back + 30.0, SY * 76.0, 66.0), FVector(2.0, 2.0, 2.0), 6, 3);
 			}
 			return;
 		}
@@ -876,6 +958,20 @@ namespace HorseCartModel
 			O.Apron = FLinearColor(0.24f, 0.12f, 0.05f);
 			O.Build = 1.22f;
 			O.bMoustache = true;
+			break;
+		case ELoad::Fiaker:
+			// The cabman: a bowler, a long dark blue coat with brass buttons, a big moustache.
+			O.Hat = EHat::Bowler;
+			O.HatColor = FLinearColor(0.02f, 0.02f, 0.02f);
+			O.Top = ETop::Overcoat;
+			O.Coat = FLinearColor(0.03f, 0.04f, 0.09f);
+			O.Shirt = FLinearColor(0.80f, 0.78f, 0.72f);
+			O.Trousers = FLinearColor(0.03f, 0.03f, 0.04f);
+			O.bScarf = true;
+			O.Scarf = FLinearColor(0.35f, 0.05f, 0.04f);
+			O.bApron = false;
+			O.bMoustache = true;
+			O.Height = 172.f + (Pick % 3) * 3.f;
 			break;
 		case ELoad::Hearse:
 			// The undertaker's coachman: all in black under a black bowler.
