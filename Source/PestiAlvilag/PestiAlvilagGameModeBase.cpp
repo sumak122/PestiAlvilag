@@ -64,6 +64,7 @@
 #include "PestiPerson.h"
 #include "StreetFights.h"
 #include "MusicBars.h"
+#include "Eateries.h"
 #include "CarjackedDriver.h"
 #include "LighterModel.h"
 #include "StreetName.h"
@@ -594,6 +595,11 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	if (!TActorIterator<AMusicBars>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AMusicBars>(AMusicBars::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	}
+	// The nine places to eat, rooms to walk into with their own menus.
+	if (!TActorIterator<AEateries>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AEateries>(AEateries::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
 	}
 
 	// And Bandi's boxing yard, the grund on Kis Fuvaros utca (open after mission 3).

@@ -7,6 +7,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/Texture2D.h"
+#include "Eateries.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FoodVendor.h"
@@ -68,6 +69,65 @@ namespace Food
 				TEXT("A spicy paprika sausage from the grill, with bread and a fresh green pepper."), 60 },
 			{ TEXT("perec"), TEXT("Perec"), TEXT("Pretzel"),
 				TEXT("A salted pretzel from the basket, crisp outside and soft inside."), 6 },
+			// The places to eat (AEateries).
+			{ TEXT("rigo_jancsi"), TEXT("Rig\u00f3 Jancsi"), TEXT("Rig\u00f3 Jancsi cake"),
+				TEXT("A cube of chocolate sponge and chocolate cream, named after the gypsy fiddler who ran off with a princess."), 60 },
+			{ TEXT("eszterhazy"), TEXT("Eszterh\u00e1zy torta"), TEXT("Eszterh\u00e1zy cake"),
+				TEXT("Walnut layers with vanilla cream and white fondant, feathered with chocolate."), 60 },
+			{ TEXT("kremes"), TEXT("Kr\u00e9mes"), TEXT("Cream slice"),
+				TEXT("Thick vanilla custard between two crisp sheets of puff pastry, buried in sugar."), 40 },
+			{ TEXT("gesztenyepure"), TEXT("Gesztenyep\u00fcr\u00e9"), TEXT("Chestnut pur\u00e9e"),
+				TEXT("Sweet chestnut pressed into threads, with rum, under a cap of whipped cream."), 50 },
+			{ TEXT("forro_csoki"), TEXT("Forr\u00f3 csokol\u00e1d\u00e9"), TEXT("Hot chocolate"),
+				TEXT("Thick hot chocolate with whipped cream, a winter treat for the gentry."), 44 },
+			{ TEXT("babfozelek"), TEXT("Babf\u0151zel\u00e9k"), TEXT("Bean stew"),
+				TEXT("Thick bean stew with a roux and a few slices of sausage on top. Fills a worker till evening."), 30 },
+			{ TEXT("krumplifozelek"), TEXT("Krumplif\u0151zel\u00e9k"), TEXT("Potato stew"),
+				TEXT("Potatoes in a sour cream and paprika sauce. Cheap, warm and honest."), 24 },
+			{ TEXT("paradicsomleves"), TEXT("Paradicsomleves"), TEXT("Tomato soup"),
+				TEXT("Sweet tomato soup with little dumplings floating in it."), 20 },
+			{ TEXT("rakott_krumpli"), TEXT("Rakott krumpli"), TEXT("Layered potatoes"),
+				TEXT("Potatoes, eggs and sausage in layers, baked under sour cream."), 40 },
+			{ TEXT("lekvaros_teszta"), TEXT("Lekv\u00e1ros t\u00e9szta"), TEXT("Noodles with jam"),
+				TEXT("Square noodles with plum jam and sugar: a sweet main course for small purses."), 20 },
+			{ TEXT("tej"), TEXT("Poh\u00e1r tej"), TEXT("Glass of milk"),
+				TEXT("A cold glass of fresh milk from the Central Dairy, with a crescent roll."), 12 },
+			{ TEXT("kakao"), TEXT("Kaka\u00f3"), TEXT("Cocoa"),
+				TEXT("A mug of hot cocoa made with milk, the favourite of every schoolboy."), 16 },
+			{ TEXT("tejbegriz"), TEXT("Tejbegr\u00edz"), TEXT("Semolina pudding"),
+				TEXT("Semolina cooked in milk, with grated chocolate and a spoon of raspberry syrup."), 20 },
+			{ TEXT("porkolt"), TEXT("P\u00f6rk\u00f6lt"), TEXT("Beef stew"),
+				TEXT("Beef stewed with onions and paprika until it falls apart, with nokedli and a pickle."), 110 },
+			{ TEXT("toltott_kaposzta"), TEXT("T\u00f6lt\u00f6tt k\u00e1poszta"), TEXT("Stuffed cabbage"),
+				TEXT("Cabbage leaves rolled round pork and rice, cooked in sauerkraut, with sour cream."), 100 },
+			{ TEXT("froccs"), TEXT("Fr\u00f6ccs"), TEXT("Wine spritzer"),
+				TEXT("White wine and soda water from the siphon, half and half. The drink of Pest."), 20 },
+			{ TEXT("bor"), TEXT("Poh\u00e1r bor"), TEXT("Glass of wine"),
+				TEXT("A glass of red from the cask, from the hills of Eger."), 30 },
+			{ TEXT("zsiros_kenyer"), TEXT("Zs\u00edros keny\u00e9r"), TEXT("Dripping on bread"),
+				TEXT("A slice of bread spread with lard, paprika and red onion rings. Goes with wine."), 10 },
+			{ TEXT("sonkas_zsemle"), TEXT("Sonk\u00e1s zsemle"), TEXT("Ham roll"),
+				TEXT("A crisp roll with ham and a leaf of lettuce, wrapped for the train."), 30 },
+			{ TEXT("korozott"), TEXT("K\u00f6r\u00f6z\u00f6tt"), TEXT("Paprika cheese spread"),
+				TEXT("Ewe's curd cheese with paprika, caraway and onion on rye bread."), 20 },
+			{ TEXT("kocsonya"), TEXT("Kocsonya"), TEXT("Pork aspic"),
+				TEXT("Cold jellied pork with egg and carrot, a winter favourite with vinegar and onion."), 40 },
+			{ TEXT("husleves"), TEXT("H\u00fasleves"), TEXT("Chicken soup"),
+				TEXT("Golden chicken broth with thin noodles and carrots, as on every Friday night."), 50 },
+			{ TEXT("solet"), TEXT("S\u00f3let"), TEXT("Cholent"),
+				TEXT("Beans and barley baked slowly overnight with goose and a brown egg."), 80 },
+			{ TEXT("flodni"), TEXT("Fl\u00f3dni"), TEXT("Fl\u00f3dni"),
+				TEXT("Layers of poppy seed, walnut, apple and plum jam between thin pastry."), 40 },
+			{ TEXT("barchesz"), TEXT("Barchesz"), TEXT("Plaited bread"),
+				TEXT("A shiny plaited white loaf, sweet and soft."), 16 },
+			{ TEXT("eroleves"), TEXT("Er\u0151leves"), TEXT("Consomm\u00e9"),
+				TEXT("Clear beef broth in a cup, with a raw egg yolk and marrow toast."), 120 },
+			{ TEXT("fogas"), TEXT("Balatoni fogas"), TEXT("Pike-perch from Balaton"),
+				TEXT("The pride of Hungarian kitchens: pike-perch fried in butter, with lemon and parsley."), 380 },
+			{ TEXT("belszin"), TEXT("B\u00e9lsz\u00edn"), TEXT("Beef tenderloin"),
+				TEXT("A thick tenderloin steak with roast potatoes. Only the rich eat like this."), 480 },
+			{ TEXT("pezsgo"), TEXT("T\u00f6rley pezsg\u0151"), TEXT("T\u00f6rley champagne"),
+				TEXT("Two glasses of T\u00f6rley from Budafok, the Hungarian champagne."), 300 },
 		};
 		return All;
 	}
@@ -80,6 +140,15 @@ namespace Food
 			{ TEXT("Gesztenyes\u00fct\u0151"), TEXT("Chestnut roaster"), TEXT("\u201eForr\u00f3 gesztenye! Forr\u00f3!\u201d  (Hot chestnuts! Hot!)"), { 13, 14 } },
 			{ TEXT("Virslis"), TEXT("Sausage cart"), TEXT("\u201eFriss virsli, forr\u00f3 virsli!\u201d  (Fresh sausages, hot sausages!)"), { 15, 16, 17 } },
 			{ TEXT("Perec\u00e1rus"), TEXT("Pretzel seller"), TEXT("\u201ePerecet tess\u00e9k!\u201d  (Pretzels, here!)"), { 17, 3, 2 } },
+			{ TEXT("Hauer cukr\u00e1szda"), TEXT("Hauer pastry shop"), TEXT("\u201eMivel szolg\u00e1lhatok?\u201d  (What may I bring you?)"), { 5, 18, 19, 20, 21, 22, 0 } },
+			{ TEXT("Kif\u0151zde"), TEXT("Cook-shop"), TEXT("\u201eMi legyen, fiam?\u201d  (What'll it be, son?)"), { 25, 23, 24, 26, 27, 6 } },
+			{ TEXT("K\u00f6zponti Tejcsarnok"), TEXT("Milk bar"), TEXT("\u201eTess\u00e9k, friss a tej!\u201d  (Here, the milk is fresh!)"), { 28, 29, 2, 30, 1 } },
+			{ TEXT("Fuvaros vend\u00e9gl\u0151"), TEXT("Carters' inn"), TEXT("\u201eNa, mit hozzak?\u201d  (Well, what shall I bring?)"), { 6, 31, 32, 9, 12, 33 } },
+			{ TEXT("Boroz\u00f3"), TEXT("Wine cellar"), TEXT("\u201eEgy fr\u00f6ccs\u00f6t?\u201d  (A spritzer?)"), { 33, 34, 3, 35 } },
+			{ TEXT("Kispipa vend\u00e9gl\u0151"), TEXT("Kispipa inn"), TEXT("\u201eTess\u00e9k helyet foglalni, a zongorista mindj\u00e1rt kezd!\u201d  (Do sit down, the pianist starts soon!)"), { 7, 8, 32, 10, 11, 34, 12 } },
+			{ TEXT("\u00c1ll\u00f3b\u00fcf\u00e9"), TEXT("Standing buffet"), TEXT("\u201eMit adhatok? Indul a vonat?\u201d  (What can I get you? Train leaving?)"), { 36, 37, 38, 15, 12, 0 } },
+			{ TEXT("K\u00f3ser \u00e9tkezde"), TEXT("Kosher eating house"), TEXT("\u201e\u00dclj\u00f6n le, j\u00f3 ember!\u201d  (Sit down, good man!)"), { 39, 40, 41, 42 } },
+			{ TEXT("Nemzeti \u00e9tterem"), TEXT("Hotel Nemzeti restaurant"), TEXT("\u201eM\u00e9lt\u00f3ztass\u00e9k, uram!\u201d  (If you please, sir!)"), { 43, 44, 45, 5, 46, 0 } },
 		};
 		return Menus[FMath::Clamp(static_cast<int32>(Which), 0, static_cast<int32>(EFoodMenu::Count) - 1)];
 	}
@@ -95,6 +164,7 @@ namespace FoodMenus
 	constexpr float WaiterRadius = 250.f;
 	constexpr float RestaurantRadius = 450.f;
 	constexpr float VendorRadius = 280.f;
+	constexpr float CounterRadius = 170.f;
 	// Where to order at the station restaurant (in Keleti's frame, on its terrace).
 	const FVector2D RestaurantOrderAt(-350.0, -3590.0);
 
@@ -163,7 +233,18 @@ void AFoodMenus::GatherOrderPoints(TArray<FOrderPoint>& Out) const
 {
 	for (TActorIterator<ACafeWaiter> It(GetWorld()); It; ++It)
 	{
-		Out.Add({ It->GetActorLocation(), FoodMenus::WaiterRadius, EFoodMenu::Cafe, *It });
+		Out.Add({ It->GetActorLocation(), FoodMenus::WaiterRadius, static_cast<EFoodMenu>(It->GetMenu()), *It });
+	}
+	// The counters of the places to eat.
+	for (TActorIterator<AEateries> It(GetWorld()); It; ++It)
+	{
+		TArray<FVector> Counters;
+		TArray<uint8> Menus;
+		It->GetCounters(Counters, Menus);
+		for (int32 i = 0; i < Counters.Num(); ++i)
+		{
+			Out.Add({ Counters[i], FoodMenus::CounterRadius, static_cast<EFoodMenu>(Menus[i]) });
+		}
 	}
 	if (TActorIterator<AKeletiStation>(GetWorld()))
 	{
