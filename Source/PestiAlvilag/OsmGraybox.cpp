@@ -89,7 +89,7 @@ namespace OsmGraybox
 	// 11: a later little block in Rózsák tere's garden left out.
 	// 12: the seminary's, the OTI palace's and the two hotels' dressed walls lose their plain facades.
 	// 13: the OTI palace's wall against the house on Dologház utca gets its plain facade back.
-	constexpr int32 MeshVersion = 13;
+	constexpr int32 MeshVersion = 14;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");

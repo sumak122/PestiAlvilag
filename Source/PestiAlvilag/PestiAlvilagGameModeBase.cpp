@@ -15,6 +15,8 @@
 #include "GarayModel.h"
 #include "GarayYard.h"
 #include "StableYard.h"
+#include "TrotTrack.h"
+#include "TrotTrackModel.h"
 #include "StableYardModel.h"
 #include "BoxingYard.h"
 #include "BoxingYardModel.h"
@@ -569,6 +571,14 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(FVector2D(AStableYard::ToCity(FVector(1500.0, 0.0, 0.0), 0.0)));
 		GetWorld()->SpawnActor<AStableYard>(AStableYard::StaticClass(), FVector(StableYardModel::CityAt, Z), FRotator(0.0, StableYardModel::CityYaw, 0.0));
+	}
+
+	// And the Kerepesi út trotting track at the east end of the map, with
+	// its stand, stables and the rail yard's engine shed nearby.
+	if (!TActorIterator<ATrotTrack>(GetWorld()))
+	{
+		const double Z = GroundZ(TrotTrackModel::Middle + FVector2D(0.0, -(TrotTrackModel::Outer + 300.0)));
+		GetWorld()->SpawnActor<ATrotTrack>(ATrotTrack::StaticClass(), FVector(TrotTrackModel::Middle, Z), FRotator::ZeroRotator);
 	}
 
 	// And Laci's motor workshop on Szerdahelyi utca (mission 7), its ground

@@ -1019,7 +1019,14 @@ void ACityDetails::BuildCemetery(const FJsonObject& Root)
 		}
 		TArray<MarketModel::FShape> Shapes;
 		TArray<BozsiHouseModel::FLamp> Lights;
-		CemeteryModel::Gate(bMain, E[4]->AsNumber(), Shapes, Lights);
+		if (E[0]->AsString() == TEXT("hidden"))
+		{
+			CemeteryModel::HiddenDoor(E[4]->AsNumber(), Shapes);
+		}
+		else
+		{
+			CemeteryModel::Gate(bMain, E[4]->AsNumber(), Shapes, Lights);
+		}
 		Set->AddShapes(Shapes);
 		for (const BozsiHouseModel::FLamp& Light : Lights)
 		{
