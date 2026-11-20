@@ -40,6 +40,16 @@ public:
 	/** Got to the end of its way. */
 	bool HasArrived() const { return Along >= Total; }
 
+	/** Standing at the end of its way, its crew off it, not yet stolen: the player can take it (AFireTruck::TakeFrom). */
+	bool CanBeTaken() const { return bReady && !bTaken && HasArrived(); }
+
+	/**
+	 * The player has taken it: it is hidden and out of the way (an AFireTruck
+	 * stands in its place), the crew shake their fists after him, one shouts,
+	 * and the police are called (two stars).
+	 */
+	void HandOver();
+
 	/** Where along its way it is, and how much way there is (cm). */
 	double GetAlong() const { return Along; }
 
@@ -81,4 +91,5 @@ private:
 	float BellSwing = 0.f;
 	float Clock = 0.f;
 	bool bReady = false;
+	bool bTaken = false;
 };

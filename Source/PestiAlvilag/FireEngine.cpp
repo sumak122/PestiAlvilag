@@ -10,6 +10,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Pedestrians.h"
+#include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
+#include "PestiHud.h"
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "SpotSound.h"
@@ -254,8 +257,12 @@ void AFireEngine::Tick(float DeltaSeconds)
 		return;
 	}
 
-	// The bell: heard round the engine, louder near.
-	if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
+	// The bell: heard round the engine, louder near; still once it has got there.
+	if (HasArrived())
+	{
+		Bell->SetHeard(0.f, 1.f);
+	}
+	else if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
 	{
 		const double Distance = FVector::Dist(Camera->GetCameraLocation(), GetActorLocation());
 		const float Far = static_cast<float>(FMath::Clamp(Distance / FireRun::BellReach, 0.0, 1.0));
@@ -355,6 +362,33 @@ void AFireEngine::PlaceCrew(float DeltaSeconds)
 	const FVector Floor(0.0, 0.0, -FireHalf().Z * 0.6);
 	// They rock with the engine on the cobbles.
 	const double Bump = 1.5 * FMath::Sin(Clock * 13.0) * FMath::Clamp(Speed / 800.f, 0.f, 1.f);
+	if (HasArrived())
+	{
+		// Got there: the crew are off it, standing in a row on its right looking
+		// at the fire, or (stolen) shaking their fists after the thief.
+		const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+		for (int32 i = 0; i < Crew.Num(); ++i)
+		{
+			APedestrian* Man = Crew[i];
+			if (!IsValid(Man))
+			{
+				continue;
+			}
+			const FVector Spot(230.0 - (i / 2) * 110.0, FireHalf().Y + 90.0 + (i % 2) * 90.0, 0.0);
+			const FVector At = Frame.TransformPosition(Floor + Spot + FVector(0.0, 0.0, PersonModel::MiddleHeight));
+			if (bTaken && PlayerPawn)
+			{
+				const double ToThief = (PlayerPawn->GetActorLocation() - At).Rotation().Yaw;
+				Man->ShakeFist(At, ToThief, Clock + i * 0.37f);
+			}
+			else
+			{
+				FLimbs Stand;
+				Man->Strike(At, Frame.Rotator().Yaw + 90.0, Stand);
+			}
+		}
+		return;
+	}
 	for (int32 i = 0; i < Crew.Num(); ++i)
 	{
 		APedestrian* Man = Crew[i];
@@ -388,5 +422,31 @@ void AFireEngine::PlaceCrew(float DeltaSeconds)
 		}
 		const FVector At = Frame.TransformPosition(Floor + Seat + FVector(0.0, 0.0, Bump * ((i % 2) ? 1.0 : -0.7)));
 		Man->Strike(At, Frame.Rotator().Yaw + FaceYaw, Pose);
+	}
+}
+
+void AFireEngine::HandOver()
+{
+	if (bTaken)
+	{
+		return;
+	}
+	bTaken = true;
+	for (UProceduralMeshComponent* Part : Parts)
+	{
+		if (Part)
+		{
+			Part->SetVisibility(false);
+		}
+	}
+	CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Bell->SetHeard(0.f, 1.f);
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->Say(TEXT("T\u0171zolt\u00f3"), TEXT("\u00c1llj! Hozd vissza a fecskend\u0151t, te gazember!"), TEXT("Stop! Bring back the engine, you scoundrel!"), 3.5f);
+	}
+	if (APestiAlvilagGameModeBase* Mode = APestiAlvilagGameModeBase::Get(this))
+	{
+		Mode->ReportCrime(2);
 	}
 }
