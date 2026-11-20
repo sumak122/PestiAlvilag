@@ -188,6 +188,54 @@ namespace CemeteryModel
 		}
 	}
 
+	/**
+	 * A forgotten wooden door in the wall, Width wide, behind the trotting
+	 * track's stables: overgrown with ivy and screened by bushes, its rotten
+	 * leaf hanging open inwards, so a man on foot can slip through (a car
+	 * cannot). From the middle of the opening, +X out of the cemetery.
+	 */
+	inline void HiddenDoor(double Width, TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		const FLinearColor Plank(0.27f, 0.21f, 0.14f);
+		const FLinearColor Bush(0.08f, 0.16f, 0.06f);
+		const double Half = Width * 0.5;
+		const double DoorTop = 210.0;
+		// The wall closes over the door, with its coping run on across.
+		Span(Out, WallPlaster, FVector(-WallThick * 0.5, -Half - 20.0, DoorTop), FVector(WallThick * 0.5, Half + 20.0, WallHeight));
+		Span(Out, Coping, FVector(-WallThick * 0.5 - 8.0, -Half - 20.0, WallHeight), FVector(WallThick * 0.5 + 8.0, Half + 20.0, WallHeight + 14.0), false);
+		Span(Out, WallStain, FVector(WallThick * 0.5, -Half - 10.0, DoorTop - 12.0), FVector(WallThick * 0.5 + 4.0, Half + 10.0, DoorTop), false);
+		// The old leaf, hinged inside at one jamb and swung in.
+		const FVector Hinge(-WallThick * 0.5 - 4.0, -Half + 6.0, 0.0);
+		const FRotator Swing(0.0, 70.0, 0.0);
+		const double Leaf = Width - 14.0;
+		Add(Out, MarketModel::Cube, Plank, Hinge + Swing.RotateVector(FVector(0.0, Leaf * 0.5, 102.0)), FVector(5.0, Leaf, 196.0), 70.0, false);
+		for (const double Z : { 40.0, 160.0 })
+		{
+			Add(Out, MarketModel::Cube, Iron, Hinge + Swing.RotateVector(FVector(-4.0, Leaf * 0.5, Z)), FVector(3.0, Leaf - 10.0, 8.0), 70.0, false);
+		}
+		// Ivy hanging over the opening and spreading on the wall, both sides.
+		for (const double Out1 : { 1.0, -1.0 })
+		{
+			const double Face = Out1 * (WallThick * 0.5 + 5.0);
+			Add(Out, MarketModel::Cube, Ivy, FVector(Face, 0.0, WallHeight - 30.0), FVector(8.0, Width + 260.0, 90.0), 0.0, false);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Add(Out, MarketModel::Cube, Ivy, FVector(Face, Side * (Half - 22.0), DoorTop - 70.0), FVector(8.0, 44.0, 150.0), 0.0, false);
+				Add(Out, MarketModel::Cube, Ivy, FVector(Face, Side * (Half + 110.0), 150.0), FVector(8.0, 180.0, 260.0), 0.0, false);
+			}
+		}
+		// Elder bushes outside screen it from the yard: one either side and
+		// one in front, a step out, with room to pass round it.
+		for (const double Side : { -1.0, 1.0 })
+		{
+			Add(Out, MarketModel::Sphere, Bush, FVector(WallThick * 0.5 + 90.0, Side * (Half + 120.0), 90.0), FVector(170.0, 200.0, 190.0), 0.0, false);
+		}
+		Add(Out, MarketModel::Sphere, Bush, FVector(WallThick * 0.5 + 210.0, Half * 0.3, 70.0), FVector(130.0, 150.0, 150.0), 0.0, false);
+		// A trodden earth path through.
+		Span(Out, Earth, FVector(-260.0, -Half + 10.0, 0.0), FVector(260.0, Half - 10.0, 2.0), false);
+	}
+
 	/** One grave from the foot of its headstone: Kind as above, Seed picks the stone and the bits. */
 	inline void Grave(EGrave Kind, uint32 Seed, TArray<FShape>& Out)
 	{

@@ -591,7 +591,11 @@ THEATRE_FRONT_X = 51560
 CEMETERY_MAP_EDGE = 300          # the wall stops this far in from the map's edge
 CEMETERY_MAIN_GATE_PATH = "Fő út"   # the main gate is where this alley meets the wall
 CEMETERY_SIDE_GATES = [2, 3]     # outline corners with a side gate ("2. kapu", "3. kapu")
-CEMETERY_GATE_WIDTH = {"main": 1500, "side": 600}
+CEMETERY_GATE_WIDTH = {"main": 1500, "side": 600, "hidden": 130}
+# A forgotten wooden door in the wall behind the trotting track's stables
+# (map cm): wide enough for a man on foot, overgrown, a way out of the
+# cemetery the police don't know (CemeteryModel::HiddenDoor).
+CEMETERY_HIDDEN_DOOR = (194650, -6300)
 CEMETERY_ROW_GAP = 300           # graves: rows this far apart
 CEMETERY_GRAVE_GAP = 175         # and graves this far apart along a row
 CEMETERY_KEEP = 0.55             # share of the grid's spots with a grave
@@ -989,6 +993,11 @@ def place_cemetery(data, f):
         p, q = edges.interpolate(t - 50), edges.interpolate(t + 50)
         dx, dy = unit(q.x - p.x, q.y - p.y)
         gate_at("side", cx, cy, dx, dy)
+    t = edges.project(Point(*CEMETERY_HIDDEN_DOOR))
+    p, q = edges.interpolate(t - 50), edges.interpolate(t + 50)
+    dx, dy = unit(q.x - p.x, q.y - p.y)
+    hit = edges.interpolate(t)
+    gate_at("hidden", hit.x, hit.y, dx, dy)
 
     # The wall: each outline edge inside the map, cut open at the gates.
     openings = unary_union([Point(g[1], g[2]).buffer(g[4] * 0.5) for g in gates])

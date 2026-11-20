@@ -49,7 +49,7 @@ namespace TrotTrackModel
 	constexpr double FenceNorth = -12900.0;
 	constexpr double FenceWest = -35000.0;
 	constexpr double FenceEast = 40000.0;
-	constexpr double FenceSouth = 10500.0;
+	constexpr double FenceSouth = 10850.0;
 	constexpr double GateWest = -6200.0;
 	constexpr double GateEast = -4600.0;
 	// Things nearby in the track's frame: the engine shed's middle (long
