@@ -16,6 +16,7 @@
 #include "PolicePatrols.h"
 #include "TrafficManager.h"
 #include "Weather.h"
+#include "Witnesses.h"
 
 namespace TrafficBikeRide
 {
@@ -447,14 +448,21 @@ void ATrafficBike::TakeRider(APawn* InRider)
 			Here + Right * (Side * TrafficBikeRide::RunnerOut), GetActorRotation(), RunnerParams))
 		{
 			Runner->SetOutfit(RiderLook);
-			Runner->RunFrom(Danger, true);
+			// He runs after the thief, runs for a constable, or runs off.
+			Runner->AfterThief(Danger, true, RiderLook);
 		}
+		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::BikeStolen, Here);
 		if (APolicePatrols::Witnessed(this, Here, TrafficBikeRide::TheftSeen))
 		{
 			if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
 			{
 				Game->ReportCrime(1);
 			}
+		}
+		else
+		{
+			// Nobody from the police saw it: now and then a passer-by runs to tell them.
+			AWitnesses::Report(this, Here, 1);
 		}
 
 		// Out of the traffic: an ordinary bicycle for the player.

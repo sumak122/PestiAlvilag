@@ -13,6 +13,7 @@
 #include "PolicePatrols.h"
 #include "Ruffian.h"
 #include "StreetName.h"
+#include "Witnesses.h"
 
 namespace StreetFight
 {
@@ -144,6 +145,11 @@ bool AStreetFights::Begin(APestiPerson* Player, const PersonKit::FOutfit& Dress,
 		{
 			Game->ReportCrime(1);
 		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Ground, 1);
 	}
 	return true;
 }
@@ -355,6 +361,23 @@ void AStreetFights::TakeTurns(FFight& Fight, ARuffian* Man, APestiPerson* Player
 	}
 }
 
+void AStreetFights::SetFightsBack()
+{
+	if (Fights.Num() > 0)
+	{
+		Fights.Last().bFightsBack = true;
+	}
+}
+
+void AStreetFights::SetChallenger()
+{
+	if (Fights.Num() > 0)
+	{
+		Fights.Last().bChallenger = true;
+		Fights.Last().bFightsBack = true;
+	}
+}
+
 void AStreetFights::SetLoot(int32 Filler)
 {
 	if (Fights.Num() > 0 && Filler > 0)
@@ -377,6 +400,27 @@ bool AStreetFights::IsFightNear(const UObject* WorldContextObject, const FVector
 		{
 			const ARuffian* Man = Fight.Man.Get();
 			if (Man && !Fight.bRanOff && !Man->IsBeaten() && FVector::Dist2D(Man->GetActorLocation(), At) < Radius)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool AStreetFights::IsBeatenNear(const UObject* WorldContextObject, const FVector& At, double Radius)
+{
+	const UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	for (TActorIterator<AStreetFights> It(World); It; ++It)
+	{
+		for (const FFight& Fight : It->Fights)
+		{
+			const ARuffian* Man = Fight.Man.Get();
+			if (Man && Man->IsBeaten() && FVector::Dist2D(Man->GetActorLocation(), At) < Radius)
 			{
 				return true;
 			}
@@ -490,6 +534,7 @@ void AStreetFights::Tick(float DeltaSeconds)
 					{
 						Game->ReportCrime(3);
 						Game->AddRenown(StreetName::ForBeatingPolice, TEXT("le\u00fct\u00f6tt egy rend\u0151rt"), TEXT("knocked down a policeman"));
+						Game->NoteDeed(StreetName::EDeed::ConstableBeaten, Man->GetActorLocation());
 					}
 				}
 				else if (Fight.Loot > 0)
@@ -505,12 +550,26 @@ void AStreetFights::Tick(float DeltaSeconds)
 					}
 					Fight.Loot = 0;
 				}
+				else if (Fight.bChallenger)
+				{
+					// The tough asked for it: the street likes to see him put down.
+					if (APestiHUD* Hud = APestiHUD::Get(this))
+					{
+						Hud->Say(TEXT("K\u00f6teked\u0151"), TEXT("J\u00f3l van, j\u00f3l van... maga az \u00far itt."), TEXT("All right, all right... you're the boss here."), 3.f);
+					}
+					if (Game)
+					{
+						Game->AddRenown(StreetName::ForBeatingChallenger, TEXT("lerendezett egy k\u00f6teked\u0151t"), TEXT("saw off a tough who picked on him"));
+						Game->NoteDeed(StreetName::EDeed::ToughBeaten, Man->GetActorLocation());
+					}
+				}
 				else
 				{
 					Say(StreetFight::BeatenLine.Hu, StreetFight::BeatenLine.En);
 					if (Game)
 					{
 						Game->AddRenown(StreetName::ForBeatingUp, TEXT("megvert egy j\u00e1r\u00f3kel\u0151t"), TEXT("beat up a passer-by"));
+						Game->NoteDeed(StreetName::EDeed::PasserbyBeaten, Man->GetActorLocation());
 					}
 				}
 			}

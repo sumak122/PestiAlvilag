@@ -81,4 +81,33 @@ public:
 	/** Laci's night races won (bits, ANightRaces order). */
 	UPROPERTY()
 	int32 RacesWon = 0;
+
+	/** The car kept in the garage on Bérkocsis utca: its body (below 0: none), wheels, paints and markings. */
+	UPROPERTY()
+	int32 GarageBody = -1;
+
+	UPROPERTY()
+	int32 GarageWheel = 0;
+
+	UPROPERTY()
+	FLinearColor GaragePaint = FLinearColor::Black;
+
+	UPROPERTY()
+	FLinearColor GarageGuard = FLinearColor::Black;
+
+	UPROPERTY()
+	FLinearColor GarageSpoke = FLinearColor::Black;
+
+	UPROPERTY()
+	FLinearColor GarageAccent = FLinearColor::Black;
+
+	UPROPERTY()
+	bool bGarageTaxi = false;
+
+	UPROPERTY()
+	bool bGaragePolice = false;
+
+	/** The suit from Kertész the tailor is his. */
+	UPROPERTY()
+	bool bHasSuit = false;
 };

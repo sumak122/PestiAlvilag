@@ -30,6 +30,8 @@ namespace StreetName
 	constexpr int32 ForBeatingUp = -1;
 	// Knocking a constable down in a fist fight: the underworld hears of it.
 	constexpr int32 ForBeatingPolice = 2;
+	// Beating a tough who came up to pick a fight with the player.
+	constexpr int32 ForBeatingChallenger = 2;
 
 	struct FRank
 	{
@@ -194,4 +196,137 @@ namespace StreetName
 
 	/** Bözsi néni's postcard, on his wall after the raid (mission 8). */
 	inline const FLine Postcard = { TEXT("Kedves Fiatal\u00far!\nA h\u00e1z csendes maga n\u00e9lk\u00fcl.\nEz nem panasz.\n>B\u00f6zsi"), TEXT("Dear young sir! The house is quiet without you. That is not a complaint. B\u00f6zsi") };
+
+	// ---------------------------------------------------------------------
+	// Deeds the papers and the gossips get hold of (GameMode::NoteDeed): the
+	// biggest of a day is on the kiosks' news boards next morning, and now and
+	// then a passer-by tells another about one of the last two days.
+
+	enum class EDeed : uint8
+	{
+		CarStolen, BikeStolen, CartStolen, RunOver, ConstableBeaten, PasserbyBeaten, ToughBeaten,
+		BoxSmashed, PoliceRammed, Arrested, BoxingWin, RaceWin, Count
+	};
+
+	struct FDeedNews
+	{
+		/** How much the papers care: the biggest of the day makes the headline. */
+		int32 Weight;
+		/** The headline (Hungarian in capitals); {HOL}/{WHERE} is the place. */
+		const TCHAR* HeadHu;
+		const TCHAR* HeadEn;
+		/** A passer-by telling another; {MIKOR}/{WHEN} is today or yesterday. */
+		const TCHAR* GossipHu;
+		const TCHAR* GossipEn;
+	};
+	inline const FDeedNews DeedNews[] = {
+		{ 7, TEXT("AUT\u00d3T LOPTAK {HOL}"), TEXT("MOTOR CAR STOLEN {WHERE}"),
+			TEXT("Hallotta? {MIKOR} valaki elk\u00f6t\u00f6tt egy aut\u00f3t {HOL}!"), TEXT("Did you hear? {WHEN} someone made off with a motor car {WHERE}!") },
+		{ 2, TEXT("BICIKLITOLVAJ {HOL}"), TEXT("BICYCLE THIEF {WHERE}"),
+			TEXT("{MIKOR} {HOL} egy fick\u00f3 ellopott egy biciklit, k\u00e9pzelje."), TEXT("{WHEN} {WHERE} some fellow stole a bicycle, imagine.") },
+		{ 4, TEXT("ELHAJTOTT\u00c1K A KOCSIT {HOL}"), TEXT("CART DRIVEN OFF {WHERE}"),
+			TEXT("Szeg\u00e9ny fuvaros... {MIKOR} elhajtott\u00e1k a lov\u00e1t {HOL}."), TEXT("Poor carter... {WHEN} they drove his horse off {WHERE}.") },
+		{ 8, TEXT("G\u00c1ZOL\u00c1S {HOL}"), TEXT("RUN DOWN {WHERE}"),
+			TEXT("Hallotta? {MIKOR} valakit elg\u00e1zoltak {HOL}! Sz\u00f6rny\u0171."), TEXT("Did you hear? {WHEN} someone was run down {WHERE}! Terrible.") },
+		{ 9, TEXT("REND\u0150RT VERTEK {HOL}"), TEXT("CONSTABLE BEATEN {WHERE}"),
+			TEXT("{MIKOR} {HOL} valaki lev\u00e1gott egy rend\u0151rt. Na de ilyet!"), TEXT("{WHEN} {WHERE} someone floored a constable. Well I never!") },
+		{ 3, TEXT("UTCAI VEREKED\u00c9S {HOL}"), TEXT("STREET BRAWL {WHERE}"),
+			TEXT("{MIKOR} megint verekedtek {HOL}. Hova jut ez a v\u00e1ros?"), TEXT("{WHEN} there was fighting {WHERE} again. What is this city coming to?") },
+		{ 3, TEXT("RENDRE TAN\u00cdTOTT\u00c1K A K\u00d6TEKED\u0150T"), TEXT("TOUGH PUT IN HIS PLACE"),
+			TEXT("{MIKOR} {HOL} valaki helyre tette azt a k\u00f6teked\u0151t. Ide\u00e9je volt."), TEXT("{WHEN} {WHERE} somebody put that tough in his place. About time.") },
+		{ 5, TEXT("BET\u00d6RT\u00c9K A REND\u0150RTELEFONT {HOL}"), TEXT("POLICE TELEPHONE SMASHED {WHERE}"),
+			TEXT("{MIKOR} {HOL} bez\u00fazt\u00e1k a rend\u0151rtelefont. Tiszta \u00fcveg minden."), TEXT("{WHEN} {WHERE} they smashed the police telephone. Glass everywhere.") },
+		{ 6, TEXT("REND\u0150RAUT\u00d3T T\u00d6RTEK {HOL}"), TEXT("POLICE CAR RAMMED {WHERE}"),
+			TEXT("{MIKOR} valaki nekihajtott a rend\u0151raut\u00f3nak {HOL}!"), TEXT("{WHEN} someone drove into the police car {WHERE}!") },
+		{ 7, TEXT("ELFOGT\u00c1K A GAR\u00c1ZD\u00c1T"), TEXT("TROUBLEMAKER ARRESTED"),
+			TEXT("{MIKOR} elkapt\u00e1k azt a gar\u00e1zd\u00e1t {HOL}. De m\u00e1r kint is van, mondj\u00e1k."), TEXT("{WHEN} they caught that troublemaker {WHERE}. They say he's out already.") },
+		{ 4, TEXT("\u00daJ N\u00c9V A GRUNDON"), TEXT("A NEW NAME ON THE GRUND"),
+			TEXT("{MIKOR} Bandi grundj\u00e1n megint nyert az a fiatal\u00far. Kem\u00e9ny \u00f6kle van."), TEXT("{WHEN} that young gent won again at Bandi's grund. Hard fists, he has.") },
+		{ 5, TEXT("\u00c9JSZAKAI AUT\u00d3VERSENY"), TEXT("NIGHT MOTOR RACE"),
+			TEXT("Hallotta az \u00e9jjel a motorz\u00fag\u00e1st? {MIKOR} versenyeztek a k\u00f6rny\u00e9ken."), TEXT("Did you hear the engines at night? {WHEN} they raced round here.") },
+	};
+	static_assert(static_cast<int32>(UE_ARRAY_COUNT(DeedNews)) == static_cast<int32>(EDeed::Count), "one news line for each deed");
+
+	/** The news board on a quiet day (the morning paper's ordinary news). */
+	inline const FLine QuietHeadlines[] = {
+		{ TEXT("A FRADI GY\u0150Z\u00d6TT AZ \u00dcLL\u0150I \u00daTON"), TEXT("FERENCV\u00c1ROS WON AT \u00dcLL\u0150I \u00daT") },
+		{ TEXT("HAVAZ\u00c1S V\u00c1RHAT\u00d3"), TEXT("SNOW EXPECTED") },
+		{ TEXT("\u00daJ VILLAMOSKOCSIK A K\u00d6R\u00daTON"), TEXT("NEW TRAMCARS ON THE K\u00d6R\u00daT") },
+		{ TEXT("OLCS\u00d3BB A KENY\u00c9R"), TEXT("BREAD IS CHEAPER") },
+		{ TEXT("TELT H\u00c1Z A N\u00c9POPER\u00c1BAN"), TEXT("FULL HOUSE AT THE N\u00c9POPERA") },
+		{ TEXT("NAGY FORGALOM A KELETIBEN"), TEXT("BUSY DAYS AT KELETI") },
+	};
+	constexpr int32 NumQuietHeadlines = static_cast<int32>(UE_ARRAY_COUNT(QuietHeadlines));
+	/** The paper on the boards. */
+	inline const TCHAR* const NewsPaperName = TEXT("PESTI H\u00cdRLAP");
+
+	/** "a Kiss József utcában" for "Kiss József utca": where a deed was done, in Hungarian; empty Street gives "a negyedben". */
+	inline FString InStreetHu(const FString& Street)
+	{
+		if (Street.IsEmpty())
+		{
+			return TEXT("a negyedben");
+		}
+		struct FEnding
+		{
+			const TCHAR* From;
+			const TCHAR* To;
+		};
+		const FEnding Endings[] = {
+			{ TEXT(" utca"), TEXT(" utc\u00e1ban") },
+			{ TEXT(" k\u00f6r\u00fat"), TEXT(" k\u00f6r\u00faton") },
+			{ TEXT(" \u00fat"), TEXT(" \u00faton") },
+			{ TEXT(" t\u00e9r"), TEXT(" t\u00e9ren") },
+			{ TEXT(" tere"), TEXT(" ter\u00e9n") },
+			{ TEXT(" k\u00f6z"), TEXT(" k\u00f6zben") },
+			{ TEXT(" sor"), TEXT(" soron") },
+			{ TEXT(" s\u00e9t\u00e1ny"), TEXT(" s\u00e9t\u00e1nyon") },
+		};
+		FString In = Street + TEXT(" k\u00f6rny\u00e9k\u00e9n");
+		for (const FEnding& Ending : Endings)
+		{
+			if (Street.EndsWith(Ending.From, ESearchCase::CaseSensitive))
+			{
+				In = Street.LeftChop(FCString::Strlen(Ending.From)) + Ending.To;
+				break;
+			}
+		}
+		// "az" before a vowel.
+		const FString Vowels = TEXT("AEIOU\u00c1\u00c9\u00cd\u00d3\u00d6\u0150\u00da\u00dc\u0170aeiou\u00e1\u00e9\u00ed\u00f3\u00f6\u0151\u00fa\u00fc\u0171");
+		int32 Found = INDEX_NONE;
+		return (Vowels.FindChar(Street[0], Found) ? TEXT("az ") : TEXT("a ")) + In;
+	}
+
+	/** "on Kiss József utca"; empty Street gives "in the district". */
+	inline FString OnStreetEn(const FString& Street)
+	{
+		return Street.IsEmpty() ? FString(TEXT("in the district")) : TEXT("on ") + Street;
+	}
+
+	/** Breaks a headline into board lines of at most Width letters (at most MaxLines). */
+	inline TArray<FString> BoardLines(const FString& Headline, int32 Width = 15, int32 MaxLines = 3)
+	{
+		TArray<FString> Words;
+		Headline.ParseIntoArray(Words, TEXT(" "));
+		TArray<FString> Lines;
+		FString Current;
+		for (const FString& Word : Words)
+		{
+			if (!Current.IsEmpty() && Current.Len() + 1 + Word.Len() > Width)
+			{
+				Lines.Add(Current);
+				Current.Reset();
+			}
+			Current = Current.IsEmpty() ? Word : Current + TEXT(" ") + Word;
+		}
+		if (!Current.IsEmpty())
+		{
+			Lines.Add(Current);
+		}
+		if (Lines.Num() > MaxLines)
+		{
+			Lines.SetNum(MaxLines);
+		}
+		return Lines;
+	}
 }

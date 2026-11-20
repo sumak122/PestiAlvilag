@@ -629,7 +629,7 @@ void ADayNight::UpdateLampLights()
 	for (int32 i = 0; i < Lamps.Num(); ++i)
 	{
 		const double Distance = FVector::Dist2D(Lamps[i], Eye);
-		if (Distance < LampRange && !LampOut[i])
+		if (Distance < LampRange && !LampOut[i] && !LampUnlit[i])
 		{
 			Near.Emplace(Distance, i);
 		}
@@ -747,7 +747,7 @@ void ADayNight::MeshLightPools()
 	const double R = GroundSurfaces::LightPoolRadius;
 	for (int32 i = 0; i < PoolGround.Num() && i < Lamps.Num(); ++i)
 	{
-		if (LampOut[i])
+		if (LampOut[i] || LampUnlit[i])
 		{
 			continue;
 		}
@@ -769,6 +769,17 @@ void ADayNight::MeshLightPools()
 		Triangles.Append({ First, First + 2, First + 1, First, First + 3, First + 2 });
 	}
 	LightPools->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Corners, TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+}
+
+void ADayNight::SetLampUnlit(int32 Lamp, bool bUnlit)
+{
+	if (!LampUnlit.IsValidIndex(Lamp) || LampUnlit[Lamp] == bUnlit)
+	{
+		return;
+	}
+	LampUnlit[Lamp] = bUnlit;
+	MeshLightPools();
+	UpdateLampLights();
 }
 
 void ADayNight::SetLampOut(int32 Lamp, bool bOut)

@@ -13,6 +13,7 @@ class ATrafficManager;
 class UBoxComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
+class UCrashSound;
 class UTextRenderComponent;
 class UTexture;
 
@@ -75,6 +76,22 @@ public:
 	/** On the pavement just outside the door. */
 	FVector2D DoorStep() const;
 
+	/** A car into it at least this fast (cm/s) smashes it. */
+	static constexpr float SmashSpeed = 350.f;
+
+	/** Smashed: no glass, nobody can telephone from it until it is mended. */
+	bool IsSmashed() const { return bSmashed; }
+	double GetSmashedAt() const { return SmashedAt; }
+
+	/** A blow from the player's fists at At: the glass cracks, and the third smashes it. */
+	void Knock(const FVector& At);
+
+	/** Smashed at once (a car ran into it, going Away): the glass bursts and the box leans. */
+	void Smash(const FVector& At, const FVector& Away, bool bLean);
+
+	/** Glass back in, standing straight again. */
+	void Mend();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -92,6 +109,28 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UTexture> WhiteTexture;
+
+	/** The smashed look: jagged bits in the frames (lean with the box) and shards on the ground (don't). */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> BrokenFrames;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> BrokenGround;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCrashSound> Noise;
+
+private:
+	void BuildBrokenLook();
+	void PlayNoise(float Strength);
+
+	/** Body's mesh sections that are the panes. */
+	TArray<int32> GlassSections;
+	int32 Knocks = 0;
+	double LastKnock = -10.0;
+	bool bSmashed = false;
+	bool bBrokenBuilt = false;
+	double SmashedAt = -1.0;
 };
 
 /** A pea whistle's two shrill blasts, made as it plays. */
@@ -159,9 +198,17 @@ public:
 	/**
 	 * A crowd has gathered at At (a fight, a crash, a spill): the nearest
 	 * pair on its beat walks over and stands looking a while. A fight the
-	 * player is still in when they get there makes him wanted.
+	 * player is still in when they get there makes him wanted. Range, when
+	 * above 0, is how far off a pair still comes (pigeons flying up are seen
+	 * from further than a crowd).
 	 */
-	static void Investigate(const UObject* WorldContextObject, const FVector& At);
+	static void Investigate(const UObject* WorldContextObject, const FVector& At, double Range = 0.0);
+
+	/** Where the nearest constable on his beat (on duty, not busy) stands, within Within of From; false when there is none. */
+	static bool FindConstable(const UObject* WorldContextObject, const FVector& From, double Within, FVector& OutAt);
+
+	/** Someone has run up to the constables near At to tell on the player: that pair goes after him, and he is wanted. */
+	static void TipOff(const UObject* WorldContextObject, const FVector& At);
 
 	/** The furniture file with the boxes and the walking lines, relative to the project folder. */
 	UPROPERTY(EditAnywhere, Category = "Police")
@@ -248,6 +295,8 @@ private:
 		bool bPhonedForHelp = false;
 		/** Gone to look at a crowd and seen the player fighting there. */
 		bool bSawFight = false;
+		/** Off the streets for the night (every other pair, after dark): not drawn, sees nothing. */
+		bool bOffDuty = false;
 	};
 
 	struct FLine
@@ -269,6 +318,8 @@ private:
 	/** Where each man walks on the beat now. */
 	FVector2D BeatSpot(const FPatrol& Patrol, int32 Which, FVector2D& OutTangent) const;
 
+	/** The boxes: the player's fists at their glass, and mending the smashed ones. */
+	void TickBoxes(AActor* Player);
 	void TickPatrol(FPatrol& Patrol, float DeltaSeconds);
 	void TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds);
 	/** Moves him towards Goal at Speed; true once he is there. */
@@ -280,6 +331,12 @@ private:
 	void UpdateGround(FMan& Man, float DeltaSeconds);
 	FVector MiddleOf(const FMan& Man) const;
 	bool CanSee(const FMan& Man, const FVector& Target) const;
+	/** How far a constable sees: less in the dark. */
+	double SeeRange() const;
+	/** Every other pair goes off the streets after dark and comes back by day, while nobody sees; true while off. */
+	bool UpdateDuty(FPatrol& Patrol, int32 Index, bool bWanted);
+	/** ADayNight's darkness this frame (0 day, 1 night). */
+	float Darkness = 0.f;
 
 	void StartChase(FPatrol& Patrol, bool bSawIt);
 	/** Into a fist fight with the player (bPlayerStarts: he punched first, else the constable wades in); true if it began. */

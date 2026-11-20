@@ -3,7 +3,10 @@
 #include "PolicePatrols.h"
 
 #include "CarBody.h"
+#include "DayNight.h"
 #include "Components/BoxComponent.h"
+#include "CrashBits.h"
+#include "CrashSound.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
@@ -22,6 +25,7 @@
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiPerson.h"
+#include "Pigeons.h"
 #include "PoliceCar.h"
 #include "PersonModel.h"
 #include "PoliceModel.h"
@@ -31,8 +35,34 @@
 #include "Serialization/JsonSerializer.h"
 #include "TrafficManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Witnesses.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPolicePatrols, Log, All);
+
+namespace PoliceBox
+{
+	// The panes: how much of their colour shows, and how solid they are (the material is unlit).
+	constexpr float GlassShade = 0.3f;
+	constexpr float GlassOpacity = 0.15f;
+	// Broken bits lower than this (cm above the box's foot) lie on the ground.
+	constexpr double GroundBits = 12.0;
+	// Fists: this many blows smash it, at most one each this long (s).
+	constexpr int32 KnocksToSmash = 3;
+	constexpr double KnockGap = 0.35;
+	// A car running into it tips it this far (degrees).
+	constexpr double LeanDegrees = 4.0;
+	// The glass flies from this high over the box's middle (cm).
+	constexpr double BurstUp = 30.0;
+	// Its sound carries this far, and a constable this near hears it (cm).
+	constexpr float NoiseFalloff = 5000.f;
+	constexpr double SmashHeard = 3000.0;
+	// The player's fists reach a box this far from its middle (cm), facing it this squarely.
+	constexpr double FistReach = PoliceModel::BoxHalf + 90.0;
+	constexpr double FistFacing = 0.4;
+	// Mended once it has been smashed this long (s), out of sight and the player this far off (cm).
+	constexpr double MendAfter = 120.0;
+	constexpr double MendBeyond = 5000.0;
+}
 
 namespace PolicePatrol
 {
@@ -92,6 +122,14 @@ namespace PolicePatrol
 	constexpr double LookSide = 90.0;
 	// The player fighting this close to where they look (cm) is caught at it.
 	constexpr double FightSeen = 900.0;
+	// After dark: a constable sees this share less far at full darkness, and every other pair goes
+	// off the streets once it is this dark (out of the player's sight, at least this far from him).
+	constexpr double NightSightLoss = 0.35;
+	constexpr float OffDutyDark = 0.7f;
+	constexpr double OffDutyBeyond = 4000.0;
+	constexpr float OffDutySeen = 2.f;
+	// Someone telling on the player reaches the constables when this near them (cm).
+	constexpr double TipOffNear = 500.0;
 	const FLine2 LookLine = { TEXT("Mi folyik itt? Sz\u00e9tmenni!"), TEXT("What's going on here? Move along!") };
 	const FLine2 DownLine = { TEXT("Jaj! Elg\u00e1zolt egy rend\u0151rt, az \u00e1tkozott!"), TEXT("Ow! The devil ran down a policeman!") };
 
@@ -264,6 +302,18 @@ APoliceBox::APoliceBox()
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->SetCanEverAffectNavigation(false);
 
+	BrokenFrames = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("BrokenFrames"));
+	BrokenFrames->SetupAttachment(Body);
+	BrokenFrames->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BrokenFrames->SetCanEverAffectNavigation(false);
+	BrokenFrames->SetVisibility(false);
+	BrokenGround = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("BrokenGround"));
+	BrokenGround->SetupAttachment(Collision);
+	BrokenGround->SetRelativeLocation(FVector(0.0, 0.0, -PoliceModel::BoxEaves * 0.5));
+	BrokenGround->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BrokenGround->SetCanEverAffectNavigation(false);
+	BrokenGround->SetVisibility(false);
+
 	BaseMaterial = CarBody::LoadPaintMaterial();
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Translucent(TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Translucent.Widget3DPassThrough_Translucent"));
 	SeeThroughMaterial = Translucent.Object;
@@ -300,6 +350,7 @@ void APoliceBox::BeginPlay()
 			TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
 		if (Section.Color == PoliceModel::BoxGlass)
 		{
+			GlassSections.Add(s);
 			if (!SeeThroughMaterial)
 			{
 				// No see-through material: leave the panes out, as clear glass.
@@ -312,8 +363,9 @@ void APoliceBox::BeginPlay()
 				Glass->SetTextureParameterValue(TEXT("SlateUI"), WhiteTexture);
 			}
 			Glass->SetScalarParameterValue(TEXT("OpacityFromTexture"), 0.f);
-			FLinearColor Tint = Section.Color;
-			Tint.A = 0.25f;
+			// Dark and faint: this material is unlit, so a light tint glowed, worst at night.
+			FLinearColor Tint = Section.Color * PoliceBox::GlassShade;
+			Tint.A = PoliceBox::GlassOpacity;
 			Glass->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Tint);
 			Body->SetMaterial(s, Glass);
 		}
@@ -324,6 +376,155 @@ void APoliceBox::BeginPlay()
 			Body->SetMaterial(s, Paint);
 		}
 	}
+}
+
+void APoliceBox::BuildBrokenLook()
+{
+	// The smashed look, split: bits low down lie on the ground, the rest sit in the frames.
+	PersonKit::FPiece Broken;
+	PoliceModel::BuildBroken(Broken, GetTypeHash(GetActorLocation().ToString()));
+	for (const PersonKit::FSection& Section : Broken.Sections)
+	{
+		PersonKit::FSection Parts[2];
+		for (int32 t = 0; t + 2 < Section.Triangles.Num(); t += 3)
+		{
+			const bool bLow = Section.Vertices[Section.Triangles[t]].Z < PoliceBox::GroundBits;
+			PersonKit::FSection& Into = Parts[bLow ? 1 : 0];
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const int32 From = Section.Triangles[t + k];
+				Into.Triangles.Add(Into.Vertices.Num());
+				Into.Vertices.Add(Section.Vertices[From]);
+				Into.Normals.Add(Section.Normals[From]);
+			}
+		}
+		for (int32 Part = 0; Part < 2; ++Part)
+		{
+			UProceduralMeshComponent* Mesh = Part == 0 ? BrokenFrames.Get() : BrokenGround.Get();
+			if (Parts[Part].Triangles.Num() == 0 || !Mesh)
+			{
+				continue;
+			}
+			const int32 Index = Mesh->GetNumSections();
+			Mesh->CreateMeshSection_LinearColor(Index, Parts[Part].Vertices, Parts[Part].Triangles, Parts[Part].Normals,
+				TArray<FVector2D>(), TArray<FLinearColor>(), TArray<FProcMeshTangent>(), false);
+			if (BaseMaterial)
+			{
+				UMaterialInstanceDynamic* Paint = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+				Paint->SetVectorParameterValue(TEXT("Color"), Section.Color);
+				Mesh->SetMaterial(Index, Paint);
+			}
+		}
+	}
+	bBrokenBuilt = true;
+}
+
+void APoliceBox::PlayNoise(float Strength)
+{
+	if (!Noise)
+	{
+		Noise = NewObject<UCrashSound>(this);
+		Noise->SetupAttachment(GetRootComponent());
+		Noise->bAllowSpatialization = true;
+		Noise->bOverrideAttenuation = true;
+		Noise->AttenuationOverrides.bAttenuate = true;
+		Noise->AttenuationOverrides.bSpatialize = true;
+		Noise->AttenuationOverrides.FalloffDistance = PoliceBox::NoiseFalloff;
+		Noise->RegisterComponent();
+		AddInstanceComponent(Noise);
+	}
+	if (!Noise->IsPlaying())
+	{
+		Noise->Start();
+	}
+	Noise->Queue(CrashSynth::EKind::Glass, Strength, 0.f);
+}
+
+void APoliceBox::Knock(const FVector& At)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (bSmashed || Now - LastKnock < PoliceBox::KnockGap)
+	{
+		return;
+	}
+	LastKnock = Now;
+	if (++Knocks >= PoliceBox::KnocksToSmash)
+	{
+		Smash(At, (GetActorLocation() - At).GetSafeNormal2D(), false);
+		return;
+	}
+	// A crack: a tinkle and a few bits.
+	PlayNoise(0.35f);
+	if (ACrashBits* Bits = ACrashBits::Get(GetWorld()))
+	{
+		Bits->Burst(At, (At - GetActorLocation()).GetSafeNormal2D(), 0.15f, true, Body->GetComponentLocation().Z);
+	}
+}
+
+void APoliceBox::Smash(const FVector& At, const FVector& Away, bool bLean)
+{
+	if (bSmashed)
+	{
+		return;
+	}
+	bSmashed = true;
+	SmashedAt = GetWorld()->GetTimeSeconds();
+	Knocks = 0;
+	if (!bBrokenBuilt)
+	{
+		BuildBrokenLook();
+	}
+	for (const int32 Section : GlassSections)
+	{
+		Body->SetMeshSectionVisible(Section, false);
+	}
+	BrokenFrames->SetVisibility(true);
+	BrokenGround->SetVisibility(true);
+	if (bLean)
+	{
+		// Tipped a little away from the car: the top goes the way it was pushed.
+		const FVector Local = GetActorTransform().InverseTransformVectorNoScale(Away).GetSafeNormal2D();
+		Body->SetRelativeRotation(FRotator(-PoliceBox::LeanDegrees * Local.X, 0.0, -PoliceBox::LeanDegrees * Local.Y));
+	}
+	PlayNoise(1.f);
+	const FVector Middle = GetActorLocation();
+	if (ACrashBits* Bits = ACrashBits::Get(GetWorld()))
+	{
+		Bits->Burst(FVector(At.X, At.Y, Middle.Z + PoliceBox::BurstUp), (Middle - At).GetSafeNormal2D(), 0.7f, true, Body->GetComponentLocation().Z);
+	}
+	// Loud: a constable near enough hears it.
+	// The square's pigeons go up at the crash of glass.
+	APigeons::Trouble(this, Middle);
+	APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::BoxSmashed, Middle);
+	if (APolicePatrols::Witnessed(this, Middle, PoliceBox::SmashHeard))
+	{
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			Game->ReportCrime(1);
+		}
+	}
+	else
+	{
+		// Nobody from the police saw it: now and then a passer-by runs to tell them.
+		AWitnesses::Report(this, Middle, 1);
+	}
+}
+
+void APoliceBox::Mend()
+{
+	if (!bSmashed)
+	{
+		return;
+	}
+	bSmashed = false;
+	Knocks = 0;
+	for (const int32 Section : GlassSections)
+	{
+		Body->SetMeshSectionVisible(Section, true);
+	}
+	BrokenFrames->SetVisibility(false);
+	BrokenGround->SetVisibility(false);
+	Body->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
 FVector2D APoliceBox::PhoneSpot() const
@@ -675,6 +876,10 @@ void APolicePatrols::Tick(float DeltaSeconds)
 		double Nearest = TNumericLimits<double>::Max();
 		for (FPatrol& Patrol : Patrols)
 		{
+			if (Patrol.bOffDuty)
+			{
+				continue;
+			}
 			for (FMan& Man : Patrol.Men)
 			{
 				if (!Man.Person || Man.Doing == EDoing::Down || Man.Doing == EDoing::Fighting
@@ -696,9 +901,86 @@ void APolicePatrols::Tick(float DeltaSeconds)
 		}
 	}
 
-	for (FPatrol& Patrol : Patrols)
+	TickBoxes(Player);
+
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	Darkness = Clock ? Clock->GetDarkness() : 0.f;
+	for (int32 i = 0; i < Patrols.Num(); ++i)
 	{
-		TickPatrol(Patrol, DeltaSeconds);
+		if (!UpdateDuty(Patrols[i], i, bWanted))
+		{
+			TickPatrol(Patrols[i], DeltaSeconds);
+		}
+	}
+}
+
+bool APolicePatrols::UpdateDuty(FPatrol& Patrol, int32 Index, bool bWanted)
+{
+	const bool bNightOff = Index % 2 == 1 && Darkness > PolicePatrol::OffDutyDark && !bWanted;
+	const bool bFar = FVector2D::Distance(Patrol.Men[0].At, FVector2D(PlayerAt)) > PolicePatrol::OffDutyBeyond;
+	if (Patrol.bOffDuty)
+	{
+		if (!bNightOff && bFar)
+		{
+			Patrol.bOffDuty = false;
+			for (FMan& Man : Patrol.Men)
+			{
+				if (Man.Person)
+				{
+					Man.Person->SetInWorld(true);
+				}
+			}
+		}
+		return Patrol.bOffDuty;
+	}
+	if (!bNightOff || !bFar || Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
+		|| !Patrol.Men[0].Person || !Patrol.Men[1].Person
+		|| Patrol.Men[0].Person->WasRecentlyRendered(PolicePatrol::OffDutySeen) || Patrol.Men[1].Person->WasRecentlyRendered(PolicePatrol::OffDutySeen))
+	{
+		return false;
+	}
+	Patrol.bOffDuty = true;
+	for (FMan& Man : Patrol.Men)
+	{
+		Man.Person->SetInWorld(false);
+	}
+	return true;
+}
+
+double APolicePatrols::SeeRange() const
+{
+	return SightRange * (1.0 - PolicePatrol::NightSightLoss * Darkness);
+}
+
+void APolicePatrols::TickBoxes(AActor* Player)
+{
+	// On foot, a click facing a box close by is a blow at its glass.
+	APestiPerson* OnFoot = Cast<APestiPerson>(Player);
+	const bool bPunching = OnFoot && AStreetFights::WantsToPunch(OnFoot);
+	const double Now = GetWorld()->GetTimeSeconds();
+	for (APoliceBox* Box : Boxes)
+	{
+		if (!Box)
+		{
+			continue;
+		}
+		const FVector Middle = Box->GetActorLocation();
+		if (bPunching)
+		{
+			const FVector ToBox = Middle - OnFoot->GetActorLocation();
+			if (ToBox.Size2D() < PoliceBox::FistReach
+				&& FVector::DotProduct(ToBox.GetSafeNormal2D(), OnFoot->GetActorForwardVector().GetSafeNormal2D()) > PoliceBox::FistFacing)
+			{
+				const FVector Fist = OnFoot->GetActorLocation() + ToBox.GetSafeNormal2D() * (ToBox.Size2D() - PoliceModel::BoxHalf) + FVector(0.0, 0.0, 40.0);
+				Box->Knock(Fist);
+			}
+		}
+		// Smashed long enough ago, nobody looking: mended.
+		if (Box->IsSmashed() && Now - Box->GetSmashedAt() > PoliceBox::MendAfter
+			&& FVector::Dist2D(Middle, PlayerAt) > PoliceBox::MendBeyond && !Box->WasRecentlyRendered(2.f))
+		{
+			Box->Mend();
+		}
 	}
 }
 
@@ -755,7 +1037,7 @@ void APolicePatrols::TickPatrol(FPatrol& Patrol, float DeltaSeconds)
 			TurnAtEnd(Patrol);
 		}
 		Patrol.CallClock -= DeltaSeconds;
-		if (Patrol.CallClock <= 0.f && Boxes.IsValidIndex(Patrol.Box) && Boxes[Patrol.Box]
+		if (Patrol.CallClock <= 0.f && Boxes.IsValidIndex(Patrol.Box) && Boxes[Patrol.Box] && !Boxes[Patrol.Box]->IsSmashed()
 			&& FVector2D::Distance(Patrol.Men[0].At, Boxes[Patrol.Box]->DoorStep()) < PolicePatrol::CallWhenWithin)
 		{
 			Patrol.CallClock = Random.FRandRange(PolicePatrol::MinCallEvery, PolicePatrol::MaxCallEvery);
@@ -893,7 +1175,7 @@ void APolicePatrols::TickMan(FPatrol& Patrol, int32 Which, float DeltaSeconds)
 		if (Man.SightClock <= 0.f)
 		{
 			Man.SightClock = PolicePatrol::SightEvery;
-			Man.bSeesPlayer = Distance < SightRange * 1.5f && CanSee(Man, PlayerAt);
+			Man.bSeesPlayer = Distance < SeeRange() * 1.5 && CanSee(Man, PlayerAt);
 		}
 		if (Man.bSeesPlayer && Game)
 		{
@@ -1159,7 +1441,7 @@ void APolicePatrols::StartChase(FPatrol& Patrol, bool bSawIt)
 	// telephone for help, if it is near and nobody has yet.
 	const APoliceBox* Box = Boxes.IsValidIndex(Patrol.Box) ? Boxes[Patrol.Box].Get() : nullptr;
 	int32 Caller = INDEX_NONE;
-	if (Box && !Patrol.bPhonedForHelp)
+	if (Box && !Box->IsSmashed() && !Patrol.bPhonedForHelp)
 	{
 		const double Distance0 = FVector2D::Distance(Patrol.Men[0].At, FVector2D(PlayerAt));
 		const double Distance1 = FVector2D::Distance(Patrol.Men[1].At, FVector2D(PlayerAt));
@@ -1243,7 +1525,7 @@ void APolicePatrols::Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En)
 	APestiHUD* Hud = APestiHUD::Get(this);
 	// Only one the player can hear.
 	if (!Hud || Hud->IsSaying() || Now - LastShout < PolicePatrol::ShoutEvery
-		|| FVector2D::Distance(Man.At, FVector2D(PlayerAt)) > SightRange * 1.5f)
+		|| FVector2D::Distance(Man.At, FVector2D(PlayerAt)) > SeeRange() * 1.5)
 	{
 		return;
 	}
@@ -1251,7 +1533,7 @@ void APolicePatrols::Shout(const FMan& Man, const TCHAR* Hu, const TCHAR* En)
 	Hud->Say(TEXT("Rend\u0151r"), Hu, En, 3.f);
 }
 
-void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVector& At)
+void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVector& At, double Range)
 {
 	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
 	if (!World)
@@ -1268,10 +1550,10 @@ void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVecto
 		}
 		// The nearest pair walking its beat together.
 		FPatrol* Nearest = nullptr;
-		double NearestDistance = PolicePatrol::LookRange;
+		double NearestDistance = Range > 0.0 ? Range : PolicePatrol::LookRange;
 		for (FPatrol& Patrol : Police->Patrols)
 		{
-			if (Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
+			if (Patrol.bOffDuty || Patrol.Men[0].Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat
 				|| !Patrol.Men[0].Person || !Patrol.Men[1].Person)
 			{
 				continue;
@@ -1306,6 +1588,73 @@ void APolicePatrols::Investigate(const UObject* WorldContextObject, const FVecto
 	}
 }
 
+bool APolicePatrols::FindConstable(const UObject* WorldContextObject, const FVector& From, double Within, FVector& OutAt)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+	double Nearest = Within;
+	bool bFound = false;
+	for (TActorIterator<APolicePatrols> It(World); It; ++It)
+	{
+		const APolicePatrols* Police = *It;
+		if (!Police->bReady)
+		{
+			continue;
+		}
+		for (const FPatrol& Patrol : Police->Patrols)
+		{
+			const FMan& Man = Patrol.Men[0];
+			if (Patrol.bOffDuty || !Man.Person || Man.Doing != EDoing::Beat || Patrol.Men[1].Doing != EDoing::Beat)
+			{
+				continue;
+			}
+			const double Distance = FVector2D::Distance(Man.At, FVector2D(From));
+			if (Distance < Nearest)
+			{
+				Nearest = Distance;
+				OutAt = FVector(Man.At, Man.GroundZ);
+				bFound = true;
+			}
+		}
+	}
+	return bFound;
+}
+
+void APolicePatrols::TipOff(const UObject* WorldContextObject, const FVector& At)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<APolicePatrols> It(World); It; ++It)
+	{
+		APolicePatrols* Police = *It;
+		if (!Police->bReady)
+		{
+			continue;
+		}
+		for (FPatrol& Patrol : Police->Patrols)
+		{
+			if (!Patrol.bOffDuty && FVector2D::Distance(Patrol.Men[0].At, FVector2D(At)) < PolicePatrol::TipOffNear
+				&& Patrol.Men[0].Doing != EDoing::Down && Patrol.Men[1].Doing != EDoing::Down
+				&& Patrol.Men[0].Doing != EDoing::Fighting && Patrol.Men[1].Doing != EDoing::Fighting)
+			{
+				Patrol.bAlarmed = false;
+				Police->StartChase(Patrol, true);
+				if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(WorldContextObject))
+				{
+					Game->ReportCrime(1);
+				}
+				return;
+			}
+		}
+	}
+}
+
 bool APolicePatrols::Witnessed(const UObject* WorldContextObject, const FVector& At, double CarRange)
 {
 	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
@@ -1331,11 +1680,15 @@ bool APolicePatrols::Witnessed(const UObject* WorldContextObject, const FVector&
 		}
 		for (FPatrol& Patrol : Police->Patrols)
 		{
+			if (Patrol.bOffDuty)
+			{
+				continue;
+			}
 			bool bThisPair = false;
 			for (const FMan& Man : Patrol.Men)
 			{
 				if (Man.Doing != EDoing::Down && Man.Doing != EDoing::Phoning && Man.Doing != EDoing::Fighting
-					&& FVector2D::Distance(Man.At, FVector2D(At)) < Police->SightRange && Police->CanSee(Man, At))
+					&& FVector2D::Distance(Man.At, FVector2D(At)) < Police->SeeRange() && Police->CanSee(Man, At))
 				{
 					bThisPair = true;
 					break;

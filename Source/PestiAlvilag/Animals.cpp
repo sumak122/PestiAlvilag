@@ -17,7 +17,9 @@
 #include "PestiPerson.h"
 #include "ProceduralMeshComponent.h"
 #include "StableYard.h"
+#include "TrafficBike.h"
 #include "TrafficCar.h"
+#include "TrafficCart.h"
 
 namespace Animals
 {
@@ -89,6 +91,52 @@ namespace Animals
 	constexpr double TameGreet = 320.0;
 
 	constexpr float SoundFalloff = 3500.f;
+
+	// Spilt milk: this many strays come to each spill, at most this many about at once, one this
+	// often (s); they come from this far off (cm), out of the camera's view, at this pace (cm/s).
+	constexpr int32 CatsPerMilk = 2;
+	constexpr int32 MaxVisitors = 4;
+	constexpr float VisitorEvery = 3.f;
+	constexpr double VisitNear = 900.0;
+	constexpr double VisitFar = 1600.0;
+	constexpr float VisitPace = 120.f;
+	// A spill further than this from the camera brings nobody (cm); spills this close are one.
+	constexpr double MilkSeen = 5500.0;
+	constexpr double SameMilk = 400.0;
+	// The cat stands this far back from the middle of the puddle (cm), plus a share of its length;
+	// this close to that spot it starts lapping, laps this many times a second.
+	constexpr double LapBack = 50.0;
+	constexpr double LapLength = 0.6;
+	constexpr double LapArrive = 25.0;
+	constexpr float LapsPerSecond = 1.f;
+	// Tries to get to the milk this many times before giving up; going off, it walks this far
+	// at a time, and is put away once this far from the camera and out of sight this long (cm, s).
+	constexpr int32 MilkTries = 4;
+	constexpr double LeaveStretch = 900.0;
+	constexpr double AwayFar = 2000.0;
+	constexpr float AwayUnseen = 1.5f;
+	// In the camera's view: within this cosine of where it looks.
+	constexpr double InView = 0.45;
+
+	// A stray dog runs after a cart or bicycle going faster than this (cm/s) that comes this near (cm),
+	// with this chance each time, for this long (s), then rests from it this long.
+	constexpr double ChaseFrom = 100.0;
+	constexpr double ChaseStart = 900.0;
+	constexpr float ChaseChance = 0.5f;
+	constexpr float ChaseLow = 4.f;
+	constexpr float ChaseHigh = 6.5f;
+	constexpr float ChaseRestFor = 15.f;
+	// Beside the horse's head (or the bicycle's front wheel), this far out to the side (cm); it gives
+	// up once left this far behind.
+	constexpr double CartAhead = 250.0;
+	constexpr double CartOut = 200.0;
+	constexpr double BikeAhead = 40.0;
+	constexpr double BikeOut = 110.0;
+	constexpr double ChaseLost = 1500.0;
+	// That close to the horse's head it may make it shy (rear up), or the rider wobble, with these chances.
+	constexpr double SpookNear = 350.0;
+	constexpr float ShyChance = 0.4f;
+	constexpr float WobbleChance = 0.5f;
 }
 
 AAnimals::AAnimals()
@@ -306,6 +354,22 @@ void AAnimals::GatherMovers(float DeltaSeconds)
 			Add(*It, true, false);
 		}
 	}
+	for (TActorIterator<ATrafficCart> It(GetWorld()); It; ++It)
+	{
+		if (It->IsInTraffic() && FVector::DistSquared2D(It->GetActorLocation(), Camera) < Near * Near)
+		{
+			Add(*It, true, false);
+			Movers.Last().bCart = true;
+		}
+	}
+	for (TActorIterator<ATrafficBike> It(GetWorld()); It; ++It)
+	{
+		if (It->IsInTraffic() && FVector::DistSquared2D(It->GetActorLocation(), Camera) < Near * Near)
+		{
+			Add(*It, true, false);
+			Movers.Last().bBike = true;
+		}
+	}
 	LastSeen = MoveTemp(Seen);
 }
 
@@ -388,6 +452,15 @@ void AAnimals::React(FPet& Pet)
 			continue;
 		}
 		const double Speed = Mover.Velocity.Size();
+		// The one it is running after is no fright.
+		if (Pet.Mood == EMood::Chase && Mover.Actor == Pet.Chased)
+		{
+			continue;
+		}
+		if (Pet.bDog && !Pet.bTame && (Mover.bCart || Mover.bBike) && Pet.Mood != EMood::Chase && StartChase(Pet, Mover))
+		{
+			return;
+		}
 		if (Mover.bVehicle)
 		{
 			if (Speed < Animals::CarNoticeSpeed)
@@ -503,6 +576,12 @@ void AAnimals::React(FPet& Pet)
 void AAnimals::Think(FPet& Pet)
 {
 	using AnimalModel::EPose;
+	// A stray come for the milk runs off like any other, then sees to the milk again.
+	if (Pet.bVisitor && Pet.Mood != EMood::Leap)
+	{
+		ThinkVisitor(Pet);
+		return;
+	}
 	switch (Pet.Mood)
 	{
 	case EMood::Leap:
@@ -513,6 +592,12 @@ void AAnimals::Think(FPet& Pet)
 		RunFrom(Pet, Away, false);
 		break;
 	}
+	case EMood::Chase:
+		Pet.Chased = nullptr;
+		Pet.ChaseRest = Animals::ChaseRestFor;
+		SetMood(Pet, EMood::Rest, Random.FRandRange(2.f, 5.f));
+		Pet.Resting = EPose::Stand;
+		break;
 	case EMood::Flee:
 	case EMood::Watch:
 		SetMood(Pet, EMood::Rest, Random.FRandRange(2.f, 5.f));
@@ -556,7 +641,7 @@ void AAnimals::Think(FPet& Pet)
 
 void AAnimals::Move(FPet& Pet, float DeltaSeconds)
 {
-	const bool bMoving = Pet.Mood == EMood::Walk || Pet.Mood == EMood::Flee || Pet.Mood == EMood::Leap;
+	const bool bMoving = Pet.Mood == EMood::Walk || Pet.Mood == EMood::Flee || Pet.Mood == EMood::Leap || Pet.Mood == EMood::Chase;
 	if (!bMoving)
 	{
 		if (Pet.Mood == EMood::Watch)
@@ -626,11 +711,16 @@ void AAnimals::PoseIt(FPet& Pet, float DeltaSeconds)
 		break;
 	case EMood::Flee:
 	case EMood::Leap:
+	case EMood::Chase:
 		Wanted = EPose::Run;
 		Phase = Pet.Phase;
 		break;
 	case EMood::Watch:
 		Wanted = EPose::Stand;
+		break;
+	case EMood::Lap:
+		Wanted = EPose::Lap;
+		Phase = Pet.Phase;
 		break;
 	default:
 		break;
@@ -690,6 +780,7 @@ void AAnimals::Tick(float DeltaSeconds)
 		return;
 	}
 	Camera = PC->PlayerCameraManager->GetCameraLocation();
+	CameraAhead = PC->PlayerCameraManager->GetCameraRotation().Vector();
 
 	// The yards and the city are built in the first moments of play: wait for them.
 	if (!bSetUp)
@@ -703,10 +794,52 @@ void AAnimals::Tick(float DeltaSeconds)
 	}
 
 	GatherMovers(DeltaSeconds);
+
+	// Spilt milk: strays come one by one while it lasts.
+	const double Now = GetWorld()->GetTimeSeconds();
+	Milks.RemoveAll([Now](const FMilk& Milk) { return Milk.Until <= Now; });
+	VisitorClock -= DeltaSeconds;
+	if (VisitorClock <= 0.f)
+	{
+		VisitorClock = Animals::VisitorEvery;
+		for (FMilk& Milk : Milks)
+		{
+			if (Milk.Called < Animals::CatsPerMilk && Milk.Until - Now > 8.0
+				&& FVector::DistSquared(Milk.At, Camera) < FMath::Square(Animals::MilkSeen))
+			{
+				if (SendVisitor(Milk))
+				{
+					break;
+				}
+			}
+		}
+	}
+
 	const FVector PlayerAt = Movers.Num() > 0 && Movers[0].bPlayer ? Movers[0].At : Camera;
 
 	for (FPet& Pet : Pets)
 	{
+		if (Pet.bAway)
+		{
+			continue;
+		}
+		// A stray going off from the milk: put away once far and out of sight.
+		if (Pet.bVisitor && Pet.bLeaving)
+		{
+			const bool bSeen = Pet.Parts[AnimalModel::Body] && Pet.Parts[AnimalModel::Body]->WasRecentlyRendered(0.2f);
+			Pet.AwayClock = bSeen || FVector::DistSquared(Pet.At, Camera) < FMath::Square(Animals::AwayFar) ? 0.f : Pet.AwayClock + DeltaSeconds;
+			if (Pet.AwayClock > Animals::AwayUnseen)
+			{
+				Pet.bAway = true;
+				Pet.bShown = false;
+				Pet.Root->SetVisibility(false, true);
+				continue;
+			}
+		}
+		if (Pet.Mood == EMood::Lap)
+		{
+			Pet.Phase = FMath::Fmod(Pet.Phase + DeltaSeconds * Animals::LapsPerSecond * 0.25f, 1.f);
+		}
 		const bool bShow = FVector::DistSquared(Pet.At, Camera) < FMath::Square(static_cast<double>(ShowWithin));
 		if (bShow != Pet.bShown)
 		{
@@ -723,6 +856,11 @@ void AAnimals::Tick(float DeltaSeconds)
 		if (Pet.Hop >= 0.f)
 		{
 			Pet.Hop += DeltaSeconds;
+		}
+		Pet.ChaseRest -= DeltaSeconds;
+		if (Pet.Mood == EMood::Chase)
+		{
+			TickChase(Pet);
 		}
 		React(Pet);
 		Pet.Busy -= DeltaSeconds;
@@ -745,5 +883,249 @@ void AAnimals::Tick(float DeltaSeconds)
 		}
 		Pet.Look = FMath::FInterpTo(Pet.Look, LookWanted, DeltaSeconds, 3.f);
 		PoseIt(Pet, DeltaSeconds);
+	}
+}
+
+void AAnimals::CallToMilk(const UObject* WorldContextObject, const FVector& At, float Seconds)
+{
+	UWorld* World = WorldContextObject ? WorldContextObject->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	TActorIterator<AAnimals> It(World);
+	if (!It)
+	{
+		return;
+	}
+	AAnimals* Strays = *It;
+	const double Until = World->GetTimeSeconds() + Seconds;
+	for (FMilk& Milk : Strays->Milks)
+	{
+		if (FVector::DistSquared(Milk.At, At) < FMath::Square(Animals::SameMilk))
+		{
+			Milk.Until = FMath::Max(Milk.Until, Until);
+			return;
+		}
+	}
+	FMilk& Added = Strays->Milks.AddDefaulted_GetRef();
+	Added.At = At;
+	Added.Until = Until;
+	// The first one comes a moment later.
+	Strays->VisitorClock = FMath::Min(Strays->VisitorClock, 1.5f);
+}
+
+bool AAnimals::SendVisitor(FMilk& Milk)
+{
+	if (!bSetUp)
+	{
+		return false;
+	}
+	// A spot out of sight (out of view, or behind something), with a clear way to the milk.
+	FVector Start = FVector::ZeroVector;
+	bool bFound = false;
+	const float FirstTurn = Random.FRandRange(0.f, 360.f);
+	for (int32 Try = 0; Try < 16 && !bFound; ++Try)
+	{
+		const FVector2D Way = FVector2D(FRotator(0.0, FirstTurn + Try * 67.5f, 0.0).Vector());
+		const double Reach = Random.FRandRange(Animals::VisitNear, Animals::VisitFar);
+		FVector Ground;
+		if (!GroundAt(Milk.At + FVector(Way * Reach, 200.0), 500.0, Ground) || FMath::Abs(Ground.Z - Milk.At.Z) > 60.0)
+		{
+			continue;
+		}
+		if (!PathClear(Ground, Milk.At))
+		{
+			continue;
+		}
+		const FVector Look = Ground + FVector(0.0, 0.0, 30.0) - Camera;
+		const bool bInView = FVector::DotProduct(Look.GetSafeNormal(), CameraAhead) > Animals::InView;
+		if (bInView && PathClear(Camera - FVector(0.0, 0.0, 25.0), Ground + FVector(0.0, 0.0, 5.0)))
+		{
+			continue;
+		}
+		Start = Ground;
+		bFound = true;
+	}
+	if (!bFound)
+	{
+		return false;
+	}
+
+	// One put away earlier comes back as this one, else a new one while there are few.
+	int32 Index = INDEX_NONE;
+	for (int32 i = 0; i < Pets.Num(); ++i)
+	{
+		if (Pets[i].bVisitor && Pets[i].bAway)
+		{
+			Index = i;
+			break;
+		}
+	}
+	if (Index == INDEX_NONE)
+	{
+		int32 Visitors = 0;
+		for (const FPet& Each : Pets)
+		{
+			Visitors += Each.bVisitor ? 1 : 0;
+		}
+		if (Visitors >= Animals::MaxVisitors)
+		{
+			return false;
+		}
+		const AnimalModel::EKind Kinds[] = { AnimalModel::EKind::TabbyCat, AnimalModel::EKind::GingerCat, AnimalModel::EKind::BlackCat };
+		AddPet(Kinds[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Kinds)) - 1)], Start, 300.0, false, false);
+		Index = Pets.Num() - 1;
+	}
+	FPet& Pet = Pets[Index];
+	Pet.bVisitor = true;
+	Pet.bAway = false;
+	Pet.bLeaving = false;
+	Pet.AwayClock = 0.f;
+	Pet.MilkAt = Milk.At;
+	Pet.MilkUntil = Milk.Until;
+	Pet.MilkTries = 0;
+	Pet.At = Start;
+	Pet.Home = Start;
+	Pet.Hop = -1.f;
+	const FVector2D ToMilk = FVector2D(Milk.At - Start).GetSafeNormal();
+	Pet.Yaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToMilk.Y, ToMilk.X)));
+	Pet.Root->SetVisibility(true, true);
+	Pet.bShown = true;
+	++Milk.Called;
+	ThinkVisitor(Pet);
+	PoseIt(Pet, 0.f);
+	return true;
+}
+
+FVector AAnimals::LapSpot(const FPet& Pet) const
+{
+	FVector2D Way = FVector2D(Pet.At - Pet.MilkAt).GetSafeNormal();
+	if (Way.IsNearlyZero())
+	{
+		Way = FVector2D(1.0, 0.0);
+	}
+	const double Back = Animals::LapBack + Animals::LapLength * AnimalModel::ShapeOf(Pet.Kind).Length;
+	return FVector(FVector2D(Pet.MilkAt) + Way * Back, Pet.MilkAt.Z);
+}
+
+void AAnimals::ThinkVisitor(FPet& Pet)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	const bool bMilk = !Pet.bLeaving && Pet.MilkUntil > Now && Pet.MilkTries <= Animals::MilkTries;
+	if (bMilk)
+	{
+		const FVector Spot = LapSpot(Pet);
+		if (FVector::Dist2D(Pet.At, Spot) < Animals::LapArrive)
+		{
+			// At the edge of the puddle: head down and lap, a meow now and then.
+			const FVector2D ToMilk = FVector2D(Pet.MilkAt - Pet.At).GetSafeNormal();
+			Pet.Heading = ToMilk;
+			Pet.Yaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(ToMilk.Y, ToMilk.X)));
+			Pet.MilkTries = 0;
+			if (Pet.Mood != EMood::Lap && Pet.Quiet <= 0.f && Random.FRand() < 0.3f)
+			{
+				Speak(Pet, static_cast<uint8>(AnimalSynth::EKind::Meow), 0.5f);
+				Pet.Quiet = 8.f;
+			}
+			SetMood(Pet, EMood::Lap, FMath::Min(8.f, static_cast<float>(Pet.MilkUntil - Now)));
+			return;
+		}
+		++Pet.MilkTries;
+		Pet.Target = Spot;
+		Pet.Heading = FVector2D(Spot - Pet.At).GetSafeNormal();
+		Pet.Speed = Animals::VisitPace;
+		SetMood(Pet, EMood::Walk, 20.f);
+		return;
+	}
+
+	// The milk is gone (or out of reach): off it goes, away from the camera.
+	Pet.bLeaving = true;
+	FVector2D Away = FVector2D(Pet.At - Camera).GetSafeNormal();
+	if (Away.IsNearlyZero())
+	{
+		Away = FVector2D(FRotator(0.0, Random.FRandRange(0.f, 360.f), 0.0).Vector());
+	}
+	for (const double Turn : { 0.0, 40.0, -40.0, 80.0, -80.0, 130.0, -130.0, 180.0 })
+	{
+		const FVector2D Try = Away.GetRotated(Turn + Random.FRandRange(-15.f, 15.f));
+		const FVector Goal = Pet.At + FVector(Try * Animals::LeaveStretch, 0.0);
+		if (PathClear(Pet.At, Goal))
+		{
+			Pet.Target = Goal;
+			Pet.Heading = Try;
+			Pet.Speed = Animals::VisitPace;
+			SetMood(Pet, EMood::Walk, 15.f);
+			return;
+		}
+	}
+	SetMood(Pet, EMood::Rest, 2.f);
+}
+
+bool AAnimals::StartChase(FPet& Pet, const FMover& Mover)
+{
+	AActor* Thing = Mover.Actor.Get();
+	const double Speed = Mover.Velocity.Size();
+	if (!Thing || Pet.ChaseRest > 0.f || Speed < Animals::ChaseFrom
+		|| FVector::DistSquared2D(Pet.At, Mover.At) > FMath::Square(Animals::ChaseStart))
+	{
+		return false;
+	}
+	// Seen once; it may or may not take after it.
+	Pet.ChaseRest = Animals::ChaseRestFor;
+	if (Random.FRand() >= Animals::ChaseChance)
+	{
+		return false;
+	}
+	Pet.Chased = Thing;
+	Pet.ChaseSide = FVector::DotProduct(Pet.At - Mover.At, Thing->GetActorRightVector()) >= 0.0 ? 1.f : -1.f;
+	Pet.bSpookTried = false;
+	Pet.Hop = -1.f;
+	SetMood(Pet, EMood::Chase, Random.FRandRange(Animals::ChaseLow, Animals::ChaseHigh));
+	Speak(Pet, static_cast<uint8>(AnimalSynth::EKind::Bark), 1.f);
+	Pet.Quiet = 0.5f;
+	TickChase(Pet);
+	return true;
+}
+
+void AAnimals::TickChase(FPet& Pet)
+{
+	AActor* Thing = Pet.Chased.Get();
+	if (!Thing || FVector::DistSquared2D(Pet.At, Thing->GetActorLocation()) > FMath::Square(Animals::ChaseLost))
+	{
+		Pet.Busy = 0.f;
+		return;
+	}
+	ATrafficCart* Cart = Cast<ATrafficCart>(Thing);
+	ATrafficBike* Bike = Cast<ATrafficBike>(Thing);
+	const FVector Ahead = Thing->GetActorForwardVector();
+	const FVector Side = Thing->GetActorRightVector() * Pet.ChaseSide;
+	const FVector Front = Thing->GetActorLocation() + Ahead * (Cart ? Animals::CartAhead : Animals::BikeAhead);
+	const FVector Spot = Front + Side * (Cart ? Animals::CartOut : Animals::BikeOut);
+	const FVector2D ToSpot = FVector2D(Spot - Pet.At);
+	const double Gap = ToSpot.Size();
+	Pet.Heading = Gap > 1.0 ? ToSpot / Gap : FVector2D(Ahead);
+	const double Pace = Pet.bDog ? Animals::DogRun * 1.3 : Animals::CatRun;
+	Pet.Speed = static_cast<float>(FMath::Clamp(Gap * 3.0, 60.0, Pace));
+
+	// Barking all the while.
+	if (Pet.Quiet <= 0.f)
+	{
+		Speak(Pet, static_cast<uint8>(AnimalSynth::EKind::Bark), Random.FRandRange(0.8f, 1.f));
+		Pet.Quiet = Random.FRandRange(0.45f, 0.9f);
+	}
+
+	// Close up: the horse may shy and rear, the rider wobble.
+	if (!Pet.bSpookTried && FVector::DistSquared2D(Pet.At, Front) < FMath::Square(Animals::SpookNear))
+	{
+		Pet.bSpookTried = true;
+		if (Cart && Random.FRand() < Animals::ShyChance)
+		{
+			Cart->Shy();
+		}
+		else if (Bike && Random.FRand() < Animals::WobbleChance)
+		{
+			Bike->Spook();
+		}
 	}
 }

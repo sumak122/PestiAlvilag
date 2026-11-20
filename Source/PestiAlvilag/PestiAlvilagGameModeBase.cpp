@@ -24,6 +24,7 @@
 #include "VargaRuns.h"
 #include "LaciYard.h"
 #include "LaciYardModel.h"
+#include "DailyLife.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
 #include "Bicycle.h"
@@ -73,6 +74,13 @@
 #include "TramRides.h"
 #include "FoodMenus.h"
 #include "TrafficManager.h"
+#include "Garage.h"
+#include "GarageModel.h"
+#include "MissionHirdetes.h"
+#include "MissionKulcs.h"
+#include "Tailor.h"
+#include "TailorModel.h"
+#include "Tattersall.h"
 
 namespace PestiStart
 {
@@ -116,7 +124,14 @@ namespace PestiStart
 
 	// Act 1 in order, for the menu's mission list (JumpToMission).
 	const FName* const ActOne[] = { &Prologue, &Uzenet, &Zsebtolvaj, &Zsibvasar, &Felmondas, &Kifutofiu, &ElsoAuto, &Bunda };
-	// The mission the next level start jumps to (1 to 8), or 0 for none.
+	constexpr int32 ActOneCount = static_cast<int32>(UE_ARRAY_COUNT(ActOne));
+	// The car show missions (the black Mercedes SSK), Laci's after act 1 once
+	// all his night races are won; in the menu's list after act 1.
+	const FName Hirdetes(TEXT("Hirdetes"));
+	const FName Kulcs(TEXT("Kulcs"));
+	const FName* const ShowChain[] = { &Hirdetes, &Kulcs };
+	constexpr int32 ShowChainCount = static_cast<int32>(UE_ARRAY_COUNT(ShowChain));
+	// The mission the next level start jumps to (1 to 8 act 1, then the car show's), or 0 for none.
 	int32 PendingJump = 0;
 	// After a jump: how long to wait for the mission's ring (s), and how far
 	// out from the ring the player stands (cm), so it counts when he walks in.
@@ -140,6 +155,9 @@ namespace PestiStart
 	constexpr double BozsiGap = 120.0;
 	// A new rank is announced this long after it is reached (s).
 	constexpr double RankAnnounceDelay = 6.5;
+	// News and gossip: the deeds remembered, and the hour the morning paper comes out.
+	constexpr int32 DeedsKept = 12;
+	constexpr float PaperOutHour = 6.f;
 
 	// The built houses and shops made of basic shapes, found again by these names.
 	const FName BozsiHouseKey(TEXT("BozsiHouse"));
@@ -348,6 +366,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 		GetWorld()->SpawnActor<APoliceChase>();
 	}
 
+	// The daily life of the streets: lamplighters, courtyards, street sellers, rare processions, tram riders, shop shutters.
+	if (!TActorIterator<ADailyLife>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ADailyLife>();
+	}
+
 	// A new game begins with the prologue, a saved one with the first
 	// mission not yet passed (traffic first: the prologue finds its route on the lanes).
 	LoadSaveOnce();
@@ -394,10 +418,39 @@ void APestiAlvilagGameModeBase::SpawnNextMission()
 	{
 		GetWorld()->SpawnActor<AMissionBunda>();
 	}
-	else if (AStoryPerson* BozsiAtStall = AFleaMarket::FindKeeper(GetWorld(), PestiStart::BozsiName))
+	else
 	{
-		// Act 1 is over: Bözsi néni was taken away in the raid.
-		BozsiAtStall->SetInWorld(false);
+		if (AStoryPerson* BozsiAtStall = AFleaMarket::FindKeeper(GetWorld(), PestiStart::BozsiName))
+		{
+			// Act 1 is over: Bözsi néni was taken away in the raid.
+			BozsiAtStall->SetInWorld(false);
+		}
+		SpawnShowMission();
+	}
+}
+
+void APestiAlvilagGameModeBase::SpawnShowMission()
+{
+	// Laci's car show missions, once all his night races are won, one at a time.
+	if (!ANightRaces::AllWon(this))
+	{
+		return;
+	}
+	for (TActorIterator<AMission> It(GetWorld()); It; ++It)
+	{
+		// One of them already waiting or under way (a passed one stays a little while).
+		if ((It->IsA<AMissionHirdetes>() || It->IsA<AMissionKulcs>()) && !IsMissionDone(It->MissionId))
+		{
+			return;
+		}
+	}
+	if (!IsMissionDone(PestiStart::Hirdetes))
+	{
+		GetWorld()->SpawnActor<AMissionHirdetes>();
+	}
+	else if (!IsMissionDone(PestiStart::Kulcs))
+	{
+		GetWorld()->SpawnActor<AMissionKulcs>();
 	}
 }
 
@@ -541,6 +594,29 @@ void APestiAlvilagGameModeBase::SpawnLandmarks()
 	{
 		const double Z = GroundZ(FVector2D(ABoxingYard::ToCity(BoxingYardModel::RingAt, 0.0)));
 		GetWorld()->SpawnActor<ABoxingYard>(ABoxingYard::StaticClass(), FVector(BoxingYardModel::CityAt, Z), FRotator(0.0, BoxingYardModel::CityYaw, 0.0));
+	}
+
+	// The Tattersall on Kerepesi út with its motor show (the car show missions).
+	if (!TActorIterator<ATattersall>(GetWorld()))
+	{
+		const FTransform Frame = ATattersall::Frame(GetWorld());
+		GetWorld()->SpawnActor<ATattersall>(ATattersall::StaticClass(), Frame.GetLocation(), Frame.Rotator());
+	}
+
+	// The player's lock-up garage on Bérkocsis utca, by his attic.
+	if (!TActorIterator<AGarage>(GetWorld()))
+	{
+		// The ground out on the pavement: straight down at the door the drop
+		// from the sky lands on the house over the garage.
+		const double Z = GroundZ(PestiStart::OutFrom(GarageModel::CityAt, GarageModel::CityYaw));
+		GetWorld()->SpawnActor<AGarage>(AGarage::StaticClass(), FVector(GarageModel::CityAt, Z), FRotator(0.0, GarageModel::CityYaw, 0.0));
+	}
+
+	// Kertész the tailor across the street from it, where the suit for the car show is bought.
+	if (!TActorIterator<ATailor>(GetWorld()))
+	{
+		const double Z = GroundZ(PestiStart::OutFrom(TailorModel::CityAt, TailorModel::CityYaw));
+		GetWorld()->SpawnActor<ATailor>(ATailor::StaticClass(), FVector(TailorModel::CityAt, Z), FRotator(0.0, TailorModel::CityYaw, 0.0));
 	}
 
 	// And Bözsi néni's house, Népszínház utca 29, built in place of the plain
@@ -690,6 +766,7 @@ void APestiAlvilagGameModeBase::Tick(float DeltaSeconds)
 	UpdateBusted();
 	TickPlaceAtRing();
 	TickGreetings();
+	TickNews();
 
 	if (NextMissionAt > 0.0 && GetWorld()->GetTimeSeconds() >= NextMissionAt)
 	{
@@ -929,6 +1006,7 @@ void APestiAlvilagGameModeBase::Busted()
 	}
 
 	// The fine and the name it gives him, then a night in the cells.
+	NoteDeed(StreetName::EDeed::Arrested, Player->GetActorLocation());
 	BustedStars = Stars;
 	BustedFine = FMath::Min(Money, PestiStart::FinePerStar * Stars);
 	AddMoney(-BustedFine);
@@ -1043,20 +1121,38 @@ void APestiAlvilagGameModeBase::LoadSaveOnce()
 		BestRoundTenths = Save->BestRoundTenths;
 		BestMedal = Save->BestMedal;
 		RacesWon = Save->RacesWon;
+		GarageCar.Body = Save->GarageBody;
+		GarageCar.Wheel = Save->GarageWheel;
+		GarageCar.Paint = Save->GaragePaint;
+		GarageCar.Guard = Save->GarageGuard;
+		GarageCar.Spoke = Save->GarageSpoke;
+		GarageCar.Accent = Save->GarageAccent;
+		GarageCar.bTaxi = Save->bGarageTaxi;
+		GarageCar.bPolice = Save->bGaragePolice;
+		bHasSuit = Save->bHasSuit;
 	}
 
 	// A jump from the menu's mission list: the missions before it count as done.
 	const int32 Jump = PestiStart::PendingJump;
 	PestiStart::PendingJump = 0;
-	if (Jump >= 1 && Jump <= static_cast<int32>(UE_ARRAY_COUNT(PestiStart::ActOne)))
+	if (Jump >= 1 && Jump <= PestiStart::ActOneCount + PestiStart::ShowChainCount)
 	{
 		CompletedMissions.Reset();
 		for (int32 i = 0; i < Jump - 1; ++i)
 		{
-			CompletedMissions.Add(*PestiStart::ActOne[i]);
+			CompletedMissions.Add(i < PestiStart::ActOneCount ? *PestiStart::ActOne[i] : *PestiStart::ShowChain[i - PestiStart::ActOneCount]);
 		}
-		// Schwimmer's baton comes with mission 5.
+		// The car show missions come after all of Laci's night races are won.
+		if (Jump > PestiStart::ActOneCount)
+		{
+			for (int32 i = 0; i < ANightRaces::RaceCount(); ++i)
+			{
+				MarkRaceWon(i);
+			}
+		}
+		// Schwimmer's baton comes with mission 5, the tailor's suit with the car show's first.
 		bHasBaton = Jump > 5;
+		bHasSuit = Jump > PestiStart::ActOneCount + 1;
 		// Mission 1 starts at Keleti like a new game; the others at their ring.
 		bPlaceAtRing = Jump > 1;
 		PlaceAtRingUntil = -1.0;
@@ -1204,6 +1300,15 @@ bool APestiAlvilagGameModeBase::SaveToDisk() const
 	Save->BestRoundTenths = BestRoundTenths;
 	Save->BestMedal = BestMedal;
 	Save->RacesWon = RacesWon;
+	Save->GarageBody = GarageCar.Body;
+	Save->GarageWheel = GarageCar.Wheel;
+	Save->GaragePaint = GarageCar.Paint;
+	Save->GarageGuard = GarageCar.Guard;
+	Save->GarageSpoke = GarageCar.Spoke;
+	Save->GarageAccent = GarageCar.Accent;
+	Save->bGarageTaxi = GarageCar.bTaxi;
+	Save->bGaragePolice = GarageCar.bPolice;
+	Save->bHasSuit = bHasSuit;
 	return UGameplayStatics::SaveGameToSlot(Save, UPestiSaveGame::SlotName(), 0);
 }
 
@@ -1235,6 +1340,10 @@ void APestiAlvilagGameModeBase::AddBoxingWin()
 {
 	BoxingWins = FMath::Min(BoxingWins + 1, 5);
 	AddRenown(StreetName::ForBoxingWin, TEXT("gy\u0151zelem Bandi ringj\u00e9ben"), TEXT("won in Bandi's ring"));
+	if (const APawn* Boxer = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		NoteDeed(StreetName::EDeed::BoxingWin, Boxer->GetActorLocation());
+	}
 }
 
 int32 APestiAlvilagGameModeBase::GetRenownRank() const
@@ -1330,6 +1439,102 @@ void APestiAlvilagGameModeBase::ReadLetter(int32 Index)
 	AddMoney(Enclosed);
 	APestiHUD::Show(this, PestiStart::RenownNoteKey, 5.f, FColor(255, 210, 60),
 		FString::Printf(TEXT("+%s a bor\u00edt\u00e9kban  (+%s in the envelope)"), *FormatMoney(Enclosed), *FormatMoney(Enclosed)));
+}
+
+void APestiAlvilagGameModeBase::Deed(const UObject* WorldContextObject, StreetName::EDeed Kind, const FVector& At)
+{
+	if (APestiAlvilagGameModeBase* Game = Get(WorldContextObject))
+	{
+		Game->NoteDeed(Kind, At);
+	}
+}
+
+void APestiAlvilagGameModeBase::NoteDeed(StreetName::EDeed Kind, const FVector& At)
+{
+	FDeedNote Note;
+	Note.Kind = Kind;
+	Note.OnDay = DayCount;
+	TActorIterator<ATrafficManager> Roads(GetWorld());
+	if (Roads)
+	{
+		Note.Street = Roads->StreetNear(At);
+	}
+	Deeds.Add(Note);
+	if (Deeds.Num() > PestiStart::DeedsKept)
+	{
+		Deeds.RemoveAt(0);
+	}
+}
+
+void APestiAlvilagGameModeBase::TickNews()
+{
+	const ADayNight* Clock = ADayNight::Get(GetWorld());
+	if (!Clock)
+	{
+		return;
+	}
+	const float Hour = Clock->GetHour();
+	const bool bFirst = LastHour < 0.f;
+	// Midnight: a new day.
+	if (!bFirst && Hour < LastHour)
+	{
+		++DayCount;
+	}
+	const bool bPaperOut = !bFirst && LastHour < PestiStart::PaperOutHour && Hour >= PestiStart::PaperOutHour;
+	LastHour = Hour;
+	if (!bFirst && !bPaperOut)
+	{
+		return;
+	}
+	// The morning paper: the biggest deed since the last one (yesterday's), or the ordinary news.
+	++Edition;
+	const FDeedNote* Biggest = nullptr;
+	for (const FDeedNote& Note : Deeds)
+	{
+		if (!bFirst && Note.OnDay >= DayCount - 1
+			&& (!Biggest || StreetName::DeedNews[static_cast<int32>(Note.Kind)].Weight >= StreetName::DeedNews[static_cast<int32>(Biggest->Kind)].Weight))
+		{
+			Biggest = &Note;
+		}
+	}
+	if (Biggest)
+	{
+		const StreetName::FDeedNews& News = StreetName::DeedNews[static_cast<int32>(Biggest->Kind)];
+		HeadlineHu = FString(News.HeadHu).Replace(TEXT("{HOL}"), *StreetName::InStreetHu(Biggest->Street).ToUpper());
+		HeadlineEn = FString(News.HeadEn).Replace(TEXT("{WHERE}"), *StreetName::OnStreetEn(Biggest->Street).ToUpper());
+	}
+	else
+	{
+		const StreetName::FLine& Quiet = StreetName::QuietHeadlines[(DayCount + Edition) % StreetName::NumQuietHeadlines];
+		HeadlineHu = Quiet.Hu;
+		HeadlineEn = Quiet.En;
+	}
+}
+
+bool APestiAlvilagGameModeBase::PickGossip(FRandomStream& Dice, FString& OutHu, FString& OutEn) const
+{
+	TArray<const FDeedNote*> Recent;
+	for (const FDeedNote& Note : Deeds)
+	{
+		if (Note.OnDay >= DayCount - 1)
+		{
+			Recent.Add(&Note);
+		}
+	}
+	if (Recent.Num() == 0)
+	{
+		return false;
+	}
+	const FDeedNote& Picked = *Recent[Dice.RandRange(0, Recent.Num() - 1)];
+	const StreetName::FDeedNews& News = StreetName::DeedNews[static_cast<int32>(Picked.Kind)];
+	const bool bToday = Picked.OnDay == DayCount;
+	OutHu = FString(News.GossipHu)
+		.Replace(TEXT("{MIKOR}"), bToday ? TEXT("Ma") : TEXT("Tegnap"))
+		.Replace(TEXT("{HOL}"), *StreetName::InStreetHu(Picked.Street));
+	OutEn = FString(News.GossipEn)
+		.Replace(TEXT("{WHEN}"), bToday ? TEXT("Today") : TEXT("Yesterday"))
+		.Replace(TEXT("{WHERE}"), *StreetName::OnStreetEn(Picked.Street));
+	return true;
 }
 
 void APestiAlvilagGameModeBase::TickGreetings()

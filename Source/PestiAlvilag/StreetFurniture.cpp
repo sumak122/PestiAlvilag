@@ -557,10 +557,15 @@ void AStreetFurniture::AddObject(const TArray<FFurniturePart>& Parts, const FVec
 		{
 			if (ADayNight* Clock = ADayNight::Get(GetWorld()))
 			{
-				const int32 LampId = Clock->AddLamp((Local * Place).GetLocation());
+				const FTransform Lantern = Local * Place;
+				const int32 LampId = Clock->AddLamp(Lantern.GetLocation());
 				if (bLampPost)
 				{
 					Thing->LampIds.Add(LampId);
+					if (Part.Shape == Furniture::Cube)
+					{
+						Clock->SetLampGlass(LampId, Lantern);
+					}
 				}
 			}
 		}

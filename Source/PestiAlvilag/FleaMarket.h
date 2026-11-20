@@ -199,6 +199,9 @@ private:
 		/** A shopper goes home in the rain (hidden) if it rains harder than this share of his, and is gone now. */
 		float RainShy = 1.f;
 		bool bRainedOff = false;
+		/** Pista bácsi and Bözsi néni: they go home for the night like the sellers, and are home now. */
+		bool bGoesHomeAtNight = false;
+		bool bHomeForNight = false;
 	};
 
 	/** Moves and poses everyone near the camera, and has them react to the player. */
@@ -229,6 +232,8 @@ private:
 	bool bOutdoors = true;
 	/** How hard it rains now (AWeather::GetRain), and which way the camera looks. */
 	float Raining = 0.f;
+	/** The open-air market is shut for the night (covers on, nobody but the keepers). */
+	bool bClosed = false;
 	FVector2D CameraLooking = FVector2D(1.0, 0.0);
 	void Smash(int32 Index, double Now);
 	void PutBack(FStall& Stall);

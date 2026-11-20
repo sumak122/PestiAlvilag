@@ -4,7 +4,24 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "StreetName.h"
 #include "PestiAlvilagGameModeBase.generated.h"
+
+/**
+ * The car kept in the player's garage on Bérkocsis utca (AGarage): its look
+ * (CarModel::FStyle, as plain numbers), Body below 0 when it is empty.
+ */
+struct FGarageCar
+{
+	int32 Body = -1;
+	int32 Wheel = 0;
+	FLinearColor Paint = FLinearColor::Black;
+	FLinearColor Guard = FLinearColor::Black;
+	FLinearColor Spoke = FLinearColor::Black;
+	FLinearColor Accent = FLinearColor::Black;
+	bool bTaxi = false;
+	bool bPolice = false;
+};
 
 /**
  * Puts up the Népszínház on Blaha Lujza tér, starts the player on foot in
@@ -123,6 +140,14 @@ public:
 	}
 	int32 GetRacesWon() const { return RacesWon; }
 
+	/** The car kept in the garage (Body below 0: none); saved with the game at home. */
+	const FGarageCar& GetGarageCar() const { return GarageCar; }
+	void SetGarageCar(const FGarageCar& Car) { GarageCar = Car; }
+
+	/** The suit from Kertész the tailor (TailorModel::Suit): worn from then on, saved; the Tattersall's doorman lets him in. */
+	bool HasSuit() const { return bHasSuit; }
+	void SetHasSuit(bool bInHasSuit) { bHasSuit = bInHasSuit; }
+
 	/** Dishes eaten at least once; true the first time. */
 	bool TryDish(FName DishId)
 	{
@@ -167,6 +192,21 @@ public:
 	int32 GetRenown() const { return RenownPoints; }
 	int32 GetRenownRank() const;
 	void AddRenown(int32 Points, const FString& WhyHu, const FString& WhyEn);
+
+	/**
+	 * News and gossip (StreetName::EDeed): something he did at At that the
+	 * papers and the gossips may hear of. The biggest deed of a day is the
+	 * headline on the kiosks' news boards from the next morning (6:00);
+	 * passers-by talk about the deeds of today and yesterday.
+	 */
+	void NoteDeed(StreetName::EDeed Kind, const FVector& At);
+	static void Deed(const UObject* WorldContextObject, StreetName::EDeed Kind, const FVector& At);
+	/** The morning paper: its number (a new one each morning) and headline. */
+	int32 GetEdition() const { return Edition; }
+	const FString& GetHeadlineHu() const { return HeadlineHu; }
+	const FString& GetHeadlineEn() const { return HeadlineEn; }
+	/** A passer-by's word about one of his deeds of today or yesterday; false when there is none. */
+	bool PickGossip(FRandomStream& Dice, FString& OutHu, FString& OutEn) const;
 	/** A price in fillér after what his street name takes off (to whole 10 fillér). */
 	static int32 PriceFor(const UObject* WorldContextObject, int32 Filler);
 	/** Whether act 1 mission Index (0 for the prologue to 7 for the fur coat) is done. */
@@ -223,6 +263,8 @@ private:
 	void Busted();
 	void UpdateBusted();
 	void SpawnNextMission();
+	/** After act 1: Laci's next car show mission, once all his night races are won. */
+	void SpawnShowMission();
 	/** Where he stands on the pavement outside the home door. */
 	FVector2D HomeStartAt() const;
 	/** The home door: Bözsi néni's, or after the raid (mission 8) the attic room's on Bérkocsis utca; and the way it faces. */
@@ -241,6 +283,21 @@ private:
 	void TickPlaceAtRing();
 	/** Passers-by greet him by his street name, and Bözsi néni has a word at her stall. */
 	void TickGreetings();
+	/** Counts the days, and puts out the morning paper at 6:00. */
+	void TickNews();
+
+	struct FDeedNote
+	{
+		StreetName::EDeed Kind = StreetName::EDeed::CarStolen;
+		FString Street;
+		int32 OnDay = 0;
+	};
+	TArray<FDeedNote> Deeds;
+	int32 DayCount = 0;
+	float LastHour = -1.f;
+	int32 Edition = 0;
+	FString HeadlineHu;
+	FString HeadlineEn;
 
 	int32 WantedLevel = 0;
 	int32 Arrests = 0;
@@ -257,6 +314,8 @@ private:
 	int32 BestRoundTenths = 0;
 	int32 BestMedal = 0;
 	int32 RacesWon = 0;
+	FGarageCar GarageCar;
+	bool bHasSuit = false;
 	TArray<FName> TriedDishes;
 	TArray<int32> FoundLighters;
 	bool bHasBaton = false;

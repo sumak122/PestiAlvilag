@@ -41,6 +41,9 @@ public:
 	/** Still out riding in the traffic (not taken by the player). */
 	bool IsInTraffic() const { return Manager != nullptr; }
 
+	/** Something startles the rider (a dog at his wheel): he wobbles and rings his bell. */
+	void Spook() { Wobble(); }
+
 protected:
 	virtual void BeginPlay() override;
 

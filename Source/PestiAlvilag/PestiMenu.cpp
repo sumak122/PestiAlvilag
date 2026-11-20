@@ -223,6 +223,8 @@ void FPestiMenu::MissionInfo(int32 Index, FString& NameHu, FString& NameEn, FStr
 		{ TEXT("KIFUT\u00d3FI\u00da"), TEXT("The errand boy"), TEXT("Varga Lajos, N\u00e9psz\u00ednh\u00e1z utca"), TEXT("Varga the grocer") },
 		{ TEXT("AZ ELS\u0150 AUT\u00d3"), TEXT("The first car"), TEXT("Laci, Szerdahelyi utca"), TEXT("Laci the mechanic") },
 		{ TEXT("A BUNDA"), TEXT("The fur coat"), TEXT("B\u00f6zsi n\u00e9ni, N\u00e9psz\u00ednh\u00e1z utca"), TEXT("Aunt B\u00f6zsi") },
+		{ TEXT("A HIRDET\u00c9S"), TEXT("The advert"), TEXT("Laci, Szerdahelyi utca"), TEXT("Laci the mechanic") },
+		{ TEXT("A KULCS"), TEXT("The key"), TEXT("Laci, Szerdahelyi utca"), TEXT("Laci the mechanic") },
 	};
 	const int32 Row = FMath::Clamp(Index, 0, MissionCount - 1);
 	NameHu = List[Row][0];

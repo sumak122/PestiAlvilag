@@ -14,6 +14,8 @@
 #include "LaciYardModel.h"
 #include "Mission.h"
 #include "PestiAlvilagGameModeBase.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "PestiCar.h"
 #include "PestiHud.h"
 #include "PestiText.h"
@@ -126,6 +128,8 @@ namespace NightRace
 			22, 2150.f, 800 },
 	};
 	constexpr int32 NumRaces = static_cast<int32>(UE_ARRAY_COUNT(Races));
+	// After the Mercedes line, the first car show mission comes up by Laci this much later (s).
+	constexpr float ShowMissionAfter = 10.f;
 
 	// The rivals' cars: a coupé and a tourer, in these paints.
 	const FLinearColor RivalPaints[] = {
@@ -162,6 +166,27 @@ void ANightRaces::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Rivals.Reset();
 	ClearGates();
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ANightRaces::AllWon(const APestiAlvilagGameModeBase* Game)
+{
+	if (!Game)
+	{
+		return false;
+	}
+	for (int32 i = 0; i < NightRace::NumRaces; ++i)
+	{
+		if (!Game->HasWonRace(i))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+int32 ANightRaces::RaceCount()
+{
+	return NightRace::NumRaces;
 }
 
 bool ANightRaces::IsMissionUnderway() const
@@ -699,6 +724,10 @@ void ANightRaces::Finish(int32 Place)
 	}
 	Game->MarkRaceWon(Race);
 	Game->AddRenown(StreetName::ForRaceWin, TEXT("\u00E9jszakai verseny megnyer\u00E9se"), TEXT("winning a night race"));
+	if (const APawn* Racer = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		Game->NoteDeed(StreetName::EDeed::RaceWin, Racer->GetActorLocation());
+	}
 	bool bAll = true;
 	for (int32 i = 0; i < NightRace::NumRaces; ++i)
 	{
@@ -709,6 +738,8 @@ void ANightRaces::Finish(int32 Place)
 		LaciSays(FString::Printf(TEXT("Mind a n\u00E9gyet megnyerted! Itt a %s. Nincs ma Pesten jobb sof\u0151r n\u00E1lad."), *Money),
 			FString::Printf(TEXT("You've won all four! Here's %s. There's no better driver in Pest tonight."), *Money));
 		MercedesLineIn = NightRace::MercedesAfter;
+		// Laci's car show mission waits by him once he has had his word about the Mercedes.
+		Game->StartNextMission(NightRace::MercedesAfter + NightRace::ShowMissionAfter);
 		return;
 	}
 	LaciSays(FString::Printf(TEXT("Els\u0151 lett\u00E9l! Itt a %s. Holnap este j\u00F6het a k\u00F6vetkez\u0151."), *Money),

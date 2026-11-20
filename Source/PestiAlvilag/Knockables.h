@@ -7,6 +7,7 @@
 #include "KnockModel.h"
 #include "Knockables.generated.h"
 
+class APedestrian;
 class FJsonObject;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -28,7 +29,9 @@ class UStaticMeshComponent;
  * harder the faster it goes, and fly, roll and tumble from there. A crate
  * that goes over spills its goods as loose lumps. Things that have been
  * moved go back where they stood once the camera is far away and they are
- * out of sight.
+ * out of sight. Nearer by, now and then a street sweeper comes along with
+ * his broom (TickSweeper): sweeps up the spilt goods, carries the thing back
+ * to its place and walks off again.
  */
 UCLASS()
 class PESTIALVILAG_API AKnockables : public AActor
@@ -81,7 +84,19 @@ private:
 		/** The car slows down once for each thing it hits, not every frame it touches it. */
 		float LastHit = -10.f;
 		TArray<UStaticMeshComponent*> Lumps;
+		/** The sweeper has it in his arms: nobody else pushes it. */
+		bool bCarried = false;
 	};
+
+	/** What the street sweeper is doing. */
+	enum class ESweep : uint8 { None, Coming, Sweeping, Carrying, Leaving };
+	/** Sends a sweeper to a thing knocked over near the player, and walks him through the job. */
+	void TickSweeper(float DeltaSeconds, const FVector& PlayerAt, const FVector& Camera);
+	/** A clear spot on the pavement out of the way to come from (and go back to), or false. */
+	bool FindSweeperStart(const FItem& Item, const FVector& Camera, FVector& OutStart) const;
+	/** Walks him a step towards Target (ground height kept); true once he is there. */
+	bool SweeperStep(APedestrian* Man, const FVector& Target, float DeltaSeconds);
+	void SendSweeperOff();
 
 	bool LoadPlaces(TArray<TPair<FTransform, KnockModel::EKind>>& OutPlaces) const;
 	/** Adds one thing standing at At (its bottom), turned to Yaw, unless something solid is in the way. */
@@ -103,5 +118,17 @@ private:
 	FVector PusherVelocity = FVector::ZeroVector;
 	float ResetClock = 0.f;
 	int32 ResetNext = 0;
+
+	UPROPERTY(Transient)
+	TObjectPtr<APedestrian> Sweeper;
+	ESweep SweepState = ESweep::None;
+	int32 SweepItem = INDEX_NONE;
+	/** Seconds in this step, and in the whole job. */
+	float SweepClock = 0.f;
+	float SweepJob = 0.f;
+	/** Seconds before looking for the next job. */
+	float SweepWait = 20.f;
+	FVector SweepFrom = FVector::ZeroVector;
+	float SweeperGroundZ = 0.f;
 	FRandomStream Random;
 };

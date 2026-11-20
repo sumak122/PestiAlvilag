@@ -38,12 +38,22 @@ public:
 	/** Picks the load, the horse and the carter; call before it is spawned (deferred). */
 	void PickLoad(FRandomStream& Random);
 
+	/** Makes it the undertaker's hearse instead (ADailyLife's funeral): a black horse, the coachman in black, a slow walk. Before spawning. */
+	void MakeHearse(FRandomStream& Dice);
+	bool IsHearse() const { return CartLoad == HorseCartModel::ELoad::Hearse; }
+
+	/** From now on it turns at each junction towards Goal (the cemetery gate). */
+	void HeadFor(const FVector& InGoal) { Goal = InGoal; bHasGoal = true; }
+
 	/** Called by the manager right after spawning. */
 	void StartOnLane(ATrafficManager* InManager, int32 InLaneIndex, int32 InPointIndex);
 
 	/** Still out in the traffic (not taken by the player). */
 	bool IsInTraffic() const { return Manager != nullptr; }
 	bool IsBolting() const { return BoltTime > 0.f; }
+
+	/** Spooked (a dog barking at its head): the horse rears up for a moment, and now and then bolts after. */
+	void Shy();
 
 protected:
 	virtual void BeginPlay() override;
@@ -79,11 +89,19 @@ private:
 	int32 NextLaneIndex = INDEX_NONE;
 	int32 PointIndex = 0;
 	FVector Target = FVector::ZeroVector;
+	/** Where it is making for, if anywhere (HeadFor). */
+	FVector Goal = FVector::ZeroVector;
+	bool bHasGoal = false;
+	/** The lane to take after this one: towards the goal, or any. */
+	int32 ChooseNextLane() const;
+
 	/** This carter's easy pace (cm/s). */
 	float Cruise = 250.f;
 
 	/** Seconds left of the horse's bolt, till the next thing goes over, and how many went this time. */
 	float BoltTime = 0.f;
+	/** Seconds left of rearing up when spooked. */
+	float ShyTime = 0.f;
 	float SpillClock = 0.f;
 	int32 SpilledThisBolt = 0;
 	/** Held up this long (s); then it pushes through for a moment, as a stuck car does. */

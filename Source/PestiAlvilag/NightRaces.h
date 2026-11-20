@@ -32,6 +32,8 @@ enum class ENightRace : uint8
  * mode, saved); later wins of the same race pay half. When all four are
  * won Laci has a word about a black Mercedes at the Tattersall show.
  */
+class APestiAlvilagGameModeBase;
+
 UCLASS()
 class PESTIALVILAG_API ANightRaces : public AActor
 {
@@ -44,6 +46,12 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	bool IsRunning() const { return State != ENightRace::None; }
+
+	/** True when the player has won every one of the races (the car show missions open then). */
+	static bool AllWon(const APestiAlvilagGameModeBase* Game);
+
+	/** How many races there are. */
+	static int32 RaceCount();
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Race")

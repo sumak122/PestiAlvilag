@@ -857,6 +857,83 @@ def city_theatre(data):
     return form, [round(a[0]), round(a[1]), yaw_of(ox, oy), round(math.dist(a, z))]
 
 
+# The three little houses at the Tattersall's gate on Kerepesi út (the car
+# show hall, CarShowModel.h, stands behind them): one-storey lodges, not
+# the graybox's tall default.
+TATTERSALL_LODGES = ["w1447129782", "w1447129783", "w1447129784"]
+TATTERSALL_LODGE_HEIGHT = 450
+
+
+def tattersall_lodges(data):
+    """The Tattersall's gate lodges made low, by id."""
+    out = {}
+    for b in data["buildings"]:
+        if b["id"] in TATTERSALL_LODGES:
+            footprint = Polygon(ring_points(b["rings"][0]))
+            out[b["id"]] = [building_form(footprint, b, front_lines_of(b), TATTERSALL_LODGE_HEIGHT, 1)]
+    return out
+
+
+# The player's lock-up garage on Bérkocsis utca, a few steps from his attic
+# door (GarageModel.h: keep these the same as its CityAt, CityYaw, HalfWidth,
+# Depth and DoorTop): a room cut into the house front, the house carried on
+# over its door.
+GARAGE_AT = (18910, 30285)
+GARAGE_YAW = -103.09
+GARAGE_HALF = 180
+GARAGE_DEPTH = 680
+GARAGE_TOP = 320
+# The cut starts this far out of the wall, so no sliver of wall is left.
+GARAGE_OUT = 60
+# Kertész és Fia, the walk-in tailor across the street (TailorModel.h: CityAt, CityYaw, HalfWidth, Depth, Top).
+TAILOR_AT = (19022, 29251)
+TAILOR_YAW = 76.2
+TAILOR_HALF = 330
+TAILOR_DEPTH = 650
+TAILOR_TOP = 340
+
+
+def garage_cut(data):
+    """The house the garage is cut into, as its pieces: the house round the
+    garage at full height and the part over the garage from GARAGE_TOP up."""
+    return room_cut(data, GARAGE_AT, GARAGE_YAW, GARAGE_HALF, GARAGE_DEPTH, GARAGE_TOP, "garage")
+
+
+def tailor_cut(data):
+    """The house the tailor's shop is cut into, the same way as the garage."""
+    return room_cut(data, TAILOR_AT, TAILOR_YAW, TAILOR_HALF, TAILOR_DEPTH, TAILOR_TOP, "tailor")
+
+
+def room_cut(data, at, yaw, half, depth, top, what):
+    """A room cut into a house front at at (the door's middle, facing yaw),
+    half wide either side and depth deep: the house round it at full height
+    and a plain wall over it from top up."""
+    x, y = at
+    ox, oy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    sx, sy = -oy, ox
+    a, b = -GARAGE_OUT, depth
+    room = Polygon([(x - ox * a + sx * half, y - oy * a + sy * half), (x - ox * b + sx * half, y - oy * b + sy * half),
+                    (x - ox * b - sx * half, y - oy * b - sy * half), (x - ox * a - sx * half, y - oy * a - sy * half)])
+    inside = Point(x - ox * 100, y - oy * 100)
+    building = next(b for b in data["buildings"] if polygon_of(b).contains(inside))
+    shape = polygon_of(building)
+    if not shape.contains(Point(x - ox * (depth + 100), y - oy * (depth + 100))):
+        raise SystemExit("the " + what + " runs out of its house")
+    fronts = front_lines_of(building)
+    levels = building.get("levels", 0)
+    pieces = []
+    rest = shape.difference(room)
+    for part in getattr(rest, "geoms", [rest]):
+        if part.area > 1e4:
+            pieces.append(building_form(part, building, fronts, building["height"], levels))
+    over = shape.intersection(room)
+    for part in getattr(over, "geoms", [over]):
+        if part.geom_type == "Polygon" and part.area > 1e3:
+            # A plain wall over the door, as over an open gateway (the facade's ground floor would hang in the door).
+            pieces.append(building_form(part, building, [], building["height"], levels, top))
+    return {building["id"]: pieces}
+
+
 def cemetery_buildings(data, f):
     """The cemetery's tall graybox buildings made low, by id."""
     k = f.get("kerepesi")
@@ -1176,6 +1253,9 @@ def main():
     for bid in CEMETERY_LATER + ROZSAK_LATER:
         replaced[bid] = [{"gone": True}]
     replaced.update(cemetery_buildings(data, f))
+    replaced.update(tattersall_lodges(data))
+    replaced.update(garage_cut(data))
+    replaced.update(tailor_cut(data))
     cemetery, extra_areas = place_cemetery(data, f)
     churches = place_churches(data)
     for bid, _, _ in CHURCHES:

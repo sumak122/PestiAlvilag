@@ -11,6 +11,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "DayNight.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -26,6 +27,7 @@
 #include "Pedestrians.h"
 #include "PersonKit.h"
 #include "PersonModel.h"
+#include "PestiAlvilagGameModeBase.h"
 #include "PestiHud.h"
 #include "SeminaryModel.h"
 #include "OtiModel.h"
@@ -309,6 +311,49 @@ void ACityDetails::BuildCorvin()
 	}
 }
 
+void ACityDetails::AddGateGang(const FVector2D& Foot, double GateYaw, double Width, double Ground, uint32 Seed)
+{
+	TActorIterator<APedestrians> Crowd(GetWorld());
+	if (!Crowd)
+	{
+		return;
+	}
+	FRandomStream Dice(static_cast<int32>(Seed * 7919u + 13u));
+	const int32 Count = Dice.RandRange(2, 3);
+	const FVector2D Out = CityDetailsPlace::Ahead(GateYaw, 1.0);
+	const FVector2D Along(-Out.Y, Out.X);
+	// Spots on the pavement either side of the gateway, a step out from the wall.
+	const double Side[] = { -1.0, 1.0, 1.0 };
+	const double Further[] = { 0.0, 0.0, 75.0 };
+	const TCHAR* const Calls[][2] = {
+		{ TEXT("Mi j\u00e1ratban erre, uras\u00e1g?"), TEXT("What brings you round here, sir?") },
+		{ TEXT("Van egy cigid, haver?"), TEXT("Got a smoke, pal?") },
+		{ TEXT("Este ez a mi utc\u00e1nk."), TEXT("At night this is our street.") },
+	};
+	for (int32 i = 0; i < Count; ++i)
+	{
+		PersonKit::FOutfit Clothes = PersonModel::RandomOutfit(Dice);
+		for (int32 Try = 0; Try < 10 && Clothes.bWoman; ++Try)
+		{
+			Clothes = PersonModel::RandomOutfit(Dice);
+		}
+		if (Clothes.bWoman)
+		{
+			continue;
+		}
+		Clothes.Hat = Dice.FRand() < 0.75f ? PersonKit::EHat::FlatCap : PersonKit::EHat::None;
+		Clothes.Top = Dice.FRand() < 0.5f ? PersonKit::ETop::Waistcoat : PersonKit::ETop::Jacket;
+		Clothes.Held = PersonKit::EHeld::None;
+		Clothes.bTie = false;
+		Clothes.bSeated = false;
+		const double Offset = Side[i] * (Width * 0.5 + 70.0 + Further[i]);
+		const FVector2D Spot = Foot + Out * (CityDetailsPlace::OutFromWall - 40.0) + Along * Offset;
+		// Facing the street, half turned towards each other.
+		const double FaceYaw = GateYaw - Side[i] * 35.0;
+		Crowd->AddStander(Spot, Ground, FaceYaw, Clothes, 0.0, TEXT("Vag\u00e1ny"), Calls[i][0], Calls[i][1], true);
+	}
+}
+
 void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 {
 	using namespace CityDetailsModel;
@@ -344,6 +389,9 @@ void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 				Way->AddLamp(Light.At, Light.Radius);
 			}
 		}
+
+		// Its gang: two or three young men who stand out by the gate after dark, arms folded.
+		AddGateGang(Foot, GateYaw, Width, Ground, Seed);
 
 		// The courtyard, in a frame not turned, round the gate's foot.
 		AShapeSet* Court = PutUp(FVector(Foot, Ground), 0.0, CityDetailsPlace::YardDrawDistance);
@@ -432,6 +480,32 @@ void ACityDetails::BuildAdverts(const FJsonObject& Root)
 	}
 }
 
+void ACityDetails::AddNewsboy(const FVector2D& KioskAt, double KioskYaw, double Ground, int32 Seed)
+{
+	TActorIterator<APedestrians> Crowd(GetWorld());
+	if (!Crowd)
+	{
+		return;
+	}
+	FRandomStream Dice(Seed * 4243 + 17);
+	PersonKit::FOutfit Boy;
+	Boy.Height = Dice.FRandRange(132.f, 146.f);
+	Boy.Build = 0.9f;
+	const FLinearColor Coats[] = { FLinearColor(0.25f, 0.22f, 0.18f), FLinearColor(0.16f, 0.17f, 0.20f), FLinearColor(0.28f, 0.19f, 0.12f) };
+	Boy.Coat = Coats[Dice.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Coats)) - 1)];
+	Boy.Trousers = FLinearColor(0.08f, 0.07f, 0.07f);
+	Boy.Top = PersonKit::ETop::Jacket;
+	Boy.Hat = PersonKit::EHat::FlatCap;
+	Boy.HatColor = FLinearColor(0.12f, 0.10f, 0.08f);
+	Boy.bTie = false;
+	Boy.bMoustache = false;
+	Boy.Beard = PersonKit::EBeard::None;
+	// On the other side of the kiosk from the board, a step out towards the street.
+	const FRotator Turn(0.0, KioskYaw, 0.0);
+	const FVector At = FVector(KioskAt, 0.0) + Turn.RotateVector(FVector(60.0, -175.0, 0.0));
+	Crowd->AddStander(FVector2D(At), Ground, KioskYaw, Boy, 0.0, TEXT("\u00dajs\u00e1gos fi\u00fa"), FString(), FString(), false, true);
+}
+
 void ACityDetails::BuildKiosks(const FJsonObject& Root)
 {
 	using namespace CityDetailsModel;
@@ -440,6 +514,7 @@ void ACityDetails::BuildKiosks(const FJsonObject& Root)
 	{
 		return;
 	}
+	int32 KioskIndex = 0;
 	for (const TSharedPtr<FJsonValue>& KioskValue : *Kiosks)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& K = KioskValue->AsArray();
@@ -457,6 +532,32 @@ void ACityDetails::BuildKiosks(const FJsonObject& Root)
 		TArray<FLamp> Lights;
 		TArray<FSign> Lettering;
 		Kiosk(static_cast<int32>(K[3]->AsNumber()), Shapes, Lights, Lettering);
+		// The news board beside it, with the day's headline (UpdateNewsBoards).
+		{
+			TArray<FShape> BoardShapes;
+			NewsBoard(BoardShapes);
+			for (FShape& Part : BoardShapes)
+			{
+				Part.At += NewsBoardFromKiosk;
+			}
+			Shapes.Append(BoardShapes);
+			TArray<FString> Blank = { FString(), FString(), FString() };
+			TArray<FSign> BoardSigns;
+			NewsBoardLines(StreetName::NewsPaperName, Blank, BoardSigns);
+			for (int32 i = 0; i < BoardSigns.Num(); ++i)
+			{
+				UTextRenderComponent* Letters = Set->AddSign(BoardSigns[i].Text, BoardSigns[i].At + NewsBoardFromKiosk, BoardSigns[i].Yaw, BoardSigns[i].Height, BoardSigns[i].Color);
+				if (i > 0 && Letters)
+				{
+					NewsLetters.Add(Letters);
+				}
+			}
+		}
+		// Every other kiosk has a newsboy by it, calling out the headline.
+		if (KioskIndex++ % 2 == 0)
+		{
+			AddNewsboy(Spot, K[2]->AsNumber(), GroundAt(Spot), KioskIndex);
+		}
 		Set->AddShapes(Shapes);
 		for (const FLamp& Light : Lights)
 		{
@@ -1114,6 +1215,28 @@ void ACityDetails::SetHands(float Hour)
 	}
 }
 
+void ACityDetails::UpdateNewsBoards()
+{
+	const APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	if (!Game || NewsLetters.Num() == 0 || Game->GetEdition() == ShownEdition)
+	{
+		return;
+	}
+	ShownEdition = Game->GetEdition();
+	TArray<FString> Lines = StreetName::BoardLines(Game->GetHeadlineHu());
+	Lines.SetNum(3);
+	// Fewer lines sit in the middle of the board.
+	const int32 Skip = (3 - FMath::Min(3, StreetName::BoardLines(Game->GetHeadlineHu()).Num())) / 2;
+	for (int32 i = 0; i < NewsLetters.Num(); ++i)
+	{
+		const int32 Row = i % 3 - Skip;
+		if (UTextRenderComponent* Letters = NewsLetters[i])
+		{
+			Letters->SetText(FText::FromString(Lines.IsValidIndex(Row) ? Lines[Row] : FString()));
+		}
+	}
+}
+
 void ACityDetails::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1133,6 +1256,8 @@ void ACityDetails::Tick(float DeltaSeconds)
 			bIconsSent = true;
 		}
 	}
+
+	UpdateNewsBoards();
 
 	HandsCheckIn -= DeltaSeconds;
 	if (HandsCheckIn > 0.f || ClockSpots.Num() == 0 || !Hands)

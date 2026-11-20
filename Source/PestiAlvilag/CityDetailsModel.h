@@ -281,6 +281,45 @@ namespace CityDetailsModel
 	}
 
 	// ---------------------------------------------------------------------
+	// The news board by a kiosk: the day's headline pasted up on a board
+	// between two posts, facing +X. Its lettering is not in Signs: the
+	// headline changes every morning (NewsBoardLines gives where the lines go).
+
+	constexpr double NewsBoardHalf = 62.0;
+	constexpr double NewsBoardBottom = 40.0;
+	constexpr double NewsBoardTop = 150.0;
+	/** Where the board stands from a kiosk's middle, in the kiosk's frame. */
+	const FVector NewsBoardFromKiosk(20.0, 180.0, 0.0);
+
+	inline void NewsBoard(TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		const FLinearColor Sheet(0.86f, 0.84f, 0.76f);
+		const FLinearColor BoardWood(0.20f, 0.13f, 0.07f);
+		for (const double S : { -1.0, 1.0 })
+		{
+			const double Y = S * (NewsBoardHalf + 3.0);
+			Span(Out, BoardWood, FVector(-3, Y - 3, 0), FVector(3, Y + 3, NewsBoardTop + 8));
+			Span(Out, BoardWood, FVector(-22, Y - 3, 0), FVector(22, Y + 3, 5), false);
+			Add(Out, MarketModel::Sphere, BoardWood, FVector(0, Y, NewsBoardTop + 11), FVector(9, 9, 9), 0.0, false);
+		}
+		Span(Out, BoardWood, FVector(-2, -NewsBoardHalf, NewsBoardBottom), FVector(2, NewsBoardHalf, NewsBoardTop));
+		Span(Out, Sheet, FVector(2, -NewsBoardHalf + 4, NewsBoardBottom + 4), FVector(3, NewsBoardHalf - 4, NewsBoardTop - 4), false);
+		// A red band along the top, where the paper's name goes.
+		Span(Out, FLinearColor(0.45f, 0.06f, 0.04f), FVector(3, -NewsBoardHalf + 4, NewsBoardTop - 22), FVector(3.5, NewsBoardHalf - 4, NewsBoardTop - 4), false);
+	}
+
+	/** The lettering of a news board in the board's frame: the paper's name, then up to three headline lines. */
+	inline void NewsBoardLines(const FString& Name, const TArray<FString>& Lines, TArray<FSign>& Out)
+	{
+		Out.Add({ Name, FVector(4.5, 0, NewsBoardTop - 17), 0.0, 12.0, FLinearColor(0.95f, 0.9f, 0.8f) });
+		for (int32 i = 0; i < Lines.Num() && i < 3; ++i)
+		{
+			Out.Add({ Lines[i], FVector(4.0, 0, NewsBoardTop - 44 - i * 24.0), 0.0, 15.0, FLinearColor(0.04f, 0.04f, 0.04f) });
+		}
+	}
+
+	// ---------------------------------------------------------------------
 	// The street clock.
 
 	/** One face of a clock: its middle, which way it looks along X (+1 or -1), its radius (cm). */
