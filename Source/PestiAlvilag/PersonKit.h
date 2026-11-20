@@ -1154,19 +1154,19 @@ namespace PersonKit
 				case EHeld::Cane:
 				{
 					// A walking stick with a crook, its tip on the ground a little ahead.
-					const FLinearColor Wood = O.HeldColor * 0.6f;
-					Rod(F, Wood, Hand + FVector(0.5, 0.0, 3.0), FVector(Hand.X + 7.0, Hand.Y, 1.0), 1.1, 6);
-					Rod(F, Wood, Hand + FVector(0.5, 0.0, 3.0), Hand + FVector(-5.0, 0.0, 4.0), 1.1, 6);
-					Rod(F, Wood, Hand + FVector(-5.0, 0.0, 4.0), Hand + FVector(-6.0, 0.0, 0.5), 1.1, 6);
+					const FLinearColor StickWood = O.HeldColor * 0.6f;
+					Rod(F, StickWood, Hand + FVector(0.5, 0.0, 3.0), FVector(Hand.X + 7.0, Hand.Y, 1.0), 1.1, 6);
+					Rod(F, StickWood, Hand + FVector(0.5, 0.0, 3.0), Hand + FVector(-5.0, 0.0, 4.0), 1.1, 6);
+					Rod(F, StickWood, Hand + FVector(-5.0, 0.0, 4.0), Hand + FVector(-6.0, 0.0, 0.5), 1.1, 6);
 					break;
 				}
 				case EHeld::NetBag:
 				{
 					// A string bag: a loaf and a cabbage showing over its rim.
-					const FLinearColor String(0.55f, 0.50f, 0.40f);
-					Rod(F, String, Hand + FVector(-1.0, -1.0, 0.0), Hand + FVector(-5.0, 0.0, -10.0), 0.4, 4);
-					Rod(F, String, Hand + FVector(1.0, 1.0, 0.0), Hand + FVector(5.0, 0.0, -10.0), 0.4, 4);
-					Blob(F, String, Hand + FVector(0.0, 0.0, -21.0), FVector(9.0, 6.5, 10.5), 10, 5);
+					const FLinearColor Twine(0.55f, 0.50f, 0.40f);
+					Rod(F, Twine, Hand + FVector(-1.0, -1.0, 0.0), Hand + FVector(-5.0, 0.0, -10.0), 0.4, 4);
+					Rod(F, Twine, Hand + FVector(1.0, 1.0, 0.0), Hand + FVector(5.0, 0.0, -10.0), 0.4, 4);
+					Blob(F, Twine, Hand + FVector(0.0, 0.0, -21.0), FVector(9.0, 6.5, 10.5), 10, 5);
 					Blob(F, FLinearColor(0.55f, 0.36f, 0.14f), Hand + FVector(-2.5, 0.0, -11.0), FVector(8.5, 4.0, 3.6), 8, 4);
 					Blob(F, FLinearColor(0.25f, 0.42f, 0.16f), Hand + FVector(3.0, 0.5, -13.0), FVector(5.0, 5.0, 4.5), 8, 4);
 					break;

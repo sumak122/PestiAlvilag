@@ -107,7 +107,19 @@ public:
 	 */
 	UProceduralMeshComponent* AddProp(const PersonKit::FPiece& Shape, int32 OnPiece, const FVector& At, const FRotator& Turn);
 
+	/** The little things a walker takes out when he stops (PassersbyModel): made the first time, then shown or put away. */
+	enum class EActProp : uint8 { Cigarette, Watch, Paper, Cap, CrumbBag, Num };
+	void ShowActProp(EActProp Prop, bool bShow);
+	/** All of them put away. */
+	void HideActProps();
+
+	/** After WalkTo: one arm (0 left, 1 right) held as Turn with its elbow bent by Elbow, linked with someone walking beside him. */
+	void LinkArm(int32 Arm, const FRotator& Turn, float Elbow);
+
 private:
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> ActProps;
+
 	/** Arms back down from Huddle, if they were folded. */
 	void Unfold();
 	bool bArmsFolded = false;
@@ -325,6 +337,29 @@ private:
 		/** A newsboy by a kiosk: he calls out the morning paper's headline, waving a paper while he does. */
 		bool bNewsboy = false;
 		double WaveUntil = 0.0;
+
+		/** Stopped for a moment (EAct): how long still, how long since it began, and which way he faces. */
+		uint8 Act = 0;
+		float ActLeft = 0.f;
+		float ActTime = 0.f;
+		float ActYaw = 0.f;
+		/** The other one in a meeting (going over to him while bMeeting, then talking, giving a light or quarrelling). */
+		TWeakObjectPtr<APedestrian> ActWith;
+		bool bMeeting = false;
+		/** Leads the talk (speaks first, gives the light). */
+		bool bActLead = false;
+		/** Walking with someone (EPair): the other one, and whether he keeps beside him (the follower) or leads. */
+		TWeakObjectPtr<APedestrian> Partner;
+		uint8 Pair = 0;
+		bool bFollower = false;
+		/** Old and bent over his stick: walks slowly, leaning forward. */
+		bool bStooped = false;
+		/** A beggar: now and then stops by the wall and holds his cap out. */
+		bool bBeggar = false;
+		/** The player has given him something lately: not before this time does he ask again. */
+		double BegAgain = 0.0;
+		/** He has asked the player for a coin while holding his cap out this time. */
+		bool bAsked = false;
 	};
 
 	bool LoadLines();
@@ -453,4 +488,46 @@ private:
 	double NextGossip = 0.0;
 	/** Now and then two passers-by near him talk about something he did (GameMode::PickGossip). */
 	void TickGossip(double Now, bool bPlayerAbout);
+
+	// Walkers' moments (PedestrianActs.cpp): stopping alone for a moment,
+	// two meeting and talking (or giving a light, or quarrelling), pairs
+	// walking together, beggars. All rare.
+	enum class EAct : uint8 { None, Watch, Smoke, Paper, Window, Shoe, Feed, Chat, Light, Argue, Beg };
+	enum class EPair : uint8 { None, Couple, MotherChild, Friends };
+	/** Now and then someone near the player stops for a moment, or two going opposite ways meet. */
+	void TickActs(double Now, bool bPlayerAbout);
+	/** His frame while stopped (or going over to meet someone): true when it has posed him. */
+	bool TickAct(FWalker& Walker, double Now, float DeltaSeconds);
+	void StartAct(FWalker& Walker, EAct Act, float Seconds, float Yaw);
+	/** Back to walking, his things put away; a meeting ends for the other one too. */
+	void EndAct(FWalker& Walker);
+	/** Free to stop or meet: walking on a pavement, not reacting, sheltering, watching, paired or busy. */
+	bool IsFree(const FWalker& Walker) const;
+	FWalker* FindWalker(const APedestrian* Person);
+	/** A follower keeps beside his leader: true while they still walk together (copies line, place and pace). */
+	bool KeepBeside(FWalker& Walker);
+	/** They no longer walk together. */
+	void SplitPair(FWalker& Walker);
+	/** After WalkTo: the arms of a pair walking linked, and an old man's stoop. */
+	void PoseWalking(FWalker& Walker);
+	/**
+	 * Sometimes a walker comes with company: a spouse, a child or a friend
+	 * beside him. AddCompanion makes a new one beside Walkers[Leader] (when
+	 * the crowd fills); RecruitCompanion takes one walking alone out of
+	 * sight (when he starts again somewhere new). PairUp dresses Follower
+	 * for it and links the two.
+	 */
+	void AddCompanion(int32 Leader);
+	void RecruitCompanion(int32 Leader);
+	void PairUp(int32 Leader, int32 Follower);
+	/** A new or restarted walker: old folk slow down, and now and then one is a beggar instead. */
+	void SetUpWalker(FWalker& Walker);
+	/** The beggar near the player asks him; E gives a coin. */
+	void TickBeggar(FWalker& Walker, double Now);
+	/** The way to the nearest wall from At (yaw), if one is within reach. */
+	bool WallBeside(const FVector2D& At, double GroundZ, const FVector2D& Heading, float& OutYaw) const;
+	/** Not before these times does anyone stop alone, meet someone, or quarrel or ask for a light. */
+	double NextIdleAct = 0.0;
+	double NextMeeting = 0.0;
+	double NextRareMeeting = 0.0;
 };

@@ -39,6 +39,9 @@ public:
 	 */
 	static bool Trouble(const UObject* WorldContextObject, const FVector& At);
 
+	/** A flock on the ground within Within of At (to throw crumbs to): where its middle is. */
+	static bool FlockNear(const UObject* WorldContextObject, const FVector2D& At, double Within, FVector& OutMiddle);
+
 	/** Flocks further than this from the camera are hidden and left still (cm). */
 	UPROPERTY(EditAnywhere, Category = "Pigeons")
 	float ShowWithin = 9000.f;

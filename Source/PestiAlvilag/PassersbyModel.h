@@ -3,14 +3,17 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DailyLifeModel.h"
 #include "PersonKit.h"
 
 /**
  * More of the people of Pest in 1932 for the walkers (PersonModel::RandomOutfit):
  * old women in headscarves, market women in shawls, old men with a cane,
  * schoolboys, soldiers on leave, priests, nuns and ladies in fur collars,
- * and brighter colours for the women's clothes. Header only, so the looks
- * can be drawn outside the game too.
+ * and brighter colours for the women's clothes; and what walkers do when
+ * they stop (APedestrians acts): the poses (DailyLifeModel::FLimbs) and the
+ * little things in their hands. Header only, so it can all be drawn outside
+ * the game too.
  */
 namespace PassersbyModel
 {
@@ -304,5 +307,234 @@ namespace PassersbyModel
 		if (Roll < 0.31f) { Out = MarketWoman(Random); return true; }
 		if (Roll < 0.37f) { Out = Lady(Random); return true; }
 		return false;
+	}
+
+	/** A beggar: an old patched coat, no tie, a few days' stubble, a battered cap held out. */
+	inline FOutfit Beggar(FRandomStream& Random)
+	{
+		FOutfit O;
+		O.Skin = SkinOf(Random);
+		O.Hair = GreyHair(Random);
+		O.bAged = true;
+		O.Height = Random.FRandRange(160.f, 174.f);
+		O.Build = Random.FRandRange(0.86f, 0.95f);
+		O.Beard = Random.FRand() < 0.6f ? PersonKit::EBeard::Stubble : PersonKit::EBeard::Full;
+		O.Top = ETop::Overcoat;
+		O.Coat = FLinearColor(0.16f, 0.14f, 0.10f);
+		O.Shirt = FLinearColor(0.45f, 0.42f, 0.36f);
+		O.Trousers = FLinearColor(0.12f, 0.11f, 0.09f);
+		O.bTie = false;
+		O.bScarf = true;
+		O.Scarf = FLinearColor(0.22f, 0.16f, 0.12f);
+		O.Hat = EHat::None;
+		O.Shoes = FLinearColor(0.10f, 0.07f, 0.05f);
+		return O;
+	}
+
+	// ---------------------------------------------------------------------
+	// What a walker does when he stops for a moment, alone or with another.
+
+	using DailyLifeModel::FLimbs;
+
+	/** Looking at his pocket watch, held up before his chest in the left hand. */
+	inline void LookAtWatch(FLimbs& L)
+	{
+		L.Arms[0] = FRotator(34.f, 0.f, -14.f);
+		L.Elbows[0] = 92.f;
+		L.Arms[1] = FRotator(18.f, 0.f, 10.f);
+		L.Elbows[1] = 64.f;
+		L.Pitch = 3.f;
+	}
+
+	/** Smoking: the right hand up to the mouth by Draw (0 down .. 1 at the lips), the left hand at rest. */
+	inline void Smoking(FLimbs& L, float Draw)
+	{
+		const float D = FMath::SmoothStep(0.f, 1.f, Draw);
+		L.Arms[1] = FRotator(FMath::Lerp(14.f, 58.f, D), 0.f, FMath::Lerp(-6.f, 50.f, D));
+		L.Elbows[1] = FMath::Lerp(62.f, 132.f, D);
+		L.Arms[0] = FRotator(4.f, 0.f, 4.f);
+		L.Elbows[0] = 8.f;
+	}
+
+	/** Reading the paper held open before him with both hands. */
+	inline void Reading(FLimbs& L)
+	{
+		L.Arms[0] = FRotator(40.f, 0.f, 6.f);
+		L.Arms[1] = FRotator(40.f, 0.f, -6.f);
+		L.Elbows[0] = 62.f;
+		L.Elbows[1] = 62.f;
+		L.Pitch = 3.f;
+	}
+
+	/** Looking in a shop window: hands clasped behind his back, leaning in a little. */
+	inline void WindowShopping(FLimbs& L)
+	{
+		L.Arms[0] = FRotator(-24.f, 0.f, -10.f);
+		L.Arms[1] = FRotator(-24.f, 0.f, 10.f);
+		L.Elbows[0] = 58.f;
+		L.Elbows[1] = 58.f;
+		L.Pitch = 7.f;
+	}
+
+	/**
+	 * Crouched down to tie a shoelace, the left knee forward and the right
+	 * nearly on the ground (Phase in seconds: the fingers at work). Returns
+	 * how far his middle comes down (cm, for a man of 178 cm).
+	 */
+	inline float TyingShoe(FLimbs& L, float Phase)
+	{
+		L.Pitch = 22.f;
+		L.Legs[0] = 92.f;
+		L.Knees[0] = -122.f;
+		L.Legs[1] = 52.f;
+		L.Knees[1] = -128.f;
+		const float Fiddle = 5.f * FMath::Sin(Phase * 9.f);
+		L.Arms[0] = FRotator(52.f + Fiddle, 0.f, -6.f);
+		L.Arms[1] = FRotator(52.f - Fiddle, 0.f, 6.f);
+		L.Elbows[0] = 34.f;
+		L.Elbows[1] = 34.f;
+		return 44.f;
+	}
+
+	/** Throwing crumbs to the pigeons from a paper bag in the left hand (Phase in throws). */
+	inline void FeedingPigeons(FLimbs& L, float Phase)
+	{
+		const float T = FMath::Sin(2.f * PI * Phase);
+		const float Toss = FMath::Max(0.f, T);
+		L.Arms[1] = FRotator(26.f + 34.f * Toss, 0.f, -12.f);
+		L.Elbows[1] = 46.f - 30.f * Toss;
+		L.Arms[0] = FRotator(22.f, 0.f, -8.f);
+		L.Elbows[0] = 72.f;
+		L.Pitch = 6.f;
+	}
+
+	/** Talking with his hands (Phase in seconds): the right hand up and turning as he speaks. */
+	inline void Talking(FLimbs& L, float Phase)
+	{
+		L.Arms[1] = FRotator(26.f + 12.f * FMath::Sin(Phase * 2.3f), 0.f, -10.f + 6.f * FMath::Sin(Phase * 1.7f));
+		L.Elbows[1] = 82.f + 18.f * FMath::Sin(Phase * 3.1f);
+		L.Arms[0] = FRotator(6.f, 0.f, 4.f);
+		L.Elbows[0] = 20.f;
+		L.Pitch = 2.f;
+	}
+
+	/** Listening: hands together before him, nodding a little (the pitch). */
+	inline void Listening(FLimbs& L, float Phase)
+	{
+		L.Arms[0] = FRotator(4.f, 0.f, -22.f);
+		L.Arms[1] = FRotator(4.f, 0.f, 22.f);
+		L.Elbows[0] = 50.f;
+		L.Elbows[1] = 50.f;
+		L.Pitch = 2.f + 1.5f * FMath::Max(0.f, static_cast<float>(FMath::Sin(Phase * 2.f)));
+	}
+
+	/** Shaking hands with someone in front of him (Phase in seconds: the shake). */
+	inline void ShakingHands(FLimbs& L, float Phase)
+	{
+		L.Arms[1] = FRotator(42.f + 6.f * FMath::Sin(Phase * 14.f), 0.f, 8.f);
+		L.Elbows[1] = 24.f;
+		L.Pitch = 4.f;
+	}
+
+	/** Arguing (Phase in seconds): both arms thrown about, leaning in. */
+	inline void Arguing(FLimbs& L, float Phase)
+	{
+		L.Arms[1] = FRotator(58.f + 30.f * FMath::Sin(Phase * 3.3f), 0.f, -22.f);
+		L.Elbows[1] = 50.f + 30.f * FMath::Cos(Phase * 2.9f);
+		L.Arms[0] = FRotator(36.f + 26.f * FMath::Sin(Phase * 2.6f + 1.f), 0.f, 18.f);
+		L.Elbows[0] = 70.f + 20.f * FMath::Sin(Phase * 3.7f);
+		L.Pitch = 7.f + 3.f * FMath::Sin(Phase * 1.9f);
+	}
+
+	/** Giving a light: a match held up to the other's face, the left hand cupped round it. */
+	inline void GivingALight(FLimbs& L)
+	{
+		L.Arms[1] = FRotator(58.f, 0.f, 10.f);
+		L.Elbows[1] = 62.f;
+		L.Arms[0] = FRotator(56.f, 0.f, -12.f);
+		L.Elbows[0] = 70.f;
+		L.Pitch = 5.f;
+	}
+
+	/** Begging: the cap held out in the right hand, stooped. */
+	inline void Begging(FLimbs& L, float Phase)
+	{
+		L.Arms[1] = FRotator(50.f + 4.f * FMath::Sin(Phase * 1.3f), 0.f, -4.f);
+		L.Elbows[1] = 26.f;
+		L.Arms[0] = FRotator(12.f, 0.f, 4.f);
+		L.Elbows[0] = 40.f;
+		L.Pitch = 9.f;
+	}
+
+	/** Walking arm in arm: the man's arm crooked (Arm on the woman's side), and hers hooked through it. */
+	inline FRotator CrookedArm(float& OutElbow)
+	{
+		OutElbow = 74.f;
+		return FRotator(6.f, 0.f, -14.f);
+	}
+	inline FRotator HookedArm(float& OutElbow)
+	{
+		OutElbow = 58.f;
+		return FRotator(18.f, 0.f, 16.f);
+	}
+
+	/** Hand in hand: the mother's right arm a little out and down to the child, the child's left up to her. */
+	inline FRotator MotherHand(float& OutElbow)
+	{
+		OutElbow = 10.f;
+		return FRotator(8.f, 0.f, -16.f);
+	}
+	inline FRotator ChildHand(float& OutElbow)
+	{
+		OutElbow = 6.f;
+		return FRotator(34.f, 0.f, 22.f);
+	}
+
+	// The little things in their hands, each built round where the fist
+	// closes (DailyLifeModel::HandOnForearm), pointing along +X.
+
+	/** A lit cigarette sticking out of the fingers. */
+	inline void Cigarette(PersonKit::FPiece& P)
+	{
+		PersonKit::Rod(P, FLinearColor(0.92f, 0.90f, 0.84f), FVector(0.5, 0.0, 1.5), FVector(8.0, 0.0, 1.5), 0.6, 6);
+		PersonKit::Rod(P, DailyLifeModel::EmberColor(), FVector(8.0, 0.0, 1.5), FVector(8.8, 0.0, 1.5), 0.65, 6);
+	}
+
+	/** A gold pocket watch on its chain, its face up. */
+	inline void PocketWatch(PersonKit::FPiece& P)
+	{
+		const FLinearColor Gold(0.70f, 0.52f, 0.18f);
+		PersonKit::Loft(P, Gold, { PersonKit::Flat(2.0, 1.5, 3.2, 3.2), PersonKit::Flat(2.0, 2.6, 3.2, 3.2) }, 12, true, true);
+		PersonKit::Loft(P, FLinearColor(0.90f, 0.88f, 0.80f), { PersonKit::Flat(2.0, 2.6, 2.7, 2.7), PersonKit::Flat(2.0, 2.7, 2.7, 2.7) }, 12, false, true);
+		PersonKit::Rod(P, Gold, FVector(-0.6, 0.0, 2.0), FVector(-6.0, -4.0, -4.0), 0.25, 4);
+	}
+
+	/** The newspaper opened wide, held up before the chest: built round the middle of its bottom edge, the pages facing -X (towards him). */
+	inline void OpenPaper(PersonKit::FPiece& P)
+	{
+		const FLinearColor Paper(0.80f, 0.78f, 0.70f);
+		const FLinearColor Print(0.42f, 0.41f, 0.38f);
+		PersonKit::Block(P, Paper, FVector(0.0, 0.0, 19.0), FVector(0.3, 28.0, 19.0));
+		for (const double Side : { -1.0, 1.0 })
+		{
+			for (int32 Row = 0; Row < 4; ++Row)
+			{
+				PersonKit::Block(P, Print, FVector(0.4, Side * 14.0, 32.0 - Row * 8.0), FVector(0.05, 11.0, Row == 0 ? 3.0 : 2.4));
+			}
+		}
+	}
+
+	/** A battered cap held upside down to take the coins. */
+	inline void HeldOutCap(PersonKit::FPiece& P)
+	{
+		const FLinearColor Cloth(0.18f, 0.16f, 0.13f);
+		PersonKit::Blob(P, Cloth, FVector(6.0, 0.0, 2.0), FVector(9.0, 8.0, -5.0), 10, 4, 0.0);
+		PersonKit::Loft(P, Cloth, { PersonKit::Flat(6.0, 2.0, 9.4, 8.4), PersonKit::Flat(6.0, 2.8, 9.4, 8.4) }, 12, false, false);
+	}
+
+	/** A small paper bag of crumbs. */
+	inline void CrumbBag(PersonKit::FPiece& P)
+	{
+		PersonKit::Block(P, FLinearColor(0.68f, 0.58f, 0.40f), FVector(2.0, 0.0, 3.0), FVector(3.5, 3.0, 5.0));
 	}
 }

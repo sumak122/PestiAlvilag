@@ -52,6 +52,8 @@ namespace Pedestrians
 	constexpr float MinLane = 40.f;
 	constexpr float MaxLane = 100.f;
 	constexpr float Middle = 90.f;
+	// Walkers who come with company beside them (PedestrianActs.cpp).
+	constexpr float PairShare = 0.12f;
 
 	constexpr double EndCell = 1000.0;
 	constexpr double JoinDistance = 700.0;
@@ -1188,7 +1190,7 @@ void APedestrians::PickAFight(APawn* Player)
 		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Stumble
 			|| Walker.React == EReact::Point || Walker.React == EReact::Flee || Walker.React == EReact::Respect
 			|| Walker.React == EReact::Wave || Walker.React == EReact::Challenge || Walker.React == EReact::Backing;
-		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree
+		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree || Walker.Person->GetOutfit().Height < 145.f
 			|| FMath::Abs(Walker.GroundZ + Pedestrians::Middle - PlayerAt.Z) > Pedestrians::AskHeight)
 		{
 			continue;
@@ -1242,6 +1244,8 @@ void APedestrians::PickAFight(APawn* Player)
 	}
 	// The fighter stands where he was: the walker himself is gone (another comes along out of sight).
 	LeaveShelter(Walker);
+	EndAct(Walker);
+	SplitPair(Walker);
 	if (Walker.Blood)
 	{
 		Walker.Blood->DestroyComponent();
@@ -1701,7 +1705,8 @@ void APedestrians::TickChallenge(double Now, bool bPlayerAbout)
 	{
 		return IsValid(Walker.Person) && Walker.bPlaced && Walker.React == EReact::None && !Walker.bStander && !Walker.bSeated
 			&& !Walker.bIndoors && Walker.Shelter == INDEX_NONE && Walker.Gawk == INDEX_NONE && Walker.Stolen == 0
-			&& !Walker.Person->GetOutfit().bWoman;
+			&& !Walker.Person->GetOutfit().bWoman && Walker.Person->GetOutfit().Height >= 145.f && !Walker.bStooped
+			&& Walker.Person->GetOutfit().Hat != PersonKit::EHat::ClericHat;
 	};
 	int32 Picked = INDEX_NONE;
 	// One sent for may come from further off.
@@ -2076,6 +2081,7 @@ void APedestrians::Tick(float DeltaSeconds)
 			break;
 		}
 		Walker.Person->SetOutfit(PersonModel::RandomOutfit(Random, true));
+		SetUpWalker(Walker);
 		const PersonKit::FOutfit& Dressed = Walker.Person->GetOutfit();
 		Walker.bHasUmbrella = Dressed.Held == PersonKit::EHeld::Umbrella || Random.FRand() < Pedestrians::UmbrellaShare;
 		Walker.UmbrellaColor = UmbrellaModel::ClothColor(Random.FRand(), Dressed.bWoman);
@@ -2085,7 +2091,12 @@ void APedestrians::Tick(float DeltaSeconds)
 		Walker.ShelterClock = Random.FRand() * Pedestrians::ShelterLook;
 		Walker.Nosy = Random.FRand();
 		Walker.GawkClock = Random.FRand() * Pedestrians::GawkLook;
-		Walkers.Add(Walker);
+		const int32 Added = Walkers.Add(Walker);
+		// Now and then with company beside him.
+		if (Random.FRand() < Pedestrians::PairShare && Walkers.Num() - NumStanders < Crowd)
+		{
+			AddCompanion(Added);
+		}
 	}
 
 	// Where the player is, on foot or at the wheel, and how fast he goes
@@ -2111,6 +2122,7 @@ void APedestrians::Tick(float DeltaSeconds)
 	}
 	TickChallenge(Now, bPlayerAbout);
 	TickGossip(Now, bPlayerAbout);
+	TickActs(Now, bPlayerAbout);
 
 	GatherMovers(Camera);
 
@@ -2134,6 +2146,12 @@ void APedestrians::Tick(float DeltaSeconds)
 			continue;
 		}
 
+		// Stopped for a moment, but now off to a doorway or a crowd: on with that instead.
+		if (Walker.Act != 0 && (Walker.Shelter != INDEX_NONE || Walker.bIndoors || Walker.Gawk != INDEX_NONE))
+		{
+			EndAct(Walker);
+		}
+
 		// Gone indoors out of the rain: nothing more to do until he comes out again.
 		if (Walker.bIndoors && TickRain(Walker, RainNow, Camera, Looking, DeltaSeconds))
 		{
@@ -2151,11 +2169,18 @@ void APedestrians::Tick(float DeltaSeconds)
 			&& PickSpot(Camera, Looking, false, AppearBeyond, Walker.Line, Walker.Along, Walker.GroundZ))
 		{
 			LeaveGawk(Walker);
+			EndAct(Walker);
+			SplitPair(Walker);
 			Walker.Stolen = 0;
 			Walker.bPlaced = false;
 			ClearReact(Walker);
 			Walker.bWaiting = false;
 			Walker.bRushing = false;
+			// Now and then he comes back with company.
+			if (!Walker.bBeggar && Random.FRand() < Pedestrians::PairShare)
+			{
+				RecruitCompanion(static_cast<int32>(&Walker - Walkers.GetData()));
+			}
 		}
 
 		if (bPlayerAbout && Walker.bPlaced)
@@ -2167,6 +2192,10 @@ void APedestrians::Tick(float DeltaSeconds)
 			continue;
 		}
 		if (TickGawk(Walker, Now, DeltaSeconds))
+		{
+			continue;
+		}
+		if (TickAct(Walker, Now, DeltaSeconds))
 		{
 			continue;
 		}
@@ -2211,7 +2240,9 @@ void APedestrians::Tick(float DeltaSeconds)
 			}
 		}
 
-		if (bOnWalk)
+		// One walking with company keeps beside the other (his line, place and pace).
+		const bool bBeside = Walker.bFollower && KeepBeside(Walker);
+		if (bOnWalk && !bBeside)
 		{
 			Walker.Along += Walker.Dir * Pace * DeltaSeconds;
 		}
@@ -2280,6 +2311,7 @@ void APedestrians::Tick(float DeltaSeconds)
 			{
 				Walker.Person->WalkTo(FVector(Walker.Shown, Walker.GroundZ + Pedestrians::Middle * Size), Walker.ShownYaw, Pace, DeltaSeconds,
 					Walker.React == EReact::Flee || (bOnCrossing && Walker.bRushing) ? 1.f : 0.f);
+				PoseWalking(Walker);
 			}
 		}
 	}
@@ -2680,7 +2712,8 @@ bool APedestrians::TakeWitness(const UObject* WorldContextObject, const FVector&
 		const FWalker& Walker = Street->Walkers[i];
 		const bool bFree = Walker.React == EReact::None || Walker.React == EReact::Aside || Walker.React == EReact::Point || Walker.React == EReact::Flee;
 		if (!IsValid(Walker.Person) || !Walker.bPlaced || !bFree || Walker.bStander || Walker.bSeated || Walker.Stolen > 0
-			|| Walker.Shelter != INDEX_NONE || FVector2D::Distance(Walker.Shown, FVector2D(Street->PlayerAt)) < NotNear)
+			|| Walker.Shelter != INDEX_NONE || FVector2D::Distance(Walker.Shown, FVector2D(Street->PlayerAt)) < NotNear
+			|| Walker.Person->GetOutfit().Height < 145.f)
 		{
 			continue;
 		}
@@ -2703,6 +2736,8 @@ bool APedestrians::TakeWitness(const UObject* WorldContextObject, const FVector&
 	// Gone from the walkers: another comes along out of sight.
 	Street->LeaveGawk(Walker);
 	Street->LeaveShelter(Walker);
+	Street->EndAct(Walker);
+	Street->SplitPair(Walker);
 	if (Walker.Blood)
 	{
 		Walker.Blood->DestroyComponent();
