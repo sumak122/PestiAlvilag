@@ -2213,6 +2213,15 @@ private:
 			Paint.Line(X + 6.5f * U, Y + 3.f * U, X + 6.5f * U, Y - 8.f * U, C, 1.6f * U, On);
 			Paint.Line(X - 2.5f * U, Y - 6.f * U, X + 6.5f * U, Y - 8.f * U, C, 2.6f * U, On);
 			break;
+		case EIcon::Food:
+			// A fork and a knife: a place to eat.
+			Paint.Line(X - 4.f * U, Y - 8.f * U, X - 4.f * U, Y + 8.f * U, C, 1.8f * U, On);
+			Paint.Line(X - 7.f * U, Y - 8.f * U, X - 7.f * U, Y - 3.f * U, C, 1.2f * U, On);
+			Paint.Line(X - 1.f * U, Y - 8.f * U, X - 1.f * U, Y - 3.f * U, C, 1.2f * U, On);
+			Paint.Line(X - 7.f * U, Y - 3.f * U, X - 1.f * U, Y - 3.f * U, C, 1.4f * U, On);
+			Paint.Line(X + 5.f * U, Y - 8.f * U, X + 5.f * U, Y + 8.f * U, C, 1.8f * U, On);
+			Paint.Box(X + 4.f * U, Y - 8.f * U, 3.f * U, 7.f * U, C, On);
+			break;
 		}
 	}
 
@@ -2472,6 +2481,7 @@ private:
 			{ EIcon::Hotel, TEXT("Sz\u00e1lloda"), TEXT("Hotel") },
 			{ EIcon::Sight, TEXT("Nevezetess\u00e9g"), TEXT("Landmark") },
 			{ EIcon::Music, TEXT("Zen\u00e9s hely"), TEXT("Live music") },
+			{ EIcon::Food, TEXT("Vend\u00e9gl\u0151, \u00e9tkezde"), TEXT("Place to eat") },
 		};
 		Over.Line(LX + 30.f, RowY - 22.f, LX + LW - 30.f, RowY - 22.f, PestiHud::Brass, 1.f, 1);
 		Paint.Text(bEnglish ? TEXT("HELYEK  \u00b7  PLACES") : TEXT("HELYEK"), Paint.Deco(17.f), LX + LW * 0.5f, RowY, PestiHud::Gold, 0.5f);
