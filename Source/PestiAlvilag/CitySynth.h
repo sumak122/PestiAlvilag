@@ -47,6 +47,8 @@ namespace CitySynth
 		FireBell,
 		/** A motorcycle's rubber bulb horn, honked twice. */
 		MotorHorn,
+		/** The dustman's hand bell, shaken in bursts at each stop of the rubbish cart (ATrafficCart). */
+		HandBell,
 		Count,
 	};
 
@@ -543,6 +545,13 @@ namespace CitySynth
 				if (Roll(1.2f))
 				{
 					RingBell(ECall::TramBell, 3 + static_cast<int32>(Unit() * 3.f), 0.32f, 0.82f, 0.25f);
+				}
+				break;
+			case ESpot::HandBell:
+				// Shaken a few times, a pause, shaken again.
+				if (!Playing(ECall::TramBell) && Roll(24.f))
+				{
+					RingBell(ECall::TramBell, 4 + static_cast<int32>(Unit() * 4.f), 0.16f, 1.2f, 0.30f);
 				}
 				break;
 			case ESpot::FireBell:

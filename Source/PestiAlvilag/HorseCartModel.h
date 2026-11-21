@@ -110,6 +110,8 @@ namespace HorseCartModel
 	constexpr double HorseAt = 190.0;
 	constexpr double BenchX = 96.0;
 	constexpr double BenchTop = 132.0;
+	/** The rubbish box's front, behind the coachman's bench. */
+	constexpr double RubbishFront = BenchX - 32.0;
 	/** Where the driver's hips are, on the bench. */
 	inline FVector DriverHip() { return FVector(BenchX - 2.0, -18.0, BenchTop + 9.0); }
 	/** The middle of the collar, and where the traces hook onto it (horse's frame). */
@@ -562,12 +564,12 @@ namespace HorseCartModel
 	 * churns from the dairy, sacks of coal, or beer barrels from the Kőbánya
 	 * breweries. None is Pista bácsi's market cart, with its crates.
 	 */
-	enum class ELoad : uint8 { None, Milk, Coal, Beer, Hearse, Fiaker, Count };
+	enum class ELoad : uint8 { None, Milk, Coal, Beer, Hearse, Fiaker, Rubbish, Count };
 	constexpr int32 MaxLoadItems = 14;
 
 	inline int32 NumLoadItems(ELoad Load)
 	{
-		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : (Load == ELoad::Hearse || Load == ELoad::Fiaker) ? 1 : 0;
+		return Load == ELoad::Milk ? 12 : Load == ELoad::Coal ? 10 : Load == ELoad::Beer ? 14 : (Load == ELoad::Hearse || Load == ELoad::Fiaker || Load == ELoad::Rubbish) ? 1 : 0;
 	}
 
 	// A churn, a sack and a barrel (cm).
@@ -607,6 +609,11 @@ namespace HorseCartModel
 			// The cab's body over the whole bed.
 			return FVector((BedFront + BedBack) * 0.5, 0.0, BedTop);
 		}
+		if (Load == ELoad::Rubbish)
+		{
+			// The rubbish box, from behind the coachman's bench to the tail.
+			return FVector((RubbishFront + BedBack + 4.0) * 0.5, 0.0, BedTop);
+		}
 		if (Load == ELoad::Hearse)
 		{
 			// The glass case over the middle of the bed.
@@ -627,6 +634,10 @@ namespace HorseCartModel
 	inline FLinearColor Coal() { return FLinearColor(0.025f, 0.025f, 0.03f); }
 	inline FLinearColor Oak() { return FLinearColor(0.36f, 0.22f, 0.11f); }
 	inline FLinearColor FiakerLacquer() { return FLinearColor(0.012f, 0.014f, 0.016f); }
+	/** The city cleansing office's grey-green on its rubbish carts. */
+	inline FLinearColor RubbishPaint() { return FLinearColor(0.10f, 0.12f, 0.10f); }
+	/** Where the dustman's hand bell hangs on the rubbish box (its pivot), in the cart's frame. */
+	inline FVector RubbishBellAt() { return FVector(RubbishFront - 4.0, 62.0, BedTop + 118.0); }
 
 	/** A fiaker's passenger seat: the middle of a seated fare's hips, in the cart's frame (two side by side: Side -1 and 1). */
 	inline FVector FiakerFareHip(double Side) { return FVector(BedBack + 50.0, Side * 30.0, BedTop + 56.0); }
@@ -660,6 +671,11 @@ namespace HorseCartModel
 			// The cab's black lacquer, and yellow wheels.
 			OutBoards = FiakerLacquer();
 			OutWheels = FLinearColor(0.60f, 0.42f, 0.07f);
+			break;
+		case ELoad::Rubbish:
+			// The cleansing office's grey-green, black wheels.
+			OutBoards = RubbishPaint();
+			OutWheels = FLinearColor(0.04f, 0.04f, 0.04f);
 			break;
 		default:
 			OutBoards = BoardPaint();
@@ -804,6 +820,84 @@ namespace HorseCartModel
 				Rod(P, Iron(), FVector(Back - 6.0, SY * 66.0, 92.0), FVector(Back + 30.0, SY * 74.0, 66.0), 1.0);
 				Blob(P, Brass(), FVector(Back + 30.0, SY * 76.0, 66.0), FVector(2.0, 2.0, 2.0), 6, 3);
 			}
+			return;
+		}
+		if (Load == ELoad::Rubbish)
+		{
+			// The city's rubbish cart: a tall closed box of grey-green planks with iron
+			// corners behind the coachman, its roof of sliding iron lids (the middle one
+			// pushed open, ash and rubbish heaped in the hole), the tailboard that lets
+			// down to tip it, the cleansing office's white number, and the dustman's
+			// hand bell on a bracket by the box. From the bed's middle.
+			const FLinearColor Paint = RubbishPaint();
+			const FLinearColor Ash(0.34f, 0.33f, 0.30f);
+			const FLinearColor Dirt(0.16f, 0.13f, 0.10f);
+			const double HalfX = (RubbishFront - BedBack - 4.0) * 0.5;
+			const double HalfY = BedHalfWidth - 2.0;
+			const double Top = 112.0;
+			// The box: planks with dark seams, iron corner posts and bands.
+			Block(P, Paint, FVector(0.0, 0.0, Top * 0.5), FVector(HalfX, HalfY, Top * 0.5));
+			for (int32 k = 1; k < 6; ++k)
+			{
+				const double Z = Top * k / 6.0;
+				for (const double SY : { -1.0, 1.0 })
+				{
+					Block(P, Paint * 0.55f, FVector(0.0, SY * (HalfY + 0.3), Z), FVector(HalfX, 0.4, 0.6));
+				}
+				Block(P, Paint * 0.55f, FVector(-HalfX - 0.3, 0.0, Z), FVector(0.4, HalfY, 0.6));
+			}
+			for (const double SX : { -1.0, 1.0 })
+			{
+				for (const double SY : { -1.0, 1.0 })
+				{
+					Block(P, Iron(), FVector(SX * (HalfX - 1.0), SY * (HalfY - 1.0), Top * 0.5), FVector(2.5, 2.5, Top * 0.5 + 1.0));
+				}
+			}
+			for (const double Z : { 8.0, Top - 6.0 })
+			{
+				for (const double SY : { -1.0, 1.0 })
+				{
+					Block(P, Iron(), FVector(0.0, SY * (HalfY + 0.8), Z), FVector(HalfX + 1.5, 0.8, 2.5));
+				}
+			}
+			// The roof: three iron lids on rails, the middle one slid back over the last, the rubbish showing.
+			for (const double SY : { -1.0, 1.0 })
+			{
+				Block(P, Iron(), FVector(0.0, SY * (HalfY - 3.0), Top + 2.0), FVector(HalfX + 2.0, 3.0, 2.0));
+			}
+			const double LidHalf = HalfX / 3.0;
+			Block(P, Iron() * 1.6f, FVector(HalfX - LidHalf, 0.0, Top + 3.5), FVector(LidHalf, HalfY - 2.0, 1.5));
+			Block(P, Iron() * 1.6f, FVector(-HalfX + LidHalf, 0.0, Top + 3.5), FVector(LidHalf, HalfY - 2.0, 1.5));
+			Block(P, Iron() * 1.4f, FVector(-HalfX + LidHalf + 8.0, 0.0, Top + 6.5), FVector(LidHalf, HalfY - 4.0, 1.5));
+			Blob(P, Ash, FVector(0.0, 0.0, Top - 2.0), FVector(LidHalf - 2.0, HalfY - 10.0, 12.0), 12, 5, 0.0);
+			for (int32 k = 0; k < 6; ++k)
+			{
+				const FVector Scrap((k % 3 - 1) * 14.0, (k / 3 - 0.5) * 30.0, Top + 6.0 + (k % 2) * 3.0);
+				Blob(P, k % 2 ? Dirt : FLinearColor(0.50f, 0.46f, 0.38f), Scrap, FVector(5.0 + k % 3, 4.0, 2.5), 6, 3);
+			}
+			// The tailboard's hinges and its chains, a shovel and a broom hung on the side.
+			for (const double SY : { -1.0, 1.0 })
+			{
+				Block(P, Iron(), FVector(-HalfX - 1.5, SY * (HalfY - 10.0), 6.0), FVector(1.5, 5.0, 2.0));
+				Rod(P, Iron(), FVector(-HalfX - 1.0, SY * (HalfY - 2.0), Top - 8.0), FVector(-HalfX - 1.0, SY * (HalfY - 2.0), Top - 40.0), 0.6);
+			}
+			Rod(P, FLinearColor(0.30f, 0.20f, 0.11f), FVector(-HalfX + 20.0, -HalfY - 3.0, 40.0), FVector(HalfX - 30.0, -HalfY - 3.0, 70.0), 1.4);
+			Block(P, Iron(), FVector(HalfX - 24.0, -HalfY - 3.0, 72.0), FVector(8.0, 0.6, 10.0));
+			Rod(P, FLinearColor(0.30f, 0.20f, 0.11f), FVector(-HalfX + 20.0, -HalfY - 3.0, 64.0), FVector(HalfX - 40.0, -HalfY - 3.0, 90.0), 1.2);
+			Blob(P, FLinearColor(0.40f, 0.33f, 0.18f), FVector(-HalfX + 14.0, -HalfY - 3.5, 61.0), FVector(8.0, 2.0, 6.0), 8, 4);
+			// The office's number in a white plate on each side.
+			for (const double SY : { -1.0, 1.0 })
+			{
+				Block(P, FLinearColor(0.78f, 0.77f, 0.72f), FVector(10.0, SY * (HalfY + 1.2), Top - 28.0), FVector(16.0, 0.4, 9.0));
+				Block(P, Iron(), FVector(4.0, SY * (HalfY + 1.5), Top - 28.0), FVector(1.5, 0.3, 6.0));
+				Block(P, Iron(), FVector(12.0, SY * (HalfY + 1.5), Top - 28.0), FVector(3.0, 0.3, 6.0));
+				Block(P, Iron(), FVector(20.0, SY * (HalfY + 1.5), Top - 28.0), FVector(1.5, 0.3, 6.0));
+			}
+			// The hand bell on its bracket at the front corner.
+			const FVector Bell = RubbishBellAt() - LoadSpot(ELoad::Rubbish, 0);
+			Rod(P, Iron(), FVector(HalfX, HalfY - 4.0, Top), Bell + FVector(0.0, 0.0, 2.0), 0.8);
+			Loft(P, Brass(), { Flat(Bell.X, Bell.Z - 10.0, 5.5, 5.5, Bell.Y), Flat(Bell.X, Bell.Z - 4.0, 4.0, 4.0, Bell.Y), Flat(Bell.X, Bell.Z, 1.5, 1.5, Bell.Y) }, 12, false, true);
+			Rod(P, FLinearColor(0.30f, 0.20f, 0.11f), Bell, Bell + FVector(0.0, 0.0, 10.0), 1.0);
 			return;
 		}
 		if (Load == ELoad::Hearse)
@@ -972,6 +1066,20 @@ namespace HorseCartModel
 			O.bApron = false;
 			O.bMoustache = true;
 			O.Height = 172.f + (Pick % 3) * 3.f;
+			break;
+		case ELoad::Rubbish:
+			// The dustman: the cleansing office's grey linen jacket and peaked cap, a leather apron, a scarf against the dust.
+			O.Hat = EHat::PeakedCap;
+			O.HatColor = FLinearColor(0.14f, 0.15f, 0.14f);
+			O.Top = ETop::Jacket;
+			O.Coat = FLinearColor(0.22f, 0.23f, 0.21f);
+			O.Shirt = FLinearColor(0.45f, 0.44f, 0.40f);
+			O.Trousers = FLinearColor(0.10f, 0.10f, 0.10f);
+			O.bApron = true;
+			O.Apron = FLinearColor(0.12f, 0.08f, 0.05f);
+			O.bScarf = true;
+			O.Scarf = FLinearColor(0.30f, 0.28f, 0.24f);
+			O.Build = 1.05f;
 			break;
 		case ELoad::Hearse:
 			// The undertaker's coachman: all in black under a black bowler.

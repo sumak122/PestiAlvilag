@@ -19,6 +19,7 @@
 #include "PolicePatrols.h"
 #include "ProceduralMeshComponent.h"
 #include "SpillLife.h"
+#include "SpotSound.h"
 #include "TrafficManager.h"
 #include "Witnesses.h"
 
@@ -39,6 +40,15 @@ namespace TrafficCartRide
 	// The hearse goes at a slow walk, so the mourners keep up behind it.
 	constexpr float HearseLow = 105.f;
 	constexpr float HearseHigh = 125.f;
+	// The rubbish cart goes at a slow walk too, and stops at houses along its round:
+	// this long between stops, this long at each (s); its bell is heard this far (cm).
+	constexpr float RubbishLow = 140.f;
+	constexpr float RubbishHigh = 175.f;
+	constexpr float RoundsDriveLeast = 25.f;
+	constexpr float RoundsDriveMost = 60.f;
+	constexpr float RoundsStopLeast = 6.f;
+	constexpr float RoundsStopMost = 12.f;
+	constexpr double HandBellReach = 4500.0;
 	constexpr float SpeedUp = 140.f;
 	constexpr float SlowDown = 380.f;
 	// The carter turns the horse this far at most (degrees), this fast, this much for each degree off course.
@@ -142,6 +152,56 @@ void ATrafficCart::MakeFiaker(FRandomStream& Dice, bool bWithFares)
 	Cruise = Dice.FRandRange(TrafficCartRide::FiakerLow, TrafficCartRide::FiakerHigh);
 }
 
+void ATrafficCart::MakeRubbish(FRandomStream& Dice)
+{
+	using HorseCartModel::ELoad;
+	CartLoad = ELoad::Rubbish;
+	HorseCoat = static_cast<HorseCartModel::ECoat>(Dice.RandRange(0, static_cast<int32>(HorseCartModel::ECoat::Count) - 1));
+	bBlaze = Dice.FRand() < 0.5f;
+	DriverLook = HorseCartModel::CarterLook(ELoad::Rubbish, Dice.RandRange(0, 11));
+	bOwnDriverLook = true;
+	Cruise = Dice.FRandRange(TrafficCartRide::RubbishLow, TrafficCartRide::RubbishHigh);
+	RoundsLeft = Dice.FRandRange(TrafficCartRide::RoundsDriveLeast * 0.3f, TrafficCartRide::RoundsDriveMost);
+}
+
+void ATrafficCart::TickRounds(float DeltaSeconds)
+{
+	RoundsLeft -= DeltaSeconds;
+	RingLeft = FMath::Max(0.f, RingLeft - DeltaSeconds);
+	if (RoundsLeft <= 0.f && BoltTime <= 0.f && ShyTime <= 0.f)
+	{
+		// A stop on the round: the cart stands while the dustman rings for the bins.
+		const float Stop = FMath::FRandRange(TrafficCartRide::RoundsStopLeast, TrafficCartRide::RoundsStopMost);
+		HoldStill(Stop);
+		RingLeft = Stop;
+		RoundsLeft = Stop + FMath::FRandRange(TrafficCartRide::RoundsDriveLeast, TrafficCartRide::RoundsDriveMost);
+	}
+	if (RingLeft > 0.f && !HandBell)
+	{
+		HandBell = NewObject<USpotSound>(this);
+		HandBell->SetupAttachment(CollisionBox);
+		HandBell->RegisterComponent();
+		HandBell->SetSpot(CitySynth::ESpot::HandBell, FMath::Rand());
+		HandBell->SetHeard(0.f, 1.f);
+		HandBell->Start();
+	}
+	if (HandBell)
+	{
+		float Gain = 0.f;
+		float Far = 1.f;
+		if (RingLeft > 0.f && BoltTime <= 0.f)
+		{
+			if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
+			{
+				const double Distance = FVector::Dist(Camera->GetCameraLocation(), GetActorLocation());
+				Far = static_cast<float>(FMath::Clamp(Distance / TrafficCartRide::HandBellReach, 0.0, 1.0));
+				Gain = Distance < TrafficCartRide::HandBellReach ? 1.f - Far : 0.f;
+			}
+		}
+		HandBell->SetHeard(Gain, Far);
+	}
+}
+
 bool ATrafficCart::IsForHire() const
 {
 	return IsFiaker() && !bFares && Manager != nullptr && BoltTime <= 0.f && ShyTime <= 0.f;
@@ -209,6 +269,10 @@ void ATrafficCart::Tick(float DeltaSeconds)
 	if (!Manager)
 	{
 		// Taken by the player: an ordinary cart from now on.
+		if (HandBell)
+		{
+			HandBell->SetHeard(0.f, 1.f);
+		}
 		Super::Tick(DeltaSeconds);
 		return;
 	}
@@ -216,6 +280,10 @@ void ATrafficCart::Tick(float DeltaSeconds)
 
 	BumpCooldown = FMath::Max(0.f, BumpCooldown - DeltaSeconds);
 	HoldTime = FMath::Max(0.f, HoldTime - DeltaSeconds);
+	if (IsRubbishCart())
+	{
+		TickRounds(DeltaSeconds);
+	}
 	if (bWaiting)
 	{
 		// At the cab stand: standing, the horse idling.
@@ -461,7 +529,7 @@ void ATrafficCart::WhileBolting(float DeltaSeconds)
 void ATrafficCart::SpillOne()
 {
 	using namespace HorseCartModel;
-	if (IsHearse() || IsFiaker())
+	if (IsHearse() || IsFiaker() || IsRubbishCart())
 	{
 		return;
 	}
