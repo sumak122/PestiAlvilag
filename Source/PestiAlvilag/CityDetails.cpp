@@ -1152,7 +1152,8 @@ void ACityDetails::BuildStreetLife(const FJsonObject& Root)
 		const FVector2D Spot = CityDetailsPlace::Pair(E);
 		TArray<FShape> Local;
 		StreetWell(Local);
-		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+		// The entry's yaw looks at the road; the spout and its drain face the other way, onto the pavement.
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber() + 180.0);
 	});
 	ForEachEntry(TEXT("pissoirs"), 3, [&](const TArray<TSharedPtr<FJsonValue>>& E)
 	{
