@@ -25,6 +25,8 @@ AOsmGraybox read:
 - kiosks: newspaper and tobacco kiosks near tram stops, [x, y, yaw, variant]
   with the counter facing the pavement walking line;
 - clocks: street clocks on a cast iron post on the squares, [x, y, yaw];
+- litter: [x, y, yaw, kind]: newspaper scraps and leaves in the gutters,
+  horse dung on the road, rubbish heaps in corners (see place_litter);
 - map_icons: the little pictures on the minimap and the big map, [kind, x, y]
   (cafe, market, tram, phone, yard, theatre, station, store, church).
 - churches: [kind ("rokus" or "jezus"), x, y, yaw, width, depth], the
@@ -61,7 +63,7 @@ from street_furniture import Space, Spread, chance, in_cart_gate, ring_points, u
 
 # The gates that stand open (their house numbers and where they are, as in
 # street_furniture.json's "gates"): Népszínház utca 9, 19, 39, 2 and 20,
-# and Rákóczi tér 3.
+# and two on Rákóczi tér (see THROUGH).
 OPEN_GATES = [
     (23598, 9701),
     (40338, 15420),
@@ -69,8 +71,21 @@ OPEN_GATES = [
     (22808, 11893),
     (81976, 31536),
     (15855, 46218),
+    (13563, 46350),
 ]
 GATE_FIND = 200
+# Through houses (átjáróház): an open gate's yard has more ways in from
+# another street, ("gate", near an existing gate) or ("arch", [x, y, yaw]) an
+# open archway cut where there was no gate. Népszínház utca 2 through to Víg
+# utca, Rákóczi tér 3 through to Német utca, the next Rákóczi tér gate
+# through to Salétrom utca.
+THROUGH = {
+    (22808, 11893): [("arch", [18955, 13095, 169.0])],
+    (15855, 46218): [("arch", [19649, 47995, -18.6])],
+    (13563, 46350): [("gate", (11198, 48874))],
+}
+# An archway is as wide as a gate.
+ARCH_WIDTH = 300
 # The gate's stone surround (ShopModel::GateSurround); the gateway is the
 # opening between the surrounds.
 GATE_SURROUND = 34
@@ -194,29 +209,35 @@ def place_courtyards(data, gates):
     joined = unary_union([s.buffer(30, join_style=2) for _, s in shapes])
     holes = [Polygon(r) for g in getattr(joined, "geoms", [joined]) for r in g.interiors]
     courtyards, replaced = [], {}
-    for near in OPEN_GATES:
+
+    def find_gate(near):
         gate = min(gates, key=lambda g: math.hypot(g["at"][0] - near[0], g["at"][1] - near[1]))
-        x, y, yaw = gate["at"]
-        if math.hypot(x - near[0], y - near[1]) > GATE_FIND:
+        if math.hypot(gate["at"][0] - near[0], gate["at"][1] - near[1]) > GATE_FIND:
             raise SystemExit(f"no gate near {near}")
+        return gate
+
+    def cut(x, y, yaw, width):
+        """Cuts a gateway from the wall foot (x, y), facing yaw, into the house
+        behind it: its depth, the yard it opens into and its way in and to the side."""
         ox, oy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
         ix, iy = -ox, -oy
         sx, sy = -iy, ix
         inside = Point(x + ix * 30, y + iy * 30)
         building, shape = next((b, s) for b, s in shapes if s.buffer(5).contains(inside))
+        if building["id"] in replaced:
+            raise SystemExit(f"two gateways through {building['id']}")
         ray = LineString([(x, y), (x + ix * 4000, y + iy * 4000)])
-        cut = ray.intersection(shape.boundary)
-        depth = min(math.hypot(q.x - x, q.y - y) for q in getattr(cut, "geoms", [cut]) if math.hypot(q.x - x, q.y - y) > 100)
+        hit = ray.intersection(shape.boundary)
+        depth = min(math.hypot(q.x - x, q.y - y) for q in getattr(hit, "geoms", [hit]) if math.hypot(q.x - x, q.y - y) > 100)
         yard_at = Point(x + ix * (depth + 150), y + iy * (depth + 150))
         hole = next(h for h in holes if h.contains(yard_at))
-        yard = hole.buffer(30, join_style=2).simplify(10)
-        half = gate["width"] / 2 - GATE_SURROUND
+        half = width / 2 - GATE_SURROUND
         a, b = -GATEWAY_OUT, depth + GATEWAY_PAST
         way = Polygon([(x + ix * a + sx * half, y + iy * a + sy * half), (x + ix * b + sx * half, y + iy * b + sy * half),
                        (x + ix * b - sx * half, y + iy * b - sy * half), (x + ix * a - sx * half, y + iy * a - sy * half)])
         for other, s in shapes:
             if other is not building and s.intersection(way).area > 100:
-                raise SystemExit(f"gateway at {near} runs into {other['id']}")
+                raise SystemExit(f"gateway at {(x, y)} runs into {other['id']}")
         fronts = front_lines_of(building)
         levels = building.get("levels", 0)
         pieces = []
@@ -229,6 +250,28 @@ def place_courtyards(data, gates):
             if part.geom_type == "Polygon" and part.area > 1e3:
                 pieces.append(building_form(part, building, [], building["height"], levels, GATEWAY_TOP))
         replaced[building["id"]] = pieces
+        return depth, hole, (x + ix * depth, y + iy * depth), (ix, iy), (sx, sy)
+
+    for near in OPEN_GATES:
+        gate = find_gate(near)
+        x, y, yaw = gate["at"]
+        depth, hole, exit_at, inward, side = cut(x, y, yaw, gate["width"])
+        yard = hole.buffer(30, join_style=2).simplify(10)
+        # Through houses: more gateways into the same yard, from another street.
+        also, exits = [], [exit_at]
+        for kind, where in THROUGH.get(near, []):
+            if kind == "gate":
+                other = find_gate(where)
+                ax, ay, ayaw = other["at"]
+                width = other["width"]
+            else:
+                ax, ay, ayaw = where
+                width = ARCH_WIDTH
+            adepth, ahole, aexit, _, _ = cut(ax, ay, ayaw, width)
+            if not ahole.equals(hole):
+                raise SystemExit(f"through gateway at {where} opens into another yard")
+            also.append([ax, ay, ayaw, width, round(adepth), 1 if kind == "arch" else 0])
+            exits.append(aexit)
 
         # The courtyard's walls, each with the height of the house it belongs to.
         walls = []
@@ -246,28 +289,49 @@ def place_courtyards(data, gates):
             if not yard.contains(Point(mid.x + nx * 60, mid.y + ny * 60)):
                 nx, ny = -nx, -ny
             walls.append([round(p[0]), round(p[1]), round(q[0]), round(q[1]), owner[0]["height"], yaw_of(nx, ny)])
-        exit_at = (x + ix * depth, y + iy * depth)
-        courtyards.append({
+        entry = {
             "gate": [x, y, yaw], "width": gate["width"], "depth": round(depth), "number": gate["number"],
             "seed": zlib_seed(gate["at"]),
             "yard": [round(v) for p in ring for v in p], "walls": walls,
-            "props": yard_props(yard, walls, exit_at, (ix, iy), (sx, sy), gate["at"]),
-        })
+            "props": yard_props(yard, walls, exits, inward, side, gate["at"]),
+        }
+        if also:
+            entry["also"] = also
+        courtyards.append(entry)
     return courtyards, replaced
 
 
-def yard_props(yard, walls, exit_at, inward, side, key):
+# Things stood against a courtyard wall: (kind, how far out from the wall, the
+# room it takes along the wall). A yard gets a few of them, picked by chance.
+YARD_WALL_THINGS = [
+    ("barrels", 70, 220), ("woodpile", 60, 300), ("bike", 25, 200), ("crates", 60, 200),
+    ("handcart", 90, 260), ("pram", 60, 160), ("ladder", 12, 120), ("bins", 50, 200),
+]
+YARD_WALL_COUNT = (3, 6)
+# Keep a way this wide clear between the gateways of a through house.
+THROUGH_PATH = 230
+
+
+def yard_props(yard, walls, exits, inward, side, key):
     """What stands in a courtyard: the water pump in the middle, a carpet
     beating rack and a washing line along the longest walls, dustbins by the
-    gateway, a bench, and a tree in a big one. Each [kind, x, y, yaw] (a
-    washing line also its length)."""
+    gateway, a bench, a tree in a big one, and a few things against the walls
+    (barrels, a woodpile, a bike, crates, a hand cart, a pram, a ladder).
+    Each [kind, x, y, yaw] (a washing line also its length). A through
+    house keeps the way between its gateways clear."""
     props = []
     inner = yard.buffer(-120)
     if inner.is_empty:
         return props
-    taken = [exit_at]
+    taken = list(exits)
+    path = None
+    if len(exits) > 1:
+        path = unary_union([LineString([exits[0], e]).buffer(THROUGH_PATH) for e in exits[1:]])
+    exit_at = exits[0]
 
     def clear(x, y, gap):
+        if path is not None and path.contains(Point(x, y)):
+            return False
         return inner.contains(Point(x, y)) and all(math.hypot(x - a, y - b) >= gap for a, b in taken)
 
     centre = polylabel(inner if inner.geom_type == "Polygon" else max(inner.geoms, key=lambda g: g.area), 10)
@@ -279,7 +343,7 @@ def yard_props(yard, walls, exit_at, inward, side, key):
     for k, s in enumerate((1, -1)):
         bx = ex + inward[0] * 120 + side[0] * s * 220
         by = ey + inward[1] * 120 + side[1] * s * 220
-        if yard.buffer(-40).contains(Point(bx, by)):
+        if yard.buffer(-40).contains(Point(bx, by)) and (path is None or not path.contains(Point(bx, by))):
             props.append(["bins", round(bx), round(by), yaw_of(-inward[0], -inward[1])])
             taken.append((bx, by))
             break
@@ -298,7 +362,8 @@ def yard_props(yard, walls, exit_at, inward, side, key):
                 if kind == "line":
                     run = min(length - 300, 900)
                     ends = [(mx + dx * run / 2, my + dy * run / 2), (mx - dx * run / 2, my - dy * run / 2)]
-                    if all(yard.buffer(-60).contains(Point(*e)) for e in ends) and clear(mx, my, 200):
+                    if all(yard.buffer(-60).contains(Point(*e)) for e in ends) and clear(mx, my, 200) \
+                            and (path is None or not path.intersects(LineString(ends))):
                         props.append(["line", round(mx), round(my), yaw_of(dx, dy), round(run)])
                         placed = True
                 elif clear(mx, my, 260):
@@ -317,6 +382,40 @@ def yard_props(yard, walls, exit_at, inward, side, key):
                 if clear(p.x, p.y, 400):
                     props.append(["tree", round(p.x), round(p.y), 0])
                     break
+    # Things against the walls: a few kinds, each once, on spots along the
+    # walls that are free, facing out from the wall.
+    lo, hi = YARD_WALL_COUNT
+    want = lo + int(chance("yardcount", *key) * (hi - lo + 1))
+    kinds = sorted(YARD_WALL_THINGS, key=lambda k: chance("yardkind", k[0], *key))
+    spots = []
+    for wi, w in enumerate(walls):
+        length = math.hypot(w[2] - w[0], w[3] - w[1])
+        for j in range(int(length // 150)):
+            spots.append((chance("yardspot", wi, j, *key), wi, 75 + j * 150))
+    spots.sort()
+    for kind, depth_in, room in kinds:
+        if want <= 0:
+            break
+        for _, wi, along in spots:
+            w = walls[wi]
+            length = math.hypot(w[2] - w[0], w[3] - w[1])
+            if along < room / 2 + 40 or along > length - room / 2 - 40:
+                continue
+            dx, dy = unit(w[2] - w[0], w[3] - w[1])
+            nx, ny = math.cos(math.radians(w[5])), math.sin(math.radians(w[5]))
+            mx = w[0] + dx * along + nx * depth_in
+            my = w[1] + dy * along + ny * depth_in
+            if not yard.buffer(-10).contains(Point(mx, my)) or (path is not None and path.contains(Point(mx, my))):
+                continue
+            if any(math.hypot(mx - a, my - b) < room / 2 + 160 for a, b in taken):
+                continue
+            # Doors are painted on the ground floor every 510 cm from 120 on; keep off them.
+            if any(abs(along - d) < room / 2 + 50 for d in range(120, int(length), 510)):
+                continue
+            props.append([kind, round(mx), round(my), w[5]])
+            taken.append((mx, my))
+            want -= 1
+            break
     return props
 
 
@@ -1338,6 +1437,90 @@ def place_wells(space, f, spots):
     return wells
 
 
+# Litter: [x, y, yaw, kind] (CityLifeModel::ELitter): 0 newspaper scraps in
+# the gutter, 1 a heap of fallen leaves at the kerb, 2 horse dung on the
+# road by the kerb, 3 a rubbish heap in a corner where two house walls meet.
+LITTER_STEP = 700
+LITTER_KERB_SHARE = 0.045
+LITTER_DUNG_SHARE = 0.02
+LITTER_HEAP_SHARE = 0.35
+LITTER_GAP = 600
+
+
+def place_litter(space, sidewalks, fronts, spots):
+    spread = Spread(LITTER_GAP)
+    litter = []
+
+    def free_spot(x, y, gap):
+        return room(spots, x, y, gap) and spread.ok(x, y) and not in_cart_gate(x, y, 60)
+
+    for w in sidewalks:
+        line = LineString(ring_points(w))
+        steps = max(1, int(line.length // LITTER_STEP))
+        for i in range(steps + 1):
+            on = line.interpolate(i / steps, normalized=True)
+            pick = chance("litter", round(on.x), round(on.y))
+            if pick >= LITTER_KERB_SHARE + LITTER_DUNG_SHARE:
+                continue
+            spot = kerb_spot(space, on.x, on.y, 28)
+            if spot is None:
+                continue
+            x, y, yaw = spot
+            if pick < LITTER_KERB_SHARE:
+                if not free_spot(x, y, 120) or space.near_building(Point(x, y), 60):
+                    continue
+                kind = 1 if chance("leaves", round(x), round(y)) < 0.45 else 0
+                litter.append([round(x), round(y), yaw, kind])
+                spread.add(x, y)
+            else:
+                rx = x + math.cos(math.radians(yaw)) * 95
+                ry = y + math.sin(math.radians(yaw)) * 95
+                if space.trams is not None and space.trams.distance(Point(rx, ry)) < 150:
+                    continue
+                if not space.roads.contains(Point(rx, ry)) or not spread.ok(rx, ry):
+                    continue
+                litter.append([round(rx), round(ry), round(chance("dung", round(rx)) * 360, 1), 2])
+                spread.add(rx, ry)
+    # Rubbish heaps in the inside corners of the street walls.
+    walls = list(facade_walls(fronts))
+    cells = {}
+    for n, (p0, p1, _, _, _) in enumerate(walls):
+        for c, o in ((p0, p1), (p1, p0)):
+            cells.setdefault((int(c[0] // 100), int(c[1] // 100)), []).append((n, c, o))
+    ends = {}
+    for n, (p0, p1, _, _, _) in enumerate(walls):
+        for c, o in ((p0, p1), (p1, p0)):
+            key = (round(c[0]), round(c[1]))
+            if key in ends:
+                continue
+            legs = [(c, o)]
+            for i in range(int(c[0] // 100) - 1, int(c[0] // 100) + 2):
+                for j in range(int(c[1] // 100) - 1, int(c[1] // 100) + 2):
+                    for m, d, q in cells.get((i, j), []):
+                        if m != n and math.dist(c, d) < 40:
+                            legs.append((c, q))
+            ends[key] = legs
+    for key, legs in ends.items():
+        if len(legs) != 2 or chance("heap", *key) >= LITTER_HEAP_SHARE:
+            continue
+        (c, a), (_, b) = legs
+        ax, ay = unit(a[0] - c[0], a[1] - c[1])
+        bx, by = unit(b[0] - c[0], b[1] - c[1])
+        # Only inside corners (the pavement wrapped round by the walls): the
+        # walls meet at less than about 150 degrees and the spot between is open.
+        if ax * bx + ay * by < -0.85:
+            continue
+        mx, my = unit(ax + bx, ay + by)
+        x, y = c[0] + mx * 70, c[1] + my * 70
+        if space.near_building(Point(x, y), 30) or space.road_shape.distance(Point(x, y)) < 80:
+            continue
+        if not free_spot(x, y, 250):
+            continue
+        litter.append([round(x), round(y), yaw_of(mx, my), 3])
+        spread.add(x, y)
+    return litter
+
+
 # Cast iron street urinals (piszoár), one on each of these squares, in the open
 # ground of the square clear of the walking lines.
 PISSOIR_SQUARES = ["Rákóczi tér", "Teleki László tér", "Mátyás tér", "Baross tér", "II. János Pál pápa tér", "Almássy tér"]
@@ -1432,6 +1615,7 @@ def main():
     wells = place_wells(space, f, spots)
     pissoirs = place_pissoirs(data, space, f, spots)
     plates = place_street_plates(data, fronts, {CORVIN_ID})
+    litter = place_litter(space, f["sidewalks"], fronts, spots)
     out = {
         "version": 1,
         "courtyards": courtyards,
@@ -1458,12 +1642,14 @@ def main():
         "wells": wells,
         "pissoirs": pissoirs,
         "street_plates": plates,
+        "litter": litter,
     }
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(courtyards)} courtyards, {len(out['buildings'])} building pieces, {len(ads)} wall ads, {len(kiosks)} kiosks, {len(clocks)} clocks, {len(out['map_icons'])} map icons, "
           f"{len(churches)} churches, {len(folk)} at windows, {len(hydrants)} hydrants, {len(manholes)} manholes, {len(hatches)} hatches, "
-          f"{len(troughs)} troughs, {len(coal_drops)} coal drops, {len(wells)} wells, {len(pissoirs)} pissoirs, {len(plates)} street plates")
+          f"{len(troughs)} troughs, {len(coal_drops)} coal drops, {len(wells)} wells, {len(pissoirs)} pissoirs, {len(plates)} street plates, "
+          f"{len(litter)} litter")
 
 
 if __name__ == "__main__":

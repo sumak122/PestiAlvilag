@@ -69,6 +69,13 @@ namespace CityDetailsModel
 		const FLinearColor Bark(0.16f, 0.11f, 0.07f);
 		const FLinearColor Clay(0.45f, 0.20f, 0.10f);
 		const FLinearColor Lantern(0.95f, 0.85f, 0.55f);
+		const FLinearColor BarrelWood(0.30f, 0.18f, 0.09f);
+		const FLinearColor LogEnd(0.55f, 0.42f, 0.26f);
+		const FLinearColor CrateWood(0.50f, 0.40f, 0.26f);
+		const FLinearColor Tyre(0.03f, 0.03f, 0.03f);
+		const FLinearColor BikeBlack(0.05f, 0.05f, 0.06f);
+		const FLinearColor PramBody(0.06f, 0.09f, 0.16f);
+		const FLinearColor Nickel(0.55f, 0.55f, 0.52f);
 	}
 
 	/** A shape stretched between two points (a rod, a line, a pole). */
@@ -474,6 +481,29 @@ namespace CityDetailsModel
 		Lamps.Add({ FVector(-Depth * 0.5, 0, GatewayTop - 60), 700.f });
 	}
 
+	/**
+	 * The street side of an archway cut through a house where there was no
+	 * gate (a through house's other way in): stone jambs, the arch's flat
+	 * head with a keystone. +X out to the street.
+	 */
+	inline void PassageFront(double Width, TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		const double Half = Width * 0.5;
+		const double Open = Half - 34.0;
+		for (const double Side : { -1.0, 1.0 })
+		{
+			const double Y0 = Side < 0.0 ? -Half : Open;
+			const double Y1 = Side < 0.0 ? -Open : Half;
+			Span(Out, StoneDark, FVector(0, Y0, 0), FVector(26, Y1, 40));
+			Span(Out, Plaster, FVector(0, Y0, 40), FVector(22, Y1, GatewayTop));
+			Span(Out, StoneDark, FVector(0, Y0 - 2, GatewayTop - 12), FVector(26, Y1 + 2, GatewayTop), false);
+			Add(Out, MarketModel::Cylinder, StoneDark, FVector(30, Side * (Open - 8.0), 25), FVector(32, 32, 50));
+		}
+		Span(Out, Plaster, FVector(0, -Half, GatewayTop), FVector(22, Half, GatewayTop + 78), false);
+		Span(Out, StoneDark, FVector(0, -18, GatewayTop - 6), FVector(30, 18, GatewayTop + 74), false);
+	}
+
 	// ---------------------------------------------------------------------
 	// The courtyard, in a frame without a turn (X east, Y south, as the city).
 
@@ -486,7 +516,11 @@ namespace CityDetailsModel
 		double Inward;
 	};
 
-	/** Something standing in the yard: pump, rack, line, bench, bins, tree. */
+	/**
+	 * Something standing in the yard: pump, rack, line, bench, bins, tree, or
+	 * against a wall (Yaw facing out from it): barrels, woodpile, bike,
+	 * crates, handcart, pram, ladder.
+	 */
 	struct FYardThing
 	{
 		FString Kind;
@@ -499,7 +533,7 @@ namespace CityDetailsModel
 	constexpr double FloorHigh = 380.0;
 	constexpr double FirstGang = 450.0;
 
-	inline void YardWall(const FYardWall& W, const FVector2D& ExitAt, double ExitHalf, uint32 Seed, TArray<FShape>& Out)
+	inline void YardWall(const FYardWall& W, const TArray<FVector2D>& Exits, double ExitHalf, uint32 Seed, TArray<FShape>& Out)
 	{
 		using namespace Colors;
 		const FVector2D Run = W.Q - W.P;
@@ -548,7 +582,7 @@ namespace CityDetailsModel
 			for (double S = 120.0; S < Length - 100.0; S += 170.0, ++Count)
 			{
 				const FVector Foot = At(S, 0.0, Z);
-				if (Floor == 0 && FVector2D::Distance(FVector2D(Foot.X, Foot.Y), ExitAt) < ExitHalf + 160.0)
+				if (Floor == 0 && Exits.ContainsByPredicate([&](const FVector2D& Exit) { return FVector2D::Distance(FVector2D(Foot.X, Foot.Y), Exit) < ExitHalf + 160.0; }))
 				{
 					continue;
 				}
@@ -631,6 +665,129 @@ namespace CityDetailsModel
 			for (const double Y : { -65.0, 65.0 })
 			{
 				Add(Out, MarketModel::Cube, Iron, At(0, Y, 22), FVector(40, 5, 44), T.Yaw, false);
+			}
+		}
+		else if (T.Kind == TEXT("barrels"))
+		{
+			// Two barrels against the wall, a smaller one in front, iron hoops.
+			const FVector Spots[] = { FVector(-8, -38, 0), FVector(-8, 38, 0), FVector(52, 6, 0) };
+			for (int32 i = 0; i < 3; ++i)
+			{
+				const double High = i == 2 ? 70.0 : 92.0;
+				const double Wide = i == 2 ? 50.0 : 62.0;
+				Add(Out, MarketModel::Cylinder, BarrelWood, At(Spots[i].X, Spots[i].Y, High * 0.5), FVector(Wide, Wide, High), 0.0, true);
+				for (const double Hoop : { 0.14, 0.86 })
+				{
+					Add(Out, MarketModel::Cylinder, Iron, At(Spots[i].X, Spots[i].Y, High * Hoop), FVector(Wide + 3, Wide + 3, 5), 0.0, false);
+				}
+				Add(Out, MarketModel::Cylinder, BarrelWood * 0.8f, At(Spots[i].X, Spots[i].Y, High + 1), FVector(Wide - 6, Wide - 6, 2), 0.0, false);
+			}
+		}
+		else if (T.Kind == TEXT("woodpile"))
+		{
+			// Split firewood stacked against the wall, the log ends showing, a
+			// chopping block with the axe in it.
+			Add(Out, MarketModel::Cube, Bark, At(-20, 0, 60), FVector(70, 260, 120), T.Yaw, true);
+			for (int32 Row = 0; Row < 5; ++Row)
+			{
+				for (int32 Col = 0; Col < 7; ++Col)
+				{
+					const double Y = -110.0 + Col * 36.0 + (Row % 2) * 14.0;
+					if (Y > 118.0)
+					{
+						continue;
+					}
+					Add(Out, MarketModel::Cylinder, LogEnd, At(16, Y, 14 + Row * 23), FVector(22, 22, 4), T.Yaw, false, 90.0, 0.0);
+				}
+			}
+			Add(Out, MarketModel::Cube, Roof, At(-15, 0, 128), FVector(90, 280, 6), T.Yaw, false, 0.0, 0.0);
+			Add(Out, MarketModel::Cylinder, Bark, At(95, -70, 25), FVector(44, 44, 50), 0.0, true);
+			Rod(Out, Wood, At(95, -70, 50), At(110, -60, 105), 4.0);
+			Add(Out, MarketModel::Cube, Iron, At(97, -69, 52), FVector(14, 3, 12), T.Yaw + 30.0, false);
+		}
+		else if (T.Kind == TEXT("bike"))
+		{
+			// A bicycle leant against the wall.
+			for (const double Y : { -55.0, 55.0 })
+			{
+				// The tyre as a ring of short rods, a few spokes, the hub.
+				constexpr int32 Bits = 14;
+				for (int32 i = 0; i < Bits; ++i)
+				{
+					const double A0 = 2.0 * PI * i / Bits;
+					const double A1 = 2.0 * PI * (i + 1) / Bits;
+					Rod(Out, Tyre, At(5, Y + 32.0 * FMath::Cos(A0), 33 + 32.0 * FMath::Sin(A0)), At(5, Y + 32.0 * FMath::Cos(A1), 33 + 32.0 * FMath::Sin(A1)), 3.5);
+				}
+				for (int32 i = 0; i < 4; ++i)
+				{
+					const double A = PI * i / 4.0;
+					Rod(Out, Nickel, At(5, Y - 30.0 * FMath::Cos(A), 33 - 30.0 * FMath::Sin(A)), At(5, Y + 30.0 * FMath::Cos(A), 33 + 30.0 * FMath::Sin(A)), 0.8);
+				}
+				Add(Out, MarketModel::Cylinder, Nickel, At(5, Y, 33), FVector(7, 7, 8), T.Yaw, false, 90.0, 0.0);
+			}
+			Rod(Out, BikeBlack, At(5, -55, 33), At(5, -5, 28), 3.0);
+			Rod(Out, BikeBlack, At(5, -5, 28), At(5, -18, 80), 3.5);
+			Rod(Out, BikeBlack, At(5, -18, 80), At(5, -55, 33), 3.0);
+			Rod(Out, BikeBlack, At(5, -5, 28), At(5, 45, 78), 3.5);
+			Rod(Out, BikeBlack, At(5, -18, 80), At(5, 45, 78), 3.5);
+			Rod(Out, BikeBlack, At(5, 45, 78), At(5, 55, 33), 3.0);
+			Rod(Out, BikeBlack, At(5, 45, 78), At(0, 42, 98), 3.0);
+			Rod(Out, Nickel, At(-18, 42, 98), At(22, 42, 98), 2.5);
+			Add(Out, MarketModel::Cube, BarrelWood * 0.5f, At(5, -22, 86), FVector(14, 26, 6), T.Yaw, false);
+		}
+		else if (T.Kind == TEXT("crates"))
+		{
+			// Empty bottle crates, two on the ground and one on top.
+			const FVector Spots[] = { FVector(-5, -32, 0), FVector(-5, 32, 0), FVector(-5, 2, 40) };
+			for (const FVector& C : Spots)
+			{
+				Add(Out, MarketModel::Cube, CrateWood, At(C.X, C.Y, C.Z + 20), FVector(46, 60, 40), T.Yaw, true);
+				for (const double Z : { 8.0, 32.0 })
+				{
+					Add(Out, MarketModel::Cube, CrateWood * 0.6f, At(C.X, C.Y, C.Z + Z), FVector(47, 61, 3), T.Yaw, false);
+				}
+			}
+		}
+		else if (T.Kind == TEXT("handcart"))
+		{
+			// A hand cart stood on its end against the wall, the shafts up.
+			Add(Out, MarketModel::Cube, Wood, At(-50, 0, 120), FVector(10, 110, 220), T.Yaw, true);
+			for (const double Y : { -58.0, 58.0 })
+			{
+				Add(Out, MarketModel::Cube, Wood, At(-38, Y, 120), FVector(14, 6, 230), T.Yaw, false);
+				Rod(Out, Wood, At(-50, Y * 0.8, 230), At(-62, Y * 0.6, 330), 5.0);
+				Add(Out, MarketModel::Cylinder, Wood * 0.7f, At(0, Y + (Y > 0 ? 8 : -8), 48), FVector(96, 96, 6), T.Yaw, false, 0.0, 90.0);
+				Add(Out, MarketModel::Cylinder, Iron, At(0, Y + (Y > 0 ? 8 : -8), 48), FVector(98, 98, 3), T.Yaw, false, 0.0, 90.0);
+			}
+			Rod(Out, Iron, At(0, -66, 48), At(0, 66, 48), 5.0);
+		}
+		else if (T.Kind == TEXT("pram"))
+		{
+			// A deep pram on four spoked wheels, its hood up.
+			Add(Out, MarketModel::Cube, PramBody, At(0, 0, 70), FVector(52, 84, 36), T.Yaw, true);
+			Add(Out, MarketModel::Sphere, PramBody, At(0, -30, 88), FVector(52, 40, 50), T.Yaw, false);
+			Add(Out, MarketModel::Cube, Nickel, At(0, 0, 51), FVector(46, 90, 3), T.Yaw, false);
+			for (const double X : { -24.0, 24.0 })
+			{
+				for (const double Y : { -32.0, 32.0 })
+				{
+					Add(Out, MarketModel::Cylinder, Tyre, At(X, Y, 22), FVector(40, 40, 3), T.Yaw, false, 0.0, 90.0);
+				}
+				Rod(Out, Nickel, At(X, 40, 70), At(X, 68, 108), 2.0);
+			}
+			Rod(Out, Nickel, At(-26, 68, 108), At(26, 68, 108), 3.0);
+		}
+		else if (T.Kind == TEXT("ladder"))
+		{
+			// A wooden ladder leant up against the wall.
+			for (const double Y : { -22.0, 22.0 })
+			{
+				Rod(Out, Wood, At(60, Y, 0), At(-8, Y, 320), 6.0);
+			}
+			for (int32 i = 1; i < 11; ++i)
+			{
+				const double F = i / 11.0;
+				Rod(Out, Wood, At(60 - 68 * F, -22, 320 * F), At(60 - 68 * F, 22, 320 * F), 3.0);
 			}
 		}
 		else if (T.Kind == TEXT("tree"))

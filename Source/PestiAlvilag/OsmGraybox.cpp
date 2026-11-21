@@ -89,7 +89,8 @@ namespace OsmGraybox
 	// 11: a later little block in Rózsák tere's garden left out.
 	// 12: the seminary's, the OTI palace's and the two hotels' dressed walls lose their plain facades.
 	// 13: the OTI palace's wall against the house on Dologház utca gets its plain facade back.
-	constexpr int32 MeshVersion = 14;
+	// 15: three through houses: archways cut from their yards to the next street (city_details.json).
+	constexpr int32 MeshVersion = 15;
 
 	/** The city details' data, next to the map data (Tools/OsmGraybox/city_details.py). */
 	const TCHAR* const DetailsFile = TEXT("city_details.json");
@@ -378,8 +379,9 @@ namespace OsmGraybox
 		{
 			const FVector Side(Along.X, Along.Y, 0.0);
 			Panel(Section, S0, S1, Z0, Z1, D1);
-			// The back only shows when the box stands well off the wall.
-			if (D0 > 10.0)
+			// The back only shows when the box stands well off the wall, or
+			// reaches back over the roof (an attic gable).
+			if (D0 > 10.0 || D0 < -10.0)
 			{
 				Quad(Section, At(S1, Z0, D0), At(S0, Z0, D0), At(S0, Z1, D0), At(S1, Z1, D0), -Out);
 			}
@@ -413,7 +415,7 @@ namespace OsmGraybox
 	// A Pest tenement front on one wall: shops or windows and a gate on the
 	// ground floor, framed windows with sills on the floors above, ledges
 	// between floors and a cornice on top. Seed varies the details.
-	void AddFacade(TArray<FSection>& Sections, const FVector2D& P0, const FVector2D& P1, double Height, int32 Levels, uint32 Seed, bool bFlip)
+	void AddFacade(TArray<FSection>& Sections, const FVector2D& P0, const FVector2D& P1, double Height, int32 Levels, uint32 Seed, uint32 HouseSeed, bool bFlip)
 	{
 		using namespace Facade;
 
@@ -505,6 +507,31 @@ namespace OsmGraybox
 		{
 			const double Base = GroundTop + (Floor - 1) * UpperHeight;
 			Wall.Block(StoneS, 0.0, Length, Base - 8.0, Base + 4.0, 8.0);
+		}
+
+		// The house's finer details (balconies, keystones, pilasters, cornice
+		// consoles, an attic gable) and the wall's wear (posters, fallen plaster).
+		FacadeLifeModel::FFront Front;
+		Front.Length = Length;
+		Front.Height = Height;
+		Front.GroundTop = GroundTop;
+		Front.UpperHeight = UpperHeight;
+		Front.CorniceZone = CorniceZone;
+		Front.EdgeMargin = EdgeMargin;
+		Front.Bay = Bay;
+		Front.WindowWidth = WindowWidth;
+		Front.Storeys = Storeys;
+		Front.Bays = Bays;
+		Front.bShops = bShops;
+		Front.House = HouseSeed;
+		Front.Wall = Seed;
+		LifeBoxes.Reset();
+		FacadeLifeModel::HouseDetails(Front, LifeBoxes);
+		for (const FacadeLifeModel::FBox& Detail : LifeBoxes)
+		{
+			FSection& Into = Detail.Part == FacadeLifeModel::TrimPart ? StoneS
+				: Detail.Part == FacadeLifeModel::GlassPart ? GlassS : Sections[FirstLife + Detail.Part];
+			Wall.Box(Into, Detail.S0, Detail.S1, Detail.Z0, Detail.Z1, Detail.D0, Detail.D1);
 		}
 	}
 }
@@ -952,7 +979,7 @@ void AOsmGraybox::BuildFacades(const FJsonObject& Root)
 				const int32 TileIndex = TileY * FacadeTilesX + TileX;
 				if (TileSections.IsValidIndex(TileIndex) && !P0.Equals(P1, 1.0))
 				{
-					AddFacade(TileSections[TileIndex], P0, P1, Height, static_cast<int32>(Levels), Seed ^ (static_cast<uint32>(Edge) * 2654435761u), bFlipFaces);
+					AddFacade(TileSections[TileIndex], P0, P1, Height, static_cast<int32>(Levels), Seed ^ (static_cast<uint32>(Edge) * 2654435761u), Seed, bFlipFaces);
 				}
 				break;
 			}
