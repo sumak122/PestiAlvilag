@@ -3,6 +3,7 @@
 #include "TrafficLorry.h"
 
 #include "CarVisuals.h"
+#include "Lorry.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -83,6 +84,10 @@ void ATrafficLorry::Dress()
 		Mesh->RegisterComponent();
 		AddInstanceComponent(Mesh);
 		Parts.Add(Mesh);
+	}
+	if (Load == ELoad::Post)
+	{
+		ALorry::AddPostLettering(this, CollisionBox, TrafficLorryRun::FloorZ);
 	}
 }
 

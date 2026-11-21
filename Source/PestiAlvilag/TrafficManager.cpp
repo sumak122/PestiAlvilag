@@ -96,6 +96,8 @@ namespace Traffic
 	constexpr int32 PoliceBikes = 2;
 	// How many of the other traffic are Rába lorries (ATrafficLorry).
 	constexpr int32 Lorries = 4;
+	// How many more are the Royal Post's vans (ATrafficLorry::MakePost).
+	constexpr int32 PostVans = 2;
 	// A car to take the stolen one's place appears this far from the camera,
 	// out of its view (cm).
 	constexpr int32 ReplaceTries = 8;
@@ -672,13 +674,21 @@ void ATrafficManager::SpawnCars()
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
 		const bool bPolice = Cars.Num() < NumPolice;
 		const bool bTaxi = !bPolice && Cars.Num() < NumPolice + NumTaxis;
-		const bool bLorry = !bPolice && !bTaxi && Cars.Num() < NumPolice + NumTaxis + Traffic::Lorries;
+		const bool bLorry = !bPolice && !bTaxi && Cars.Num() < NumPolice + NumTaxis + Traffic::Lorries + Traffic::PostVans;
+		const bool bPostVan = bLorry && Cars.Num() >= NumPolice + NumTaxis + Traffic::Lorries;
 		// The first two police are motorbike constables.
 		UClass* CarClass = bPolice ? (Cars.Num() < Traffic::PoliceBikes ? APoliceMotorbike::StaticClass() : APoliceCar::StaticClass()) : bTaxi ? ATrafficTaxi::StaticClass() : bLorry ? ATrafficLorry::StaticClass() : ATrafficCar::StaticClass();
 		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 		if (!Car)
 		{
 			continue;
+		}
+		if (bPostVan)
+		{
+			if (ATrafficLorry* Van = Cast<ATrafficLorry>(Car))
+			{
+				Van->MakePost();
+			}
 		}
 		const FLinearColor& Paint = bPolice ? Traffic::PolicePaint
 			: bTaxi ? Traffic::TaxiPaint
@@ -1337,12 +1347,19 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	UClass* CarClass = What == ETestTraffic::Police ? APoliceCar::StaticClass()
 		: What == ETestTraffic::PoliceBike ? APoliceMotorbike::StaticClass()
-		: What == ETestTraffic::Lorry ? ATrafficLorry::StaticClass()
+		: What == ETestTraffic::Lorry || What == ETestTraffic::PostVan ? ATrafficLorry::StaticClass()
 		: What == ETestTraffic::Taxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
 	ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 	if (!Car)
 	{
 		return false;
+	}
+	if (What == ETestTraffic::PostVan)
+	{
+		if (ATrafficLorry* Van = Cast<ATrafficLorry>(Car))
+		{
+			Van->MakePost();
+		}
 	}
 	const FLinearColor& Paint = What == ETestTraffic::Police || What == ETestTraffic::PoliceBike ? Traffic::PolicePaint
 		: What == ETestTraffic::Taxi ? Traffic::TaxiPaint

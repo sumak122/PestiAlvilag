@@ -27,6 +27,8 @@ public:
 
 	int32 GetPaintIndex() const { return PaintIndex; }
 	LorryModel::ELoad GetLoad() const { return Load; }
+	/** Makes it one of the Royal Post's vans. Right after spawning. */
+	void MakePost() { Load = LorryModel::ELoad::Post; }
 
 protected:
 	virtual void BeginPlay() override;

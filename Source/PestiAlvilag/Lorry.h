@@ -8,6 +8,7 @@
 #include "Lorry.generated.h"
 
 class APedestrian;
+class USceneComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 
@@ -38,6 +39,9 @@ public:
 	/** Has been driven by the player at some time. */
 	bool WasTaken() const { return bTaken; }
 
+	/** Paints "M. KIR. POSTA" on both sides of a post van's box: text on Body, whose floor is FloorAt below its middle. */
+	static void AddPostLettering(AActor* Van, USceneComponent* Body, double FloorAt);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -54,6 +58,8 @@ protected:
 private:
 	/** The carrier runs out shouting, the deed is noted, the police told if they saw. */
 	void Stolen();
+	/** The Royal Post's van taken: the police called at once, the mail sack's money his. */
+	void PostTaken();
 	/** The player seated at the wheel while he drives, hidden otherwise. */
 	void PlaceWheelMan(bool bDriven);
 
