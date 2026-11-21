@@ -88,6 +88,8 @@ private:
 	float Speed = 0.f;
 	float BlockedTime = 0.f;
 	float WheelTurn = 0.f;
+	float SteerAngle = 0.f;
+	float LastYaw = 0.f;
 	float BellSwing = 0.f;
 	float Clock = 0.f;
 	bool bReady = false;

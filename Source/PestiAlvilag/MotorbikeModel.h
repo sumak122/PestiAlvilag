@@ -23,13 +23,13 @@ namespace MotorbikeModel
 	enum EPart : int32 { Body, Steer, WheelFront, WheelRear, WheelSide, NumParts };
 
 	/** Where the machine runs and where the sidecar sits, across the outfit (cm). */
-	inline double BikeY(bool bSidecar) { return bSidecar ? 38.0 : 0.0; }
-	constexpr double SideY = -46.0;
+	inline double BikeY(bool bSidecar) { return bSidecar ? 30.0 : 0.0; }
+	constexpr double SideY = -34.0;
 	constexpr double WheelRadius = 33.0;
 	constexpr double SideWheelRadius = 30.0;
 	inline FVector RearAxle(bool bSidecar) { return FVector(-72.0, BikeY(bSidecar), WheelRadius); }
 	inline FVector FrontAxle(bool bSidecar) { return FVector(74.0, BikeY(bSidecar), WheelRadius); }
-	inline FVector SideAxle() { return FVector(-8.0, SideY - 46.0, SideWheelRadius); }
+	inline FVector SideAxle() { return FVector(-8.0, SideY - 35.0, SideWheelRadius); }
 	inline FVector HeadBottom(bool bSidecar) { return FVector(50.0, BikeY(bSidecar), 72.0); }
 	inline FVector HeadTop(bool bSidecar) { return FVector(44.0, BikeY(bSidecar), 92.0); }
 	/** The steering turns about the head tube's line (unit vector, up the tube). */
@@ -42,7 +42,7 @@ namespace MotorbikeModel
 	/** The handlebar grips. */
 	inline FVector Grip(bool bSidecar, double Side) { return FVector(32.0, BikeY(bSidecar) + 31.0 * Side, 100.0); }
 	/** Half the outfit's size, for its box (cm). */
-	inline FVector OutfitHalf(bool bSidecar) { return bSidecar ? FVector(112.0, 88.0, 55.0) : FVector(112.0, 36.0, 55.0); }
+	inline FVector OutfitHalf(bool bSidecar) { return bSidecar ? FVector(112.0, 75.0, 55.0) : FVector(112.0, 36.0, 55.0); }
 
 	inline FLinearColor Enamel() { return FLinearColor(0.015f, 0.015f, 0.017f); }
 	inline FLinearColor Nickel() { return FLinearColor(0.55f, 0.55f, 0.57f); }

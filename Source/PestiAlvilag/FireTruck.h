@@ -72,5 +72,7 @@ private:
 	bool bBellOn = false;
 	bool bBlocking = false;
 	float WheelTurn = 0.f;
+	float SteerAngle = 0.f;
+	float LastYaw = 0.f;
 	float BellClock = 0.f;
 };
