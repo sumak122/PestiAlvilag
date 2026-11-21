@@ -76,6 +76,13 @@ namespace VargaRun
 		{ TEXT("shoes"), TEXT("a cip\u00E9sz"), TEXT("the shoemaker's") },
 		{ TEXT("greengrocer"), TEXT("a z\u00F6lds\u00E9ges"), TEXT("the greengrocer's") },
 		{ TEXT("cafe"), TEXT("a k\u00E1v\u00E9m\u00E9r\u00E9s"), TEXT("the coffee shop") },
+		{ TEXT("florist"), TEXT("a vir\u00E1gbolt"), TEXT("the florist's") },
+		{ TEXT("books"), TEXT("az antikv\u00E1rium"), TEXT("the bookshop") },
+		{ TEXT("pawn"), TEXT("a z\u00E1logh\u00E1z"), TEXT("the pawnshop") },
+		{ TEXT("coal"), TEXT("a szenes"), TEXT("the coal dealer's") },
+		{ TEXT("photo"), TEXT("a f\u00E9nyk\u00E9p\u00E9sz"), TEXT("the photographer's") },
+		{ TEXT("locksmith"), TEXT("a lakatos"), TEXT("the locksmith's") },
+		{ TEXT("toys"), TEXT("a j\u00E1t\u00E9kbolt"), TEXT("the toyshop") },
 	};
 	// The gold time: the straight-line length of the round, made this much longer by the streets, at a bicycle's pace (cm/s).
 	constexpr double Winding = 1.4;
