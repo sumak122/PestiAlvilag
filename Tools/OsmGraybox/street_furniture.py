@@ -57,6 +57,7 @@ Usage:
 
 import argparse
 import json
+import os
 import math
 import zlib
 
@@ -2129,7 +2130,41 @@ SHOP_TRADES = [             # trade, how often, sign words, words on a hanging s
     ("stationery", 2, ["PAPÍR ÉS ÍRÓSZER", "KÖNYV ÉS PAPÍR"], "PAPÍR"),
     ("cafe", 2, ["KÁVÉMÉRÉS", "KÁVÉ ÉS TEA"], "KÁVÉ"),
 ]
-SHOP_OUTSIDE = {"greengrocer": 0.9, "grocer": 0.3, "tavern": 0.6, "hardware": 0.7, "baker": 0.3, "dairy": 0.3}
+# Round 3 (map detail): new trades. A share of the shops (SHOP_NEW_SHARE)
+# takes one of these instead of its old trade, so most shops stay as they were.
+SHOP_NEW_SHARE = 0.18
+NEW_SHOP_TRADES = [
+    ("florist", 2, ["VIRÁGÜZLET", "VIRÁG ÉS KOSZORÚ"], "VIRÁG"),
+    ("books", 2, ["ANTIKVÁRIUM", "KÖNYVKERESKEDÉS"], "KÖNYV"),
+    ("pawn", 1, ["ZÁLOGKÖLCSÖN", "ZÁLOGHÁZ"], "ZÁLOG"),
+    ("coal", 1, ["FA ÉS SZÉN", "TŰZIFA · SZÉN · KOKSZ"], "FA · SZÉN"),
+    ("photo", 1, ["FÉNYKÉPÉSZ", "FÉNYKÉPÉSZETI MŰTEREM"], "FOTÓ"),
+    ("locksmith", 1, ["LAKATOS", "LAKATOS ÉS KULCSMÁSOLÓ"], ""),
+    ("toys", 1, ["JÁTÉKÁRU", "JÁTÉK ÉS DÍSZMŰ"], "JÁTÉK"),
+]
+# The back streets: a few small shops here and there, of the poorer trades.
+BACK_SHOP_TRADES = [
+    ("coal", 4, ["FA ÉS SZÉN", "TŰZIFA · SZÉN · KOKSZ", "FA- ÉS SZÉNKERESKEDÉS"], "FA · SZÉN"),
+    ("locksmith", 3, ["LAKATOS", "LAKATOS ÉS KULCSMÁSOLÓ"], ""),
+    ("pawn", 2, ["ZÁLOGKÖLCSÖN", "ZÁLOGHÁZ"], "ZÁLOG"),
+    ("shoes", 3, ["CIPÉSZ", "CIPÉSZMESTER", "CIPŐJAVÍTÁS"], "CIPÉSZ"),
+    ("tavern", 3, ["ITALMÉRÉS", "BOR ÉS SÖR", "KOCSMA"], "SÖR · BOR"),
+    ("grocer", 3, ["FŰSZERES", "SZATÓCS", "GYARMATÁRU"], "FŰSZER"),
+    ("dairy", 1, ["TEJCSARNOK"], "TEJ"),
+    ("barber", 1, ["BORBÉLY", "FODRÁSZ"], "FODRÁSZ"),
+    ("books", 1, ["ANTIKVÁRIUM"], "KÖNYV"),
+    ("photo", 1, ["FÉNYKÉPÉSZ"], "FOTÓ"),
+]
+SHOP_OUTSIDE = {"greengrocer": 0.9, "grocer": 0.3, "tavern": 0.6, "hardware": 0.7, "baker": 0.3, "dairy": 0.3,
+                "florist": 0.9, "books": 0.6, "coal": 0.7, "cafe": 0.5}
+# The modern 1930s fronts (black glass, chrome, travertine): the share of shops with one, on these streets only.
+MODERN_STREETS = {"Rákóczi út": 0.45, "József körút": 0.3, "Erzsébet körút": 0.4, "Népszínház utca": 0.12}
+# Enamel advert plates on the stallriser: the share of open shops with one, and what they advertise (made-up makes).
+SHOP_PLATE = 0.3
+SHOP_PLATES = [
+    "KŐBÁNYAI SÖR", "PANNÓNIA PEZSGŐ", "TÜNDÉR CSOKOLÁDÉ", "SAS SZAPPAN", "HAJNAL CIGARETTA", "FECSKE CIPŐKRÉM",
+    "DUNA KÁVÉ", "ARANY KEKSZ", "HUNNIA VARRÓGÉP", "TURUL KERÉKPÁR", "RÉKA MOSÓPOR", "KORONA RUM",
+]
 # Shop sign names in the old Pest way, "at the golden hat" (one of each at most).
 SHOP_NAMES = {
     "hats": ["AZ ARANY KALAPHOZ"],
@@ -2169,6 +2204,19 @@ MORE_SHOP_STREETS = [       # street, its chemists, share of its walls with shop
     ("Teleki László tér", [], 0.6),
     ("Kiss József utca", [], 0.5),
 ]
+# Round 3 (map detail): the back streets get a shop on a few walls, of the
+# poorer trades (BACK_SHOP_TRADES), and no new gates. Placed after the music
+# bars and eateries so their fronts stay where they are; these streets are
+# left bare because the game builds its own places on them.
+BACK_SHOP_SHARE = 0.10
+BACK_SHOP_KEEP = 0.3        # and of the fronts cut on those walls, only this share is kept
+BACK_SHOP_KEEPER = 0.15
+BACK_SHOP_SKIP_STREETS = {
+    "Bérkocsis utca", "Szerdahelyi utca", "Dologház utca", "Kis Fuvaros utca", "Auróra utca", "Kerepesi út",
+    "Fiumei út", "Garay utca", "Víg utca", "Aréna út", "Salgótarjáni utca", "Verseny utca", "Jobbágy utca",
+    "Scheiber Sándor utca", "II. János Pál pápa tér", "Rózsák tere", "Baross téri felüljáró",
+}
+BACK_SHOP_CLEAR = 1500      # back street shops keep this far from the game's own places and the eateries
 SHOP_KEEP_CLEAR = [
     ((41134, -21532), 1600),   # Friedmann's furrier (FurrierModel::CityAt)
     ((74888, -51702), 2000),   # Garay utca 13 (GarayModel::CityAt)
@@ -2251,14 +2299,15 @@ def shop_walls(data, street_name, area=None):
     return walls, lines
 
 
-def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharmacies=PHARMACIES, taken=None, keep_clear=None, share=1.0):
+def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharmacies=PHARMACIES, taken=None, keep_clear=None, share=1.0,
+                shop_trades=None, keeper_share=None, skip_ids=()):
     """Shop fronts and gates on the ground floors of a shop street. Walls in
     taken (building id and first corner) already have shops from another street."""
     walls, lines = shop_walls(data, street_name, area)
     if share < 1.0:
         walls = [w for w in walls if chance("shopwall", w["id"], *w["p0"]) < share]
     if keep_clear:
-        walls = [w for w in walls if w["id"] not in SHOP_SKIP_BUILDINGS and all(
+        walls = [w for w in walls if w["id"] not in SHOP_SKIP_BUILDINGS and w["id"] not in skip_ids and all(
             LineString([w["p0"], w["p1"]]).distance(Point(*at)) > gap for at, gap in keep_clear)]
     if taken is not None:
         walls = [w for w in walls if (w["id"], tuple(w["p0"])) not in taken]
@@ -2270,7 +2319,8 @@ def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharm
     total = sum(l.length for l in lines)
     clear = [Point(x, y) for x, y in furniture_spots]
     clear_tree = STRtree(clear) if clear else None
-    trades = [t for t in SHOP_TRADES for _ in range(t[1])]
+    trades = [t for t in (shop_trades or SHOP_TRADES) for _ in range(t[1])]
+    new_trades = [t for t in NEW_SHOP_TRADES for _ in range(t[1])]
     shops, gates = [], []
     owners = sorted(SHOP_OWNERS, key=lambda n: chance("owner", *salt, n))
     pharmacies = list(pharmacies)
@@ -2331,6 +2381,8 @@ def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharm
                     trade, _, signs, blade = choices[int(chance(*key) * len(choices))]
                     owner = owners[len(shops) % len(owners)]
                 last_trade = trade
+                if shop_trades is None and trade != "pharmacy" and chance("newtrade", *key) < SHOP_NEW_SHARE:
+                    trade, _, signs, blade = new_trades[int(chance("whichnew", *key) * len(new_trades))]
                 # What the fascia and the window glass say: the owner's name
                 # over the trade, the trade over the owner's name, or a shop
                 # sign name "at the ..." over the trade.
@@ -2351,7 +2403,7 @@ def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharm
                 if outside and clear_tree is not None:
                     spot = Point(sx + ox * 80, sy + oy * 80).buffer(n * bay / 2 + SHOP_OUTSIDE_CLEAR)
                     outside = not any(clear[i].intersects(spot) for i in clear_tree.query(spot))
-                shops.append({
+                shop = {
                     "at": [round(sx), round(sy), yaw],
                     "width": round(n * bay - SHOP_GAP),
                     "trade": trade,
@@ -2361,11 +2413,49 @@ def place_shops(data, furniture_spots, street_name=SHOP_STREET, area=None, pharm
                     "seed": zlib.crc32(repr(key).encode()) & 0x7FFFFFFF,
                     "closed": closed,
                     "outside": outside,
-                    "keeper": not closed and chance("keeper", *key) < SHOP_KEEPER,
-                })
+                    "keeper": not closed and chance("keeper", *key) < (SHOP_KEEPER if keeper_share is None else keeper_share),
+                }
+                # Added later, so the shops that were there before keep their looks.
+                if chance("modern", *key) < MODERN_STREETS.get(street_name, 0.0):
+                    shop["modern"] = True
+                if not closed and chance("plate", *key) < SHOP_PLATE:
+                    shop["plate"] = SHOP_PLATES[int(chance("platewords", *key) * len(SHOP_PLATES))]
+                shops.append(shop)
                 k += n
                 run -= n
     return shops, gates
+
+
+def place_back_shops(data, spots, taken, shops, skip_ids):
+    """A few shops on the back streets (BACK_SHOP_SHARE of their walls), without gates."""
+    shop_streets = {SHOP_STREET} | {n for n, _ in MARKET_QUARTER_STREETS} | {n for n, _, _ in MORE_SHOP_STREETS}
+    names = sorted({c["name"] for c in data["centerlines"] if c.get("name")} - shop_streets - BACK_SHOP_SKIP_STREETS)
+    # Keep clear of the game's own places, the music bars, the eateries and the courtyards the game opens.
+    clear = list(SHOP_KEEP_CLEAR) + [(at, BACK_SHOP_CLEAR) for at, *_ in MUSIC_BARS] + [(at, BACK_SHOP_CLEAR) for at, *_ in EATERIES]
+    clear += [(tuple(v["at"][:2]), BACK_SHOP_CLEAR) for v in shops if v.get("eatery")]
+    clear += [(at, BACK_SHOP_CLEAR) for at in BACK_SHOP_CLEAR_OF]
+    out = []
+    for name in names:
+        more, _ = place_shops(data, spots, name, None, [], taken, clear, BACK_SHOP_SHARE, BACK_SHOP_TRADES, BACK_SHOP_KEEPER, skip_ids)
+        out += [v for v in more if chance("backkeep", v["seed"]) < BACK_SHOP_KEEP]
+    return out
+
+
+# More of the game's own places on streets that are not left bare above (Unreal cm).
+BACK_SHOP_CLEAR_OF = [
+    (19022, 29251),    # the tailor (city_details.py TAILOR_AT)
+    (18910, 30285),    # the garage (GARAGE_AT)
+    (23598, 9701), (40338, 15420), (79559, 28548), (22808, 11893), (81976, 31536), (15855, 46218),   # the open courtyards' gates
+]
+
+
+def rebuilt_blocks(graybox_path):
+    """The blocks city_details.py cuts or rebuilds (from its last output next to the graybox): no back street shops on them."""
+    path = os.path.join(os.path.dirname(graybox_path), "city_details.json")
+    if not os.path.exists(path):
+        return set()
+    with open(path, encoding="utf-8") as fh:
+        return {b["replaces"] for b in json.load(fh).get("buildings", []) if "replaces" in b}
 
 
 def main():
@@ -2424,6 +2514,7 @@ def main():
         else:
             front = min(on_street, key=lambda v: math.dist(v["at"][:2], (ex, ey)))
         front.update(trade=trade, fascia=fascia, glass=glass, blade=blade, closed=False, outside=False, keeper=False, eatery=fascia)
+    shops += place_back_shops(data, spots, taken, shops, rebuilt_blocks(args.graybox))
     baross = layout_baross(space)
     rakoczi = layout_rakoczi(space, garden)
     kerepesi = layout_kerepesi(data)

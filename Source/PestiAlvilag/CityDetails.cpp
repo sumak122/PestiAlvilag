@@ -60,6 +60,10 @@ namespace CityDetailsPlace
 	// The street's life is gathered into one shape set per square patch this wide (cm).
 	constexpr double LifePatch = 12000.0;
 	constexpr float LifeDrawDistance = 12000.f;
+	/** Street name plates: their letter height (cm), how wide a letter is for its height, and how far off the names are drawn. */
+	constexpr double PlateLetters = 13.0;
+	constexpr double PlateLetterWidth = 0.62;
+	constexpr float PlateDrawDistance = 4500.f;
 	constexpr float ChurchDrawDistance = 80000.f;
 	// The Kerepesi cemetery: its wall and gates are seen from far off, the graves (one set per patch) only near.
 	constexpr float CemeteryWallDrawDistance = 40000.f;
@@ -1143,6 +1147,42 @@ void ACityDetails::BuildStreetLife(const FJsonObject& Root)
 		DropShapes(Local, Foot, DropYaw);
 		PutCoalMan(Foot, DropYaw, Seed);
 	});
+	ForEachEntry(TEXT("wells"), 3, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		StreetWell(Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	ForEachEntry(TEXT("pissoirs"), 3, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		Pissoir(Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	// Street name plates on the corner houses: [x, y, yaw out from the wall, width, name]. The names are lettered once the sets are up.
+	struct FPlateName
+	{
+		FString Name;
+		FVector At;
+		double Yaw;
+		double Room;
+	};
+	TMap<FIntPoint, TArray<FPlateName>> PlateNames;
+	ForEachEntry(TEXT("street_plates"), 5, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		const double PlateYaw = E[2]->AsNumber();
+		const double Width = E[3]->AsNumber();
+		const FVector Foot(Spot, GroundAt(Spot + CityDetailsPlace::Ahead(PlateYaw, CityDetailsPlace::OutFromWall)));
+		TArray<FShape> Local;
+		StreetPlate(Width, Local);
+		DropShapes(Local, Foot, PlateYaw);
+		const FIntPoint Patch = PatchOf(Spot);
+		const FVector Front = Foot + FVector(CityDetailsPlace::Ahead(PlateYaw, PlateLetterX), PlateHeight) - MiddleOf(Patch);
+		PlateNames.FindOrAdd(Patch).Add({ E[4]->AsString(), Front, PlateYaw, Width - 10.0 });
+	});
 	// The people at the windows: the facades stand on the flat ground, so the sill's height is the height in the world.
 	ForEachEntry(TEXT("window_folk"), 6, [&](const TArray<TSharedPtr<FJsonValue>>& E)
 	{
@@ -1158,6 +1198,19 @@ void ACityDetails::BuildStreetLife(const FJsonObject& Root)
 		{
 			Set->AddShapes(Patch.Value);
 			Count += Patch.Value.Num();
+			if (const TArray<FPlateName>* Names = PlateNames.Find(Patch.Key))
+			{
+				for (const FPlateName& Plate : *Names)
+				{
+					// Long names are lettered smaller, so they fit the plate; read only from close by.
+					const double Size = FMath::Min(CityDetailsPlace::PlateLetters, Plate.Room / (CityDetailsPlace::PlateLetterWidth * FMath::Max(1, Plate.Name.Len())));
+					if (UTextRenderComponent* Lettering = Set->AddSign(Plate.Name, Plate.At, Plate.Yaw, Size, PlateWhite))
+					{
+						Lettering->SetCastShadow(false);
+						Lettering->SetCullDistance(CityDetailsPlace::PlateDrawDistance);
+					}
+				}
+			}
 		}
 	}
 	UE_LOG(LogCityDetails, Log, TEXT("Street life: %d shapes in %d sets"), Count, Patches.Num());

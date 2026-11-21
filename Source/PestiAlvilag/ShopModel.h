@@ -32,11 +32,12 @@ namespace ShopModel
 	enum class ETrade : uint8
 	{
 		Grocer, Baker, Butcher, Shoes, Hats, Drapery, Watches, Tobacco, Barber,
-		Tavern, Greengrocer, Hardware, Pharmacy, Dairy, Stationery, Cafe, NumTrades
+		Tavern, Greengrocer, Hardware, Pharmacy, Dairy, Stationery, Cafe,
+		Florist, Books, Pawn, Coal, Photo, Locksmith, Toys, NumTrades
 	};
 
 	/** Which words of the shop a piece of lettering shows. */
-	enum class ELine : uint8 { Fascia, Glass, Blade, Number };
+	enum class ELine : uint8 { Fascia, Glass, Blade, Number, Plate };
 
 	/** Lettering on the shop: where its middle is, which way it faces (yaw in the shop's frame, 0 = out to the street), and its letter height. */
 	struct FLettering
@@ -112,6 +113,37 @@ namespace ShopModel
 		const FLinearColor Crate(0.48f, 0.36f, 0.20f);
 		const FLinearColor Barrel(0.36f, 0.22f, 0.10f);
 		const FLinearColor Tin(0.55f, 0.56f, 0.56f);
+		// The modern 1930s fronts of the big streets: black glass, chrome and travertine.
+		const FLinearColor BlackGlass(0.010f, 0.010f, 0.012f);
+		const FLinearColor Chrome(0.58f, 0.59f, 0.60f);
+		const FLinearColor Travertine(0.62f, 0.56f, 0.45f);
+		const FLinearColor NeonWhite(0.92f, 0.90f, 0.82f);
+		// Flowers, books, coal, photographs, toys.
+		const FLinearColor Blooms[] = {
+			FLinearColor(0.62f, 0.05f, 0.05f), FLinearColor(0.85f, 0.70f, 0.10f), FLinearColor(0.85f, 0.84f, 0.80f),
+			FLinearColor(0.80f, 0.35f, 0.45f), FLinearColor(0.35f, 0.15f, 0.45f), FLinearColor(0.85f, 0.42f, 0.08f) };
+		const FLinearColor Leaf(0.08f, 0.20f, 0.06f);
+		const FLinearColor Pot(0.48f, 0.22f, 0.12f);
+		const FLinearColor Bindings[] = {
+			FLinearColor(0.30f, 0.06f, 0.05f), FLinearColor(0.08f, 0.14f, 0.08f), FLinearColor(0.07f, 0.08f, 0.20f),
+			FLinearColor(0.35f, 0.25f, 0.14f), FLinearColor(0.60f, 0.55f, 0.42f), FLinearColor(0.10f, 0.08f, 0.06f) };
+		const FLinearColor Paper(0.78f, 0.75f, 0.66f);
+		const FLinearColor CoalLump(0.02f, 0.02f, 0.022f);
+		const FLinearColor Firewood(0.42f, 0.30f, 0.17f);
+		const FLinearColor Sack(0.12f, 0.105f, 0.09f);
+		const FLinearColor Sepia(0.42f, 0.33f, 0.22f);
+		const FLinearColor Velvet(0.30f, 0.04f, 0.06f);
+		const FLinearColor SafeGreen(0.06f, 0.14f, 0.09f);
+		const FLinearColor Chalkboard(0.06f, 0.07f, 0.06f);
+		const FLinearColor Chalk(0.80f, 0.80f, 0.76f);
+		/** Enamel advert plates: the ground colour, and the letters on it. */
+		const FLinearColor PlateGrounds[] = {
+			FLinearColor(0.05f, 0.14f, 0.42f), FLinearColor(0.55f, 0.06f, 0.04f), FLinearColor(0.80f, 0.62f, 0.08f),
+			FLinearColor(0.05f, 0.25f, 0.12f), FLinearColor(0.85f, 0.84f, 0.80f) };
+		const FLinearColor PlateLetters[] = {
+			FLinearColor(0.88f, 0.86f, 0.80f), FLinearColor(0.88f, 0.86f, 0.80f), FLinearColor(0.04f, 0.04f, 0.05f),
+			FLinearColor(0.88f, 0.86f, 0.80f), FLinearColor(0.55f, 0.06f, 0.04f) };
+		const FLinearColor PostRed(0.45f, 0.05f, 0.03f);
 	}
 
 	/** A repeatable random series, so a shop looks the same every time. */
@@ -134,7 +166,8 @@ namespace ShopModel
 	{
 		static const TCHAR* const Names[] = {
 			TEXT("grocer"), TEXT("baker"), TEXT("butcher"), TEXT("shoes"), TEXT("hats"), TEXT("drapery"), TEXT("watches"), TEXT("tobacco"),
-			TEXT("barber"), TEXT("tavern"), TEXT("greengrocer"), TEXT("hardware"), TEXT("pharmacy"), TEXT("dairy"), TEXT("stationery"), TEXT("cafe") };
+			TEXT("barber"), TEXT("tavern"), TEXT("greengrocer"), TEXT("hardware"), TEXT("pharmacy"), TEXT("dairy"), TEXT("stationery"), TEXT("cafe"),
+			TEXT("florist"), TEXT("books"), TEXT("pawn"), TEXT("coal"), TEXT("photo"), TEXT("locksmith"), TEXT("toys") };
 		for (int32 i = 0; i < static_cast<int32>(ETrade::NumTrades); ++i)
 		{
 			if (FCString::Strcmp(Name, Names[i]) == 0)
@@ -452,6 +485,228 @@ namespace ShopModel
 			}
 			break;
 		}
+		case ETrade::Florist:
+		{
+			// Tin buckets of cut flowers on the floor, potted plants on a stand behind.
+			Stand(26.0, Shelf);
+			EachAlong(28.0, [&](double Y)
+			{
+				const FLinearColor& Bloom = Blooms[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Blooms)))];
+				P.Add(Can(19.0, Y, Floor, 18.0, 20.0, Tin));
+				P.Add(Can(19.0, Y, Floor + 20.0, 14.0, 16.0, Leaf));
+				for (int32 k = 0; k < 5; ++k)
+				{
+					P.Add(Lump(15.0 + (k % 3) * 4.0, Y - 8.0 + k * 4.0, Floor + 32.0 + (k % 2) * 5.0, FVector(9.0, 9.0, 8.0), Bloom));
+				}
+				P.Add(Can(8.0, Y, Floor + 26.0, 12.0, 10.0, Pot));
+				P.Add(Lump(8.0, Y, Floor + 34.0, FVector(18.0, 18.0, 16.0), Dice.Chance(0.5) ? Leaf : Blooms[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Blooms)))]));
+			});
+			break;
+		}
+		case ETrade::Books:
+		{
+			// Books stood up on a stepped stand, a few lying open at the front.
+			Stand(22.0, Shelf);
+			for (double Y = Y0 + 6.0; Y < Y1 - 8.0;)
+			{
+				const double Thick = Dice.Range(2.5, 5.0);
+				const double Tall = Dice.Range(18.0, 28.0);
+				P.Add(Span(4.0, 12.0 + Dice.Range(0.0, 4.0), Y, Y + Thick, Floor + 22.0, Floor + 22.0 + Tall, Bindings[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Bindings)))]));
+				Y += Thick + (Dice.Chance(0.1) ? 6.0 : 0.4);
+			}
+			EachAlong(34.0, [&](double Y)
+			{
+				P.Add(Span(17.0, 29.0, Y - 11.0, Y + 11.0, Floor, Floor + 2.5, Bindings[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Bindings)))]));
+				P.Add(Span(17.5, 28.5, Y - 10.0, Y + 10.0, Floor + 2.5, Floor + 3.5, Paper));
+			});
+			break;
+		}
+		case ETrade::Pawn:
+		{
+			// The pawnbroker's jumble: a gramophone, a fiddle, candlesticks, watches on velvet, a folded fur.
+			Stand(18.0, Velvet);
+			int32 Item = Dice.Index(5);
+			EachAlong(34.0, [&](double Y)
+			{
+				switch (Item++ % 5)
+				{
+				case 0:
+				{
+					P.Add(Span(8.0, 26.0, Y - 12.0, Y + 12.0, Floor, Floor + 14.0, Shelf));
+					P.Add(ParkModel::Bar(FVector(17.0, Y, Floor + 14.0), FVector(14.0, Y, Floor + 34.0), 2.0, Brass));
+					FPart Horn{ ParkModel::Cone, Brass, FVector(16.0, Y, Floor + 42.0), FVector(26.0, 26.0, 22.0) };
+					Horn.Pitch = 135.0;
+					P.Add(Horn);
+					break;
+				}
+				case 1:
+				{
+					FPart Body{ ParkModel::Sphere, FLinearColor(0.38f, 0.16f, 0.05f), FVector(10.0, Y, Floor + 40.0), FVector(5.0, 20.0, 34.0) };
+					Body.Roll = 12.0;
+					P.Add(Body);
+					P.Add(ParkModel::Bar(FVector(10.0, Y - 3.0, Floor + 56.0), FVector(10.0, Y - 7.0, Floor + 82.0), 2.5, Iron));
+					break;
+				}
+				case 2:
+					for (const double Side : { -1.0, 1.0 })
+					{
+						P.Add(Can(16.0, Y + Side * 7.0, Floor, 7.0, 3.0, Brass));
+						P.Add(Can(16.0, Y + Side * 7.0, Floor + 3.0, 2.5, 26.0, Brass));
+						P.Add(Can(16.0, Y + Side * 7.0, Floor + 29.0, 2.0, 8.0, White));
+					}
+					break;
+				case 3:
+					P.Add(Span(14.0, 28.0, Y - 14.0, Y + 14.0, Floor, Floor + 3.0, Velvet));
+					for (int32 k = 0; k < 4; ++k)
+					{
+						FPart Watch{ ParkModel::Cylinder, Dice.Chance(0.5) ? Gilt : Tin, FVector(21.0, Y - 9.0 + k * 6.0, Floor + 3.6), FVector(5.0, 5.0, 1.2) };
+						P.Add(Watch);
+					}
+					break;
+				default:
+					P.Add(Lump(18.0, Y, Floor, FVector(20.0, 28.0, 12.0), FLinearColor(0.20f, 0.13f, 0.08f)));
+					break;
+				}
+			});
+			break;
+		}
+		case ETrade::Coal:
+		{
+			// Samples of the stock: a tray of coal, a stack of briquettes, a bundle of kindling, and the price card.
+			EachAlong(40.0, [&](double Y)
+			{
+				switch (Dice.Index(3))
+				{
+				case 0:
+					P.Add(Span(10.0, 28.0, Y - 14.0, Y + 14.0, Floor, Floor + 5.0, Iron));
+					for (int32 k = 0; k < 6; ++k)
+					{
+						P.Add(Lump(13.0 + (k % 3) * 6.0, Y - 9.0 + (k / 3) * 10.0, Floor + 4.0, FVector(8.0, 8.0, 6.0), CoalLump));
+					}
+					break;
+				case 1:
+					for (int32 k = 0; k < 4; ++k)
+					{
+						P.Add(Span(12.0, 26.0, Y - 10.0, Y + 10.0, Floor + k * 5.0, Floor + k * 5.0 + 4.6, CoalLump));
+					}
+					break;
+				default:
+					for (int32 k = 0; k < 5; ++k)
+					{
+						FPart Stick{ ParkModel::Cylinder, Firewood, FVector(18.0, Y - 8.0 + k * 4.0, Floor + 3.0 + (k % 2) * 4.0), FVector(4.0, 4.0, 30.0) };
+						Stick.Pitch = 90.0;
+						P.Add(Stick);
+					}
+					break;
+				}
+				P.Add(Span(26.0, 27.0, Y - 6.0, Y + 6.0, Floor + 30.0, Floor + 38.0, Paper));
+			});
+			break;
+		}
+		case ETrade::Photo:
+		{
+			// Framed portraits on little easels, and the big camera on its tripod in the middle.
+			Stand(16.0, FLinearColor(0.20f, 0.22f, 0.26f));
+			const double Middle = (Y0 + Y1) * 0.5;
+			EachAlong(30.0, [&](double Y)
+			{
+				if (FMath::Abs(Y - Middle) < 18.0 && Wide > 70.0)
+				{
+					for (const double Leg : { -1.0, 1.0 })
+					{
+						P.Add(ParkModel::Bar(FVector(18.0, Middle, Floor + 70.0), FVector(22.0, Middle + Leg * 14.0, Floor), 1.5, Shelf));
+					}
+					P.Add(ParkModel::Bar(FVector(18.0, Middle, Floor + 70.0), FVector(8.0, Middle, Floor), 1.5, Shelf));
+					P.Add(Span(10.0, 26.0, Middle - 9.0, Middle + 9.0, Floor + 70.0, Floor + 88.0, FLinearColor(0.12f, 0.08f, 0.05f)));
+					P.Add(Span(26.0, 31.0, Middle - 7.0, Middle + 7.0, Floor + 72.0, Floor + 86.0, Iron));
+					FPart Lens{ ParkModel::Cylinder, Brass, FVector(31.5, Middle, Floor + 79.0), FVector(7.0, 7.0, 4.0) };
+					Lens.Pitch = 90.0;
+					P.Add(Lens);
+					return;
+				}
+				const double Tall = Dice.Range(22.0, 34.0);
+				const double Half = Tall * 0.38;
+				P.Add(Span(9.0, 12.0, Y - Half, Y + Half, Floor + 16.0, Floor + 16.0 + Tall, Dice.Chance(0.6) ? Gilt : Iron));
+				P.Add(Span(12.0, 12.6, Y - Half + 3.0, Y + Half - 3.0, Floor + 19.0, Floor + 13.0 + Tall, Sepia));
+				P.Add(Lump(12.8, Y, Floor + 16.0 + Tall * 0.45, FVector(1.0, Half * 0.7, Tall * 0.35), FLinearColor(0.62f, 0.52f, 0.38f)));
+			});
+			break;
+		}
+		case ETrade::Locksmith:
+		{
+			// Keys hung on the back board, padlocks on the floor, a little safe.
+			P.Add(Span(1.0, 3.0, Y0 + 4.0, Y1 - 4.0, Floor + 60.0, WindowTop - 80.0, Shelf));
+			for (double Z = Floor + 72.0; Z < WindowTop - 95.0; Z += 22.0)
+			{
+				for (double Y = Y0 + 12.0; Y < Y1 - 10.0; Y += 9.0)
+				{
+					const FLinearColor& Metal = Dice.Chance(0.5) ? Brass : Tin;
+					P.Add(Span(3.0, 4.0, Y - 0.8, Y + 0.8, Z - 12.0, Z, Metal));
+					P.Add(Span(3.0, 4.2, Y - 2.2, Y + 2.2, Z, Z + 4.0, Metal));
+				}
+			}
+			EachAlong(30.0, [&](double Y)
+			{
+				P.Add(Span(18.0, 24.0, Y - 6.0, Y + 6.0, Floor, Floor + 10.0, Dice.Chance(0.5) ? Brass : Iron));
+				FPart Shackle{ ParkModel::Cylinder, Tin, FVector(21.0, Y, Floor + 13.0), FVector(9.0, 9.0, 1.5) };
+				Shackle.Pitch = 90.0;
+				P.Add(Shackle);
+			});
+			if (Wide > 60.0)
+			{
+				const double Y = Y0 + 22.0;
+				P.Add(Span(6.0, 30.0, Y - 15.0, Y + 15.0, Floor, Floor + 40.0, SafeGreen));
+				P.Add(Span(30.0, 30.8, Y - 12.0, Y + 12.0, Floor + 3.0, Floor + 37.0, FLinearColor(0.09f, 0.20f, 0.13f)));
+				FPart Dial{ ParkModel::Cylinder, Brass, FVector(31.2, Y, Floor + 24.0), FVector(7.0, 7.0, 1.2) };
+				Dial.Pitch = 90.0;
+				P.Add(Dial);
+			}
+			break;
+		}
+		case ETrade::Toys:
+		{
+			// A rocking horse, dolls in a row, drums and balls.
+			Stand(18.0, Cream);
+			if (Wide > 70.0)
+			{
+				const double Y = Y0 + 30.0;
+				FPart Rocker{ ParkModel::Cylinder, Paints[1], FVector(18.0, Y, Floor + 2.0), FVector(4.0, 4.0, 52.0) };
+				Rocker.Roll = 90.0;
+				for (const double X : { 11.0, 25.0 })
+				{
+					Rocker.At.X = X;
+					P.Add(Rocker);
+				}
+				P.Add(ParkModel::Bar(FVector(18.0, Y - 12.0, Floor + 4.0), FVector(18.0, Y - 8.0, Floor + 22.0), 3.0, Paints[1]));
+				P.Add(ParkModel::Bar(FVector(18.0, Y + 12.0, Floor + 4.0), FVector(18.0, Y + 8.0, Floor + 22.0), 3.0, Paints[1]));
+				P.Add(Lump(18.0, Y, Floor + 18.0, FVector(13.0, 30.0, 14.0), White));
+				P.Add(ParkModel::Bar(FVector(18.0, Y + 12.0, Floor + 28.0), FVector(18.0, Y + 18.0, Floor + 42.0), 7.0, White));
+				P.Add(Lump(18.0, Y + 21.0, Floor + 38.0, FVector(8.0, 14.0, 8.0), White));
+				P.Add(Span(17.0, 19.0, Y + 8.0, Y + 16.0, Floor + 34.0, Floor + 46.0, FLinearColor(0.05f, 0.04f, 0.03f)));
+			}
+			EachAlong(16.0, [&](double Y)
+			{
+				if (Wide > 70.0 && Y < Y0 + 56.0)
+				{
+					return;
+				}
+				switch (Dice.Index(3))
+				{
+				case 0:
+					P.Add(Can(8.0, Y, Floor + 18.0, 8.0, 14.0, Cloths[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Cloths)))]));
+					P.Add(Lump(8.0, Y, Floor + 32.0, FVector(7.0, 7.0, 7.0), FLinearColor(0.80f, 0.62f, 0.50f)));
+					break;
+				case 1:
+					P.Add(Can(20.0, Y, Floor, 13.0, 10.0, Labels[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Labels)))]));
+					P.Add(Can(20.0, Y, Floor + 10.0, 13.5, 1.0, White));
+					break;
+				default:
+					P.Add(Lump(22.0, Y, Floor, FVector(11.0, 11.0, 11.0), Labels[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Labels)))]));
+					break;
+				}
+			});
+			break;
+		}
 		default:
 			break;
 		}
@@ -466,6 +721,24 @@ namespace ShopModel
 			// White tiles with a dark band, and hooks or a shelf of jugs.
 			P.Add(Span(2.5, 3.0, Y0, Y1, SillZ, TransomZ, White));
 			P.Add(Span(3.0, 3.3, Y0, Y1, 200.0, 206.0, Trade == ETrade::Butcher ? Paints[1] : Paints[4]));
+			return;
+		}
+		if (Trade == ETrade::Coal)
+		{
+			// A dark, dusty store: sacks stacked against the back wall.
+			P.Add(Span(2.5, 3.0, Y0, Y1, SillZ, TransomZ, FLinearColor(0.08f, 0.075f, 0.07f)));
+			for (double Y = Y0 + 4.0; Y < Y1 - 30.0; Y += 32.0)
+			{
+				P.Add(Lump(14.0, Y + 15.0, SillZ + 4.0, FVector(24.0, 30.0, 40.0), Sack));
+				P.Add(Lump(14.0, Y + 15.0, SillZ + 40.0, FVector(10.0, 14.0, 8.0), Sack));
+			}
+			return;
+		}
+		if (Trade == ETrade::Photo)
+		{
+			// The studio's painted backdrop: a pale sky with a balustrade.
+			P.Add(Span(2.5, 3.0, Y0, Y1, SillZ, TransomZ, FLinearColor(0.42f, 0.46f, 0.50f)));
+			P.Add(Span(3.0, 3.4, Y0, Y1, SillZ + 70.0, SillZ + 80.0, Stone));
 			return;
 		}
 		if (Trade == ETrade::Barber)
@@ -519,6 +792,12 @@ namespace ShopModel
 					Y += Wide + 2.0;
 					break;
 				}
+				case ETrade::Florist:
+					P.Add(Can(5.0, Y + 8.0, Z, 12.0, 10.0, Pot));
+					P.Add(Lump(5.0, Y + 8.0, Z + 8.0, FVector(14.0, 16.0, Dice.Range(14.0, 24.0)), Leaf));
+					Y += 17.0;
+					break;
+				case ETrade::Locksmith:
 				case ETrade::Hardware:
 				case ETrade::Greengrocer:
 					P.Add(Can(5.0, Y + 8.0, Z, 15.0, Dice.Range(8.0, 18.0), Trade == ETrade::Hardware ? Tin : Crate));
@@ -551,9 +830,11 @@ namespace ShopModel
 	}
 
 	/** One shop window: frame, glazing bars, the dark shop behind and the goods. */
-	inline void Window(TArray<FPart>& P, const FLinearColor& Paint, ETrade Trade, double Y0, double Y1, FDice& Dice)
+	inline void Window(TArray<FPart>& P, const FLinearColor& Paint, ETrade Trade, double Y0, double Y1, FDice& Dice, bool bModern = false)
 	{
 		using namespace Colors;
+		// A modern front has thin chrome frames round one big sheet of plate glass.
+		const FLinearColor& Frame = bModern ? Chrome : Paint;
 		// The shop behind the glass, the display floor and the stallriser under it.
 		P.Add(Span(0.5, 2.5, Y0, Y1, SillZ, WindowTop, Inside));
 		P.Add(Span(2.5, 30.0, Y0, Y1, SillZ, SillZ + 4.0, Shelf));
@@ -561,11 +842,11 @@ namespace ShopModel
 		P.Add(Span(30.0, 32.0, Y0 + 8.0, Y1 - 8.0, PlinthTop + 9.0, SillZ - 9.0, Paint));
 		P.Add(Span(0.0, 36.0, Y0 - 2.0, Y1 + 2.0, SillZ - 6.0, SillZ, Paint, true));
 		// Frame and bars.
-		P.Add(Span(26.0, FrontX, Y0, Y0 + 7.0, SillZ, WindowTop, Paint));
-		P.Add(Span(26.0, FrontX, Y1 - 7.0, Y1, SillZ, WindowTop, Paint));
-		P.Add(Span(26.0, FrontX, Y0, Y1, TransomZ, TransomZ + 7.0, Paint));
+		P.Add(Span(26.0, FrontX, Y0, Y0 + 7.0, SillZ, WindowTop, Frame));
+		P.Add(Span(26.0, FrontX, Y1 - 7.0, Y1, SillZ, WindowTop, Frame));
+		P.Add(Span(26.0, FrontX, Y0, Y1, TransomZ, TransomZ + 7.0, Frame));
 		// Big panes below the transom; the light above is left whole for the lettering.
-		const int32 Lights = FMath::Max(1, FMath::RoundToInt((Y1 - Y0) / 85.0));
+		const int32 Lights = bModern ? 1 : FMath::Max(1, FMath::RoundToInt((Y1 - Y0) / 85.0));
 		for (int32 k = 1; k < Lights; ++k)
 		{
 			const double Y = Y0 + (Y1 - Y0) * k / Lights;
@@ -663,11 +944,16 @@ namespace ShopModel
 	 * on the pavement.
 	 */
 	inline void ShopAtWall(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside,
-		bool* OutAwning = nullptr)
+		bool* OutAwning = nullptr, bool bModern = false, bool bPlate = false)
 	{
 		using namespace Colors;
 		FDice Dice(Seed);
 		FLinearColor Paint = Paints[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Paints)))];
+		if (Trade == ETrade::Coal)
+		{
+			// The coal and wood dealer's front is plain dark brown, grimy with dust.
+			Paint = FLinearColor(0.07f, 0.05f, 0.035f);
+		}
 		if (Trade == ETrade::Dairy)
 		{
 			Paint = Cream;
@@ -680,7 +966,14 @@ namespace ShopModel
 		{
 			Paint = Paints[2];
 		}
-		const FLinearColor& Letters = Paint == Cream ? Paints[0] : Gilt;
+		if (bModern)
+		{
+			Paint = BlackGlass;
+		}
+		const FLinearColor& Letters = bModern ? NeonWhite : Paint == Cream ? Paints[0] : Gilt;
+		// Gilt lines on an old front, chrome on a modern one, whose pilasters are clad in travertine.
+		const FLinearColor& Trim = bModern ? Chrome : Gilt;
+		const FLinearColor& Pier = bModern ? Travertine : Paint;
 		const double Half = Width * 0.5;
 		const double Inner = Half - PilasterWidth;
 
@@ -690,16 +983,27 @@ namespace ShopModel
 		{
 			const double Y0 = Side < 0.0 ? -Half : Inner;
 			const double Y1 = Side < 0.0 ? -Inner : Half;
-			P.Add(Span(0.0, 40.0, Y0 - 2.0, Y1 + 2.0, 0.0, 30.0, Paint, true));
-			P.Add(Span(0.0, 36.0, Y0, Y1, 30.0, FasciaBottom, Paint, true));
-			P.Add(Span(36.0, 38.0, Y0 + 7.0, Y1 - 7.0, 50.0, FasciaBottom - 30.0, Paint));
-			P.Add(Span(0.0, 41.0, Y0 - 3.0, Y1 + 3.0, FasciaBottom - 16.0, FasciaBottom, Paint));
+			P.Add(Span(0.0, 40.0, Y0 - 2.0, Y1 + 2.0, 0.0, 30.0, bModern ? BlackGlass : Paint, true));
+			P.Add(Span(0.0, 36.0, Y0, Y1, 30.0, FasciaBottom, Pier, true));
+			if (!bModern)
+			{
+				P.Add(Span(36.0, 38.0, Y0 + 7.0, Y1 - 7.0, 50.0, FasciaBottom - 30.0, Paint));
+				P.Add(Span(0.0, 41.0, Y0 - 3.0, Y1 + 3.0, FasciaBottom - 16.0, FasciaBottom, Paint));
+			}
 		}
 		P.Add(Span(0.0, FrontX, -Half - 4.0, Half + 4.0, FasciaBottom, FasciaTop, Paint, true));
-		P.Add(Span(FrontX, FrontX + 1.0, -Inner + 8.0, Inner - 8.0, FasciaBottom + 8.0, FasciaBottom + 10.0, Gilt));
-		P.Add(Span(FrontX, FrontX + 1.0, -Inner + 8.0, Inner - 8.0, FasciaTop - 10.0, FasciaTop - 8.0, Gilt));
-		P.Add(Span(0.0, 40.0, -Half - 7.0, Half + 7.0, FasciaTop, FasciaTop + 9.0, Paint));
-		P.Add(Span(0.0, 45.0, -Half - 10.0, Half + 10.0, FasciaTop + 9.0, CorniceTop, Paint));
+		P.Add(Span(FrontX, FrontX + 1.0, -Inner + 8.0, Inner - 8.0, FasciaBottom + 8.0, FasciaBottom + 10.0, Trim));
+		P.Add(Span(FrontX, FrontX + 1.0, -Inner + 8.0, Inner - 8.0, FasciaTop - 10.0, FasciaTop - 8.0, Trim));
+		if (bModern)
+		{
+			// A flat chrome-edged top instead of the moulded cornice.
+			P.Add(Span(0.0, 37.0, -Half - 2.0, Half + 2.0, FasciaTop, FasciaTop + 4.0, Chrome));
+		}
+		else
+		{
+			P.Add(Span(0.0, 40.0, -Half - 7.0, Half + 7.0, FasciaTop, FasciaTop + 9.0, Paint));
+			P.Add(Span(0.0, 45.0, -Half - 10.0, Half + 10.0, FasciaTop + 9.0, CorniceTop, Paint));
+		}
 		Text.Add({ ELine::Fascia, FVector(FrontX + 1.5, 0.0, (FasciaBottom + FasciaTop) * 0.5), 0.0, 30.0, Inner * 2.0 - 24.0, Letters });
 
 		// Windows either side of the door.
@@ -720,11 +1024,11 @@ namespace ShopModel
 		{
 			if (DoorY0 - -Inner > 40.0)
 			{
-				Window(P, Paint, Trade, -Inner, DoorY0, Dice);
+				Window(P, Paint, Trade, -Inner, DoorY0, Dice, bModern);
 			}
 			if (Inner - DoorY1 > 40.0)
 			{
-				Window(P, Paint, Trade, DoorY1, Inner, Dice);
+				Window(P, Paint, Trade, DoorY1, Inner, Dice, bModern);
 			}
 			Door(P, Paint, DoorAt);
 			// More gold lettering on the glass over the widest window.
@@ -732,6 +1036,17 @@ namespace ShopModel
 			const double Right = Inner - DoorY1;
 			const double Y = Left > Right ? (-Inner + DoorY0) * 0.5 : (DoorY1 + Inner) * 0.5;
 			Text.Add({ ELine::Glass, FVector(31.5, Y, (TransomZ + 7.0 + WindowTop) * 0.5), 0.0, 17.0, FMath::Max(Left, Right) - 24.0, Letters });
+			// An enamel advert plate on the stallriser under the other window, or the same one when there is only one.
+			const double Other = Left > Right ? Right : Left;
+			const double PlateY = Other > 110.0 ? (Left > Right ? (DoorY1 + Inner) * 0.5 : (-Inner + DoorY0) * 0.5) : Y;
+			const double PlateHalf = FMath::Min(42.0, (Other > 110.0 ? Other : FMath::Max(Left, Right)) * 0.5 - 14.0);
+			if (bPlate && PlateHalf > 25.0)
+			{
+				const int32 Kind = Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(PlateGrounds)));
+				P.Add(Span(32.0, 33.2, PlateY - PlateHalf, PlateY + PlateHalf, 24.0, 64.0, PlateLetters[Kind]));
+				P.Add(Span(33.2, 33.6, PlateY - PlateHalf + 2.0, PlateY + PlateHalf - 2.0, 26.0, 62.0, PlateGrounds[Kind]));
+				Text.Add({ ELine::Plate, FVector(34.2, PlateY, 44.0), 0.0, 11.0, PlateHalf * 2.0 - 10.0, PlateLetters[Kind] });
+			}
 		}
 		// Short pieces of window or wall between the door and pilasters too narrow for a window.
 		if (DoorY0 - -Inner <= 40.0)
@@ -749,8 +1064,8 @@ namespace ShopModel
 		{
 			return;
 		}
-		const bool bAwning = Trade == ETrade::Greengrocer || ((Trade == ETrade::Grocer || Trade == ETrade::Baker || Trade == ETrade::Drapery
-			|| Trade == ETrade::Butcher || Trade == ETrade::Dairy || Trade == ETrade::Cafe) && Dice.Chance(0.55)) || Dice.Chance(0.12);
+		const bool bAwning = !bModern && (Trade == ETrade::Greengrocer || Trade == ETrade::Florist || ((Trade == ETrade::Grocer || Trade == ETrade::Baker || Trade == ETrade::Drapery
+			|| Trade == ETrade::Butcher || Trade == ETrade::Dairy || Trade == ETrade::Cafe) && Dice.Chance(0.55)) || (Trade != ETrade::Coal && Dice.Chance(0.12)));
 		if (OutAwning)
 		{
 			*OutAwning = bAwning;
@@ -795,7 +1110,27 @@ namespace ShopModel
 				P.Add(Span(62.0, 76.0, SignY + Face * 6.6 - 0.3, SignY + Face * 6.6 + 0.3, FasciaTop - 19.0, FasciaTop - 17.0, Paints[3]));
 			}
 		}
-		else if (Trade == ETrade::Tobacco || Trade == ETrade::Tavern || Trade == ETrade::Pharmacy || Trade == ETrade::Cafe || Dice.Chance(0.15))
+		else if (Trade == ETrade::Locksmith)
+		{
+			// The locksmith's big gilt key, hung out over the pavement.
+			Bracket(95.0);
+			for (const double X : { 35.0, 80.0 })
+			{
+				P.Add(ParkModel::Bar(FVector(X, SignY, FasciaTop + 30.0), FVector(X, SignY, FasciaTop + 10.0), 1.0, Iron));
+			}
+			FPart Bow{ ParkModel::Cylinder, Gilt, FVector(86.0, SignY, FasciaTop + 2.0), FVector(26.0, 26.0, 4.0) };
+			Bow.Roll = 90.0;
+			P.Add(Bow);
+			FPart Eye = Bow;
+			Eye.Color = Iron;
+			Eye.Size = FVector(13.0, 13.0, 4.6);
+			P.Add(Eye);
+			P.Add(Span(18.0, 74.0, SignY - 2.0, SignY + 2.0, FasciaTop - 1.0, FasciaTop + 5.0, Gilt));
+			P.Add(Span(18.0, 26.0, SignY - 2.0, SignY + 2.0, FasciaTop - 16.0, FasciaTop - 1.0, Gilt));
+			P.Add(Span(30.0, 36.0, SignY - 2.0, SignY + 2.0, FasciaTop - 12.0, FasciaTop - 1.0, Gilt));
+		}
+		else if (Trade == ETrade::Tobacco || Trade == ETrade::Tavern || Trade == ETrade::Pharmacy || Trade == ETrade::Cafe
+			|| Trade == ETrade::Pawn || Trade == ETrade::Coal || Trade == ETrade::Photo || Dice.Chance(0.15))
 		{
 			// A hanging board, lettered on both faces.
 			Bracket(95.0);
@@ -875,6 +1210,111 @@ namespace ShopModel
 			P.Add(ParkModel::Bar(FVector(40.0, Y + Side * 80.0, 0.0), FVector(37.0, Y + Side * 86.0, 150.0), 3.0, Shelf));
 			break;
 		}
+		case ETrade::Florist:
+		{
+			// Buckets of flowers on a low stepped stand by the door.
+			const double Span0 = FMath::Max(-Half + 20.0, Y - 75.0);
+			const double Span1 = FMath::Min(Half - 20.0, Y + 75.0);
+			if (Span1 - Span0 < 60.0)
+			{
+				break;
+			}
+			P.Add(Span(46.0, 70.0, Span0, Span1, 0.0, 30.0, Shelf, true));
+			P.Add(Span(70.0, 96.0, Span0, Span1, 0.0, 12.0, Shelf, true));
+			int32 k = 0;
+			for (double C = Span0 + 15.0; C < Span1 - 10.0; C += 25.0, ++k)
+			{
+				const bool bBack = k % 2 == 0;
+				const double X = bBack ? 58.0 : 83.0;
+				const double Z = bBack ? 30.0 : 12.0;
+				const FLinearColor& Bloom = Blooms[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Blooms)))];
+				P.Add(Can(X, C, Z, 22.0, 24.0, Tin));
+				P.Add(Can(X, C, Z + 24.0, 16.0, 18.0, Leaf));
+				for (int32 b = 0; b < 6; ++b)
+				{
+					P.Add(Lump(X - 7.0 + (b % 3) * 7.0, C - 6.0 + (b / 3) * 12.0, Z + 38.0 + (b % 2) * 5.0, FVector(10.0, 10.0, 9.0), Bloom));
+				}
+			}
+			break;
+		}
+		case ETrade::Books:
+		{
+			// The second-hand bookseller's trestle with boxes of books, spines up.
+			const double Span0 = FMath::Max(-Half + 20.0, Y - 80.0);
+			const double Span1 = FMath::Min(Half - 20.0, Y + 80.0);
+			if (Span1 - Span0 < 70.0)
+			{
+				break;
+			}
+			for (const double Leg : { Span0 + 6.0, Span1 - 6.0 })
+			{
+				P.Add(Span(50.0, 54.0, Leg - 2.0, Leg + 2.0, 0.0, 72.0, Shelf, true));
+				P.Add(Span(86.0, 90.0, Leg - 2.0, Leg + 2.0, 0.0, 72.0, Shelf, true));
+			}
+			P.Add(Span(48.0, 92.0, Span0, Span1, 72.0, 75.0, Shelf, true));
+			for (double C = Span0 + 3.0; C + 34.0 <= Span1; C += 36.0)
+			{
+				P.Add(Span(52.0, 88.0, C, C + 34.0, 75.0, 79.0, Crate));
+				for (double B = C + 2.0; B < C + 31.0; B += 3.2)
+				{
+					P.Add(Span(55.0, 85.0, B, B + 2.8, 79.0, 79.0 + Dice.Range(14.0, 20.0), Bindings[Dice.Index(static_cast<int32>(UE_ARRAY_COUNT(Bindings)))]));
+				}
+			}
+			break;
+		}
+		case ETrade::Coal:
+		{
+			// Full sacks against the wall, a stack of split firewood and the dealer's scales.
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const double SY = Y + Side * k * 42.0;
+				if (FMath::Abs(SY) > Half - 25.0)
+				{
+					continue;
+				}
+				// A full sack: a squat bulge of jute, its neck tied, coal showing at the top.
+				P.Add(Lump(52.0, SY, 0.0, FVector(36.0, 40.0, 30.0), Sack));
+				P.Add(Can(52.0, SY, 14.0, 34.0, 26.0, Sack));
+				P.Add(Lump(52.0, SY, 34.0, FVector(30.0, 34.0, 16.0), Sack));
+				P.Add(Lump(52.0, SY, 44.0, FVector(16.0, 18.0, 8.0), CoalLump));
+			}
+			const double WY = Y - Side * 70.0;
+			if (FMath::Abs(WY) < Half - 50.0 && FMath::Abs(WY - DoorAt) > DoorWidth * 0.5 + 20.0)
+			{
+				for (int32 Row = 0; Row < 5; ++Row)
+				{
+					for (int32 k = 0; k < 6 - Row % 2; ++k)
+					{
+						FPart Billet{ ParkModel::Cylinder, Firewood, FVector(56.0, WY - 40.0 + k * 15.0 + (Row % 2) * 7.5, 7.0 + Row * 13.0), FVector(13.0, 13.0, 34.0) };
+						Billet.Pitch = 90.0;
+						P.Add(Billet);
+					}
+				}
+			}
+			break;
+		}
+		case ETrade::Cafe:
+		{
+			// A chalked board on the pavement.
+			if (FMath::Abs(Y) > Half - 30.0)
+			{
+				break;
+			}
+			for (const double Lean : { -1.0, 1.0 })
+			{
+				FPart Board{ ParkModel::Cube, Chalkboard, FVector(95.0 + Lean * 12.0, Y, 48.0), FVector(3.0, 52.0, 92.0) };
+				Board.Pitch = Lean * 14.0;
+				P.Add(Board);
+			}
+			for (int32 Line = 0; Line < 4; ++Line)
+			{
+				const double WZ = 76.0 - Line * 14.0;
+				FPart Writing{ ParkModel::Cube, Chalk, FVector(108.8 - (WZ - 48.0) * 0.2493, Y - 4.0 + (Line % 2) * 6.0, WZ), FVector(0.5, Line == 0 ? 34.0 : 22.0, Line == 0 ? 5.0 : 2.5) };
+				Writing.Pitch = 14.0;
+				P.Add(Writing);
+			}
+			break;
+		}
 		case ETrade::Baker:
 		case ETrade::Dairy:
 		{
@@ -894,11 +1334,11 @@ namespace ShopModel
 
 	/** One shop front Width cm wide: its parts go into P and its lettering into Text (see ShopAtWall). */
 	inline void BuildShop(TArray<FPart>& P, TArray<FLettering>& Text, double Width, ETrade Trade, uint32 Seed, bool bClosed, bool bOutside,
-		bool* OutAwning = nullptr)
+		bool* OutAwning = nullptr, bool bModern = false, bool bPlate = false)
 	{
 		const int32 FirstPart = P.Num();
 		const int32 FirstText = Text.Num();
-		ShopAtWall(P, Text, Width, Trade, Seed, bClosed, bOutside, OutAwning);
+		ShopAtWall(P, Text, Width, Trade, Seed, bClosed, bOutside, OutAwning, bModern, bPlate);
 		StandOut(P, FirstPart, Text, FirstText);
 	}
 
@@ -924,7 +1364,7 @@ namespace ShopModel
 	 * A tenement gate Width cm wide: stone surround, panelled double doors, fanlight and the blue number plate.
 	 * With bOpen the doors stand swung back against the gateway's walls and the opening is clear up to the vault.
 	 */
-	inline void BuildGate(TArray<FPart>& P, TArray<FLettering>& Text, double Width, bool bOpen = false)
+	inline void BuildGate(TArray<FPart>& P, TArray<FLettering>& Text, double Width, bool bOpen = false, bool bPostbox = false)
 	{
 		using namespace Colors;
 		const int32 FirstPart = P.Num();
@@ -982,6 +1422,21 @@ namespace ShopModel
 				}
 				P.Add({ ParkModel::Sphere, Brass, FVector(14.0, Side * 9.0, 120.0), FVector(6.0, 6.0, 6.0) });
 			}
+		}
+		if (bPostbox)
+		{
+			// A letter box on the left jamb: red iron with a rounded top, the slot under a brass flap, the post horn.
+			const double Y = -(Open + Half) * 0.5;
+			P.Add(Span(22.0, 36.0, Y - 13.0, Y + 13.0, 100.0, 150.0, PostRed));
+			FPart Top{ ParkModel::Cylinder, PostRed, FVector(29.0, Y, 150.0), FVector(14.0, 14.0, 26.0) };
+			Top.Roll = 90.0;
+			P.Add(Top);
+			P.Add(Span(36.0, 37.0, Y - 8.0, Y + 8.0, 136.0, 141.0, Brass));
+			P.Add(Span(36.0, 36.6, Y - 9.5, Y + 9.5, 141.0, 143.0, Iron));
+			FPart Horn{ ParkModel::Cylinder, Gilt, FVector(36.4, Y, 118.0), FVector(9.0, 9.0, 0.8) };
+			Horn.Pitch = 90.0;
+			P.Add(Horn);
+			P.Add(Span(36.0, 36.8, Y - 2.0, Y + 2.0, 102.0, 106.0, Brass));
 		}
 		// The blue enamel house number plate on the right jamb.
 		P.Add(Span(22.0, 23.5, Open + 3.0, Half - 3.0, 252.0, 276.0, White));

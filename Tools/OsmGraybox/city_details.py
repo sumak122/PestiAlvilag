@@ -55,6 +55,7 @@ from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry import box
 from shapely.ops import polylabel, unary_union
 from shapely.prepared import prep
+from shapely.strtree import STRtree
 
 from street_furniture import Space, Spread, chance, in_cart_gate, ring_points, unit, yaw_of
 
@@ -1242,6 +1243,152 @@ def place_troughs(space, f, spots):
 
 
 
+# Street name plates: blue enamel, on the corner houses, the 1932 names.
+PLATE_NAMES_1932 = {
+    "II. János Pál pápa tér": "Tisza Kálmán tér",
+    "Teleki László tér": "Teleki tér",
+    "Dobozi utca": "Karpfenstein utca",
+    "Baross téri felüljáró": "Baross tér",
+    "Bródy Sándor utca": "Sándor utca",
+    "Krúdy Gyula utca": "Eszterházy utca",
+}
+# Today's names of streets that had no such name yet (PestiMap NotYet): no plate.
+PLATE_NOT_YET = {
+    "48-asok útja", "56-osok útja", "Bacsó Béla utca", "Mindszenty József tér", "Szeles Erika tér",
+    "Szerb Antal út", "Scheiber Sándor utca", "Karácsony Sándor utca",
+    # Named after 1932, their old names not known here.
+    "Hutyra Ferenc utca", "Somogyi Béla utca", "Rejtő Jenő utca", "Bauer Sándor utca", "Márkus Emília utca",
+}
+PLATE_HIGHWAYS_SKIP = {"footway", "path", "pedestrian", "steps", "service", "track", "cycleway"}
+PLATE_STREET_REACH = 1800    # a wall belongs to the named street this near it
+PLATE_CORNER_REACH = 700     # a wall end this far past another street's kerb is a corner
+PLATE_FROM_END = 70          # the plate's near edge, in from the corner
+PLATE_OUT = 12               # off the wall, clear of the facade's relief
+PLATE_GAP = 1500             # plates of the same street at least this far apart
+PLATE_LETTER = 13 * 0.62     # cm a letter takes (CityDetailsPlace::PlateLetters, PlateLetterWidth)
+
+
+def place_street_plates(data, buildings, skip_ids):
+    """[x, y, yaw out, width, NAME] at the corners of the house fronts."""
+    named = [(c["name"], LineString(ring_points(c["points"])), c.get("width", 600)) for c in data["centerlines"]
+             if c.get("name") and c.get("highway") not in PLATE_HIGHWAYS_SKIP and c["name"] not in PLATE_NOT_YET]
+    tree = STRtree([line for _, line, _ in named])
+    spread = {}
+    plates = []
+    for p0, p1, height, levels, b in facade_walls(buildings):
+        if b.get("id") in skip_ids:
+            continue
+        length = math.dist(p0, p1)
+        if length < 400 or height < 600:
+            continue
+        mid = Point((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+        near = [named[i] for i in tree.query(mid.buffer(PLATE_STREET_REACH))]
+        if not near:
+            continue
+        own, own_line, _ = min(near, key=lambda n: n[1].distance(mid))
+        if own_line.distance(mid) > PLATE_STREET_REACH:
+            continue
+        name = PLATE_NAMES_1932.get(own, own).upper()
+        width = min(220, max(70, len(name) * PLATE_LETTER + 22))
+        if length < width + 2 * PLATE_FROM_END + 200:
+            continue
+        ax, ay = unit(p1[0] - p0[0], p1[1] - p0[1])
+        ox, oy = ay, -ax
+        for end, sign in ((p0, 1), (p1, -1)):
+            e = Point(*end)
+            corner = any(n != own and line.distance(e) < w / 2 + PLATE_CORNER_REACH
+                         for n, line, w in (named[i] for i in tree.query(e.buffer(PLATE_CORNER_REACH + 2000))))
+            if not corner:
+                continue
+            along = PLATE_FROM_END + width / 2
+            x = end[0] + ax * along * sign + ox * PLATE_OUT
+            y = end[1] + ay * along * sign + oy * PLATE_OUT
+            mine = spread.setdefault(name, [])
+            if any(math.hypot(x - a, y - b_) < PLATE_GAP for a, b_ in mine):
+                continue
+            mine.append((x, y))
+            plates.append([round(x), round(y), yaw_of(ox, oy), round(width), name])
+    return plates
+
+
+# Public street wells (közkifolyó): green cast iron columns at the kerb, every few blocks.
+WELL_GAP = 22000
+WELL_IN = 60
+
+
+def place_wells(space, f, spots):
+    spread = Spread(WELL_GAP)
+    wells = []
+    for w in f["sidewalks"]:
+        line = LineString(ring_points(w))
+        steps = max(1, int(line.length // 1500))
+        for i in range(steps + 1):
+            on = line.interpolate(i / steps, normalized=True)
+            spot = kerb_spot(space, on.x, on.y, WELL_IN)
+            if spot is None:
+                continue
+            x, y, yaw = spot
+            if not spread.ok(x, y) or not room(spots, x, y, 250) or not clear_of(space, x, y, 180, 150):
+                continue
+            if space.road_shape.distance(Point(x, y)) < WELL_IN - 5 or in_cart_gate(x, y, 100):
+                continue
+            spread.add(x, y)
+            wells.append([round(x), round(y), yaw])
+            spots.append((x, y))
+    return wells
+
+
+# Cast iron street urinals (piszoár), one on each of these squares, in the open
+# ground of the square clear of the walking lines.
+PISSOIR_SQUARES = ["Rákóczi tér", "Teleki László tér", "Mátyás tér", "Baross tér", "II. János Pál pápa tér", "Almássy tér"]
+PISSOIR_CLEAR_OF_WALKS = 230
+PISSOIR_ROOM = 380
+PISSOIR_SEARCH = 3500
+
+
+def place_pissoirs(data, space, f, spots):
+    walks = [LineString(ring_points(w)) for w in f["sidewalks"]]
+    walk_tree = STRtree(walks)
+    avoid = list(spots) + [tuple(t[:2]) for t in f["tisza"].get("trees", [])] + [tuple(t[:2]) for t in f["rakoczi"].get("trees", [])]
+    out = []
+    for square in PISSOIR_SQUARES:
+        lines = [LineString(ring_points(c["points"])) for c in data["centerlines"] if c.get("name") == square]
+        if not lines:
+            continue
+        anchor = unary_union(lines).centroid
+        best = None
+        for gx in range(-PISSOIR_SEARCH, PISSOIR_SEARCH + 1, 100):
+            for gy in range(-PISSOIR_SEARCH, PISSOIR_SEARCH + 1, 100):
+                x, y = anchor.x + gx, anchor.y + gy
+                d = math.hypot(gx, gy)
+                if d > PISSOIR_SEARCH or (best is not None and d >= best[0]):
+                    continue
+                pt = Point(x, y)
+                if space.roads.contains(pt) or space.road_shape.distance(pt) < 250 or not clear_of(space, x, y, 300, 300):
+                    continue
+                near_walks = [walks[i] for i in walk_tree.query(pt.buffer(PISSOIR_CLEAR_OF_WALKS))]
+                if any(w.distance(pt) < PISSOIR_CLEAR_OF_WALKS for w in near_walks):
+                    continue
+                if not room(avoid, x, y, PISSOIR_ROOM):
+                    continue
+                best = (d, x, y)
+        if best is None:
+            print(f"No room for a pissoir on {square}")
+            continue
+        _, x, y = best
+        pt = Point(x, y)
+        walk = min((walks[i] for i in walk_tree.query(pt.buffer(3000))), key=lambda w: w.distance(pt), default=None)
+        yaw = 0.0
+        if walk is not None:
+            q = walk.interpolate(walk.project(pt))
+            # The way in looks away from the nearest walk, its screen to the other side.
+            yaw = yaw_of(x - q.x, y - q.y)
+        out.append([round(x), round(y), yaw])
+        spots.append((x, y))
+        avoid.append((x, y))
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("graybox")
@@ -1282,6 +1429,9 @@ def main():
     hatches = place_hatches(space, fronts, f, spots, {CORVIN_ID})
     coal_drops = place_coal_drops(space, hatches, spots)
     manholes = place_manholes(space)
+    wells = place_wells(space, f, spots)
+    pissoirs = place_pissoirs(data, space, f, spots)
+    plates = place_street_plates(data, fronts, {CORVIN_ID})
     out = {
         "version": 1,
         "courtyards": courtyards,
@@ -1305,12 +1455,15 @@ def main():
         "hatches": hatches,
         "troughs": troughs,
         "coal_drops": coal_drops,
+        "wells": wells,
+        "pissoirs": pissoirs,
+        "street_plates": plates,
     }
     with open(args.output, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(courtyards)} courtyards, {len(out['buildings'])} building pieces, {len(ads)} wall ads, {len(kiosks)} kiosks, {len(clocks)} clocks, {len(out['map_icons'])} map icons, "
           f"{len(churches)} churches, {len(folk)} at windows, {len(hydrants)} hydrants, {len(manholes)} manholes, {len(hatches)} hatches, "
-          f"{len(troughs)} troughs, {len(coal_drops)} coal drops")
+          f"{len(troughs)} troughs, {len(coal_drops)} coal drops, {len(wells)} wells, {len(pissoirs)} pissoirs, {len(plates)} street plates")
 
 
 if __name__ == "__main__":

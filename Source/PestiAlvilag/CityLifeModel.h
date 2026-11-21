@@ -96,6 +96,109 @@ namespace CityLifeModel
 		}
 	}
 
+	/** Cast iron painted green, for the public wells and the street urinals. */
+	const FLinearColor StreetIronGreen(0.07f, 0.14f, 0.09f);
+	const FLinearColor PlateBlue(0.05f, 0.14f, 0.42f);
+	const FLinearColor PlateWhite(0.85f, 0.84f, 0.80f);
+	const FLinearColor Drain(0.30f, 0.29f, 0.27f);
+
+	/** How high a street name plate hangs on the corner house (cm, its middle). */
+	constexpr double PlateHeight = 432.0;
+
+	/** A blue enamel street name plate on a house wall, Width wide; the wall is at X = 0, the plate faces +X. The name is lettered by the caller at PlateLetterX. */
+	constexpr double PlateLetterX = 2.6;
+	inline void StreetPlate(double Width, TArray<FShape>& Out)
+	{
+		Add(Out, MarketModel::Cube, PlateWhite, FVector(0.8, 0, PlateHeight), FVector(1.6, Width, 30.0), 0.0, false);
+		Add(Out, MarketModel::Cube, PlateBlue, FVector(1.8, 0, PlateHeight), FVector(0.6, Width - 3.0, 27.0), 0.0, false);
+	}
+
+	/**
+	 * A public street well (közkifolyó): a fluted cast iron column with a cap and finial,
+	 * a spout to the front over an iron drain grating, the pump handle at the side.
+	 */
+	inline void StreetWell(TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		Add(Out, MarketModel::Cube, Drain, FVector(28, 0, 1), FVector(70, 60, 2), 0.0, false);
+		for (int32 k = 0; k < 6; ++k)
+		{
+			Add(Out, MarketModel::Cube, Iron, FVector(28, -24 + k * 9.6, 2.2), FVector(56, 3, 0.6), 0.0, false);
+		}
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 10), FVector(40, 40, 20));
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 24), FVector(32, 32, 8), 0.0, false);
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 85), FVector(24, 24, 122));
+		for (int32 k = 0; k < 8; ++k)
+		{
+			const double Angle = k * PI / 4.0;
+			Add(Out, MarketModel::Cube, StreetIronGreen, FVector(FMath::Cos(Angle) * 12.0, FMath::Sin(Angle) * 12.0, 85), FVector(3, 3, 110), k * 45.0, false);
+		}
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 150), FVector(32, 32, 8), 0.0, false);
+		Add(Out, MarketModel::Sphere, StreetIronGreen, FVector(0, 0, 160), FVector(28, 28, 20), 0.0, false);
+		Add(Out, MarketModel::Sphere, Brass, FVector(0, 0, 175), FVector(10, 10, 12), 0.0, false);
+		// The spout: a lion's head boss and a curved pipe.
+		Add(Out, MarketModel::Sphere, StreetIronGreen, FVector(12, 0, 105), FVector(10, 16, 16), 0.0, false);
+		Rod(Out, StreetIronGreen, FVector(14, 0, 102), FVector(30, 0, 96), 5.0);
+		Rod(Out, StreetIronGreen, FVector(30, 0, 96), FVector(36, 0, 86), 5.0);
+		// The handle, pivoted on the side of the column, its end hanging down.
+		Add(Out, MarketModel::Cylinder, Brass, FVector(0, 14, 120), FVector(8, 8, 4), 0.0, false, 0.0, 90.0);
+		Rod(Out, Iron, FVector(0, 16, 120), FVector(-6, 42, 112), 3.0);
+		Rod(Out, Iron, FVector(-6, 42, 112), FVector(-8, 48, 92), 3.0);
+		Add(Out, MarketModel::Sphere, Iron, FVector(-8, 48, 90), FVector(6, 6, 8), 0.0, false);
+	}
+
+	/**
+	 * A cast iron street urinal (piszoár) as on the squares of Pest: a round screen of
+	 * panels on legs, open under and over, a pierced frieze, a little roof on a middle post
+	 * with a lamp on top; the way in at the front is hidden by a curved screen.
+	 */
+	inline void Pissoir(TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		constexpr double Radius = 115.0;
+		constexpr int32 Panels = 12;
+		for (int32 k = 0; k < Panels; ++k)
+		{
+			// Leave the front two panels out: the way in, behind its own screen.
+			if (k == 0 || k == Panels - 1)
+			{
+				continue;
+			}
+			const double Angle = (k + 0.5) * 2.0 * PI / Panels;
+			const double Wide = 2.0 * Radius * FMath::Sin(PI / Panels) + 1.0;
+			const FVector At(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0);
+			const double Facing = FMath::RadiansToDegrees(Angle);
+			Add(Out, MarketModel::Cube, StreetIronGreen, At + FVector(0, 0, 112), FVector(4, Wide, 156), Facing);
+			Add(Out, MarketModel::Cube, IronWorn, At + FVector(0, 0, 196), FVector(5, Wide, 4), Facing, false);
+			// The pierced frieze: little uprights between two rails.
+			Add(Out, MarketModel::Cube, StreetIronGreen, At + FVector(0, 0, 222), FVector(5, Wide, 3), Facing, false);
+			Add(Out, MarketModel::Cube, StreetIronGreen, At + FVector(0, 0, 200) + FVector(-FMath::Sin(Angle), FMath::Cos(Angle), 0) * (Wide * 0.25), FVector(3, 3, 22), Facing, false);
+			Add(Out, MarketModel::Cube, StreetIronGreen, At + FVector(0, 0, 200) - FVector(-FMath::Sin(Angle), FMath::Cos(Angle), 0) * (Wide * 0.25), FVector(3, 3, 22), Facing, false);
+		}
+		// Legs at the panel joints.
+		for (int32 k = 1; k < Panels; ++k)
+		{
+			const double Angle = k * 2.0 * PI / Panels;
+			Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 115), FVector(7, 7, 230), 0.0, false);
+		}
+		// The screen in front of the way in.
+		Add(Out, MarketModel::Cube, StreetIronGreen, FVector(Radius + 60.0, 0, 112), FVector(4, 110, 156), 0.0, true);
+		for (const double Side : { -1.0, 1.0 })
+		{
+			Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(Radius + 60.0, Side * 55.0, 100), FVector(7, 7, 200), 0.0, false);
+		}
+		// Middle post, roof, lamp and finial.
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 130), FVector(14, 14, 260), 0.0, false);
+		Add(Out, MarketModel::Cylinder, Iron, FVector(0, 0, 244), FVector(Radius * 2.0 + 40.0, Radius * 2.0 + 40.0, 6), 0.0, false);
+		Add(Out, MarketModel::Cone, StreetIronGreen, FVector(0, 0, 268), FVector(Radius * 2.0 + 30.0, Radius * 2.0 + 30.0, 44), 0.0, false);
+		Add(Out, MarketModel::Cylinder, StreetIronGreen, FVector(0, 0, 296), FVector(16, 16, 16), 0.0, false);
+		Add(Out, MarketModel::Cube, FLinearColor(0.80f, 0.74f, 0.52f), FVector(0, 0, 312), FVector(16, 16, 18), 45.0, false);
+		Add(Out, MarketModel::Cone, StreetIronGreen, FVector(0, 0, 328), FVector(24, 24, 14), 0.0, false);
+		Add(Out, MarketModel::Sphere, Brass, FVector(0, 0, 339), FVector(6, 6, 8), 0.0, false);
+		// Wet stone floor inside.
+		Add(Out, MarketModel::Cylinder, Drain, FVector(0, 0, 1), FVector(Radius * 2.0, Radius * 2.0, 2), 0.0, false);
+	}
+
 	/** An iron manhole cover, flush with the roadway. */
 	inline void Manhole(int32 Variant, TArray<FShape>& Out)
 	{

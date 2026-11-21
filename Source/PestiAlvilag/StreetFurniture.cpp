@@ -916,8 +916,13 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			TArray<ParkModel::FPart> Model;
 			TArray<ShopModel::FLettering> Lettering;
 			bool bAwning = false;
+			// A modern black glass front on the big streets, and an enamel advert plate on some.
+			bool bModern = false;
+			Shop->TryGetBoolField(TEXT("modern"), bModern);
+			FString PlateWords;
+			Shop->TryGetStringField(TEXT("plate"), PlateWords);
 			ShopModel::BuildShop(Model, Lettering, Width, ShopModel::TradeOf(*Shop->GetStringField(TEXT("trade"))), Seed,
-				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")), &bAwning);
+				Shop->GetBoolField(TEXT("closed")), Shop->GetBoolField(TEXT("outside")), &bAwning, bModern, !PlateWords.IsEmpty());
 			Put(Model, Foot, Yaw);
 
 			// Out of the rain: by the door, and under an awning all along the windows.
@@ -940,6 +945,11 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			}
 			for (const ShopModel::FLettering& Line : Lettering)
 			{
+				if (Line.Line == ShopModel::ELine::Plate)
+				{
+					Letter(Line, PlateWords, Foot, Yaw);
+					continue;
+				}
 				const TCHAR* Field = Line.Line == ShopModel::ELine::Fascia ? TEXT("fascia") : Line.Line == ShopModel::ELine::Glass ? TEXT("glass") : TEXT("blade");
 				Letter(Line, Shop->GetStringField(Field), Foot, Yaw);
 			}
@@ -1003,7 +1013,9 @@ void AStreetFurniture::BuildShops(const FJsonObject& Root)
 			// A few gates stand open onto their courtyards (ACityDetails).
 			const bool bOpen = ACityDetails::IsOpenGate(FVector2D(Foot.X, Foot.Y));
 			const double GateWidth = Gate->GetNumberField(TEXT("width"));
-			ShopModel::BuildGate(Model, Lettering, GateWidth, bOpen);
+			// A letter box on the jamb of about one gate in six.
+			const bool bPostbox = !bOpen && HashCombine(GetTypeHash(FMath::RoundToInt(Foot.X)), GetTypeHash(FMath::RoundToInt(Foot.Y))) % 6 == 0;
+			ShopModel::BuildGate(Model, Lettering, GateWidth, bOpen, bPostbox);
 			Put(Model, Foot, Yaw);
 			// Two can stand in the gateway out of the rain, one each side.
 			for (const double Side : { -1.0, 1.0 })
