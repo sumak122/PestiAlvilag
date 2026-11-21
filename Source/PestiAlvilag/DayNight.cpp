@@ -10,6 +10,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Components/VolumetricCloudComponent.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/PostProcessVolume.h"
@@ -22,6 +23,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "OsmGraybox.h"
+#include "PestiMenu.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -48,6 +50,31 @@ namespace DayNight
 
 	// The sun is low and warm at dawn and dusk.
 	const FLinearColor LowSunColor(1.f, 0.62f, 0.38f);
+	// A November sun through the haze: paler and yellower (not with the plain picture).
+	const FLinearColor PaleLowSunColor(1.f, 0.8f, 0.56f);
+
+	// The old film look (ADayNight::SetPictureStyle): faded, warm, a little
+	// grain and dark corners; black and white for the Fortepan style.
+	constexpr double FilmSaturation = 0.78;
+	constexpr double FilmContrast = 0.94;
+	const FLinearColor FilmTint(1.f, 0.955f, 0.86f);
+	constexpr double FilmLift = 0.01;
+	constexpr float FilmVignette = 0.55f;
+	constexpr float FilmGrain = 0.2f;
+	constexpr double PhotoContrast = 1.08;
+	const FLinearColor PhotoTint(1.f, 0.98f, 0.95f);
+	constexpr float PhotoVignette = 0.7f;
+	constexpr float PhotoGrain = 0.3f;
+
+	// The November sky: the blue mostly greyed out on a fair day, nearly
+	// all of it under cloud; hazier; the cloud layer lower (km).
+	const FLinearColor BlueSky(0.175287f, 0.409607f, 1.f);
+	constexpr float SkyGreyFair = 0.45f;
+	constexpr float SkyGreyCloudy = 0.9f;
+	constexpr float DayMie = 0.003996f;
+	constexpr float HazeMie = 2.f;
+	constexpr float LowCloudBottom = 3.f;
+	constexpr float CloudBottom = 5.f;
 
 	// Darkness rises as the sun sinks from 3 degrees above the horizon to 6
 	// below; the lamps are lit from 0.3 and put out again below 0.22.
@@ -271,6 +298,30 @@ void ADayNight::FindSky()
 		DayFogFalloff = Fog->GetComponent()->FogHeightFalloff;
 	}
 
+	for (TActorIterator<ASkyAtmosphere> It(World); It; ++It)
+	{
+		Atmosphere = It->GetComponent();
+		break;
+	}
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (UVolumetricCloudComponent* Layer = It->FindComponentByClass<UVolumetricCloudComponent>())
+		{
+			Clouds = Layer;
+			break;
+		}
+	}
+
+	// The old film look, over the whole picture (priority below the night's exposure, which only sets the exposure).
+	FilmGrade = World->SpawnActor<APostProcessVolume>(APostProcessVolume::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
+	if (FilmGrade)
+	{
+		FilmGrade->bUnbound = true;
+		FilmGrade->Priority = 5.f;
+		FilmGrade->BlendWeight = 1.f;
+	}
+	SetPictureStyle(PestiSettings::PictureStyle());
+
 	// The night's exposure: blended in with the darkness, so the day is untouched.
 	NightExposure = World->SpawnActor<APostProcessVolume>(APostProcessVolume::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator);
 	if (NightExposure)
@@ -395,7 +446,8 @@ void ADayNight::UpdateSun(bool bForce)
 			{
 				// Under cloud the sun is only a bright patch in the grey.
 				Light->SetIntensity(DaySunIntensity * FMath::Clamp((Elevation + 6.f) / 8.f, 0.f, 1.f) * (1.f - DayNight::CloudDims * Overcast));
-				Light->SetLightColor(FMath::Lerp(LowSunColor, DaySunColor, FMath::Clamp(Elevation / 20.f, 0.f, 1.f)));
+				const FLinearColor LowSun = PictureStyle == 2 ? LowSunColor : PaleLowSunColor;
+				Light->SetLightColor(FMath::Lerp(LowSun, DaySunColor, FMath::Clamp(Elevation / 20.f, 0.f, 1.f)));
 			}
 		}
 	}
@@ -404,6 +456,7 @@ void ADayNight::UpdateSun(bool bForce)
 	{
 		NightExposure->BlendWeight = Darkness;
 	}
+	UpdateSkyColour();
 	if (Sky && Sky->GetLightComponent())
 	{
 		Sky->GetLightComponent()->SetIntensity(DaySkyIntensity * FMath::Lerp(1.f, NightSky, Darkness));
@@ -427,6 +480,62 @@ void ADayNight::UpdateSun(bool bForce)
 			FogLayer->SetFogHeightFalloff(Falloff);
 		}
 	}
+}
+
+void ADayNight::SetPictureStyle(int32 Style)
+{
+	PictureStyle = FMath::Clamp(Style, 0, 2);
+	ShadeFilm();
+	if (Clouds)
+	{
+		Clouds->SetLayerBottomAltitude(PictureStyle == 2 ? DayNight::CloudBottom : DayNight::LowCloudBottom);
+	}
+	ShownSkyGrey = -1.f;
+	UpdateSkyColour();
+}
+
+void ADayNight::ShadeFilm()
+{
+	using namespace DayNight;
+	if (!FilmGrade)
+	{
+		return;
+	}
+	FPostProcessSettings& Settings = FilmGrade->Settings;
+	const bool bOn = PictureStyle != 2;
+	const bool bPhoto = PictureStyle == 1;
+	Settings.bOverride_ColorSaturation = bOn;
+	Settings.ColorSaturation = FVector4(1.0, 1.0, 1.0, bPhoto ? 0.0 : FilmSaturation);
+	Settings.bOverride_ColorContrast = bOn;
+	Settings.ColorContrast = FVector4(1.0, 1.0, 1.0, bPhoto ? PhotoContrast : FilmContrast);
+	Settings.bOverride_ColorOffset = bOn;
+	Settings.ColorOffset = bPhoto ? FVector4(0.006, 0.006, 0.006, 0.0) : FVector4(FilmLift, FilmLift * 0.8, FilmLift * 0.5, 0.0);
+	Settings.bOverride_SceneColorTint = bOn;
+	Settings.SceneColorTint = bPhoto ? PhotoTint : FilmTint;
+	Settings.bOverride_VignetteIntensity = bOn;
+	Settings.VignetteIntensity = bPhoto ? PhotoVignette : FilmVignette;
+	Settings.bOverride_FilmGrainIntensity = bOn;
+	Settings.FilmGrainIntensity = bPhoto ? PhotoGrain : FilmGrain;
+}
+
+void ADayNight::UpdateSkyColour()
+{
+	using namespace DayNight;
+	if (!Atmosphere)
+	{
+		return;
+	}
+	const float SkyGrey = PictureStyle == 2 ? 0.f : FMath::Lerp(SkyGreyFair, SkyGreyCloudy, FMath::Max(Overcast, Mist));
+	if (ShownSkyGrey >= 0.f && FMath::Abs(SkyGrey - ShownSkyGrey) < 0.01f)
+	{
+		return;
+	}
+	ShownSkyGrey = SkyGrey;
+	// The same scattering in every colour makes a white sky; a touch cool, like a grey day.
+	const float Mean = (BlueSky.R + BlueSky.G + BlueSky.B) / 3.f;
+	const FLinearColor Grey(Mean * 0.94f, Mean * 0.98f, Mean * 1.06f);
+	Atmosphere->SetRayleighScattering(FMath::Lerp(BlueSky, Grey, SkyGrey));
+	Atmosphere->SetMieScatteringScale(DayMie * (1.f + HazeMie * SkyGrey));
 }
 
 void ADayNight::SetWeather(float InOvercast, float InMist)

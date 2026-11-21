@@ -10,6 +10,8 @@
 class ADirectionalLight;
 class APostProcessVolume;
 class ASkyLight;
+class USkyAtmosphereComponent;
+class UVolumetricCloudComponent;
 class AExponentialHeightFog;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -99,6 +101,14 @@ public:
 	 */
 	void SetWeather(float InOvercast, float InMist);
 
+	/**
+	 * The look of the picture (PestiSettings::PictureStyle): 0 an old film
+	 * (faded warm colours, grain, dark corners, a grey November sky and a
+	 * pale yellow low sun), 1 the same in black and white like the old
+	 * Fortepan photos, 2 plain (as the game looked before).
+	 */
+	void SetPictureStyle(int32 Style);
+
 	/** Moves the clock on an hour. */
 	void SkipHour();
 
@@ -156,6 +166,10 @@ protected:
 private:
 	void FindSky();
 	void UpdateSun(bool bForce);
+	/** The film grade's settings for the picture style. */
+	void ShadeFilm();
+	/** Greys the blue out of the sky for November, more under cloud. */
+	void UpdateSkyColour();
 	void UpdateGlows(bool bForce);
 	/** Puts on (or takes off) the glow of the next few slots, so the whole city doesn't switch in one frame. */
 	void StepGlowSwitch(float DeltaSeconds);
@@ -184,6 +198,22 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APostProcessVolume> NightExposure;
+
+	/** The old film look over everything (see SetPictureStyle). */
+	UPROPERTY(Transient)
+	TObjectPtr<APostProcessVolume> FilmGrade;
+
+	/** The level's sky and its cloud layer, greyed for November unless the picture is plain. */
+	UPROPERTY(Transient)
+	TObjectPtr<USkyAtmosphereComponent> Atmosphere;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UVolumetricCloudComponent> Clouds;
+
+	/** 0 old film, 1 black and white, 2 plain (SetPictureStyle). */
+	int32 PictureStyle = 0;
+	/** How grey the sky was last made (UpdateSkyColour), -1 before the first time. */
+	float ShownSkyGrey = -1.f;
 
 	UPROPERTY(Transient)
 	TArray<FNightGlow> Glows;

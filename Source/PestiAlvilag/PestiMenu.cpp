@@ -16,6 +16,7 @@
 #include "PestiAlvilagGameModeBase.h"
 #include "PestiPerson.h"
 #include "PestiSaveGame.h"
+#include "DayNight.h"
 #include "TestGrounds.h"
 #include "Weather.h"
 
@@ -30,6 +31,7 @@ namespace PestiSettings
 		bool bInvert = false;
 		bool bEnglishOn = true;
 		bool bRayTracingOn = false;
+		int32 StyleNum = 0;
 
 		void Load()
 		{
@@ -43,6 +45,8 @@ namespace PestiSettings
 			GConfig->GetBool(Section, TEXT("InvertMouse"), bInvert, GGameUserSettingsIni);
 			GConfig->GetBool(Section, TEXT("English"), bEnglishOn, GGameUserSettingsIni);
 			GConfig->GetBool(Section, TEXT("RayTracing"), bRayTracingOn, GGameUserSettingsIni);
+			GConfig->GetInt(Section, TEXT("PictureStyle"), StyleNum, GGameUserSettingsIni);
+			StyleNum = FMath::Clamp(StyleNum, 0, 2);
 			VolumeSteps = FMath::Clamp(VolumeSteps, 0, Steps);
 			MouseSteps = FMath::Clamp(MouseSteps, 1, Steps);
 		}
@@ -58,6 +62,7 @@ namespace PestiSettings
 			GConfig->SetBool(Section, TEXT("InvertMouse"), bInvert, GGameUserSettingsIni);
 			GConfig->SetBool(Section, TEXT("English"), bEnglishOn, GGameUserSettingsIni);
 			GConfig->SetBool(Section, TEXT("RayTracing"), bRayTracingOn, GGameUserSettingsIni);
+			GConfig->SetInt(Section, TEXT("PictureStyle"), StyleNum, GGameUserSettingsIni);
 			GConfig->Flush(false, GGameUserSettingsIni);
 		}
 	}
@@ -67,6 +72,21 @@ namespace PestiSettings
 	bool InvertMouse() { Store::Load(); return Store::bInvert; }
 	bool English() { Store::Load(); return Store::bEnglishOn; }
 	bool RayTracing() { Store::Load(); return Store::bRayTracingOn; }
+	int32 PictureStyle() { Store::Load(); return Store::StyleNum; }
+
+	void SetPictureStyle(UWorld* World, int32 Style)
+	{
+		Store::Load();
+		Store::StyleNum = (Style % 3 + 3) % 3;
+		Store::Write();
+		if (World)
+		{
+			if (ADayNight* Clock = ADayNight::Get(World))
+			{
+				Clock->SetPictureStyle(Store::StyleNum);
+			}
+		}
+	}
 
 	void SetVolume(UWorld* World, int32 Value)
 	{
@@ -389,11 +409,22 @@ void FPestiMenu::Setting(int32 Row, FString& Hu, FString& En, int32& Bars, FStri
 		En = TEXT("V-sync (no tearing)");
 		OnOff(Look && Look->IsVSyncEnabled());
 		break;
-	default:
+	case 7:
 		Hu = TEXT("Sug\u00e1rk\u00f6vet\u00e9s");
 		En = TEXT("ray tracing (slow on older cards)");
 		OnOff(PestiSettings::RayTracing());
 		break;
+	default:
+	{
+		Hu = TEXT("K\u00e9p st\u00edlusa");
+		En = TEXT("picture style");
+		static const TCHAR* const StylesHu[] = { TEXT("R\u00e9gi film"), TEXT("Fortepan"), TEXT("Sima") };
+		static const TCHAR* const StylesEn[] = { TEXT("Old film"), TEXT("Black and white photo"), TEXT("Plain") };
+		const int32 Pick = FMath::Clamp(PestiSettings::PictureStyle(), 0, 2);
+		ValueHu = StylesHu[Pick];
+		ValueEn = StylesEn[Pick];
+		break;
+	}
 	}
 }
 
@@ -416,6 +447,9 @@ void FPestiMenu::ChangeSetting(UWorld* World, int32 Row, int32 By)
 		return;
 	case 7:
 		PestiSettings::SetRayTracing(!PestiSettings::RayTracing());
+		return;
+	case 8:
+		PestiSettings::SetPictureStyle(World, PestiSettings::PictureStyle() + By);
 		return;
 	default:
 		break;

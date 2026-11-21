@@ -25,12 +25,15 @@ namespace PestiSettings
 	bool English();
 	/** Ray-traced lighting (the graphics card's ray tracing for Lumen): off unless switched on, as it costs a lot. */
 	bool RayTracing();
+	/** The picture's look: 0 old film, 1 black and white (Fortepan), 2 plain (ADayNight::SetPictureStyle). */
+	int32 PictureStyle();
 
 	void SetVolume(UWorld* World, int32 Value);
 	void SetMouseSpeed(int32 Value);
 	void SetInvertMouse(bool bOn);
 	void SetEnglish(bool bOn);
 	void SetRayTracing(bool bOn);
+	void SetPictureStyle(UWorld* World, int32 Style);
 
 	/** Sets the sound loudness from the saved volume (each time a level starts). */
 	void ApplyVolume(UWorld* World);
@@ -135,7 +138,7 @@ public:
 	int32 GetSpawnPick(int32 Row) const { return SpawnPicks[FMath::Clamp(Row, 0, TestSpawn::NumGroups - 1)]; }
 
 	/** The settings rows. */
-	static constexpr int32 SettingCount = 8;
+	static constexpr int32 SettingCount = 9;
 	/** A settings row: its name, and either Bars (0 to 10) or a value to pick. */
 	static void Setting(int32 Row, FString& Hu, FString& En, int32& Bars, FString& ValueHu, FString& ValueEn);
 
