@@ -42,6 +42,13 @@ namespace FireRun
 	constexpr double BellReach = 9000.0;
 }
 
+namespace FireSteer
+{
+	// The front wheels turn this far at their sharpest (degrees), when it turns this fast (degrees/s).
+	constexpr float MaxSteer = 28.f;
+	constexpr float TurnAt = 60.f;
+}
+
 AFireEngine::AFireEngine()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -58,6 +65,7 @@ AFireEngine::AFireEngine()
 void AFireEngine::BeginPlay()
 {
 	Super::BeginPlay();
+	LastYaw = static_cast<float>(GetActorRotation().Yaw);
 	using namespace DailyLifeModel;
 
 	// The body, the wheels and the bell, each about its own pivot, under the box's middle.
@@ -339,11 +347,19 @@ void AFireEngine::Tick(float DeltaSeconds)
 	using namespace DailyLifeModel;
 	WheelTurn = FMath::Fmod(WheelTurn + Speed * DeltaSeconds, static_cast<float>(2.0 * PI * FireWheelRadius));
 	const float Spin = -FMath::RadiansToDegrees(WheelTurn / static_cast<float>(FireWheelRadius));
+	// The front wheels turn the way it turns.
+	const float NowYaw = static_cast<float>(GetActorRotation().Yaw);
+	const float YawRate = DeltaSeconds > 0.f ? FMath::FindDeltaAngleDegrees(LastYaw, NowYaw) / DeltaSeconds : 0.f;
+	LastYaw = NowYaw;
+	const float Moving = FMath::Clamp(FMath::Abs(Speed) / 300.f, 0.2f, 1.f);
+	const float WantSteer = FMath::Clamp(YawRate / (FireSteer::TurnAt * Moving), -1.f, 1.f) * FireSteer::MaxSteer * (Speed < 0.f ? -1.f : 1.f);
+	SteerAngle = FMath::FInterpTo(SteerAngle, WantSteer, DeltaSeconds, 8.f);
 	for (int32 w = FireWheelFrontLeft; w <= FireWheelBackRight; ++w)
 	{
 		if (Parts.IsValidIndex(w) && Parts[w])
 		{
-			Parts[w]->SetRelativeRotation(FRotator(Spin, 0.f, 0.f));
+			const bool bFront = w == FireWheelFrontLeft || w == FireWheelFrontRight;
+			Parts[w]->SetRelativeRotation(FRotator(Spin, bFront ? SteerAngle : 0.f, 0.f));
 		}
 	}
 	PlaceCrew(DeltaSeconds);
