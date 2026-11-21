@@ -21,7 +21,7 @@
 #include "SpotSound.h"
 #include "TrafficManager.h"
 
-namespace FireSteer
+namespace FireTruckSteer
 {
 	// The front wheels turn this far at their sharpest (degrees).
 	constexpr float MaxSteer = 28.f;
@@ -153,7 +153,7 @@ void AFireTruck::Tick(float DeltaSeconds)
 	const float YawRate = DeltaSeconds > 0.f ? FMath::FindDeltaAngleDegrees(LastYaw, NowYaw) / DeltaSeconds : 0.f;
 	LastYaw = NowYaw;
 	const float Moving = FMath::Clamp(FMath::Abs(ForwardSpeed) / 300.f, 0.2f, 1.f);
-	const float WantSteer = FMath::Clamp(YawRate / (MaxTurnRate * Moving), -1.f, 1.f) * FireSteer::MaxSteer * (ForwardSpeed < 0.f ? -1.f : 1.f);
+	const float WantSteer = FMath::Clamp(YawRate / (MaxTurnRate * Moving), -1.f, 1.f) * FireTruckSteer::MaxSteer * (ForwardSpeed < 0.f ? -1.f : 1.f);
 	SteerAngle = FMath::FInterpTo(SteerAngle, WantSteer, DeltaSeconds, 8.f);
 	for (int32 w = FireWheelFrontLeft; w <= FireWheelBackRight; ++w)
 	{
