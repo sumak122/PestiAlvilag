@@ -26,6 +26,7 @@
 #include "TrafficCart.h"
 #include "TrafficCar.h"
 #include "PoliceCar.h"
+#include "PoliceMotorbike.h"
 #include "PolicePatrols.h"
 #include "PoliceChase.h"
 #include "Bus.h"
@@ -89,6 +90,8 @@ namespace Traffic
 	constexpr float StolenLift = 60.f;
 	constexpr double DriverOut = 170.0;
 	constexpr double PoliceSeeTheft = 3000.0;
+	// How many of the police are motorbike constables (APoliceMotorbike).
+	constexpr int32 PoliceBikes = 2;
 	// A car to take the stolen one's place appears this far from the camera,
 	// out of its view (cm).
 	constexpr int32 ReplaceTries = 8;
@@ -655,7 +658,8 @@ void ATrafficManager::SpawnCars()
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
 		const bool bPolice = Cars.Num() < NumPolice;
 		const bool bTaxi = !bPolice && Cars.Num() < NumPolice + NumTaxis;
-		UClass* CarClass = bPolice ? APoliceCar::StaticClass() : bTaxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
+		// The first two police are motorbike constables.
+		UClass* CarClass = bPolice ? (Cars.Num() < Traffic::PoliceBikes ? APoliceMotorbike::StaticClass() : APoliceCar::StaticClass()) : bTaxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
 		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 		if (!Car)
 		{
@@ -1317,13 +1321,14 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	UClass* CarClass = What == ETestTraffic::Police ? APoliceCar::StaticClass()
+		: What == ETestTraffic::PoliceBike ? APoliceMotorbike::StaticClass()
 		: What == ETestTraffic::Taxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
 	ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 	if (!Car)
 	{
 		return false;
 	}
-	const FLinearColor& Paint = What == ETestTraffic::Police ? Traffic::PolicePaint
+	const FLinearColor& Paint = What == ETestTraffic::Police || What == ETestTraffic::PoliceBike ? Traffic::PolicePaint
 		: What == ETestTraffic::Taxi ? Traffic::TaxiPaint
 		: Traffic::Paints[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(Traffic::Paints)) - 1)];
 	Car->StartOnLane(this, BestLane, BestPoint + 1, Paint);

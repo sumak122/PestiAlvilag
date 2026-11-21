@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Motorbike.h"
 #include "OsmGraybox.h"
 #include "PersonModel.h"
 #include "PestiAlvilagGameModeBase.h"
@@ -25,6 +26,14 @@ namespace PoliceChase
 	const FVector2D StationDoor(30169.5, 51534.0);
 	constexpr double StationFacing = 160.43;
 	constexpr float StationDrawDistance = 20000.f;
+	// The duty motorbike: its spot in the station's frame (out to the kerb, along to the right of the door), the box's
+	// middle over the ground; a new one this long after it was taken (s), put out only with the camera this far off,
+	// and not while something stands this near the spot (cm).
+	const FVector BikeSpot(330.0, 520.0, 0.0);
+	constexpr double BikeLift = 120.0;
+	constexpr double BikeBackAfter = 240.0;
+	constexpr double BikeOutOfSight = 7000.0;
+	constexpr double BikeClear = 400.0;
 
 	// Road blocks: at most this many at once, a new one no sooner than this
 	// after the last (s); placed this far ahead of the player (cm), never
@@ -228,7 +237,57 @@ void APoliceChase::Tick(float DeltaSeconds)
 			Guard->Stand(SentryAt[i], StationYaw);
 		}
 	}
+	TickStationBike();
 	TickBlocks(DeltaSeconds);
+}
+
+void APoliceChase::TickStationBike()
+{
+	if (!bStationBuilt)
+	{
+		return;
+	}
+	AMotorbike* Bike = StationBike.Get();
+	if (Bike && !Bike->WasTaken())
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Bike && BikeGoneAt < 0.0)
+	{
+		BikeGoneAt = Now;
+	}
+	if (BikeGoneAt >= 0.0 && Now - BikeGoneAt < PoliceChase::BikeBackAfter)
+	{
+		return;
+	}
+	// Along the kerb in front of the station, to the right of the door.
+	const FTransform Frame(FRotator(0.0, StationYaw, 0.0), StationAt);
+	const FVector Spot = Frame.TransformPosition(PoliceChase::BikeSpot);
+	const APlayerCameraManager* Viewer = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Viewer || FVector::Dist2D(Viewer->GetCameraLocation(), Spot) < PoliceChase::BikeOutOfSight)
+	{
+		return;
+	}
+	if (Bike && FVector::Dist2D(Bike->GetActorLocation(), Spot) < PoliceChase::BikeClear)
+	{
+		// The old one was left standing there: it is theirs again.
+		return;
+	}
+	double Z = StationAt.Z;
+	GroundAt(Spot, Z);
+	const FTransform Place(FRotator(0.0, StationYaw + 90.0, 0.0), FVector(Spot.X, Spot.Y, Z + PoliceChase::BikeLift));
+	AMotorbike* Fresh = GetWorld()->SpawnActorDeferred<AMotorbike>(AMotorbike::StaticClass(), Place, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Fresh)
+	{
+		return;
+	}
+	Fresh->SetLook(false, 0, true);
+	Fresh->SetOwned(true);
+	Fresh->FinishSpawning(Place);
+	StationBike = Fresh;
+	BikeGoneAt = -1.0;
 }
 
 void APoliceChase::TickBlocks(float DeltaSeconds)

@@ -145,6 +145,11 @@ CarModel::FStyle APoliceCar::PickStyle(const FLinearColor& Paint) const
 	return Look;
 }
 
+PersonKit::FOutfit APoliceCar::OfficerOutfit(FRandomStream& Random) const
+{
+	return PoliceModel::Outfit(Random);
+}
+
 void APoliceCar::Tick(float DeltaSeconds)
 {
 	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
@@ -171,7 +176,7 @@ void APoliceCar::Tick(float DeltaSeconds)
 	// Called by telephone from a police box, every car in the district comes;
 	// otherwise more of them the more stars he has.
 	const float Range = Game->IsPoliceCalledIn() ? CalledInRange : ResponseRange * PoliceCar::RangeShare[Stars - 1];
-	if (!bChasing && bWanted && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < Range)
+	if (!bChasing && bWanted && Game->GetWantedLevel() >= MinStars && FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) < Range)
 	{
 		StartChase();
 	}
@@ -493,7 +498,7 @@ void APoliceCar::GetOut()
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	const double CarGround = GetActorLocation().Z - 60.0;
-	for (int32 Side = 0; Side < 2; ++Side)
+	for (int32 Side = 0; Side < NumOfficers; ++Side)
 	{
 		FOfficer Officer;
 		Officer.At = DoorSpot(Side);
@@ -510,7 +515,7 @@ void APoliceCar::GetOut()
 		{
 			continue;
 		}
-		Man->PutOnUniform(PoliceModel::Outfit(OfficerLooks));
+		Man->PutOnUniform(OfficerOutfit(OfficerLooks));
 		Man->ShowTruncheon(true);
 		Officer.Man = Man;
 		Officers.Add(Officer);

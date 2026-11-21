@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "BicycleModel.h"
 #include "PersonKit.h"
+#include "PoliceModel.h"
 
 /**
  * A Budapest-built Méray motorcycle of the early thirties, with a sidecar
@@ -54,6 +55,9 @@ namespace MotorbikeModel
 	inline FLinearColor Glass() { return FLinearColor(0.30f, 0.35f, 0.37f); }
 	inline FLinearColor Lens() { return FLinearColor(0.85f, 0.82f, 0.68f); }
 	inline FLinearColor PlateWhite() { return FLinearColor(0.80f, 0.79f, 0.74f); }
+	/** The police machine's tank and guards: the police cars' blue, white lines and tips. */
+	inline FLinearColor PoliceBlue() { return FLinearColor(0.02f, 0.04f, 0.12f); }
+	inline FLinearColor PoliceWhite() { return FLinearColor(0.82f, 0.82f, 0.80f); }
 
 	/** The sidecar's lacquer, by number: black, maroon, bottle green, dove grey. */
 	constexpr int32 NumPaints = 4;
@@ -66,6 +70,16 @@ namespace MotorbikeModel
 		case 3: return FLinearColor(0.30f, 0.31f, 0.30f);
 		default: return FLinearColor(0.02f, 0.02f, 0.022f);
 		}
+	}
+
+	/** A motorbike constable: the uniform (PoliceModel) under a brown leather crash helmet with goggles. */
+	inline PersonKit::FOutfit PoliceRider(FRandomStream& Random)
+	{
+		PersonKit::FOutfit O = PoliceModel::Outfit(Random);
+		O.Hat = PersonKit::EHat::Helmet;
+		O.HatColor = FLinearColor(0.20f, 0.11f, 0.05f);
+		O.HatBand = FLinearColor(0.09f, 0.05f, 0.025f);
+		return O;
 	}
 
 	/** A spoked wheel round its hub (its middle, the Pivot), turning about Y: drum hub, 36 spokes, nickel rim, fat tyre. */
@@ -96,7 +110,7 @@ namespace MotorbikeModel
 	}
 
 	/** The rigid frame, engine, gearbox, tank, saddle, exhaust, rear guard and carrier. */
-	inline void BuildMachine(FPiece& B, bool bSidecar)
+	inline void BuildMachine(FPiece& B, bool bSidecar, bool bPolice = false)
 	{
 		using namespace PersonKit;
 		const double Y = BikeY(bSidecar);
@@ -128,12 +142,14 @@ namespace MotorbikeModel
 		{
 			Tank.Add({ FVector(Row[0], Y, Row[3]), FVector(0.0, Row[1], 0.0), FVector(0.0, 0.0, Row[2]) });
 		}
-		Loft(B, Enamel(), Tank, 14, true, true);
+		const FLinearColor TankPaint = bPolice ? PoliceBlue() : Enamel();
+		const FLinearColor LinePaint = bPolice ? PoliceWhite() : GoldLine();
+		Loft(B, TankPaint, Tank, 14, true, true);
 		for (const double Side : { -1.0, 1.0 })
 		{
-			BicycleModel::Curve(B, GoldLine(), FVector(-10.0, Y + 11.4 * Side, 84.0), FVector(12.0, Y + 13.0 * Side, 86.5),
+			BicycleModel::Curve(B, LinePaint, FVector(-10.0, Y + 11.4 * Side, 84.0), FVector(12.0, Y + 13.0 * Side, 86.5),
 				FVector(36.0, Y + 11.0 * Side, 89.0), 0.45, 5);
-			BicycleModel::Curve(B, GoldLine(), FVector(-6.0, Y + 11.6 * Side, 79.5), FVector(12.0, Y + 13.0 * Side, 80.5),
+			BicycleModel::Curve(B, LinePaint, FVector(-6.0, Y + 11.6 * Side, 79.5), FVector(12.0, Y + 13.0 * Side, 80.5),
 				FVector(32.0, Y + 11.4 * Side, 83.0), 0.45, 5);
 			// Knee grips of rubber.
 			Block(B, Tyre(), FVector(-6.0, Y + 10.5 * Side, 82.0), FVector(5.0, 1.2, 4.0));
@@ -205,7 +221,18 @@ namespace MotorbikeModel
 			Rod(B, Enamel(), Foot, Rear + FVector(10.0, 6.0 * Side, 20.0), 0.9);
 		}
 		Block(B, Enamel(), FVector(-50.0, Y + 9.0, 52.0), FVector(8.0, 3.0, 5.0));
-		BicycleModel::Arc(B, Enamel(), FVector(Rear.X, Y, Rear.Z), WheelRadius + 4.0, 0.35, PI + 0.25, 0.8, 6.5, 6);
+		BicycleModel::Arc(B, bPolice ? PoliceBlue() : Enamel(), FVector(Rear.X, Y, Rear.Z), WheelRadius + 4.0, 0.35, PI + 0.25, 0.8, 6.5, 6);
+		if (bPolice)
+		{
+			// A white tip to the rear guard, leather bags each side of the carrier for the forms and the handcuffs.
+			BicycleModel::Arc(B, PoliceWhite(), FVector(Rear.X, Y, Rear.Z), WheelRadius + 4.1, PI - 0.05, PI + 0.27, 0.9, 6.7, 6);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Block(B, Leather(), FVector(-80.0, Y + 13.0 * Side, 58.0), FVector(12.0, 4.0, 9.0));
+				Block(B, Leather(), FVector(-80.0, Y + 13.5 * Side, 65.5), FVector(12.5, 4.3, 1.5));
+				Rod(B, Nickel(), FVector(-80.0, Y + 17.2 * Side, 61.0), FVector(-80.0, Y + 17.2 * Side, 65.0), 0.5);
+			}
+		}
 		for (const double Side : { -1.0, 1.0 })
 		{
 			Rod(B, Enamel(), FVector(-50.0, Y + 6.0 * Side, 72.0), FVector(-96.0, Y + 6.0 * Side, 66.0), 0.9);
@@ -217,7 +244,7 @@ namespace MotorbikeModel
 	}
 
 	/** The girder fork, handlebars, headlamp and front guard: they turn about the head tube, round HeadBottom. */
-	inline void BuildSteer(FPiece& S, bool bSidecar)
+	inline void BuildSteer(FPiece& S, bool bSidecar, bool bPolice = false)
 	{
 		using namespace PersonKit;
 		const double Y = BikeY(bSidecar);
@@ -274,7 +301,12 @@ namespace MotorbikeModel
 		Blob(S, Tyre(), Grip(bSidecar, 1.0) + FVector(6.0, -6.0, 3.0), FVector(3.5, 3.5, 3.5), 8, 5);
 
 		// The front guard and its stays, the front number plate on it.
-		BicycleModel::Arc(S, Enamel(), FVector(Axle.X, Y, Axle.Z), WheelRadius + 4.0, -0.15, PI * 0.82, 0.8, 6.5, 6);
+		BicycleModel::Arc(S, bPolice ? PoliceBlue() : Enamel(), FVector(Axle.X, Y, Axle.Z), WheelRadius + 4.0, -0.15, PI * 0.82, 0.8, 6.5, 6);
+		if (bPolice)
+		{
+			// The white tip of the front guard, seen coming at night.
+			BicycleModel::Arc(S, PoliceWhite(), FVector(Axle.X, Y, Axle.Z), WheelRadius + 4.1, -0.17, 0.25, 0.9, 6.7, 6);
+		}
 		Block(S, PlateWhite(), FVector(Axle.X, Y, Axle.Z + WheelRadius + 9.0), FVector(9.0, 0.5, 4.0));
 		Block(S, Enamel(), FVector(Axle.X, Y, Axle.Z + WheelRadius + 9.0), FVector(9.6, 0.4, 4.6));
 	}
@@ -361,15 +393,15 @@ namespace MotorbikeModel
 		}
 	}
 
-	/** The whole outfit's parts, each about its own pivot (PartAt). The solo machine has no WheelSide. */
-	inline void Build(FPiece (&Parts)[NumParts], bool bSidecar, int32 PaintIndex)
+	/** The whole outfit's parts, each about its own pivot (PartAt). The solo machine has no WheelSide; bPolice paints it as the police's. */
+	inline void Build(FPiece (&Parts)[NumParts], bool bSidecar, int32 PaintIndex, bool bPolice = false)
 	{
-		BuildMachine(Parts[Body], bSidecar);
+		BuildMachine(Parts[Body], bSidecar, bPolice);
 		if (bSidecar)
 		{
 			BuildSidecar(Parts[Body], Paint(PaintIndex));
 		}
-		BuildSteer(Parts[Steer], bSidecar);
+		BuildSteer(Parts[Steer], bSidecar, bPolice);
 		BuildWheel(Parts[WheelFront], WheelRadius);
 		BuildWheel(Parts[WheelRear], WheelRadius);
 		if (bSidecar)

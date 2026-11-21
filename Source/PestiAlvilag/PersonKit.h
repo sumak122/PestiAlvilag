@@ -33,7 +33,7 @@ namespace PersonKit
 	 * Veil: a nun's white wimple and black veil.
 	 * ClericHat: a priest's round black hat with a wide flat brim.
 	 */
-	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood, Kerchief, WideBrim, PeakedCap, Veil, ClericHat };
+	enum class EHat : uint8 { None, Bowler, Fedora, FlatCap, Boater, Cloche, Hood, Kerchief, WideBrim, PeakedCap, Veil, ClericHat, Helmet };
 	enum class ETop : uint8 { Shirt, Waistcoat, Jacket, Overcoat, Dress };
 	/** Cane: a walking stick down to the ground. NetBag: a string bag with bread and a cabbage. Book: a couple of school books. */
 	enum class EHeld : uint8 { None, Briefcase, Umbrella, Newspaper, Basket, Baton, Cane, NetBag, Book };
@@ -962,6 +962,30 @@ namespace PersonKit
 			Blob(B, O.HatColor, Crown + FVector(0.0, 0.0, -1.0), FVector(10.4, 9.4, 6.0), 14, 5, 0.0);
 			Loft(B, O.HatColor, { Flat(Crown.X + 0.5, Crown.Z - 1.4, 18.5, 17.0), Flat(Crown.X + 0.5, Crown.Z - 0.4, 18.5, 17.0) }, 18, true, true);
 			break;
+		case EHat::Helmet:
+		{
+			// A motorcyclist's leather crash helmet: the padded dome with a
+			// ridge over the top, ear flaps, and the goggles pushed up on it.
+			const FVector Dome = Crown + FVector(-0.3, 0.0, -3.5);
+			Blob(B, O.HatColor, Dome, FVector(11.6, 10.6, 10.5), 14, 6, 0.0);
+			Loft(B, O.HatBand, { Flat(Dome.X, Dome.Z - 0.4, 11.8, 10.8), Flat(Dome.X, Dome.Z + 1.6, 11.7, 10.7) }, 16, true, true);
+			Blob(B, O.HatBand, Dome + FVector(0.0, 0.0, 0.2), FVector(11.9, 1.8, 10.7), 12, 6, 0.0);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Blob(B, O.HatColor, Dome + FVector(0.5, 10.2 * Side, -5.5), FVector(4.6, 1.6, 6.0), 10, 5);
+				// The goggles' two round lenses in nickel rims, on the brow above the band.
+				const FVector Lens = Dome + FVector(10.0, 3.8 * Side, 3.2);
+				Loft(B, FLinearColor(0.50f, 0.50f, 0.52f), {
+					{ Lens, FVector(0.0, 2.6, 0.0), FVector(0.0, 0.0, 2.3) },
+					{ Lens + FVector(1.6, 0.0, 0.3), FVector(0.0, 2.6, 0.0), FVector(0.0, 0.0, 2.3) },
+				}, 12, false, true);
+				Loft(B, FLinearColor(0.20f, 0.24f, 0.22f), {
+					{ Lens + FVector(1.7, 0.0, 0.3), FVector(0.0, 2.0, 0.0), FVector(0.0, 0.0, 1.8) },
+					{ Lens + FVector(1.9, 0.0, 0.3), FVector(0.0, 2.0, 0.0), FVector(0.0, 0.0, 1.8) },
+				}, 12, false, true);
+			}
+			break;
+		}
 		default:
 			break;
 		}

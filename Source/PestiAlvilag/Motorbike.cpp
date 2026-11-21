@@ -55,10 +55,11 @@ AMotorbike::AMotorbike()
 	BaseMaterial = CarBody::LoadPaintMaterial();
 }
 
-void AMotorbike::SetLook(bool bInSidecar, int32 InPaint)
+void AMotorbike::SetLook(bool bInSidecar, int32 InPaint, bool bInPolice)
 {
 	bSidecar = bInSidecar;
 	PaintIndex = InPaint;
+	bPolice = bInPolice;
 }
 
 void AMotorbike::BeginPlay()
@@ -76,7 +77,7 @@ void AMotorbike::BeginPlay()
 
 	// The machine, the steering, the wheels, each about its own pivot; the front wheel rides on the steering.
 	PersonKit::FPiece Shapes[NumParts];
-	Build(Shapes, bSidecar, PaintIndex);
+	Build(Shapes, bSidecar, PaintIndex, bPolice);
 	for (int32 p = 0; p < NumParts; ++p)
 	{
 		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
@@ -250,6 +251,20 @@ void AMotorbike::PlaceRider(bool bDriven)
 void AMotorbike::Stolen()
 {
 	const FVector Location = GetActorLocation();
+	if (bPolice)
+	{
+		// The police's own machine, from under their noses: the guards shout, and every patrol hears of it.
+		if (APestiHUD* Hud = APestiHUD::Get(this))
+		{
+			Hud->Say(TEXT("Rend\u0151r"), TEXT("\u00c1llj! A szolg\u00e1lati motor! Fogj\u00e1tok meg!"), TEXT("Stop! The duty motorbike! Catch him!"), 3.f);
+		}
+		APestiAlvilagGameModeBase::Deed(this, StreetName::EDeed::CarStolen, Location);
+		if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+		{
+			Game->ReportCrime(2);
+		}
+		return;
+	}
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
 	const FVector Danger = Player ? Player->GetActorLocation() : Location;
 

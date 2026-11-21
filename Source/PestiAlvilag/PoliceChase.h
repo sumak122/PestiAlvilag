@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "PoliceChase.generated.h"
 
+class AMotorbike;
 class AShapeSet;
 class APoliceman;
 class APestiCar;
@@ -68,6 +69,8 @@ private:
 	};
 
 	void BuildStation();
+	/** The duty motorbike parked by the station door; a new one a while after it is taken, out of the player's sight. */
+	void TickStationBike();
 	void TickBlocks(float DeltaSeconds);
 	bool TryPlaceBlock(const APawn* Player);
 	void KnockBarriers(FBlock& Block, APestiCar* Car);
@@ -88,4 +91,7 @@ private:
 	bool bStationBuilt = false;
 	TArray<TWeakObjectPtr<APoliceman>> Sentries;
 	TArray<FVector> SentryAt;
+	TWeakObjectPtr<AMotorbike> StationBike;
+	/** When the last one was taken (s), or below zero. */
+	double BikeGoneAt = -1.0;
 };
