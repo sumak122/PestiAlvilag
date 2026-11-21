@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "PersonKit.h"
 #include "TrafficCar.h"
 #include "PoliceCar.generated.h"
 
@@ -59,6 +60,13 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual CarModel::FStyle PickStyle(const FLinearColor& Paint) const override;
 
+	/** How a constable getting out of it is dressed (PoliceModel::Outfit). */
+	virtual PersonKit::FOutfit OfficerOutfit(FRandomStream& Random) const;
+	/** How many constables get out of it. */
+	int32 NumOfficers = 2;
+	/** It joins a chase only from this many stars. */
+	int32 MinStars = 1;
+
 	/** White sign on the roof reading RENDŐRSÉG; it flashes red in a chase. */
 	UPROPERTY(VisibleAnywhere, Category = "Police")
 	TObjectPtr<UStaticMeshComponent> RoofSign;
@@ -68,6 +76,11 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Police")
 	TObjectPtr<UTextRenderComponent> SignTextRight;
+
+	/** The constables (NumOfficers) out of the doors. */
+	void GetOut();
+	/** The constables are out on foot. */
+	bool bOfficersOut = false;
 
 private:
 	void StartChase();
@@ -80,8 +93,6 @@ private:
 
 	/** Close enough, and he slow enough, to pull up and get out. */
 	bool WantsToStop(const APawn* Player, float DistToPlayer) const;
-	/** Two constables out of the doors. */
-	void GetOut();
 	/** The constables on foot: after the player, or back to the car (bBack). True once all are back in. */
 	bool TickOfficers(const APawn* Player, APestiAlvilagGameModeBase* Game, float DeltaSeconds, bool bBack);
 	/** Puts them away (back in the car). */
@@ -107,7 +118,6 @@ private:
 		bool bFighting = false;
 	};
 	TArray<FOfficer> Officers;
-	bool bOfficersOut = false;
 	FVector ParkedAt = FVector::ZeroVector;
 	/** Not before this time does it pull up again (after they got back in). */
 	double NoStopUntil = 0.0;

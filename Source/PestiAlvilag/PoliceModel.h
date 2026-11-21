@@ -91,29 +91,38 @@ namespace PoliceModel
 		const FVector Crown = HeadAt + FVector(-0.5, 0.0, 7.5);
 
 		// The shako: a stiff drum, a little narrower at the top and leaning
-		// back, on a leather band, with a flat top.
+		// back, on a leather band, with a flat top. Not under a motorcyclist's helmet (EHat::Helmet).
 		const double Base = Crown.Z - 4.0;
-		Loft(B, Shako, {
-			Flat(Crown.X, Base, 10.6, 9.6),
-			Flat(Crown.X - 0.6, Base + 9.0, 10.3, 9.3),
-			Flat(Crown.X - 1.6, Base + 17.0, 9.7, 8.7),
-		}, 16, true, true);
-		Loft(B, Leather, { Flat(Crown.X, Base - 0.3, 10.9, 9.9), Flat(Crown.X - 0.1, Base + 2.4, 10.8, 9.8) }, 16, true, true);
-		// The top's rim, and the short peak over the eyes.
-		Loft(B, Leather, { Flat(Crown.X - 1.6, Base + 16.2, 9.9, 8.9), Flat(Crown.X - 1.6, Base + 17.3, 9.9, 8.9) }, 16, true, true);
-		Loft(B, Leather, {
-			{ FVector(Crown.X + 9.6, 0.0, Base + 0.6), FVector(0.0, 0.0, 0.35), FVector(0.0, 8.5, 0.0) },
-			{ FVector(Crown.X + 13.5, 0.0, Base - 1.6), FVector(0.0, 0.0, 0.35), FVector(0.0, 7.0, 0.0) },
-			{ FVector(Crown.X + 15.5, 0.0, Base - 2.8), FVector(0.0, 0.0, 0.35), FVector(0.0, 4.5, 0.0) },
-		}, 8, true, true);
-		// The chin strap, brass, along the band.
-		Loft(B, Brass, { Flat(Crown.X + 0.1, Base + 2.6, 10.85, 9.85), Flat(Crown.X + 0.1, Base + 3.2, 10.85, 9.85) }, 16, true, true);
-		// The badge on the front, the cockade above it.
-		const double FrontX = Crown.X + 10.0;
-		Blob(B, Brass, FVector(FrontX - 0.8, 0.0, Base + 8.0), FVector(1.0, 3.4, 4.2), 10, 5);
-		Blob(B, CockadeGreen, FVector(FrontX - 1.8, 0.0, Base + 14.0), FVector(0.8, 2.2, 2.2), 10, 4);
-		Blob(B, CockadeWhite, FVector(FrontX - 1.4, 0.0, Base + 14.0), FVector(0.8, 1.5, 1.5), 10, 4);
-		Blob(B, CockadeRed, FVector(FrontX - 1.0, 0.0, Base + 14.0), FVector(0.8, 0.8, 0.8), 8, 3);
+		const bool bShako = O.Hat != EHat::Helmet;
+		if (bShako)
+		{
+			Loft(B, Shako, {
+				Flat(Crown.X, Base, 10.6, 9.6),
+				Flat(Crown.X - 0.6, Base + 9.0, 10.3, 9.3),
+				Flat(Crown.X - 1.6, Base + 17.0, 9.7, 8.7),
+			}, 16, true, true);
+			Loft(B, Leather, { Flat(Crown.X, Base - 0.3, 10.9, 9.9), Flat(Crown.X - 0.1, Base + 2.4, 10.8, 9.8) }, 16, true, true);
+			// The top's rim, and the short peak over the eyes.
+			Loft(B, Leather, { Flat(Crown.X - 1.6, Base + 16.2, 9.9, 8.9), Flat(Crown.X - 1.6, Base + 17.3, 9.9, 8.9) }, 16, true, true);
+			Loft(B, Leather, {
+				{ FVector(Crown.X + 9.6, 0.0, Base + 0.6), FVector(0.0, 0.0, 0.35), FVector(0.0, 8.5, 0.0) },
+				{ FVector(Crown.X + 13.5, 0.0, Base - 1.6), FVector(0.0, 0.0, 0.35), FVector(0.0, 7.0, 0.0) },
+				{ FVector(Crown.X + 15.5, 0.0, Base - 2.8), FVector(0.0, 0.0, 0.35), FVector(0.0, 4.5, 0.0) },
+			}, 8, true, true);
+			// The chin strap, brass, along the band.
+			Loft(B, Brass, { Flat(Crown.X + 0.1, Base + 2.6, 10.85, 9.85), Flat(Crown.X + 0.1, Base + 3.2, 10.85, 9.85) }, 16, true, true);
+			// The badge on the front, the cockade above it.
+			const double FrontX = Crown.X + 10.0;
+			Blob(B, Brass, FVector(FrontX - 0.8, 0.0, Base + 8.0), FVector(1.0, 3.4, 4.2), 10, 5);
+			Blob(B, CockadeGreen, FVector(FrontX - 1.8, 0.0, Base + 14.0), FVector(0.8, 2.2, 2.2), 10, 4);
+			Blob(B, CockadeWhite, FVector(FrontX - 1.4, 0.0, Base + 14.0), FVector(0.8, 1.5, 1.5), 10, 4);
+			Blob(B, CockadeRed, FVector(FrontX - 1.0, 0.0, Base + 14.0), FVector(0.8, 0.8, 0.8), 8, 3);
+		}
+		else
+		{
+			// The police badge on the front of the leather helmet, above the goggles.
+			Blob(B, Brass, FVector(Crown.X + 8.5, 0.0, Crown.Z + 3.5), FVector(0.8, 2.2, 2.6), 10, 5);
+		}
 
 		// A stand collar round the neck.
 		Loft(B, Tunic, { Flat(0.3, Z(145.0), 7.4, 7.6), Flat(0.6, Z(151.0), 6.6, 6.6) }, 12, false, true);

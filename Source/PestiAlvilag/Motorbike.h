@@ -30,9 +30,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** With or without the sidecar, and the sidecar's lacquer (MotorbikeModel::Paint). Before spawning. */
-	void SetLook(bool bInSidecar, int32 InPaint);
+	/** With or without the sidecar, the sidecar's lacquer (MotorbikeModel::Paint), the police's own machine. Before spawning. */
+	void SetLook(bool bInSidecar, int32 InPaint, bool bInPolice = false);
 	bool HasSidecar() const { return bSidecar; }
+	bool IsPolice() const { return bPolice; }
 
 	/** Someone's machine parked in the street: the first ride on it is a theft. */
 	void SetOwned(bool bInOwned) { bOwned = bInOwned; }
@@ -65,6 +66,7 @@ private:
 
 	bool bSidecar = true;
 	int32 PaintIndex = 0;
+	bool bPolice = false;
 	bool bOwned = false;
 	bool bTaken = false;
 	/** The ground under the box's middle, in the box's frame (cm). */
