@@ -1809,7 +1809,7 @@ private:
 	{
 		const bool bEnglish = PestiSettings::English();
 		const float W = 980.f;
-		const float H = 700.f;
+		const float H = 720.f;
 		const float X = CentreX - W * 0.5f;
 		const float Y = Y0 + 170.f;
 		Paint.Panel(X, Y, W, H);
@@ -1823,13 +1823,13 @@ private:
 		const float ValueW = 330.f;
 		for (int32 i = 0; i < FPestiMenu::SettingCount; ++i)
 		{
-			const float RowY = Y + 120.f + 72.f * i;
+			const float RowY = Y + 120.f + 64.f * i;
 			const bool bOn = i == Shown.GetChoice();
 			if (bOn)
 			{
-				Paint.Box(X + 30.f, RowY - 38.f, W - 60.f, 66.f, PestiHud::MenuGlow);
-				Paint.Line(X + 30.f, RowY - 38.f, X + W - 30.f, RowY - 38.f, PestiHud::Gold, 1.5f);
-				Paint.Line(X + 30.f, RowY + 28.f, X + W - 30.f, RowY + 28.f, PestiHud::Gold, 1.5f);
+				Paint.Box(X + 30.f, RowY - 34.f, W - 60.f, 60.f, PestiHud::MenuGlow);
+				Paint.Line(X + 30.f, RowY - 34.f, X + W - 30.f, RowY - 34.f, PestiHud::Gold, 1.5f);
+				Paint.Line(X + 30.f, RowY + 26.f, X + W - 30.f, RowY + 26.f, PestiHud::Gold, 1.5f);
 				Paint.Diamond(X + 46.f, RowY - 5.f, 10.f, PestiHud::Gold, 2);
 			}
 			FString NameHu;
