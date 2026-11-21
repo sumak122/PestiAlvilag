@@ -194,7 +194,7 @@ namespace TestSpawnPlace
 	void SpawnTraffic(UWorld* World, const APawn* Pawn, int32 Pick)
 	{
 		const ETestTraffic Kinds[] = { ETestTraffic::Car, ETestTraffic::Taxi, ETestTraffic::Police,
-			ETestTraffic::MilkCart, ETestTraffic::CoalCart, ETestTraffic::BeerCart, ETestTraffic::Bike, ETestTraffic::Fiaker, ETestTraffic::PoliceBike };
+			ETestTraffic::MilkCart, ETestTraffic::CoalCart, ETestTraffic::BeerCart, ETestTraffic::Bike, ETestTraffic::Fiaker, ETestTraffic::PoliceBike, ETestTraffic::Lorry };
 		ATrafficManager* Lanes = FindTraffic(World);
 		const int32 Which = FMath::Clamp(Pick, 0, static_cast<int32>(UE_ARRAY_COUNT(Kinds)) - 1);
 		if (!Lanes || !Lanes->SpawnForTest(Kinds[Which], Pawn->GetActorLocation()))
@@ -381,7 +381,7 @@ namespace TestSpawn
 		switch (Group)
 		{
 		case EGroup::Vehicle: return TestSpawnPlace::VehicleKinds().Num();
-		case EGroup::Traffic: return 9;
+		case EGroup::Traffic: return 10;
 		case EGroup::Animal: return 5;
 		case EGroup::People: return 5;
 		case EGroup::Clock: return static_cast<int32>(UE_ARRAY_COUNT(TestSpawnPlace::Hours));
@@ -451,8 +451,9 @@ namespace TestSpawn
 				{ TEXT("Biciklis"), TEXT("Bicycle rider") },
 				{ TEXT("Fi\u00e1ker"), TEXT("Fiaker cab") },
 				{ TEXT("Motoros rend\u0151r"), TEXT("Police motorbike") },
+				{ TEXT("R\u00e1ba teheraut\u00f3"), TEXT("R\u00e1ba lorry") },
 			};
-			const int32 Row = FMath::Clamp(Pick, 0, 8);
+			const int32 Row = FMath::Clamp(Pick, 0, 9);
 			Hu = Names[Row][0];
 			En = Names[Row][1];
 			break;

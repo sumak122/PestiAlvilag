@@ -29,6 +29,7 @@
 #include "DailyLife.h"
 #include "FiakerStand.h"
 #include "MotorbikeParking.h"
+#include "LorryParking.h"
 #include "FireStation.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
@@ -395,6 +396,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<AMotorbikeParking>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<AMotorbikeParking>();
+	}
+
+	// A couple of carriers' lorries parked by the kerb round the player.
+	if (!TActorIterator<ALorryParking>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<ALorryParking>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first
