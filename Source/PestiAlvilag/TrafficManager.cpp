@@ -27,6 +27,8 @@
 #include "TrafficCar.h"
 #include "PoliceCar.h"
 #include "PoliceMotorbike.h"
+#include "Lorry.h"
+#include "TrafficLorry.h"
 #include "PolicePatrols.h"
 #include "PoliceChase.h"
 #include "Bus.h"
@@ -92,6 +94,8 @@ namespace Traffic
 	constexpr double PoliceSeeTheft = 3000.0;
 	// How many of the police are motorbike constables (APoliceMotorbike).
 	constexpr int32 PoliceBikes = 2;
+	// How many of the other traffic are Rába lorries (ATrafficLorry).
+	constexpr int32 Lorries = 4;
 	// A car to take the stolen one's place appears this far from the camera,
 	// out of its view (cm).
 	constexpr int32 ReplaceTries = 8;
@@ -215,19 +219,29 @@ APestiCar* ATrafficManager::StealCar(ATrafficCar* Car)
 
 	// The same car, now one the player drives (it settles onto the ground itself).
 	const FTransform Place(Facing, Location + FVector(0.f, 0.f, Traffic::StolenLift));
-	// A taxi stays a taxi, so the player can work in it.
-	APestiCar* Stolen = World->SpawnActorDeferred<APestiCar>(bTaxi ? APestiTaxi::StaticClass() : APestiCar::StaticClass(), Place, nullptr, nullptr,
+	// A taxi stays a taxi, so the player can work in it; a lorry stays a lorry, with its load.
+	const ATrafficLorry* AsLorry = Cast<ATrafficLorry>(Car);
+	UClass* StolenClass = AsLorry ? ALorry::StaticClass() : bTaxi ? APestiTaxi::StaticClass() : APestiCar::StaticClass();
+	APestiCar* Stolen = World->SpawnActorDeferred<APestiCar>(StolenClass, Place, nullptr, nullptr,
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 	if (!Stolen)
 	{
 		Car->Destroy();
 		return nullptr;
 	}
-	Stolen->BodyColor = Look.PaintColor;
-	Stolen->SetStyle(Look);
-	Stolen->FinishSpawning(Place);
-	// Still dented, still missing what it lost.
-	Stolen->TakeLooksFrom(Car->GetVisuals());
+	if (ALorry* StolenLorry = Cast<ALorry>(Stolen))
+	{
+		StolenLorry->SetLook(AsLorry->GetPaintIndex(), AsLorry->GetLoad());
+		Stolen->FinishSpawning(Place);
+	}
+	else
+	{
+		Stolen->BodyColor = Look.PaintColor;
+		Stolen->SetStyle(Look);
+		Stolen->FinishSpawning(Place);
+		// Still dented, still missing what it lost.
+		Stolen->TakeLooksFrom(Car->GetVisuals());
+	}
 	Car->Destroy();
 	++(bTaxi ? TaxisToReplace : CarsToReplace);
 
@@ -658,8 +672,9 @@ void ATrafficManager::SpawnCars()
 		const FRotator Facing = (Lane.Points[PointIdx + 1] - Lane.Points[PointIdx]).GetSafeNormal2D().Rotation();
 		const bool bPolice = Cars.Num() < NumPolice;
 		const bool bTaxi = !bPolice && Cars.Num() < NumPolice + NumTaxis;
+		const bool bLorry = !bPolice && !bTaxi && Cars.Num() < NumPolice + NumTaxis + Traffic::Lorries;
 		// The first two police are motorbike constables.
-		UClass* CarClass = bPolice ? (Cars.Num() < Traffic::PoliceBikes ? APoliceMotorbike::StaticClass() : APoliceCar::StaticClass()) : bTaxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
+		UClass* CarClass = bPolice ? (Cars.Num() < Traffic::PoliceBikes ? APoliceMotorbike::StaticClass() : APoliceCar::StaticClass()) : bTaxi ? ATrafficTaxi::StaticClass() : bLorry ? ATrafficLorry::StaticClass() : ATrafficCar::StaticClass();
 		ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 		if (!Car)
 		{
@@ -1322,6 +1337,7 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	UClass* CarClass = What == ETestTraffic::Police ? APoliceCar::StaticClass()
 		: What == ETestTraffic::PoliceBike ? APoliceMotorbike::StaticClass()
+		: What == ETestTraffic::Lorry ? ATrafficLorry::StaticClass()
 		: What == ETestTraffic::Taxi ? ATrafficTaxi::StaticClass() : ATrafficCar::StaticClass();
 	ATrafficCar* Car = World->SpawnActor<ATrafficCar>(CarClass, Location, Facing, SpawnParams);
 	if (!Car)
