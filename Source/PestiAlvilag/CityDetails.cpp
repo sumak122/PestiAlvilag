@@ -137,6 +137,15 @@ bool ACityDetails::IsOpenGate(const FVector2D& Foot)
 					{
 						OpenGates.Add(CityDetailsPlace::Pair(*Gate));
 					}
+					// A through house's other gates stand open too.
+					const TArray<TSharedPtr<FJsonValue>>* Also = nullptr;
+					if (Yard.IsValid() && Yard->TryGetArrayField(TEXT("also"), Also))
+					{
+						for (const TSharedPtr<FJsonValue>& AlsoValue : *Also)
+						{
+							OpenGates.Add(CityDetailsPlace::Pair(AlsoValue->AsArray()));
+						}
+					}
 				}
 			}
 		}
@@ -191,6 +200,25 @@ bool ACityDetails::IsHidingPlace(const FVector2D& At)
 						for (int32 i = 0; i + 1 < Outline->Num(); i += 2)
 						{
 							Hideout.Yard.Add(CityDetailsPlace::Pair(*Outline, i));
+						}
+					}
+					// A through house's other gateways hide as well: [x, y, yaw, width, depth, arch].
+					const TArray<TSharedPtr<FJsonValue>>* Also = nullptr;
+					if (Yard->TryGetArrayField(TEXT("also"), Also))
+					{
+						for (const TSharedPtr<FJsonValue>& AlsoValue : *Also)
+						{
+							const TArray<TSharedPtr<FJsonValue>>& A = AlsoValue->AsArray();
+							if (A.Num() < 5)
+							{
+								continue;
+							}
+							FHideout Other = Hideout;
+							Other.Foot = CityDetailsPlace::Pair(A);
+							Other.Out = CityDetailsPlace::Ahead(CityDetailsPlace::Number(A, 2), 1.0);
+							Other.HalfWidth = A[3]->AsNumber() * 0.5;
+							Other.Depth = A[4]->AsNumber();
+							Hideouts.Add(MoveTemp(Other));
 						}
 					}
 					Hideouts.Add(MoveTemp(Hideout));
@@ -405,6 +433,43 @@ void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 		}
 		const FVector2D ExitAt = -CityDetailsPlace::Ahead(GateYaw, Depth);
 		const double ExitHalf = Width * 0.5 - 34.0;
+		TArray<FVector2D> Exits;
+		Exits.Add(ExitAt);
+		// A through house: more gateways into this yard from another street,
+		// [x, y, yaw, width, depth, arch]; an arch has no gate, so its stone front is drawn here.
+		const TArray<TSharedPtr<FJsonValue>>* Also = nullptr;
+		if (Yard->TryGetArrayField(TEXT("also"), Also))
+		{
+			for (const TSharedPtr<FJsonValue>& AlsoValue : *Also)
+			{
+				const TArray<TSharedPtr<FJsonValue>>& A = AlsoValue->AsArray();
+				if (A.Num() < 6)
+				{
+					continue;
+				}
+				const FVector2D OtherFoot = CityDetailsPlace::Pair(A);
+				const double OtherYaw = A[2]->AsNumber();
+				const double OtherWidth = A[3]->AsNumber();
+				const double OtherDepth = A[4]->AsNumber();
+				const double OtherGround = GroundAt(OtherFoot + CityDetailsPlace::Ahead(OtherYaw, CityDetailsPlace::OutFromWall));
+				if (AShapeSet* Way = PutUp(FVector(OtherFoot, OtherGround), OtherYaw, CityDetailsPlace::YardDrawDistance))
+				{
+					TArray<FShape> WayShapes;
+					TArray<FLamp> Lights;
+					Gateway(OtherWidth, OtherDepth, WayShapes, Lights);
+					if (A[5]->AsNumber() > 0.5)
+					{
+						PassageFront(OtherWidth, WayShapes);
+					}
+					Way->AddShapes(WayShapes);
+					for (const FLamp& Light : Lights)
+					{
+						Way->AddLamp(Light.At, Light.Radius);
+					}
+				}
+				Exits.Add(OtherFoot - Foot - CityDetailsPlace::Ahead(OtherYaw, OtherDepth));
+			}
+		}
 		TArray<FShape> Shapes;
 		const TArray<TSharedPtr<FJsonValue>>* Walls = nullptr;
 		if (Yard->TryGetArrayField(TEXT("walls"), Walls))
@@ -422,7 +487,7 @@ void ACityDetails::BuildCourtyards(const FJsonObject& Root)
 				Wall.Q = CityDetailsPlace::Pair(W, 2) - Foot;
 				Wall.Height = W[4]->AsNumber();
 				Wall.Inward = W[5]->AsNumber();
-				YardWall(Wall, ExitAt, ExitHalf, Seed + static_cast<uint32>(Index++) * 7919u, Shapes);
+				YardWall(Wall, Exits, ExitHalf, Seed + static_cast<uint32>(Index++) * 7919u, Shapes);
 			}
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Things = nullptr;
@@ -1160,6 +1225,15 @@ void ACityDetails::BuildStreetLife(const FJsonObject& Root)
 		const FVector2D Spot = CityDetailsPlace::Pair(E);
 		TArray<FShape> Local;
 		Pissoir(Local);
+		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
+	});
+	// Litter: [x, y, yaw, kind]; flat bits lie on the ground under the spot.
+	ForEachEntry(TEXT("litter"), 4, [&](const TArray<TSharedPtr<FJsonValue>>& E)
+	{
+		const FVector2D Spot = CityDetailsPlace::Pair(E);
+		TArray<FShape> Local;
+		const uint32 LitterSeed = HashCombine(GetTypeHash(FMath::RoundToInt(Spot.X)), GetTypeHash(FMath::RoundToInt(Spot.Y)));
+		Litter(static_cast<ELitter>(FMath::Clamp(static_cast<int32>(E[3]->AsNumber()), 0, 3)), LitterSeed, Local);
 		DropShapes(Local, FVector(Spot, GroundAt(Spot)), E[2]->AsNumber());
 	});
 	// Street name plates on the corner houses: [x, y, yaw out from the wall, width, name]. The names are lettered once the sets are up.

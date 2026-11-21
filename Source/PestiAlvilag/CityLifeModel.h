@@ -14,6 +14,8 @@
  * - the coal man's drop: a cellar hatch standing open, a wooden chute into
  *   it, his handcart with the sacks, sacks on the pavement and spilt coal
  *   (ACityDetails stands the coal man himself by it);
+ * - litter (ELitter): newspaper scraps and fallen leaves in the gutter,
+ *   horse dung on the road, rubbish heaps in the corners;
  * - people at the open windows (FolkKind): an old woman in her black
  *   kerchief, a man in his shirt sleeves, a young woman, each leaning on a
  *   cushion on the sill; a feather duvet put out to air; a cat on the sill.
@@ -59,6 +61,14 @@ namespace CityLifeModel
 		const FLinearColor DuvetTick(0.62f, 0.25f, 0.22f);
 		const FLinearColor CatGinger(0.55f, 0.28f, 0.08f);
 		const FLinearColor CatGrey(0.22f, 0.22f, 0.22f);
+		// Litter.
+		const FLinearColor Newsprint(0.66f, 0.64f, 0.56f);
+		const FLinearColor LeafBrown(0.30f, 0.17f, 0.06f);
+		const FLinearColor LeafYellow(0.52f, 0.36f, 0.09f);
+		const FLinearColor Dung(0.12f, 0.085f, 0.045f);
+		const FLinearColor Straw(0.50f, 0.42f, 0.22f);
+		const FLinearColor Cabbage(0.33f, 0.42f, 0.18f);
+		const FLinearColor TinCan(0.36f, 0.36f, 0.34f);
 	}
 
 	/** Moves shapes built in a thing's own frame into a set's frame: turned by Yaw, then put at Origin. */
@@ -72,6 +82,65 @@ namespace CityLifeModel
 			// The set's turn is about Z, the outermost of a rotator's turns, so it simply adds to the yaw.
 			Moved.Yaw = Piece.Yaw + Yaw;
 			Out.Add(Moved);
+		}
+	}
+
+	/** Litter kinds, as city_details.py place_litter numbers them. */
+	enum class ELitter : int32
+	{
+		Papers,
+		Leaves,
+		Dung,
+		Heap
+	};
+
+	/** A bit of litter, Seed varying it; nothing to bump into. */
+	inline void Litter(ELitter Kind, uint32 Seed, TArray<FShape>& Out)
+	{
+		using namespace Colors;
+		MarketModel::FRandom R(Seed * 2654435761u + 977u);
+		switch (Kind)
+		{
+		case ELitter::Papers:
+			// A torn newspaper and some scraps blown against the kerb.
+			Add(Out, MarketModel::Cube, Newsprint, FVector(0, 0, 1.0), FVector(38, 52, 0.6), R.Range(-30.0, 30.0), false, 0.0, R.Range(-4.0, 4.0));
+			Add(Out, MarketModel::Cube, Newsprint * 0.85f, FVector(6, 18, 2.0), FVector(30, 26, 0.6), R.Range(0.0, 90.0), false, 5.0, 0.0);
+			for (int32 i = 0; i < 4; ++i)
+			{
+				Add(Out, MarketModel::Cube, i % 2 ? Newsprint : Newsprint * 0.75f, FVector(R.Range(-20.0, 20.0), R.Range(-90.0, 90.0), 0.8),
+					FVector(R.Range(8.0, 16.0), R.Range(8.0, 14.0), 0.5), R.Range(0.0, 180.0), false);
+			}
+			break;
+		case ELitter::Leaves:
+			// A drift of plane leaves along the kerb.
+			Add(Out, MarketModel::Sphere, LeafBrown, FVector(4, 0, 0), FVector(50, R.Range(110.0, 170.0), 12), 0.0, false);
+			for (int32 i = 0; i < 9; ++i)
+			{
+				Add(Out, MarketModel::Cube, i % 3 == 0 ? LeafYellow : LeafBrown * (i % 2 ? 1.2f : 0.9f),
+					FVector(R.Range(-30.0, 25.0), R.Range(-110.0, 110.0), R.Range(1.0, 5.0)), FVector(14, 12, 0.6), R.Range(0.0, 180.0), false, R.Range(-10.0, 10.0), 0.0);
+			}
+			break;
+		case ELitter::Dung:
+			// Horse dung, a few balls and a smear, a wisp of straw.
+			for (int32 i = 0; i < 5; ++i)
+			{
+				const double Size = R.Range(9.0, 13.0);
+				Add(Out, MarketModel::Sphere, Dung * (i % 2 ? 1.2f : 1.0f), FVector(R.Range(-16.0, 16.0), R.Range(-16.0, 16.0), Size * 0.3), FVector(Size, Size, Size * 0.75), 0.0, false);
+			}
+			Add(Out, MarketModel::Sphere, Dung * 0.8f, FVector(0, 0, 0), FVector(44, 36, 4), R.Range(0.0, 180.0), false);
+			Add(Out, MarketModel::Cube, Straw, FVector(R.Range(-20.0, 20.0), 24, 1.0), FVector(22, 1.5, 0.8), R.Range(0.0, 180.0), false);
+			break;
+		case ELitter::Heap:
+			// Rubbish put out in the corner: a broken crate, cabbage leaves, paper, a tin.
+			Add(Out, MarketModel::Cube, CartWood, FVector(-10, 8, 18), FVector(40, 50, 36), 20.0, false, 0.0, 12.0);
+			Add(Out, MarketModel::Cube, CartWood * 0.7f, FVector(18, -22, 3), FVector(46, 8, 3), -35.0, false);
+			Add(Out, MarketModel::Sphere, Cabbage, FVector(20, 22, 6), FVector(26, 22, 12), 40.0, false);
+			Add(Out, MarketModel::Sphere, Cabbage * 0.8f, FVector(30, -6, 5), FVector(18, 16, 9), 0.0, false);
+			Add(Out, MarketModel::Cube, Newsprint, FVector(28, 6, 2), FVector(34, 26, 0.6), 15.0, false, 6.0, 0.0);
+			Add(Out, MarketModel::Cube, Newsprint * 0.8f, FVector(-2, -30, 1), FVector(20, 18, 0.6), 60.0, false);
+			Add(Out, MarketModel::Cylinder, TinCan, FVector(40, 30, 5), FVector(10, 10, 14), 0.0, false, 90.0, 0.0);
+			Add(Out, MarketModel::Sphere, LeafBrown, FVector(-4, -8, 0), FVector(60, 60, 14), 0.0, false);
+			break;
 		}
 	}
 
