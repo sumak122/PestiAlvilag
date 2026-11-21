@@ -8,6 +8,8 @@
 #include "Lorry.generated.h"
 
 class APedestrian;
+class ATrafficManager;
+class USpotSound;
 class USceneComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
@@ -39,8 +41,8 @@ public:
 	/** Has been driven by the player at some time. */
 	bool WasTaken() const { return bTaken; }
 
-	/** Paints "M. KIR. POSTA" on both sides of a post van's box: text on Body, whose floor is FloorAt below its middle. */
-	static void AddPostLettering(AActor* Van, USceneComponent* Body, double FloorAt);
+	/** Paints the name on both sides of a post van's ("M. KIR. POSTA") or an ambulance's box: text on Body, whose floor is FloorAt below its middle. */
+	static void AddLettering(AActor* Van, USceneComponent* Body, double FloorAt, LorryModel::ELoad Kind);
 
 protected:
 	virtual void BeginPlay() override;
@@ -55,11 +57,19 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+	/** The ambulance's bell, made the first time it rings. */
+	UPROPERTY(Transient)
+	TObjectPtr<USpotSound> Bell;
+
 private:
 	/** The carrier runs out shouting, the deed is noted, the police told if they saw. */
 	void Stolen();
 	/** The Royal Post's van taken: the police called at once, the mail sack's money his. */
 	void PostTaken();
+	/** The ambulance taken: the police called at once. */
+	void AmbulanceTaken();
+	/** The ambulance's bell: its sound and the traffic stopping ahead while it rings. */
+	void UpdateBell();
 	/** The player seated at the wheel while he drives, hidden otherwise. */
 	void PlaceWheelMan(bool bDriven);
 
@@ -72,4 +82,7 @@ private:
 	float WheelTurn = 0.f;
 	float SteerAngle = 0.f;
 	float LastYaw = 0.f;
+	bool bBellOn = false;
+	bool bBlocking = false;
+	TWeakObjectPtr<ATrafficManager> Traffic;
 };

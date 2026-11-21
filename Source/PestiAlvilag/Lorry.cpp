@@ -7,7 +7,12 @@
 #include "CarVisuals.h"
 #include "CarjackedDriver.h"
 #include "Components/BoxComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/TextRenderComponent.h"
+#include "EngineUtils.h"
+#include "InputCoreTypes.h"
+#include "SpotSound.h"
+#include "TrafficManager.h"
 #include "DailyLifeModel.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -37,6 +42,10 @@ namespace LorryRun
 	// The mail sack in a post van holds this much (pengő, as fillér).
 	constexpr int32 SackLeast = 300;
 	constexpr int32 SackMost = 800;
+	// The ambulance's bell is heard this far (cm); while it rings the traffic stops at these points ahead (cm), in this slot.
+	constexpr double BellReach = 9000.0;
+	const double BlockAhead[] = { 500.0, 1200.0, 2000.0 };
+	constexpr int32 BlockSlot = 7;
 }
 
 ALorry::ALorry()
@@ -102,28 +111,28 @@ void ALorry::BeginPlay()
 		AddInstanceComponent(Mesh);
 		Parts.Add(Mesh);
 	}
-	if (Load == ELoad::Post)
-	{
-		AddPostLettering(this, CollisionBox, FloorZ);
-	}
+	AddLettering(this, CollisionBox, FloorZ, Load);
 }
 
-void ALorry::AddPostLettering(AActor* Van, USceneComponent* Body, double FloorAt)
+void ALorry::AddLettering(AActor* Van, USceneComponent* Body, double FloorAt, LorryModel::ELoad Kind)
 {
-	if (!Van || !Body)
+	if (!Van || !Body || (Kind != LorryModel::ELoad::Post && Kind != LorryModel::ELoad::Ambulance))
 	{
 		return;
 	}
+	const bool bPost = Kind == LorryModel::ELoad::Post;
 	for (const double Side : { -1.0, 1.0 })
 	{
 		UTextRenderComponent* Text = NewObject<UTextRenderComponent>(Van, NAME_None, RF_Transient);
 		Text->SetupAttachment(Body);
-		Text->SetRelativeLocationAndRotation(FVector(0.0, 0.0, FloorAt) + LorryModel::PostLetteringAt(Side), FRotator(0.0, Side * 90.0, 0.0));
-		Text->SetText(FText::FromString(TEXT("M. KIR. POSTA")));
+		const FVector At = bPost ? LorryModel::PostLetteringAt(Side) : LorryModel::AmbulanceLetteringAt(Side);
+		Text->SetRelativeLocationAndRotation(FVector(0.0, 0.0, FloorAt) + At, FRotator(0.0, Side * 90.0, 0.0));
+		// "MENTŐK" (the ambulance service), written with escapes to keep the source plain ASCII.
+		Text->SetText(FText::FromString(bPost ? TEXT("M. KIR. POSTA") : TEXT("MENT\u0150K")));
 		Text->SetHorizontalAlignment(EHTA_Center);
 		Text->SetVerticalAlignment(EVRTA_TextCenter);
-		Text->SetWorldSize(LorryModel::PostLetterHeight);
-		Text->SetTextRenderColor(LorryModel::PostYellow().ToFColor(true));
+		Text->SetWorldSize(bPost ? LorryModel::PostLetterHeight : LorryModel::PostLetterHeight - 2.0);
+		Text->SetTextRenderColor((bPost ? LorryModel::PostYellow() : LorryModel::CrossRed()).ToFColor(true));
 		Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Text->RegisterComponent();
 		Van->AddInstanceComponent(Text);
@@ -132,6 +141,10 @@ void ALorry::AddPostLettering(AActor* Van, USceneComponent* Body, double FloorAt
 
 void ALorry::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (bBlocking && Traffic.IsValid())
+	{
+		Traffic->SetRoadBlock(LorryRun::BlockSlot, TArray<FVector>());
+	}
 	if (IsValid(WheelMan))
 	{
 		WheelMan->Destroy();
@@ -153,6 +166,10 @@ void ALorry::Tick(float DeltaSeconds)
 		if (Load == LorryModel::ELoad::Post)
 		{
 			PostTaken();
+		}
+		else if (Load == LorryModel::ELoad::Ambulance)
+		{
+			AmbulanceTaken();
 		}
 		else if (bOwned)
 		{
@@ -180,7 +197,88 @@ void ALorry::Tick(float DeltaSeconds)
 		}
 	}
 
+	// The ambulance's bell: B while he drives it.
+	if (Load == ELoad::Ambulance)
+	{
+		if (bDriven && (PC->WasInputKeyJustPressed(EKeys::B) || PC->WasInputKeyJustPressed(EKeys::Gamepad_DPad_Down)))
+		{
+			bBellOn = !bBellOn;
+		}
+		if (!bDriven)
+		{
+			bBellOn = false;
+		}
+		UpdateBell();
+	}
+
 	PlaceWheelMan(bDriven);
+}
+
+void ALorry::UpdateBell()
+{
+	// The sound, made the first time it rings: heard round the ambulance, louder near.
+	if (bBellOn && !Bell)
+	{
+		Bell = NewObject<USpotSound>(this);
+		Bell->SetupAttachment(CollisionBox);
+		Bell->RegisterComponent();
+		Bell->SetSpot(CitySynth::ESpot::FireBell, FMath::Rand());
+		Bell->SetHeard(0.f, 1.f);
+		Bell->Start();
+	}
+	if (Bell)
+	{
+		float Gain = 0.f;
+		float Far = 1.f;
+		if (bBellOn)
+		{
+			if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
+			{
+				const double Distance = FVector::Dist(Camera->GetCameraLocation(), GetActorLocation());
+				Far = static_cast<float>(FMath::Clamp(Distance / LorryRun::BellReach, 0.0, 1.0));
+				Gain = Distance < LorryRun::BellReach ? 1.f - Far : 0.f;
+			}
+		}
+		Bell->SetHeard(Gain, Far);
+	}
+
+	// The traffic ahead stops for it while it rings.
+	if (!bBellOn && !bBlocking)
+	{
+		return;
+	}
+	if (!Traffic.IsValid())
+	{
+		TActorIterator<ATrafficManager> It(GetWorld());
+		Traffic = It ? *It : nullptr;
+	}
+	if (ATrafficManager* Lanes = Traffic.Get())
+	{
+		TArray<FVector> Points;
+		if (bBellOn)
+		{
+			const FVector Ahead = GetActorForwardVector().GetSafeNormal2D() * (ForwardSpeed < 0.f ? -1.0 : 1.0);
+			for (const double Distance : LorryRun::BlockAhead)
+			{
+				Points.Add(GetActorLocation() + Ahead * Distance);
+			}
+		}
+		Lanes->SetRoadBlock(LorryRun::BlockSlot, Points);
+		bBlocking = bBellOn;
+	}
+}
+
+void ALorry::AmbulanceTaken()
+{
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->Say(TEXT("Ment\u0151"), TEXT("Az ambulancia! Valaki elvitte a ment\u0151aut\u00f3t!"), TEXT("The ambulance! Someone's taken the ambulance!"), 3.f);
+	}
+	// The ambulance society's own car: every patrol hears of it.
+	if (APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this))
+	{
+		Game->ReportCrime(2);
+	}
 }
 
 void ALorry::PlaceWheelMan(bool bDriven)
