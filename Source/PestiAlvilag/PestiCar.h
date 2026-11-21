@@ -197,6 +197,8 @@ protected:
 
 	CarModel::FStyle Style;
 	bool bStyleSet = false;
+	/** Pushed by hand (AHandCart): no engine to hear or smoke, no lamps. */
+	bool bPushedByHand = false;
 
 	virtual void BeginPlay() override;
 
