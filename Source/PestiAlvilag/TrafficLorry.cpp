@@ -2,7 +2,10 @@
 
 #include "TrafficLorry.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "CarVisuals.h"
+#include "Kismet/GameplayStatics.h"
+#include "SpotSound.h"
 #include "Lorry.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -17,6 +20,12 @@ namespace TrafficLorryRun
 	// The front wheels turn this far at their sharpest (degrees), at this turn rate (degrees/s).
 	constexpr float MaxSteer = 30.f;
 	constexpr float FullTurn = 60.f;
+	// The ambulance rushes, its bell ringing, for this long (s), every so often; heard this far (cm).
+	constexpr float RingLeast = 15.f;
+	constexpr float RingMost = 35.f;
+	constexpr float QuietLeast = 50.f;
+	constexpr float QuietMost = 120.f;
+	constexpr double BellReach = 9000.0;
 }
 
 ATrafficLorry::ATrafficLorry()
@@ -85,10 +94,7 @@ void ATrafficLorry::Dress()
 		AddInstanceComponent(Mesh);
 		Parts.Add(Mesh);
 	}
-	if (Load == ELoad::Post)
-	{
-		ALorry::AddPostLettering(this, CollisionBox, TrafficLorryRun::FloorZ);
-	}
+	ALorry::AddLettering(this, CollisionBox, TrafficLorryRun::FloorZ, Load);
 }
 
 void ATrafficLorry::Tick(float DeltaSeconds)
@@ -120,5 +126,44 @@ void ATrafficLorry::Tick(float DeltaSeconds)
 			const bool bFront = w == WheelFrontLeft || w == WheelFrontRight;
 			Parts[w]->SetRelativeRotation(FRotator(Spin, bFront ? SteerAngle : 0.f, 0.f));
 		}
+	}
+	if (Load == ELoad::Ambulance)
+	{
+		TickBell(DeltaSeconds);
+	}
+}
+
+void ATrafficLorry::TickBell(float DeltaSeconds)
+{
+	BellLeft -= DeltaSeconds;
+	if (BellLeft <= 0.f)
+	{
+		bRinging = !bRinging;
+		BellLeft = bRinging ? FMath::FRandRange(TrafficLorryRun::RingLeast, TrafficLorryRun::RingMost)
+			: FMath::FRandRange(TrafficLorryRun::QuietLeast, TrafficLorryRun::QuietMost);
+	}
+	if (bRinging && !Bell)
+	{
+		Bell = NewObject<USpotSound>(this);
+		Bell->SetupAttachment(CollisionBox);
+		Bell->RegisterComponent();
+		Bell->SetSpot(CitySynth::ESpot::FireBell, FMath::Rand());
+		Bell->SetHeard(0.f, 1.f);
+		Bell->Start();
+	}
+	if (Bell)
+	{
+		float Gain = 0.f;
+		float Far = 1.f;
+		if (bRinging)
+		{
+			if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0))
+			{
+				const double Distance = FVector::Dist(Camera->GetCameraLocation(), GetActorLocation());
+				Far = static_cast<float>(FMath::Clamp(Distance / TrafficLorryRun::BellReach, 0.0, 1.0));
+				Gain = Distance < TrafficLorryRun::BellReach ? 1.f - Far : 0.f;
+			}
+		}
+		Bell->SetHeard(Gain, Far);
 	}
 }

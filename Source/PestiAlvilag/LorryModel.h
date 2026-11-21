@@ -24,8 +24,8 @@ namespace LorryModel
 
 	enum EPart : int32 { Body, WheelFrontLeft, WheelFrontRight, WheelBackLeft, WheelBackRight, NumParts };
 
-	/** What it carries on the platform; Post is the Royal Hungarian Post's van, a closed box body instead of the platform. */
-	enum class ELoad : uint8 { Empty, Barrels, Crates, Sacks, Tilt, Post, Count };
+	/** What it carries on the platform; Post is the Royal Hungarian Post's van and Ambulance the ambulance society's, each a closed box body instead of the platform. */
+	enum class ELoad : uint8 { Empty, Barrels, Crates, Sacks, Tilt, Post, Ambulance, Count };
 
 	constexpr double WheelRadius = 46.0;
 	constexpr double FrontAxle = 190.0;
@@ -348,10 +348,93 @@ namespace LorryModel
 		}
 	}
 
+	/** The ambulance's cream and the red of its crosses. */
+	inline FLinearColor AmbulanceCream() { return FLinearColor(0.62f, 0.58f, 0.46f); }
+	inline FLinearColor CrossRed() { return FLinearColor(0.50f, 0.02f, 0.02f); }
+	/** Where the ambulance's name is painted on its box's side (+1 right, -1 left), and its bell hangs (cm). */
+	inline FVector AmbulanceLetteringAt(double Side) { return FVector(-110.0, Side * (BedHalfY - 14.0 + 1.5), 118.0); }
+	inline FVector AmbulanceBellAt() { return FVector(150.0, 52.0, 250.0); }
+
+	/** A red cross on a white disc, on a face at (X, Y, Z) facing out along Out (unit vector in X or Y). */
+	inline void RedCross(FPiece& B, const FVector& At, const FVector& Out, double Size)
+	{
+		const FVector Side = FVector::CrossProduct(FVector(0.0, 0.0, 1.0), Out).GetSafeNormal();
+		const FVector Face = At + Out * 0.6;
+		PersonKit::Loft(B, FLinearColor(0.80f, 0.79f, 0.74f), {
+			{ At + Out * 0.1, Side * Size, FVector(0.0, 0.0, Size) },
+			{ At + Out * 0.5, Side * Size, FVector(0.0, 0.0, Size) },
+		}, 20, false, true);
+		const FVector Arm = Side * (Size * 0.72) + FVector(0.0, 0.0, Size * 0.22);
+		const FVector Up = Side * (Size * 0.22) + FVector(0.0, 0.0, Size * 0.72);
+		Box(B, CrossRed(), (Face - Arm).ComponentMin(Face + Arm) - Out.GetAbs() * 0.2, (Face - Arm).ComponentMax(Face + Arm) + Out.GetAbs() * 0.2);
+		Box(B, CrossRed(), (Face - Up).ComponentMin(Face + Up) - Out.GetAbs() * 0.2, (Face - Up).ComponentMax(Face + Up) + Out.GetAbs() * 0.2);
+	}
+
+	/** The ambulance's box body: cream panels, frosted windows with red crosses, the roof lamp, rear doors. */
+	inline void BuildAmbulanceBox(FPiece& B)
+	{
+		const FLinearColor Cream = AmbulanceCream();
+		const FLinearColor Black = Chassis();
+		const FLinearColor Frosted(0.55f, 0.57f, 0.56f);
+		const double Back = BedBack + 70.0;
+		const double Front = BedFront - 6.0;
+		const double HalfY = BedHalfY - 14.0;
+		const double Base = 96.0;
+		const double Top = 240.0;
+		for (double X = Back + 10.0; X < Front; X += 60.0)
+		{
+			Box(B, Black, FVector(X, -HalfY, 86.0), FVector(X + 8.0, HalfY, Base));
+		}
+		Box(B, Cream, FVector(Back, -HalfY, Base), FVector(Front, HalfY, Top));
+		// A rounded roof, a little wider, and the blue lamp on it.
+		PersonKit::Loft(B, Cream * 0.9f, {
+			{ FVector(Back - 3.0, 0.0, Top), FVector(0.0, HalfY + 3.0, 0.0), FVector(0.0, 0.0, 9.0) },
+			{ FVector(Front + 3.0, 0.0, Top), FVector(0.0, HalfY + 3.0, 0.0), FVector(0.0, 0.0, 9.0) },
+		}, 16, true, true);
+		Tube(B, Black, FVector(Front - 10.0, 0.0, Top + 6.0), FVector(Front - 10.0, 0.0, Top + 14.0), 2.0, 6);
+		PersonKit::Blob(B, FLinearColor(0.10f, 0.20f, 0.55f), FVector(Front - 10.0, 0.0, Top + 19.0), FVector(6.0, 6.0, 7.0), 10, 5);
+		for (const double S : { -1.0, 1.0 })
+		{
+			const double Y = S * HalfY;
+			// Two frosted windows with red crosses up high, the dark waist line, the name under them.
+			for (const double X : { Back + 52.0, Front - 52.0 })
+			{
+				Box(B, Frosted, FVector(X - 34.0, FMath::Min(Y, Y + S * 0.8), Top - 70.0), FVector(X + 34.0, FMath::Max(Y, Y + S * 0.8), Top - 14.0));
+				Box(B, Cream * 0.7f, FVector(X - 36.0, FMath::Min(Y, Y + S * 0.6), Top - 72.0), FVector(X + 36.0, FMath::Max(Y, Y + S * 0.6), Top - 70.0));
+				RedCross(B, FVector(X, Y + S * 0.8, Top - 42.0), FVector(0.0, S, 0.0), 20.0);
+			}
+			Box(B, CrossRed(), FVector(Back + 2.0, FMath::Min(Y, Y + S * 1.2), Base + 48.0), FVector(Front - 2.0, FMath::Max(Y, Y + S * 1.2), Base + 51.0));
+		}
+		// The back: two doors, each with a frosted window and a cross, the step, lamp and plate.
+		for (const double S : { -1.0, 1.0 })
+		{
+			Box(B, Frosted, FVector(Back - 1.0, S * 10.0 - 22.0, Top - 66.0), FVector(Back, S * 10.0 + 22.0, Top - 18.0));
+			Box(B, Black, FVector(Back - 1.5, S * 34.0, Base + 40.0), FVector(Back - 0.5, S * 34.0 + S * 6.0, Base + 44.0));
+		}
+		RedCross(B, FVector(Back, 0.0, Base + 50.0), FVector(-1.0, 0.0, 0.0), 22.0);
+		Box(B, Black, FVector(Back - 2.0, -1.0, Base + 4.0), FVector(Back - 1.0, 1.0, Top - 4.0));
+		Box(B, Black, FVector(Back - 28.0, -56.0, 70.0), FVector(Back, 56.0, 74.0));
+		Box(B, FLinearColor(0.80f, 0.79f, 0.74f), FVector(Back - 3.0, 30.0, 78.0), FVector(Back - 2.0, 74.0, 92.0));
+		PersonKit::Blob(B, FLinearColor(0.55f, 0.05f, 0.03f), FVector(Back - 3.0, -60.0, 88.0), FVector(2.0, 4.0, 4.0), 8, 4);
+		// The bell on the cab roof's corner, and a board with a red cross over the windscreen.
+		Tube(B, Black, AmbulanceBellAt() + FVector(0.0, 0.0, -12.0), AmbulanceBellAt(), 1.0, 5);
+		PersonKit::Loft(B, FLinearColor(0.70f, 0.52f, 0.18f), {
+			PersonKit::Flat(AmbulanceBellAt().X, AmbulanceBellAt().Z - 6.0, 6.5, 6.5, AmbulanceBellAt().Y),
+			PersonKit::Flat(AmbulanceBellAt().X, AmbulanceBellAt().Z - 1.0, 3.0, 3.0, AmbulanceBellAt().Y),
+		}, 12, true, true);
+		Box(B, Cream, FVector(140.0, -26.0, 243.0), FVector(146.0, 26.0, 264.0));
+		RedCross(B, FVector(146.0, 0.0, 253.5), FVector(1.0, 0.0, 0.0), 9.0);
+		// Low guards over the twins.
+		for (const double S : { -1.0, 1.0 })
+		{
+			Guard(B, Black, BackAxle, WheelRadius + 2.0, WheelRadius + 9.0, S * (BackTrack - 22.0), S * (BackTrack + 22.0), 0.25, PI - 0.25);
+		}
+	}
+
 	/** The lorry: chassis, bonnet, radiator, cab, platform and load; the wheels. */
 	inline void Build(FPiece (&Parts)[NumParts], int32 PaintIndex, ELoad Load)
 	{
-		const FLinearColor Coat = Load == ELoad::Post ? PostGreen() : Paint(PaintIndex);
+		const FLinearColor Coat = Load == ELoad::Post ? PostGreen() : Load == ELoad::Ambulance ? AmbulanceCream() : Paint(PaintIndex);
 		const FLinearColor Black = Chassis();
 		FPiece& B = Parts[Body];
 
@@ -479,6 +562,10 @@ namespace LorryModel
 		if (Load == ELoad::Post)
 		{
 			BuildPostBox(B);
+		}
+		else if (Load == ELoad::Ambulance)
+		{
+			BuildAmbulanceBox(B);
 		}
 		else
 		{
