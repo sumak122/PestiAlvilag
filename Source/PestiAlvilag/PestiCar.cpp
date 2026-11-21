@@ -325,7 +325,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	const bool bEngineOff = bEngineDead || (bOld && !bOldEngineOn);
 	// An old engine left running (or cranked from the front) idles on with nobody in the car, for a while.
 	const bool bIdlingAlone = !PC && bOld && !bEngineDead && (bOldEngineOn || bCranking);
-	Visuals->SetEngineRunning((PC != nullptr || bIdlingAlone) && !bEngineOff);
+	Visuals->SetEngineRunning((PC != nullptr || bIdlingAlone) && !bEngineOff && !bPushedByHand);
 	if (!PC)
 	{
 		Visuals->SetHeadlights(false);
@@ -352,7 +352,7 @@ void APestiCar::Tick(float DeltaSeconds)
 		RollDriverless(DeltaSeconds);
 		return;
 	}
-	const bool bEngineHeard = !bEngineOff || bCranking;
+	const bool bEngineHeard = (!bEngineOff || bCranking) && !bPushedByHand;
 	if (!bEngineHeard && EngineNoise->IsPlaying())
 	{
 		EngineNoise->Stop();
@@ -411,7 +411,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	}
 
 	// H switches the headlights on and off.
-	if (PC->WasInputKeyJustPressed(EKeys::H) || PC->WasInputKeyJustPressed(EKeys::Gamepad_DPad_Up))
+	if (!bPushedByHand && (PC->WasInputKeyJustPressed(EKeys::H) || PC->WasInputKeyJustPressed(EKeys::Gamepad_DPad_Up)))
 	{
 		bHeadlightsOn = !bHeadlightsOn;
 	}
@@ -449,7 +449,7 @@ void APestiCar::Tick(float DeltaSeconds)
 	{
 		LastPedal = FMath::Abs(Throttle);
 	}
-	else if (!bEngineDead)
+	else if (!bEngineDead && !bPushedByHand)
 	{
 		UpdateEngineNoise(Throttle);
 	}

@@ -30,6 +30,7 @@
 #include "FiakerStand.h"
 #include "MotorbikeParking.h"
 #include "LorryParking.h"
+#include "HandCarts.h"
 #include "FireStation.h"
 #include "DayNight.h"
 #include "HomeDoor.h"
@@ -402,6 +403,12 @@ void APestiAlvilagGameModeBase::StartPlay()
 	if (!TActorIterator<ALorryParking>(GetWorld()))
 	{
 		GetWorld()->SpawnActor<ALorryParking>();
+	}
+
+	// Now and then, rarely, a porter pushing his hand cart along the side of a street.
+	if (!TActorIterator<AHandCarts>(GetWorld()))
+	{
+		GetWorld()->SpawnActor<AHandCarts>();
 	}
 
 	// A new game begins with the prologue, a saved one with the first

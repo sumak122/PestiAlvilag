@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "HandCarts.h"
 #include "HomeDoor.h"
 #include "LaciYard.h"
 #include "Pedestrians.h"
@@ -194,10 +195,13 @@ namespace TestSpawnPlace
 	void SpawnTraffic(UWorld* World, const APawn* Pawn, int32 Pick)
 	{
 		const ETestTraffic Kinds[] = { ETestTraffic::Car, ETestTraffic::Taxi, ETestTraffic::Police,
-			ETestTraffic::MilkCart, ETestTraffic::CoalCart, ETestTraffic::BeerCart, ETestTraffic::Bike, ETestTraffic::Fiaker, ETestTraffic::PoliceBike, ETestTraffic::Lorry, ETestTraffic::PostVan, ETestTraffic::Ambulance, ETestTraffic::RubbishCart };
+			ETestTraffic::MilkCart, ETestTraffic::CoalCart, ETestTraffic::BeerCart, ETestTraffic::Bike, ETestTraffic::Fiaker, ETestTraffic::PoliceBike, ETestTraffic::Lorry, ETestTraffic::PostVan, ETestTraffic::Ambulance, ETestTraffic::RubbishCart, ETestTraffic::HandCart };
 		ATrafficManager* Lanes = FindTraffic(World);
 		const int32 Which = FMath::Clamp(Pick, 0, static_cast<int32>(UE_ARRAY_COUNT(Kinds)) - 1);
-		if (!Lanes || !Lanes->SpawnForTest(Kinds[Which], Pawn->GetActorLocation()))
+		// A porter's hand cart comes along the side of the road (AHandCarts).
+		const bool bSent = Kinds[Which] == ETestTraffic::HandCart ? AHandCarts::SpawnNear(World, Pawn->GetActorLocation(), true)
+			: (Lanes && Lanes->SpawnForTest(Kinds[Which], Pawn->GetActorLocation()));
+		if (!bSent)
 		{
 			Say(World, TEXT("Nincs a k\u00f6zelben utca.  (No street near here.)"));
 			return;
@@ -381,7 +385,7 @@ namespace TestSpawn
 		switch (Group)
 		{
 		case EGroup::Vehicle: return TestSpawnPlace::VehicleKinds().Num();
-		case EGroup::Traffic: return 13;
+		case EGroup::Traffic: return 14;
 		case EGroup::Animal: return 5;
 		case EGroup::People: return 5;
 		case EGroup::Clock: return static_cast<int32>(UE_ARRAY_COUNT(TestSpawnPlace::Hours));
@@ -455,8 +459,9 @@ namespace TestSpawn
 				{ TEXT("Postakocsi"), TEXT("Post van") },
 				{ TEXT("Ment\u0151aut\u00f3"), TEXT("Ambulance") },
 				{ TEXT("Szemeteskocsi"), TEXT("Rubbish cart") },
+				{ TEXT("Hord\u00e1r k\u00e9zikocsival"), TEXT("Porter with hand cart") },
 			};
-			const int32 Row = FMath::Clamp(Pick, 0, 12);
+			const int32 Row = FMath::Clamp(Pick, 0, 13);
 			Hu = Names[Row][0];
 			En = Names[Row][1];
 			break;
