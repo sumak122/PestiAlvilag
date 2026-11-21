@@ -24,8 +24,8 @@ namespace LorryModel
 
 	enum EPart : int32 { Body, WheelFrontLeft, WheelFrontRight, WheelBackLeft, WheelBackRight, NumParts };
 
-	/** What it carries on the platform. */
-	enum class ELoad : uint8 { Empty, Barrels, Crates, Sacks, Tilt, Count };
+	/** What it carries on the platform; Post is the Royal Hungarian Post's van, a closed box body instead of the platform. */
+	enum class ELoad : uint8 { Empty, Barrels, Crates, Sacks, Tilt, Post, Count };
 
 	constexpr double WheelRadius = 46.0;
 	constexpr double FrontAxle = 190.0;
@@ -249,10 +249,109 @@ namespace LorryModel
 		}
 	}
 
+	/** The Royal Hungarian Post's green and the yellow of its lines and horn. */
+	inline FLinearColor PostGreen() { return FLinearColor(0.035f, 0.075f, 0.04f); }
+	inline FLinearColor PostYellow() { return FLinearColor(0.72f, 0.52f, 0.08f); }
+	/** Where the post's name is painted on the box's side (+1 right, -1 left), and how tall (cm). */
+	inline FVector PostLetteringAt(double Side) { return FVector((BedBack + BedFront) * 0.5 + 24.0, Side * (BedHalfY - 8.0 + 1.5), 128.0); }
+	constexpr double PostLetterHeight = 22.0;
+
+	/** The post horn with its looped tube and a crown over it, on a side at (X, Y, Z), facing out by Out (+1 right, -1 left). */
+	inline void PostHorn(FPiece& B, double X, double Y, double Z, double Out)
+	{
+		const FLinearColor Gold = PostYellow();
+		const double F = Y + Out * 0.8;
+		// The loop of the tube, the bell flaring out to one side, the mouthpiece to the other.
+		Ring(B, Gold, FVector(X, F, Z), FVector(16.0, 0.0, 0.0), FVector(0.0, 0.0, 11.0), 1.6, 20);
+		PersonKit::Loft(B, Gold, {
+			{ FVector(X + 14.0, F, Z - 4.0), FVector(0.0, 0.0, 2.0), FVector(0.0, Out * 0.5, 0.0) },
+			{ FVector(X + 26.0, F, Z - 4.0), FVector(0.0, 0.0, 4.0), FVector(0.0, Out * 0.5, 0.0) },
+			{ FVector(X + 32.0, F, Z - 4.0), FVector(0.0, 0.0, 9.0), FVector(0.0, Out * 0.5, 0.0) },
+		}, 8, false, false);
+		Box(B, Gold, FVector(X - 26.0, FMath::Min(F, F + Out) - 0.2, Z - 5.0), FVector(X - 14.0, FMath::Max(F, F + Out) + 0.2, Z - 3.0));
+		// A cord with tassels hanging from the loop.
+		Box(B, Gold, FVector(X - 1.0, FMath::Min(F, F + Out) - 0.2, Z - 22.0), FVector(X + 1.0, FMath::Max(F, F + Out) + 0.2, Z - 11.0));
+		PersonKit::Blob(B, Gold, FVector(X, F, Z - 24.0), FVector(2.5, 1.0, 3.5), 8, 4);
+		// The Holy Crown over it, its cross a little askew.
+		PersonKit::Blob(B, Gold, FVector(X, F, Z + 20.0), FVector(8.0, 1.2, 6.0), 10, 5, 0.0);
+		Box(B, Gold, FVector(X - 8.5, FMath::Min(F, F + Out) - 0.2, Z + 17.0), FVector(X + 8.5, FMath::Max(F, F + Out) + 0.2, Z + 20.0));
+		Box(B, Gold, FVector(X + 0.2, FMath::Min(F, F + Out) - 0.2, Z + 26.0), FVector(X + 1.4, FMath::Max(F, F + Out) + 0.2, Z + 33.0));
+		Box(B, Gold, FVector(X - 2.0, FMath::Min(F, F + Out) - 0.2, Z + 29.5), FVector(X + 3.6, FMath::Max(F, F + Out) + 0.2, Z + 30.7));
+	}
+
+	/** The post van's closed box body on the chassis: green panels, a yellow line, the horn and crown, double doors at the back, a roof rail. */
+	inline void BuildPostBox(FPiece& B)
+	{
+		const FLinearColor Green = PostGreen();
+		const FLinearColor Gold = PostYellow();
+		const FLinearColor Black = Chassis();
+		const double Back = BedBack + 30.0;
+		const double Front = BedFront - 6.0;
+		const double HalfY = BedHalfY - 8.0;
+		const double Base = 100.0;
+		const double Top = 252.0;
+		// The floor bearers, the box, its roof a little wider, curved at the edges.
+		for (double X = Back + 10.0; X < Front; X += 60.0)
+		{
+			Box(B, Black, FVector(X, -HalfY, 90.0), FVector(X + 8.0, HalfY, Base));
+		}
+		Box(B, Green, FVector(Back, -HalfY, Base), FVector(Front, HalfY, Top));
+		PersonKit::Loft(B, Green * 0.85f, {
+			{ FVector(Back - 3.0, 0.0, Top), FVector(0.0, HalfY + 3.0, 0.0), FVector(0.0, 0.0, 6.0) },
+			{ FVector(Front + 3.0, 0.0, Top), FVector(0.0, HalfY + 3.0, 0.0), FVector(0.0, 0.0, 6.0) },
+		}, 16, true, true);
+		Box(B, Black, FVector(Back - 3.0, -HalfY - 3.0, Top - 1.0), FVector(Front + 3.0, HalfY + 3.0, Top + 0.5));
+		// A rail round the roof for parcels.
+		for (const double S : { -1.0, 1.0 })
+		{
+			Tube(B, Black, FVector(Back + 4.0, S * (HalfY - 4.0), Top + 12.0), FVector(Front - 4.0, S * (HalfY - 4.0), Top + 12.0), 1.0, 5);
+			for (double X = Back + 4.0; X <= Front - 3.9; X += (Front - Back - 8.0) / 4.0)
+			{
+				Tube(B, Black, FVector(X, S * (HalfY - 4.0), Top + 4.0), FVector(X, S * (HalfY - 4.0), Top + 12.0), 0.8, 4);
+			}
+		}
+		for (const double S : { -1.0, 1.0 })
+		{
+			const double Y = S * HalfY;
+			// Raised panels with dark beading, the yellow line round the waist.
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const double X0 = Back + 8.0 + k * (Front - Back - 16.0) / 3.0;
+				const double X1 = X0 + (Front - Back - 16.0) / 3.0 - 6.0;
+				Box(B, Green * 0.6f, FVector(X0, Y - 0.3 * S, Base + 10.0), FVector(X1, Y + 0.8 * S, Base + 12.0));
+				Box(B, Green * 0.6f, FVector(X0, Y - 0.3 * S, Top - 14.0), FVector(X1, Y + 0.8 * S, Top - 12.0));
+				Box(B, Green * 0.6f, FVector(X0, Y - 0.3 * S, Base + 10.0), FVector(X0 + 2.0, Y + 0.8 * S, Top - 12.0));
+				Box(B, Green * 0.6f, FVector(X1 - 2.0, Y - 0.3 * S, Base + 10.0), FVector(X1, Y + 0.8 * S, Top - 12.0));
+			}
+			Box(B, Gold, FVector(Back + 2.0, FMath::Min(Y, Y + S * 1.2), Base + 62.0), FVector(Front - 2.0, FMath::Max(Y, Y + S * 1.2), Base + 65.0));
+			PostHorn(B, (Back + Front) * 0.5, Y, Base + 100.0, S);
+		}
+		// The back: two doors with a handle and hinges, the step, the lamp and plate.
+		Box(B, Green * 0.9f, FVector(Back - 1.5, -HalfY + 4.0, Base + 6.0), FVector(Back, HalfY - 4.0, Top - 6.0));
+		Box(B, Black, FVector(Back - 2.0, -1.0, Base + 6.0), FVector(Back - 1.0, 1.0, Top - 6.0));
+		Box(B, Gold, FVector(Back - 2.0, -HalfY + 4.0, Base + 62.0), FVector(Back - 1.0, HalfY - 4.0, Base + 65.0));
+		Tube(B, Nickel(), FVector(Back - 4.0, 6.0, Base + 70.0), FVector(Back - 4.0, 18.0, Base + 70.0), 1.0, 5);
+		for (const double S : { -1.0, 1.0 })
+		{
+			for (const double Z : { Base + 30.0, Top - 30.0 })
+			{
+				Box(B, Black, FVector(Back - 2.5, S * (HalfY - 18.0), Z), FVector(Back - 1.5, S * (HalfY - 2.0), Z + 3.0));
+			}
+		}
+		Box(B, Black, FVector(Back - 24.0, -50.0, 72.0), FVector(Back, 50.0, 76.0));
+		Box(B, FLinearColor(0.80f, 0.79f, 0.74f), FVector(Back - 3.0, 30.0, 80.0), FVector(Back - 2.0, 74.0, 94.0));
+		PersonKit::Blob(B, FLinearColor(0.55f, 0.05f, 0.03f), FVector(Back - 3.0, -60.0, 90.0), FVector(2.0, 4.0, 4.0), 8, 4);
+		// Low guards over the twins, tucked under the box.
+		for (const double S : { -1.0, 1.0 })
+		{
+			Guard(B, Black, BackAxle, WheelRadius + 2.0, WheelRadius + 9.0, S * (BackTrack - 22.0), S * (BackTrack + 22.0), 0.25, PI - 0.25);
+		}
+	}
+
 	/** The lorry: chassis, bonnet, radiator, cab, platform and load; the wheels. */
 	inline void Build(FPiece (&Parts)[NumParts], int32 PaintIndex, ELoad Load)
 	{
-		const FLinearColor Coat = Paint(PaintIndex);
+		const FLinearColor Coat = Load == ELoad::Post ? PostGreen() : Paint(PaintIndex);
 		const FLinearColor Black = Chassis();
 		FPiece& B = Parts[Body];
 
@@ -377,49 +476,56 @@ namespace LorryModel
 			Tube(B, Black, FVector(CabBack + 38.0, S * 80.0, 83.0), FVector(CabBack + 38.0, S * 78.0, 96.0), 1.0, 4);
 		}
 
-		// The platform: cross bearers, the plank floor, drop sides with stakes, the tailboard.
-		for (double X = BedBack + 10.0; X < BedFront; X += 60.0)
+		if (Load == ELoad::Post)
 		{
-			Box(B, DarkPlanks(), FVector(X, -BedHalfY, 96.0), FVector(X + 8.0, BedHalfY, 104.0));
+			BuildPostBox(B);
 		}
-		Box(B, Planks(), FVector(BedBack, -BedHalfY, 104.0), FVector(BedFront, BedHalfY, BedZ));
-		for (const double S : { -1.0, 1.0 })
+		else
 		{
-			const double Y = S * BedHalfY;
-			// Three boards with gaps, and the iron edge.
-			for (int32 k = 0; k < 3; ++k)
+			// The platform: cross bearers, the plank floor, drop sides with stakes, the tailboard.
+			for (double X = BedBack + 10.0; X < BedFront; X += 60.0)
 			{
-				const double Z = BedZ + 1.0 + k * 16.0;
-				Box(B, (k % 2) ? Planks() : Planks() * 0.88f, FVector(BedBack, Y - 2.5, Z), FVector(BedFront, Y + 2.5, Z + 14.0));
+				Box(B, DarkPlanks(), FVector(X, -BedHalfY, 96.0), FVector(X + 8.0, BedHalfY, 104.0));
 			}
-			Box(B, Black, FVector(BedBack, Y - 3.0, BedZ + SideHeight - 1.0), FVector(BedFront, Y + 3.0, BedZ + SideHeight + 1.0));
-			// The stakes and their iron pockets, the side hinges.
-			for (double X = BedBack + 4.0; X < BedFront; X += (BedFront - BedBack - 8.0) / 4.0)
+			Box(B, Planks(), FVector(BedBack, -BedHalfY, 104.0), FVector(BedFront, BedHalfY, BedZ));
+			for (const double S : { -1.0, 1.0 })
 			{
-				Box(B, DarkPlanks(), FVector(X, Y + S * 2.5, BedZ - 8.0), FVector(X + 6.0, Y + S * 7.5, BedZ + SideHeight + 4.0));
-				Box(B, Black, FVector(X - 1.0, Y + S * 2.0, BedZ - 10.0), FVector(X + 7.0, Y + S * 8.0, BedZ - 2.0));
+				const double Y = S * BedHalfY;
+				// Three boards with gaps, and the iron edge.
+				for (int32 k = 0; k < 3; ++k)
+				{
+					const double Z = BedZ + 1.0 + k * 16.0;
+					Box(B, (k % 2) ? Planks() : Planks() * 0.88f, FVector(BedBack, Y - 2.5, Z), FVector(BedFront, Y + 2.5, Z + 14.0));
+				}
+				Box(B, Black, FVector(BedBack, Y - 3.0, BedZ + SideHeight - 1.0), FVector(BedFront, Y + 3.0, BedZ + SideHeight + 1.0));
+				// The stakes and their iron pockets, the side hinges.
+				for (double X = BedBack + 4.0; X < BedFront; X += (BedFront - BedBack - 8.0) / 4.0)
+				{
+					Box(B, DarkPlanks(), FVector(X, Y + S * 2.5, BedZ - 8.0), FVector(X + 6.0, Y + S * 7.5, BedZ + SideHeight + 4.0));
+					Box(B, Black, FVector(X - 1.0, Y + S * 2.0, BedZ - 10.0), FVector(X + 7.0, Y + S * 8.0, BedZ - 2.0));
+				}
+				// Rear guards over the twins, flat in the way of the day.
+				Guard(B, Black, BackAxle, WheelRadius + 2.0, WheelRadius + 10.0, S * (BackTrack - 22.0), S * (BackTrack + 22.0), 0.25, PI - 0.25);
 			}
-			// Rear guards over the twins, flat in the way of the day.
-			Guard(B, Black, BackAxle, WheelRadius + 2.0, WheelRadius + 10.0, S * (BackTrack - 22.0), S * (BackTrack + 22.0), 0.25, PI - 0.25);
-		}
-		// The headboard, taller, with a ladder rack over the cab roof.
-		Box(B, DarkPlanks(), FVector(BedFront - 6.0, -BedHalfY, BedZ), FVector(BedFront, BedHalfY, BedZ + SideHeight + 50.0));
-		for (int32 k = 0; k < 4; ++k)
-		{
-			Box(B, Planks(), FVector(BedFront - 7.0, -BedHalfY, BedZ + 4.0 + k * 24.0), FVector(BedFront - 5.5, BedHalfY, BedZ + 20.0 + k * 24.0));
-		}
-		// The tailboard, its chains, the back lamp and number plate.
-		Box(B, Planks(), FVector(BedBack - 3.0, -BedHalfY, BedZ), FVector(BedBack + 2.0, BedHalfY, BedZ + SideHeight));
-		Box(B, Black, FVector(BedBack - 3.5, -BedHalfY, BedZ + 20.0), FVector(BedBack - 2.5, BedHalfY, BedZ + 23.0));
-		for (const double S : { -1.0, 1.0 })
-		{
-			Tube(B, Black, FVector(BedBack - 3.0, S * (BedHalfY - 4.0), BedZ + SideHeight), FVector(BedBack - 2.0, S * (BedHalfY - 4.0), BedZ + SideHeight - 30.0), 0.6, 4);
-		}
-		Box(B, FLinearColor(0.80f, 0.79f, 0.74f), FVector(BedBack - 6.0, 30.0, 70.0), FVector(BedBack - 5.0, 74.0, 84.0));
-		PersonKit::Blob(B, FLinearColor(0.55f, 0.05f, 0.03f), FVector(BedBack - 6.0, -56.0, 80.0), FVector(2.0, 4.0, 4.0), 8, 4);
-		Box(B, Black, FVector(BedBack - 4.0, -76.0, 66.0), FVector(BedBack + 4.0, 76.0, 72.0));
+			// The headboard, taller, with a ladder rack over the cab roof.
+			Box(B, DarkPlanks(), FVector(BedFront - 6.0, -BedHalfY, BedZ), FVector(BedFront, BedHalfY, BedZ + SideHeight + 50.0));
+			for (int32 k = 0; k < 4; ++k)
+			{
+				Box(B, Planks(), FVector(BedFront - 7.0, -BedHalfY, BedZ + 4.0 + k * 24.0), FVector(BedFront - 5.5, BedHalfY, BedZ + 20.0 + k * 24.0));
+			}
+			// The tailboard, its chains, the back lamp and number plate.
+			Box(B, Planks(), FVector(BedBack - 3.0, -BedHalfY, BedZ), FVector(BedBack + 2.0, BedHalfY, BedZ + SideHeight));
+			Box(B, Black, FVector(BedBack - 3.5, -BedHalfY, BedZ + 20.0), FVector(BedBack - 2.5, BedHalfY, BedZ + 23.0));
+			for (const double S : { -1.0, 1.0 })
+			{
+				Tube(B, Black, FVector(BedBack - 3.0, S * (BedHalfY - 4.0), BedZ + SideHeight), FVector(BedBack - 2.0, S * (BedHalfY - 4.0), BedZ + SideHeight - 30.0), 0.6, 4);
+			}
+			Box(B, FLinearColor(0.80f, 0.79f, 0.74f), FVector(BedBack - 6.0, 30.0, 70.0), FVector(BedBack - 5.0, 74.0, 84.0));
+			PersonKit::Blob(B, FLinearColor(0.55f, 0.05f, 0.03f), FVector(BedBack - 6.0, -56.0, 80.0), FVector(2.0, 4.0, 4.0), 8, 4);
+			Box(B, Black, FVector(BedBack - 4.0, -76.0, 66.0), FVector(BedBack + 4.0, 76.0, 72.0));
 
-		BuildLoad(B, Load);
+			BuildLoad(B, Load);
+		}
 
 		// The wheels: the front ones single, the back ones twins.
 		const FLinearColor Disc = Coat * 0.8f;

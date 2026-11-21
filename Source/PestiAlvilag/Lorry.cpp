@@ -7,6 +7,7 @@
 #include "CarVisuals.h"
 #include "CarjackedDriver.h"
 #include "Components/BoxComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "DailyLifeModel.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -33,6 +34,9 @@ namespace LorryRun
 	constexpr double CarrierBack = 700.0;
 	constexpr double CarrierKerb = 300.0;
 	constexpr double TheftSeen = 2500.0;
+	// The mail sack in a post van holds this much (pengő, as fillér).
+	constexpr int32 SackLeast = 300;
+	constexpr int32 SackMost = 800;
 }
 
 ALorry::ALorry()
@@ -98,6 +102,32 @@ void ALorry::BeginPlay()
 		AddInstanceComponent(Mesh);
 		Parts.Add(Mesh);
 	}
+	if (Load == ELoad::Post)
+	{
+		AddPostLettering(this, CollisionBox, FloorZ);
+	}
+}
+
+void ALorry::AddPostLettering(AActor* Van, USceneComponent* Body, double FloorAt)
+{
+	if (!Van || !Body)
+	{
+		return;
+	}
+	for (const double Side : { -1.0, 1.0 })
+	{
+		UTextRenderComponent* Text = NewObject<UTextRenderComponent>(Van, NAME_None, RF_Transient);
+		Text->SetupAttachment(Body);
+		Text->SetRelativeLocationAndRotation(FVector(0.0, 0.0, FloorAt) + LorryModel::PostLetteringAt(Side), FRotator(0.0, Side * 90.0, 0.0));
+		Text->SetText(FText::FromString(TEXT("M. KIR. POSTA")));
+		Text->SetHorizontalAlignment(EHTA_Center);
+		Text->SetVerticalAlignment(EVRTA_TextCenter);
+		Text->SetWorldSize(LorryModel::PostLetterHeight);
+		Text->SetTextRenderColor(LorryModel::PostYellow().ToFColor(true));
+		Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Text->RegisterComponent();
+		Van->AddInstanceComponent(Text);
+	}
 }
 
 void ALorry::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -120,7 +150,11 @@ void ALorry::Tick(float DeltaSeconds)
 	if (bDriven && !bTaken)
 	{
 		bTaken = true;
-		if (bOwned)
+		if (Load == LorryModel::ELoad::Post)
+		{
+			PostTaken();
+		}
+		else if (bOwned)
 		{
 			bOwned = false;
 			Stolen();
@@ -222,5 +256,25 @@ void ALorry::Stolen()
 	else
 	{
 		AWitnesses::Report(this, Location, 1);
+	}
+}
+
+void ALorry::PostTaken()
+{
+	APestiAlvilagGameModeBase* Game = APestiAlvilagGameModeBase::Get(this);
+	const int32 Sack = FMath::RandRange(LorryRun::SackLeast, LorryRun::SackMost);
+	if (Game)
+	{
+		Game->AddMoney(Sack);
+	}
+	if (APestiHUD* Hud = APestiHUD::Get(this))
+	{
+		Hud->Say(TEXT("Postakocsi"), FString::Printf(TEXT("Egy postazs\u00e1k a padl\u00f3n: %s."), *APestiAlvilagGameModeBase::FormatMoney(Sack)),
+			FString::Printf(TEXT("A mail sack on the floor: %s."), *APestiAlvilagGameModeBase::FormatMoney(Sack)), 3.f);
+	}
+	// The Royal Post's own van (the theft itself is noted where it was taken): every patrol hears of it.
+	if (Game)
+	{
+		Game->ReportCrime(2);
 	}
 }
