@@ -132,7 +132,7 @@ namespace ShopModel
 		const FLinearColor Firewood(0.42f, 0.30f, 0.17f);
 		const FLinearColor Sack(0.12f, 0.105f, 0.09f);
 		const FLinearColor Sepia(0.42f, 0.33f, 0.22f);
-		const FLinearColor Velvet(0.30f, 0.04f, 0.06f);
+		const FLinearColor PawnVelvet(0.30f, 0.04f, 0.06f);
 		const FLinearColor SafeGreen(0.06f, 0.14f, 0.09f);
 		const FLinearColor Chalkboard(0.06f, 0.07f, 0.06f);
 		const FLinearColor Chalk(0.80f, 0.80f, 0.76f);
@@ -524,7 +524,7 @@ namespace ShopModel
 		case ETrade::Pawn:
 		{
 			// The pawnbroker's jumble: a gramophone, a fiddle, candlesticks, watches on velvet, a folded fur.
-			Stand(18.0, Velvet);
+			Stand(18.0, PawnVelvet);
 			int32 Item = Dice.Index(5);
 			EachAlong(34.0, [&](double Y)
 			{
@@ -556,7 +556,7 @@ namespace ShopModel
 					}
 					break;
 				case 3:
-					P.Add(Span(14.0, 28.0, Y - 14.0, Y + 14.0, Floor, Floor + 3.0, Velvet));
+					P.Add(Span(14.0, 28.0, Y - 14.0, Y + 14.0, Floor, Floor + 3.0, PawnVelvet));
 					for (int32 k = 0; k < 4; ++k)
 					{
 						FPart Watch{ ParkModel::Cylinder, Dice.Chance(0.5) ? Gilt : Tin, FVector(21.0, Y - 9.0 + k * 6.0, Floor + 3.6), FVector(5.0, 5.0, 1.2) };
@@ -1428,9 +1428,9 @@ namespace ShopModel
 			// A letter box on the left jamb: red iron with a rounded top, the slot under a brass flap, the post horn.
 			const double Y = -(Open + Half) * 0.5;
 			P.Add(Span(22.0, 36.0, Y - 13.0, Y + 13.0, 100.0, 150.0, PostRed));
-			FPart Top{ ParkModel::Cylinder, PostRed, FVector(29.0, Y, 150.0), FVector(14.0, 14.0, 26.0) };
-			Top.Roll = 90.0;
-			P.Add(Top);
+			FPart Dome{ ParkModel::Cylinder, PostRed, FVector(29.0, Y, 150.0), FVector(14.0, 14.0, 26.0) };
+			Dome.Roll = 90.0;
+			P.Add(Dome);
 			P.Add(Span(36.0, 37.0, Y - 8.0, Y + 8.0, 136.0, 141.0, Brass));
 			P.Add(Span(36.0, 36.6, Y - 9.5, Y + 9.5, 141.0, 143.0, Iron));
 			FPart Horn{ ParkModel::Cylinder, Gilt, FVector(36.4, Y, 118.0), FVector(9.0, 9.0, 0.8) };
