@@ -8,6 +8,7 @@
 
 class ATrafficManager;
 class UProceduralMeshComponent;
+class USpotSound;
 
 /**
  * A carrier's horse and cart in the city's traffic (AHorseCart with a
@@ -49,6 +50,14 @@ public:
 	 */
 	void MakeFiaker(FRandomStream& Dice, bool bWithFares);
 	bool IsFiaker() const { return CartLoad == HorseCartModel::ELoad::Fiaker; }
+	/**
+	 * Makes it the city's rubbish cart: a closed grey-green box, the dustman
+	 * on the bench, at a slow walk; now and then it stops in the street while
+	 * he rings his hand bell. Before spawning.
+	 */
+	void MakeRubbish(FRandomStream& Dice);
+	bool IsRubbishCart() const { return CartLoad == HorseCartModel::ELoad::Rubbish; }
+
 	/** Has fares on board (a fiaker in the traffic): not for hire. */
 	bool HasFares() const { return bFares; }
 	/** A fiaker the player can hire (ATaxiRides): empty, in the traffic or on its stand, calm. */
@@ -142,4 +151,12 @@ private:
 	bool bNear = true;
 	/** The player's speed last frame: a crash may already have stopped his car this frame. */
 	FVector LastPlayerVelocity = FVector::ZeroVector;
+
+	/** The rubbish cart's round: stops now and then while the dustman rings his bell. */
+	void TickRounds(float DeltaSeconds);
+	/** Seconds till the next stop, and of ringing left at this one. */
+	float RoundsLeft = 0.f;
+	float RingLeft = 0.f;
+	UPROPERTY(Transient)
+	TObjectPtr<USpotSound> HandBell;
 };

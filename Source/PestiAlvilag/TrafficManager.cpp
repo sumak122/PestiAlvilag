@@ -905,10 +905,17 @@ void ATrafficManager::SpawnCarts()
 			continue;
 		}
 		// Now and then a fiaker instead, half of them with fares in the back.
+		// And now and then the city's rubbish cart on its round.
 		static constexpr float FiakerShare = 0.2f;
-		if (Random.FRand() < FiakerShare)
+		static constexpr float RubbishShare = 0.1f;
+		const float CartDice = Random.FRand();
+		if (CartDice < FiakerShare)
 		{
 			Cart->MakeFiaker(Random, Random.FRand() < 0.5f);
+		}
+		else if (CartDice < FiakerShare + RubbishShare)
+		{
+			Cart->MakeRubbish(Random);
 		}
 		else
 		{
@@ -1307,7 +1314,8 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 	const FRotator Facing = (Lane.Points[BestPoint + 1] - Spot).GetSafeNormal2D().Rotation();
 	FRandomStream Random(FMath::Rand());
 
-	if (What == ETestTraffic::MilkCart || What == ETestTraffic::CoalCart || What == ETestTraffic::BeerCart || What == ETestTraffic::Fiaker)
+	if (What == ETestTraffic::MilkCart || What == ETestTraffic::CoalCart || What == ETestTraffic::BeerCart || What == ETestTraffic::Fiaker
+		|| What == ETestTraffic::RubbishCart)
 	{
 		static constexpr double TestCartLift = 20.0;
 		Location.Z += HorseCartModel::RigHalf().Z + TestCartLift;
@@ -1323,6 +1331,10 @@ bool ATrafficManager::SpawnForTest(ETestTraffic What, const FVector& Near)
 		if (What == ETestTraffic::Fiaker)
 		{
 			Cart->MakeFiaker(Random, false);
+		}
+		else if (What == ETestTraffic::RubbishCart)
+		{
+			Cart->MakeRubbish(Random);
 		}
 		else
 		{
